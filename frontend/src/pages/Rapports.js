@@ -29,10 +29,11 @@ export default function Rapports() {
     try {
       const blob = await api.downloadReport(kind, dept, year, scenario);
       const url = URL.createObjectURL(blob);
+      const prefix = kind.startsWith("fiches") ? "fiches" : "rapport";
       const a = document.createElement("a"); a.href = url;
-      a.download = `rapport_${scenario}_${year}${dept !== "all" ? "_" + dept : ""}.${ext}`; a.click();
+      a.download = `${prefix}_${scenario}_${year}${dept !== "all" ? "_" + dept : ""}.${ext}`; a.click();
       URL.revokeObjectURL(url);
-      toast.success(`Rapport ${ext.toUpperCase()} téléchargé`);
+      toast.success(`${prefix === "fiches" ? "Fiches" : "Rapport"} ${ext.toUpperCase()} téléchargé`);
     } catch { toast.error("Export échoué"); } finally { setBusy(""); }
   };
 
@@ -68,12 +69,18 @@ export default function Rapports() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button data-testid="export-excel-btn" disabled={busy} onClick={() => download("excel", "xlsx")} className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90">
-            <FileSpreadsheet size={16} /> Exporter Excel
+            <FileSpreadsheet size={16} /> Synthèse Excel
           </Button>
           <Button data-testid="export-pdf-btn" disabled={busy} onClick={() => download("pdf", "pdf")} className="gap-2 bg-[#EF4444] hover:bg-[#EF4444]/90">
-            <FileText size={16} /> Exporter PDF
+            <FileText size={16} /> Synthèse PDF
+          </Button>
+          <Button data-testid="export-fiches-excel-btn" disabled={busy} variant="outline" onClick={() => download("fiches-excel", "xlsx")} className="gap-2 border-[#0E9488]/40 text-[#0E9488] hover:bg-[#0E9488]/5">
+            <FileSpreadsheet size={16} /> Fiches détaillées (Excel)
+          </Button>
+          <Button data-testid="export-fiches-pdf-btn" disabled={busy} variant="outline" onClick={() => download("fiches-pdf", "pdf")} className="gap-2 border-[#EF4444]/40 text-[#EF4444] hover:bg-[#EF4444]/5">
+            <FileText size={16} /> Fiches détaillées (PDF)
           </Button>
         </div>
       </div>

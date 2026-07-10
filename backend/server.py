@@ -873,6 +873,90 @@ def build_employee_fiche_pdf(ln, year, scenario_label):
     buf.seek(0)
     return buf
 
+def _group_by_dept(lines):
+    groups = {}
+    for l in lines:
+        g = groups.setdefault(l["department"], {"label": l["department_label"], "lines": []})
+        g["lines"].append(l)
+    return sorted(groups.items(), key=lambda kv: kv[0])
+
+FICHE_COLS = ["#", "Nom", "Type", "Sal. base", "Aug.", "Nouv. salaire", "Vacances", "Primes", "Avantages", "CSST", "REER", "Assur.", "Coût total"]
+def _fiche_row(l):
+    return [str(l["employee_number"]).zfill(3), l["name"], "CCQ" if l["is_ccq"] else l["employment_type"],
+            l["base_salary"], f"{l['augmentation']*100:.1f}%", l["new_salary"], l["vacation"], l["primes_total"],
+            l["avantages"], l["csst"], l["reer"], l["assurance"], l["total_cost"]]
+
+def build_fiches_excel(data, year, scenario_label, scope):
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Fiches détaillées"
+    bold = openpyxl.styles.Font(bold=True)
+    ws.append([f"Fiches détaillées {scenario_label} {year} — {scope}"]); ws["A1"].font = openpyxl.styles.Font(bold=True, size=14)
+    ws.append([])
+    num_cols = ["Sal. base", "Nouv. salaire", "Vacances", "Primes", "Avantages", "CSST", "REER", "Assur.", "Coût total"]
+    for dept, g in _group_by_dept(data["lines"]):
+        ws.append([f"Département {dept} — {g['label']}"]); ws[ws.max_row][0].font = bold
+        ws.append(FICHE_COLS); [setattr(c, "font", bold) for c in ws[ws.max_row]]
+        sub = {k: 0 for k in num_cols}
+        for l in g["lines"]:
+            ws.append(_fiche_row(l))
+            for k, key in zip(num_cols, ["base_salary", "new_salary", "vacation", "primes_total", "avantages", "csst", "reer", "assurance", "total_cost"]):
+                sub[k] += l[key]
+        ws.append(["", "Sous-total", "", round(sub["Sal. base"], 2), "", round(sub["Nouv. salaire"], 2), round(sub["Vacances"], 2),
+                   round(sub["Primes"], 2), round(sub["Avantages"], 2), round(sub["CSST"], 2), round(sub["REER"], 2),
+                   round(sub["Assur."], 2), round(sub["Coût total"], 2)])
+        [setattr(c, "font", bold) for c in ws[ws.max_row]]
+        ws.append([])
+    t = data["totals"]
+    ws.append(["", "BUDGET TOTAL", "", t["salaire_base"], "", t["salaire_base"], t["vacances"], t["primes"], t["avantages"], t["csst"], t["reer"], t["assurance"], t["budget_total"]])
+    [setattr(c, "font", openpyxl.styles.Font(bold=True, size=12)) for c in ws[ws.max_row]]
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return buf
+
+def build_fiches_pdf(data, year, scenario_label, scope):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=14 * mm, bottomMargin=12 * mm, leftMargin=12 * mm, rightMargin=12 * mm)
+    styles = getSampleStyleSheet()
+    NAVY = colors.HexColor("#0E1526"); TEAL = colors.HexColor("#14B8A6")
+    h = ParagraphStyle("h", parent=styles["Title"], textColor=NAVY, fontSize=16)
+    sub = ParagraphStyle("sub", parent=styles["Normal"], textColor=colors.HexColor("#64748B"), fontSize=9)
+    sec = ParagraphStyle("sec", parent=styles["Heading2"], textColor=NAVY, fontSize=11, spaceBefore=8)
+    el = [Paragraph(f"Fiches détaillées — {scenario_label} {year}", h),
+          Paragraph(f"{scope} · généré le {datetime.now().strftime('%Y-%m-%d %H:%M')}", sub), Spacer(1, 6)]
+    widths = [12 * mm, 46 * mm, 24 * mm, 24 * mm, 14 * mm, 26 * mm, 22 * mm, 22 * mm, 24 * mm, 20 * mm, 20 * mm, 20 * mm, 26 * mm]
+    num_keys = ["base_salary", "new_salary", "vacation", "primes_total", "avantages", "csst", "reer", "assurance", "total_cost"]
+    for dept, g in _group_by_dept(data["lines"]):
+        rows = [FICHE_COLS]
+        sub_tot = {k: 0 for k in num_keys}
+        for l in g["lines"]:
+            r = _fiche_row(l)
+            rows.append([r[0], r[1], r[2], _money(l["base_salary"]), r[4], _money(l["new_salary"]), _money(l["vacation"]),
+                         _money(l["primes_total"]), _money(l["avantages"]), _money(l["csst"]), _money(l["reer"]), _money(l["assurance"]), _money(l["total_cost"])])
+            for k in num_keys:
+                sub_tot[k] += l[k]
+        rows.append(["", "Sous-total", "", _money(sub_tot["base_salary"]), "", _money(sub_tot["new_salary"]), _money(sub_tot["vacation"]),
+                     _money(sub_tot["primes_total"]), _money(sub_tot["avantages"]), _money(sub_tot["csst"]), _money(sub_tot["reer"]), _money(sub_tot["assurance"]), _money(sub_tot["total_cost"])])
+        tbl = Table(rows, colWidths=widths, repeatRows=1)
+        tbl.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                                 ("FONTSIZE", (0, 0), (-1, -1), 7), ("ALIGN", (3, 0), (-1, -1), "RIGHT"),
+                                 ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E2E8F0")),
+                                 ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#F8FAFC")]),
+                                 ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#E2E8F0")), ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold")]))
+        el += [Paragraph(f"Département {dept} — {g['label']}", sec), tbl, Spacer(1, 6)]
+    t = data["totals"]
+    gt = Table([["BUDGET TOTAL", _money(t["budget_total"])]], colWidths=[200 * mm, 60 * mm])
+    gt.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), NAVY), ("TEXTCOLOR", (0, 0), (0, -1), colors.white),
+                            ("TEXTCOLOR", (1, 0), (1, -1), TEAL), ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+                            ("FONTSIZE", (0, 0), (-1, -1), 12), ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                            ("TOPPADDING", (0, 0), (-1, -1), 7), ("BOTTOMPADDING", (0, 0), (-1, -1), 7)]))
+    el += [Spacer(1, 4), gt]
+    doc.build(el)
+    buf.seek(0)
+    return buf
+
 @api.get("/budget/evolution")
 async def budget_evolution(department: Optional[str] = None, user: dict = Depends(get_current_user)):
     depts = await db.departments.find().to_list(1000)
@@ -926,6 +1010,24 @@ async def report_pdf(department: Optional[str] = None, year: Optional[int] = Non
     await log_action(user, "Modifier", "Rapport", f"Export PDF {SCEN_LABEL.get(scenario, scenario)} — {scope}")
     return StreamingResponse(buf, media_type="application/pdf",
                              headers={"Content-Disposition": f"attachment; filename=rapport_{scenario}_{hypo['year']}.pdf"})
+
+@api.get("/reports/fiches-pdf")
+async def report_fiches_pdf(department: Optional[str] = None, year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
+    data, hypo = await _budget_data(department, year, scenario)
+    scope = "Tous les départements" if not department or department == "all" else department
+    buf = build_fiches_pdf(data, hypo["year"], SCEN_LABEL.get(scenario, scenario), scope)
+    await log_action(user, "Modifier", "Rapport", f"Fiches PDF {SCEN_LABEL.get(scenario, scenario)} — {scope}")
+    return StreamingResponse(buf, media_type="application/pdf",
+                             headers={"Content-Disposition": f"attachment; filename=fiches_{scenario}_{hypo['year']}.pdf"})
+
+@api.get("/reports/fiches-excel")
+async def report_fiches_excel(department: Optional[str] = None, year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
+    data, hypo = await _budget_data(department, year, scenario)
+    scope = "Tous les départements" if not department or department == "all" else department
+    buf = build_fiches_excel(data, hypo["year"], SCEN_LABEL.get(scenario, scenario), scope)
+    await log_action(user, "Modifier", "Rapport", f"Fiches Excel {SCEN_LABEL.get(scenario, scenario)} — {scope}")
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename=fiches_{scenario}_{hypo['year']}.xlsx"})
 
 # ---------------------------------------------------------------------------
 # Excel import / templates
