@@ -69,6 +69,7 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
     if (isCCQ) {
       o.prime_type = f.prime_type; o.prime_garde = f.prime_garde; o.prime_halo = f.prime_halo; o.alloc_securite = f.alloc_securite;
     } else {
+      o.alloc_securite = f.alloc_securite;
       o.reer = Number(f.reer) || 0; o.assurance = Number(f.assurance) || 0;
       o.boni_mode = f.boni_mode;
       if (f.boni_mode === "pct") o.boni_pct = Number(f.boni_pct) || 0;
@@ -158,23 +159,28 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
                 </div>
               )}
               {!isCCQ && (
-                <div className="grid grid-cols-3 gap-3 p-3">
-                  <div><Label className="text-[11px] uppercase text-slate-500">RPDB/REER ($)</Label><Input data-testid="fiche-reer" type="number" className="mt-1 font-mono-data" value={f.reer} onChange={(e) => set("reer", e.target.value)} /></div>
-                  <div><Label className="text-[11px] uppercase text-slate-500">Assu. coll. ($)</Label><Input data-testid="fiche-assurance" type="number" className="mt-1 font-mono-data" value={f.assurance} onChange={(e) => set("assurance", e.target.value)} /></div>
-                  <div><Label className="text-[11px] uppercase text-slate-500">Boni</Label>
-                    <div className="mt-1 flex gap-1">
-                      <Select value={f.boni_mode} onValueChange={(v) => set("boni_mode", v)}>
-                        <SelectTrigger data-testid="fiche-boni-mode" className="w-16 px-2"><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="montant">$</SelectItem><SelectItem value="pct">%</SelectItem></SelectContent>
-                      </Select>
-                      {f.boni_mode === "pct"
-                        ? <Input data-testid="fiche-boni-pct" type="number" step="0.1" className="font-mono-data" value={f.boni_pct} onChange={(e) => set("boni_pct", e.target.value)} />
-                        : <Input data-testid="fiche-boni" type="number" className="font-mono-data" value={f.boni} onChange={(e) => set("boni", e.target.value)} />}
+                <div className="p-3">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div><Label className="text-[11px] uppercase text-slate-500">RPDB/REER ($)</Label><Input data-testid="fiche-reer" type="number" className="mt-1 font-mono-data" value={f.reer} onChange={(e) => set("reer", e.target.value)} /></div>
+                    <div><Label className="text-[11px] uppercase text-slate-500">Assu. coll. ($)</Label><Input data-testid="fiche-assurance" type="number" className="mt-1 font-mono-data" value={f.assurance} onChange={(e) => set("assurance", e.target.value)} /></div>
+                    <div><Label className="text-[11px] uppercase text-slate-500">Boni</Label>
+                      <div className="mt-1 flex gap-1">
+                        <Select value={f.boni_mode} onValueChange={(v) => set("boni_mode", v)}>
+                          <SelectTrigger data-testid="fiche-boni-mode" className="w-16 px-2"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="montant">$</SelectItem><SelectItem value="pct">%</SelectItem></SelectContent>
+                        </Select>
+                        {f.boni_mode === "pct"
+                          ? <Input data-testid="fiche-boni-pct" type="number" step="0.1" className="font-mono-data" value={f.boni_pct} onChange={(e) => set("boni_pct", e.target.value)} />
+                          : <Input data-testid="fiche-boni" type="number" className="font-mono-data" value={f.boni} onChange={(e) => set("boni", e.target.value)} />}
+                      </div>
                     </div>
                   </div>
+                  <label className="mt-3 flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 sm:w-1/3">
+                    <span className="text-[11px] font-500">Alloc. sécurité</span><Switch data-testid="fiche-alloc_securite" checked={f.alloc_securite} onCheckedChange={(v) => set("alloc_securite", v)} />
+                  </label>
                 </div>
               )}
-              {!isCCQ && <p className="border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">Employé non-CCQ : aucune prime applicable. Seuls le BONI, le REER et l'assurance collective s'appliquent.</p>}
+              {!isCCQ && <p className="border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">Employé non-CCQ : primes CCQ (garde, HALO) non applicables. BONI, REER, assurance collective et Alloc. sécurité s'appliquent.</p>}
               {isCCQ && <p className="border-t border-slate-200 px-3 py-2 text-[11px] text-[#2563EB]">Employé CCQ : RPDB, BONI et Assu. collectives non applicables. Avantages CCQ appliqués.</p>}
             </div>
           </div>
@@ -191,6 +197,7 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
                 {isCCQ && <Row label="Prime HALO" value={fmtCAD(p.halo)} />}
                 {isCCQ && <Row label="Alloc. sécurité" value={fmtCAD(p.alloc)} />}
                 {!isCCQ && <Row label="Boni" value={fmtCAD(p.boni)} />}
+                {!isCCQ && <Row label="Alloc. sécurité" value={fmtCAD(p.alloc)} />}
               </div>
             </div>
             <div className="rounded-xl border border-slate-200">

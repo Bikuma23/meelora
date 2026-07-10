@@ -65,7 +65,7 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
       ccq_category: isCCQ ? f.ccq_category : "N/A", current_annual_salary: Number(f.current_annual_salary),
       vacation_rate: Number(f.vacation_rate_pct) / 100, sick_personal_days: parseInt(f.sick_personal_days, 10),
       holiday_days: parseInt(f.holiday_days, 10), is_ccq: isCCQ, prime_type: isCCQ ? f.prime_type : "Aucune Prime",
-      prime_garde: isCCQ && f.prime_garde, prime_halo: isCCQ && f.prime_halo, alloc_securite: isCCQ && f.alloc_securite,
+      prime_garde: isCCQ && f.prime_garde, prime_halo: isCCQ && f.prime_halo, alloc_securite: f.alloc_securite,
       hire_date: f.hire_date, birth_date: f.birth_date,
     });
   };
@@ -130,7 +130,7 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
           </div>
         </div>
         <div className="border-t border-slate-200 pt-4">
-          <p className="mb-2 text-xs font-700 uppercase tracking-widest text-slate-500">Primes & allocations {!isCCQ && <span className="font-500 normal-case tracking-normal text-slate-400">— non applicables aux employés non-CCQ</span>}</p>
+          <p className="mb-2 text-xs font-700 uppercase tracking-widest text-slate-500">Primes & allocations</p>
           {isCCQ ? (
             <div className="grid grid-cols-3 gap-3">
               {[["prime_garde", "Prime de garde"], ["prime_halo", "Prime HALO 5%"], ["alloc_securite", "Alloc. sécurité"]].map(([k, lbl]) => (
@@ -138,7 +138,12 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
               ))}
             </div>
           ) : (
-            <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] text-slate-500">Aucune prime n'est calculée pour cet employé. Le BONI, le REER et l'assurance collective se gèrent dans la fiche Salaires & Budget.</p>
+            <div className="space-y-2">
+              <div className="grid grid-cols-3 gap-3">
+                <label className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"><span className="text-[11px] font-500">Alloc. sécurité</span><Switch data-testid="f-alloc_securite" checked={f.alloc_securite} onCheckedChange={(v) => set("alloc_securite", v)} /></label>
+              </div>
+              <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] text-slate-500">Primes CCQ (garde, HALO) non applicables. Le BONI, le REER et l'assurance collective se gèrent dans la fiche Salaires & Budget.</p>
+            </div>
           )}
         </div>
         <DialogFooter>

@@ -194,9 +194,10 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
             halo = new_salary * hypo["prime_halo_rate"] if ov.get("prime_halo", e.get("prime_halo")) else 0
             alloc = hypo["alloc_securite_montant"] if ov.get("alloc_securite", e.get("alloc_securite")) else 0
         else:
-            # Employés non-CCQ : aucune prime. Seul le boni (+ REER/assurance) s'applique.
+            # Employés non-CCQ : pas de prime CCQ ni HALO/garde. Boni + Alloc. sécurité + REER/assurance possibles.
             prime_type = "Aucune Prime"
-            prime_amt = garde = halo = alloc = 0
+            prime_amt = garde = halo = 0
+            alloc = hypo["alloc_securite_montant"] if ov.get("alloc_securite", e.get("alloc_securite")) else 0
             boni_mode = ov.get("boni_mode", "montant")
             if boni_mode == "pct":
                 boni = new_salary * float(ov.get("boni_pct", 0) or 0) / 100
@@ -851,7 +852,7 @@ def build_employee_fiche_pdf(ln, year, scenario_label):
                   ["Prime HALO", _money(ln["halo"])], ["Alloc. sécurité", _money(ln["alloc"])],
                   ["Total primes", _money(ln["primes_total"])]]
     else:
-        primes = [["Boni", _money(ln["boni"])], ["Total primes & boni", _money(ln["primes_total"])]]
+        primes = [["Boni", _money(ln["boni"])], ["Alloc. sécurité", _money(ln["alloc"])], ["Total primes & boni", _money(ln["primes_total"])]]
     charges = [["RRQ", _money(ln["rrq"])], ["AE", _money(ln["ae"])], ["RQAP", _money(ln["rqap"])], ["FSS", _money(ln["fss"])]]
     if ccq:
         charges.append(["Avantages CCQ (32.33%)", _money(ln["ccq_avantages"])])
