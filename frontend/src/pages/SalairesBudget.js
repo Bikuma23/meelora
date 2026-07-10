@@ -113,13 +113,13 @@ export default function SalairesBudget() {
               {b.lines.map((ln) => (
                 <tr key={ln.employee_number} onClick={() => setDetail({ open: true, line: ln })} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" data-testid={`budget-row-${ln.employee_number}`}>
                   <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(ln.employee_number).padStart(3, "0")}</td>
-                  <td className="px-4 py-2.5 font-600">{ln.name}{ln.overridden && <span className="ml-2 rounded bg-[#14B8A61a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">Ajusté</span>}</td>
+                  <td className="px-4 py-2.5 font-600">{ln.name}{ln.overridden && <span className="ml-2 rounded bg-[#14B8A61a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">Ajusté</span>}{ln.prorated && <span className="ml-2 rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active} mois</span>}</td>
                   <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#2563EB" : "#64748B" }}>{ln.is_ccq ? "CCQ" : ln.employment_type}</span></td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.new_salary)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.vacation)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.primes_total)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.avantages)}</td>
-                  <td className="px-4 py-2.5 text-right font-mono-data font-700">{fmtCAD(ln.total_cost)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono-data font-700">{fmtCAD(ln.total_budgeted)}</td>
                   <td className="px-4 py-2.5 text-right">
                     <button data-testid={`edit-line-${ln.employee_number}`} disabled={!canEdit} onClick={(ev) => { ev.stopPropagation(); setFiche({ open: true, line: ln }); }}
                       className="p-1.5 text-slate-400 hover:text-[#2563EB] disabled:cursor-not-allowed disabled:opacity-30">

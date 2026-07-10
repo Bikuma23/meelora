@@ -33,6 +33,7 @@ function Row({ label, value, strong, accent }) {
 
 const SCENARIOS = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 const SCEN_LABEL = Object.fromEntries(SCENARIOS);
+const MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
 
 export default function BudgetFicheDialog({ open, onOpenChange, line, year, scenario = "ca", locks = {}, isAdmin = true, onSaved }) {
   const isCCQ = line.is_ccq;
@@ -211,12 +212,37 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
                 {!isCCQ && <Row label="Assu. collectives" value={fmtCAD(p.assurance)} />}
               </div>
             </div>
-            <div className="flex items-center justify-between rounded-xl bg-[#0E1526] px-4 py-3">
-              <span className="text-xs font-700 uppercase tracking-widest text-white">Masse salariale totale</span>
-              <span className="font-mono-data text-lg font-700 text-[#14B8A6]" data-testid="fiche-total">{fmtCAD(p.total_cost)}</span>
+            <div className="rounded-xl bg-[#0E1526] px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-600 uppercase tracking-widest text-white/60">Masse salariale (année pleine)</span>
+                <span className="font-mono-data text-sm text-white/80">{fmtCAD(p.total_cost)}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between">
+                <span className="text-xs font-700 uppercase tracking-widest text-white">Total budgété{p.prorated ? ` · pro-rata ${p.months_active} mois` : ""}</span>
+                <span className="font-mono-data text-lg font-700 text-[#14B8A6]" data-testid="fiche-total">{fmtCAD(p.total_budgeted)}</span>
+              </div>
             </div>
           </div>
         </div>
+
+        {p.monthly && (
+          <div className="rounded-xl border border-slate-200" data-testid="fiche-ventilation">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+              <h3 className="text-xs font-700 uppercase tracking-widest">Ventilation mensuelle {year}</h3>
+              {p.prorated
+                ? <span className="text-[11px] text-[#B45309]">Embauche en cours d'année → pro-rata dès le mois {p.hire_month} ({p.months_active} mois)</span>
+                : <span className="text-[11px] text-slate-400">Répartie sur 12 mois</span>}
+            </div>
+            <div className="grid grid-cols-4 gap-px bg-slate-100 sm:grid-cols-6 lg:grid-cols-12">
+              {MONTHS.map((mo, i) => (
+                <div key={mo} className={`bg-white p-2 text-center ${p.monthly[i] === 0 ? "opacity-40" : ""}`} data-testid={`fiche-month-${i}`}>
+                  <p className="text-[10px] font-600 uppercase text-slate-400">{mo}</p>
+                  <p className="mt-0.5 font-mono-data text-[11px] font-600">{fmtCAD(p.monthly[i])}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
           <Button variant="outline" data-testid="fiche-reset-btn" onClick={reset} disabled={locked} className="gap-1.5"><RotateCcw size={15} /> Réinitialiser</Button>

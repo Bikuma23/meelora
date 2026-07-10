@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend-only validation of the new 'Ventilation mensuelle' fiche and mid-year hire pro-rata feature. All 6 acceptance scenarios pass end-to-end via Playwright against the public preview URL. Hire date was modified and restored to leave state clean.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "BudgetFicheDialog.js line 233: 'pro-rata dès le mois {p.hire_month}' displays the raw month index from backend. Verify semantics — for hire 2026-07-15 it shows 'mois 7' which is correct (1-indexed July), just confirm this convention is consistent everywhere."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "admin@accslegro.com / admin123",
+  "seed_data_creation": "None. Employee #1 (Marie Bouchère) hire_date temporarily changed to 2026-07-15 then restored to 2018-06-01.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "SPA (no react-router). Sidebar testids: nav-dashboard, nav-employes (NOT nav-employees), nav-budget, nav-hypotheses, nav-departements, nav-rapports, nav-journal, nav-utilisateurs. Login: fill email + type password + Enter.",
+  "verified_scenarios": {
+    "1_login_admin": "OK",
+    "2_fiche_ventilation_full_year_employee_1_before_change": "12 months = 13 773 $ each, fiche-total = 165 274 $ (= masse salariale année pleine). fiche-ventilation section renders below the fiche.",
+    "3_prorata_mid_year_hire_2026-07-15": "Jan..Juin (fiche-month-0..5) = 0 $, Juil (fiche-month-6) = 7 553 $ (partial ~17/31 days), Août..Déc = 13 773 $ each. Badge in header: 'Embauche en cours d'année → pro-rata dès le mois 7 (6 mois)'. fiche-total = 76 417 $ < 165 274 $.",
+    "4_reduced_totals_and_row_badge": "Row for Marie Bouchère shows Coût total = 76 417 $ and badge 'PRO-RATA 6 MOIS'. Budget total card dropped 709 488 $ → 620 631 $. Salaire de base card dropped 496 310 $ → 440 756 $.",
+    "5_dashboard_reflects_reduction": "Dashboard comparatif-card: Salaires actuels 479 847 $ → 426 084 $, Budget CA 496 310 $ → 440 756 $, Revue 1/2 also 440 756 $. Masse salariale card 440 756 $, Budget global 620 631 $.",
+    "6_restore_2018-06-01": "After restore, ventilation returns to 12 non-zero months of 13 773 $, fiche-total = 165 274 $, Budget total card back to 709 488 $. State clean."
+  }
+}

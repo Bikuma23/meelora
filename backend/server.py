@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 from pathlib import Path
 import os
+import calendar
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -158,6 +159,24 @@ def _emp_scn(e, year, scenario):
     base = ov.get("base_salary", yd.get("base_salary", e["current_annual_salary"]))
     return yd, ov, base
 
+def _proration(e, year):
+    """Retourne (fractions mensuelles [12], facteur annuel). Pro-rata au jour pour l'embauche en cours d'année."""
+    frac = [1.0] * 12
+    hd = e.get("hire_date")
+    if hd and year:
+        try:
+            p = str(hd)[:10].split("-"); hy = int(p[0]); hm = int(p[1]); hday = int(p[2])
+        except Exception:
+            hy = None
+        if hy is not None and 1 <= (hm if hy else 1) <= 12:
+            if hy > int(year):
+                frac = [0.0] * 12
+            elif hy == int(year):
+                dim = calendar.monthrange(int(year), hm)[1]
+                first = max(0.0, min(1.0, (dim - hday + 1) / dim))
+                frac = [0.0] * (hm - 1) + [round(first, 6)] + [1.0] * (12 - hm)
+    return frac, sum(frac) / 12
+
 def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
     dept_csst = {d["code"]: d.get("csst", 0) for d in depts}
     dept_label = {d["code"]: d["description"] for d in depts}
@@ -230,6 +249,12 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
                 reer = float(ov.get("reer", new_salary * hypo["reer_rate"]))
                 assurance = float(ov.get("assurance", hypo["assurance_annuelle"]))
             total = new_salary + vacation + primes_total + avantages + csst + reer + assurance
+        frac, factor = _proration(e, year)
+        months_active = sum(1 for x in frac if x > 0)
+        hire_month = next((i + 1 for i, x in enumerate(frac) if x > 0), 0)
+        prorated = factor < 0.9999
+        monthly = [round(total / 12 * frac[m], 2) for m in range(12)]
+        total_budgeted = round(total * factor, 2)
         lines.append({
             "employee_id": str(e.get("_id", "")), "employee_number": e["employee_number"],
             "name": e["name"], "title": e.get("title", ""), "department": e["department"],
@@ -245,28 +270,30 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
             "rrq": round(rrq, 2), "ae": round(ae, 2), "rqap": round(rqap, 2), "fss": round(fss, 2),
             "ccq_avantages": round(ccq_av, 2), "avantages": round(avantages, 2), "csst": round(csst, 2),
             "reer": round(reer, 2), "assurance": round(assurance, 2), "total_cost": round(total, 2),
+            "monthly": monthly, "months_active": months_active, "hire_month": hire_month,
+            "prorated": prorated, "proration_factor": round(factor, 4), "total_budgeted": total_budgeted,
         })
-        tot["salaire_base"] += new_salary
-        tot["vacances"] += vacation
-        tot["primes"] += primes_total
-        tot["avantages"] += avantages
-        tot["csst"] += csst
-        tot["reer"] += reer
-        tot["assurance"] += assurance
-        tot["budget_total"] += total
+        tot["salaire_base"] += new_salary * factor
+        tot["vacances"] += vacation * factor
+        tot["primes"] += primes_total * factor
+        tot["avantages"] += avantages * factor
+        tot["csst"] += csst * factor
+        tot["reer"] += reer * factor
+        tot["assurance"] += assurance * factor
+        tot["budget_total"] += total_budgeted
 
     totals = {k: round(v, 2) for k, v in tot.items()}
     # by department
     by_dept = {}
     for ln in lines:
         d = by_dept.setdefault(ln["department"], {"department": ln["department"], "label": ln["department_label"], "salaire": 0, "budget": 0})
-        d["salaire"] += ln["new_salary"]
-        d["budget"] += ln["total_cost"]
+        d["salaire"] += ln["new_salary"] * ln["proration_factor"]
+        d["budget"] += ln["total_budgeted"]
     by_department = sorted([{**v, "salaire": round(v["salaire"], 2), "budget": round(v["budget"], 2)} for v in by_dept.values()], key=lambda x: -x["budget"])
     # by type
     by_type_map = {}
     for ln in lines:
-        by_type_map[ln["employment_type"]] = by_type_map.get(ln["employment_type"], 0) + ln["total_cost"]
+        by_type_map[ln["employment_type"]] = by_type_map.get(ln["employment_type"], 0) + ln["total_budgeted"]
     by_type = [{"type": k, "total": round(v, 2)} for k, v in by_type_map.items()]
     # monthly ventilation
     total_weeks = sum(hypo["pay_weeks"]) or 1
@@ -289,9 +316,9 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
         {"label": "CSST", "value": totals["csst"], "pct": round(totals["csst"] / bt * 100, 1), "color": "#EF4444"},
         {"label": "RPDB (REER)", "value": totals["reer"], "pct": round(totals["reer"] / bt * 100, 1), "color": "#14B8A6"},
     ]
-    top5 = sorted(lines, key=lambda x: -x["total_cost"])[:5]
+    top5 = sorted(lines, key=lambda x: -x["total_budgeted"])[:5]
     top5 = [{"name": l["name"], "title": l["title"], "department": l["department"],
-             "total": l["total_cost"], "base": l["base_salary"], "rank": i + 1} for i, l in enumerate(top5)]
+             "total": l["total_budgeted"], "base": l["base_salary"], "rank": i + 1} for i, l in enumerate(top5)]
     kpis = {
         "headcount": len(employees),
         "masse_salariale": totals["salaire_base"],
@@ -681,7 +708,7 @@ async def budget_compare(year: Optional[int] = None, department: Optional[str] =
     depts = await db.departments.find().to_list(1000)
     query = {"department": department} if department and department != "all" else {}
     employees = await db.employees.find(query).sort("employee_number", 1).to_list(1000)
-    actuel_base = round(sum(_emp_scn(e, year, "actuel")[2] for e in employees), 2)
+    actuel_base = round(sum(_emp_scn(e, year, "actuel")[2] * _proration(e, year)[1] for e in employees), 2)
     out = {"year": year, "headcount": len(employees),
            "actuel": {"masse": actuel_base, "budget_total": actuel_base}}
     for scn in BUDGET_SCENARIOS:
@@ -971,7 +998,7 @@ async def budget_evolution(department: Optional[str] = None, user: dict = Depend
         ca = compute_budget(employees, hypo, depts, year=y, scenario="ca")
         revue1 = compute_budget(employees, hypo, depts, year=y, scenario="revue1")
         revue2 = compute_budget(employees, hypo, depts, year=y, scenario="revue2")
-        actuel = round(sum(_emp_scn(e, y, "actuel")[2] for e in employees), 2)
+        actuel = round(sum(_emp_scn(e, y, "actuel")[2] * _proration(e, y)[1] for e in employees), 2)
         out.append({"year": y, "actuel": actuel,
                     "ca": ca["totals"]["salaire_base"], "revue1": revue1["totals"]["salaire_base"], "revue2": revue2["totals"]["salaire_base"],
                     "ca_budget": ca["totals"]["budget_total"], "revue1_budget": revue1["totals"]["budget_total"], "revue2_budget": revue2["totals"]["budget_total"]})
