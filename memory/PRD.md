@@ -1,34 +1,36 @@
-# PRD — Masse Salariale CCQ (Workforce Budgeting Dashboard)
+# PRD — Budget Masse Salariale CCQ (rebuild du modèle Excel)
 
-## Original Problem Statement
-French-language, highly fluid single-page workforce budgeting app for a Quebec technical/construction company. Calculates payroll projections (masse salariale) with multi-scenario comparison, strictly separating Standard employees from CCQ union employees (Électriciens & Frigoristes). Left control panel (scenario tabs + category sliders), right real-time canvas (KPI cards + stacked bar chart + employee CRUD table).
+## Problème / Objectif
+Refaire entièrement le fichier Excel de budget salarial (Québec CCQ) en application web fluide : dashboards, saisie et extraction faciles, formulaires de saisie + recherche, tables d'employés, hypothèses facilement modifiables, en conservant la philosophie de calcul de l'Excel.
 
-## User Choices
-- Persistence: Backend + MongoDB for employees; real-time calculations on frontend.
-- Employees: full CRUD (add/edit/delete) + pre-seeded mock data.
-- Treasury: fixed budget (2,500,000 CAD).
-- Design: chosen by agent (Swiss Brutalist / high-density data, IBM Plex Mono + Archivo).
+## Choix utilisateur
+- Remplace l'ancien simulateur de scénarios.
+- 4 onglets : Tableau de bord · Employés · Budget Salaires · Hypothèses.
+- Comparatif des 3 sections (Salaire Actuel / Budget CA / Budget Revue) — important.
+- Fiche Employé : # auto-incrémenté, âge auto (date naissance), ancienneté auto (date embauche), tous champs obligatoires + messages d'erreur.
+- Hypothèses persistées en MongoDB, éditables. Champ "augmentation" retiré des hypothèses → piloté dans l'onglet Budget.
+- Respect des conditions du fichier Template App Budget.
+
+## Conditions Excel implémentées
+- CCQ : avantages sociaux 32.33% + RRQ/AE/RQAP/FSS normaux ; pas de vacances, assurance, REER (RPDB/BONI/Assu. masqués) ; prime électricien compagnon +5%.
+- Prime de garde = (365 × 250$) / nb employés admissibles (coût moyen).
+- Primes 8/11/12% calculées automatiquement sur le nouveau salaire.
+- Charges sociales avec plafonds/exemptions ; CSST par département.
 
 ## Architecture
-- Backend: FastAPI + MongoDB (motor). Endpoints: GET /api/config, GET/POST/PUT/DELETE /api/employees. Auto-seeds 12 employees on startup. Business constants: EMPLOYER_TAX_RATE=0.1477, TREASURY_BUDGET=2,500,000, CCQ benefit rates per trade.
-- Frontend: React SPA. src/lib/calculations.js holds real-time projection engine (useMemo). Components: Dashboard, ScenarioTabs, CategoryControls, KpiCards, SalaryChart (recharts), EmployeeTable.
+- Backend FastAPI + MongoDB. Collections: employees, hypotheses (doc key="current"). Endpoints: /api/employees (CRUD + ?q recherche, employee_number auto), /api/hypotheses (GET/PUT), /api/budget (3 sections + agrégats dashboard). Moteur de calcul compute_section().
+- Frontend React SPA, nav par état (4 onglets). Recharts, framer-motion, shadcn/ui. Design Swiss brutalist (Archivo + IBM Plex Mono/Sans).
 
-## Core Requirements (static)
-- Scenarios: Budget Initial (40h baseline), Croissance (CCQ overtime x1.5, +3 CCQ hires), Restrictif (35h, hiring frozen).
-- CCQ formula: (Hourly*Hours)+(BenefitsRate*Hours)+(Tax*Hourly*Hours). Standard: salary*hoursFactor*(1+tax).
-- KPIs: Total Masse Salariale, Total Cotisations CCQ, Solde de Trésorerie Restant.
-- Real-time recompute on any slider/scenario change; no page reload.
-
-## Implemented (2026-06)
-- [x] Full backend CRUD + config + seed data.
-- [x] Real-time projection engine with scenario modifiers + new-hire ramp.
-- [x] Left control panel (scenario tabs, category sliders with frozen-hiring lock).
-- [x] KPI cards, monthly stacked bar chart, employee CRUD table + dialog.
-- [x] French UI, Swiss brutalist design.
-- [x] Tested: 100% backend (pytest) + 100% frontend (Playwright E2E).
+## Implémenté (2026-06)
+- [x] CRUD employés + recherche, # auto, âge/ancienneté auto, validation champs obligatoires.
+- [x] Onglet Hypothèses éditable (taux RRQ/AE/RQAP/FSS, CCQ, primes, CSST par département) persisté.
+- [x] Budget Salaires : 3 sections comparatives + contrôles d'augmentation temps réel + détail par employé.
+- [x] Tableau de bord : KPI + graphiques (comparatif scénarios, camembert CCQ/Régulier, coût par département).
+- [x] Tests : 100% backend (pytest) + 100% frontend (Playwright E2E).
 
 ## Backlog / Next
-- P1: Scenario comparison side-by-side view (compare all 3 at once).
-- P1: Export projection to CSV/PDF.
-- P2: Persist scenario slider adjustments to backend (payroll_projections collection).
-- P2: Editable treasury budget & CCQ rates from UI.
+- P1: Export Excel/PDF du budget et de l'effectif.
+- P1: Modèle Pydantic pour PUT /api/hypotheses (validation d'entrée).
+- P2: Compteur atomique MongoDB pour employee_number (concurrence).
+- P2: Historique multi-années et duplication d'année budgétaire.
+- P2: Champ BONI éditable pour employés Réguliers.

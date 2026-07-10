@@ -143,7 +143,7 @@ def compute_section(employees, hypo, aug_reg, aug_ccq, garde_avg):
 
         vacation = 0 if ccq else new_salary * e["vacation_rate"]
 
-        prime_amt = new_salary * PRIME_PCT[e["prime_type"]]
+        prime_amt = new_salary * PRIME_PCT.get(e.get("prime_type"), 0.08)
         garde = garde_avg if e["prime_garde"] else 0
         halo = new_salary * hypo["prime_halo_rate"] if e["prime_halo"] else 0
         chef = hypo["prime_chef_equipe_montant"] if e["prime_chef_equipe"] else 0

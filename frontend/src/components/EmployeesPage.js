@@ -6,7 +6,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Switch } from "./ui/switch";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "./ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -112,6 +112,9 @@ function EmployeeForm({ open, onOpenChange, initial, departments, onSubmit }) {
           <DialogTitle className="font-heading uppercase tracking-tight">
             {initial ? `Modifier — #${initial.employee_number} ${initial.name}` : "Nouvel employé"}
           </DialogTitle>
+          <DialogDescription className="text-xs text-[#52525B]">
+            Tous les champs sont obligatoires. L'âge et l'ancienneté se calculent automatiquement.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-4 py-2 sm:grid-cols-2">
