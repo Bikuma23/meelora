@@ -33,6 +33,10 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 - [x] Aperçu du rapport (KPI + ventilation + par département) dans la page Rapports.
 - [x] Tests : 30/30 backend + 100% frontend.
 
+## Règle primes (2026-07)
+- [x] Employés **non-CCQ** : aucune prime. Saisie des primes désactivée dans le formulaire employé ET la fiche ; lignes de primes retirées du calcul automatique. Serveur force primes=0 pour non-CCQ (même si override). BONI / RPDB-REER / Assu. collectives restent (propres aux réguliers). Primes = CCQ uniquement.
+- [x] Tests : 33/33 backend + 100% frontend.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
