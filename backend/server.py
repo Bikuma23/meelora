@@ -97,6 +97,48 @@ WD_CCQ = [22, 20, 22, 22, 21, 22, 13, 21, 22, 22, 21, 14]
 WD_STD = [22, 20, 22, 22, 21, 22, 23, 21, 22, 22, 21, 23]
 PAY_WEEKS = [5, 4, 4, 5, 4, 4, 5, 4, 4, 5, 4, 5]
 
+def _first_saturday(year, month):
+    d = datetime(year, month, 1)
+    return d + timedelta(days=(5 - d.weekday()) % 7)
+
+def _ccq_vacation_ranges(year):
+    """Vacances de la construction (convention CCQ), calculées automatiquement.
+    - Congé estival : période de 2 semaines se terminant le 1er samedi d'août.
+    - Congé hivernal : période de 2 semaines se terminant le 1er samedi de janvier (année+1).
+    On ne retient que la portion tombant dans l'année civile visée."""
+    ranges = []
+    summer_end = _first_saturday(year, 8)
+    ranges.append((summer_end - timedelta(days=13), summer_end))
+    winter_end = _first_saturday(year + 1, 1)
+    ranges.append((winter_end - timedelta(days=13), winter_end))
+    return ranges
+
+def compute_working_days(year, ccq=False):
+    """Jours ouvrables (lun-ven) par mois, SANS déduire les jours fériés officiels du Québec.
+    Pour les employés CCQ, on déduit les jours des vacances de la construction (été + hiver)."""
+    ranges = _ccq_vacation_ranges(year) if ccq else []
+    out = []
+    for m in range(1, 13):
+        dim = calendar.monthrange(year, m)[1]
+        count = 0
+        for day in range(1, dim + 1):
+            d = datetime(year, m, day)
+            if d.weekday() >= 5:
+                continue
+            if ccq and d.year == year and any(s <= d <= e for s, e in ranges):
+                continue
+            count += 1
+        out.append(count)
+    return out
+
+def _apply_working_days(hypo, year):
+    """Recalcule les jours ouvrables (CCQ/standard) pour l'année donnée."""
+    hypo["working_days_ccq"] = compute_working_days(int(year), ccq=True)
+    hypo["working_days_std"] = compute_working_days(int(year), ccq=False)
+    return hypo
+
+
+
 DEFAULT_HYPOTHESES = {
     "key": "current", "year": 2026,
     "charges": [
@@ -626,6 +668,7 @@ async def _get_hypo(year):
     doc = await db.hypotheses.find_one({"key": _hkey(year)})
     if not doc:
         base = dict(DEFAULT_HYPOTHESES); base["key"] = _hkey(year); base["year"] = int(year)
+        _apply_working_days(base, year)
         await db.hypotheses.insert_one(base)
         doc = await db.hypotheses.find_one({"key": _hkey(year)})
     return doc
@@ -655,6 +698,7 @@ async def create_year(payload: YearCreate, user: dict = Depends(get_current_user
     src = await _get_hypo(payload.source_year)
     newh = {k: v for k, v in src.items() if k != "_id"}
     newh["key"] = _hkey(ny); newh["year"] = ny
+    _apply_working_days(newh, ny)
     await db.hypotheses.insert_one(newh)
     # Report : le scénario source de l'année précédente devient le salaire actuel de la nouvelle année.
     depts = await db.departments.find().to_list(1000)
