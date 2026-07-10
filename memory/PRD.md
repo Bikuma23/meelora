@@ -26,7 +26,19 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 - [x] Hypothèses : jours ouvrables CCQ/standard, charges sociales avec maximums assurables, augmentations, autres paramètres.
 - [x] Tests : 18/18 backend + 100% frontend.
 
-## Backlog Phase 2
+## Implémenté (Phase 2 — 2026-07)
+- [x] Module Rapports : export **Excel** (Résumé, Détail employés, Par département, Ventilation) et **PDF** (KPI, ventilation, par département), filtrables par département.
+- [x] Filtres **Année + Département** sur le tableau de bord (re-calcul en temps réel via /budget?department).
+- [x] Validation du code département à la création/modification d'employé **et** à l'import Excel (400 si inexistant).
+- [x] Aperçu du rapport (KPI + ventilation + par département) dans la page Rapports.
+- [x] Tests : 30/30 backend + 100% frontend.
+
+## Backlog restant
+- Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
+- Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
+- Gestion multi-années / duplication du budget actif.
+
+## Backlog Phase 2 (obsolète — livré)
 - Rapports prédéfinis & personnalisés (export PDF/Excel).
 - Filtres Année + Département sur le tableau de bord (backend /budget?department déjà prêt).
 - Validation du code département à la création d'un employé.

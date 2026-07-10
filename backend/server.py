@@ -647,6 +647,7 @@ async def import_employees(file: UploadFile = File(...), user: dict = Depends(ge
     ws = wb.active
     valid_types = {"CCQ", "Régulier temps plein", "Stagiaire"}
     valid_primes = {"Aucune Prime", "Prime 8%", "Prime 11%", "Prime 12%"}
+    dept_codes = {d["code"] for d in await db.departments.find().to_list(1000)}
     inserted, errors = 0, []
     n = await _next_number()
     for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
@@ -682,6 +683,8 @@ async def import_employees(file: UploadFile = File(...), user: dict = Depends(ge
             }
             if not doc["department"]:
                 raise ValueError("Département requis")
+            if doc["department"] not in dept_codes:
+                raise ValueError(f"Département '{doc['department']}' inexistant")
             await db.employees.insert_one(doc)
             n += 1
             inserted += 1
