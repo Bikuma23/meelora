@@ -108,6 +108,7 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 - [x] **Vacances CCQ** : désormais calculées (taux vacances de l'employé, ex. 13 %) sur **(nouveau salaire + primes)**, comme les non-CCQ. Auparavant 0 pour les CCQ.
 - [x] **Avantages CCQ (32,33 %)** : calculés sur **(nouveau salaire + primes)** au lieu du salaire seul.
 - [x] Le champ « Taux vacances (%) » est désormais éditable dans la fiche pour les CCQ. Vérifié par curl (Marie : vac=15 146,25 = 0,13×116 509,60 ; ccq_av=37 667,55 = 0,3233×116 509,60) et écran (colonnes Vacances/Avantages CCQ mises à jour).
+- [x] **Transparence fiche CCQ** : ligne « Base de calcul (salaire + primes) » ajoutée, libellés « Vacances (X% de la base) » et « Avantages CCQ (32.33% de la base) » pour montrer clairement l'assiette de calcul. Validé par capture d'écran.
 
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).

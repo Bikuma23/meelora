@@ -192,11 +192,12 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
               <div className="divide-y divide-slate-100">
                 <Row label="Nouveau salaire" value={fmtCAD(p.new_salary)} strong accent="#2563EB" />
                 <Row label="Taux horaire (réf. 2080 h)" value={`${p.taux_horaire} $/h`} />
-                <Row label="Vacances" value={fmtCAD(p.vacation)} />
                 {isCCQ && <Row label={`Prime (${p.prime_type})`} value={fmtCAD(p.prime_amount)} />}
                 {isCCQ && <Row label="Prime de garde" value={fmtCAD(p.garde)} />}
                 {isCCQ && <Row label="Prime HALO" value={fmtCAD(p.halo)} />}
                 {isCCQ && <Row label="Alloc. sécurité" value={fmtCAD(p.alloc)} />}
+                {isCCQ && <Row label="Base de calcul (salaire + primes)" value={fmtCAD(p.new_salary + p.primes_total)} strong accent="#8B5CF6" />}
+                <Row label={isCCQ ? `Vacances (${(p.vacation_rate * 100).toFixed(2)}% de la base)` : "Vacances"} value={fmtCAD(p.vacation)} />
                 {!isCCQ && <Row label="Boni" value={fmtCAD(p.boni)} />}
                 {!isCCQ && <Row label="Alloc. sécurité" value={fmtCAD(p.alloc)} />}
               </div>
@@ -206,7 +207,7 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
               <div className="divide-y divide-slate-100">
                 <Row label="RRQ" value={fmtCAD(p.rrq)} /><Row label="AE" value={fmtCAD(p.ae)} />
                 <Row label="RQAP" value={fmtCAD(p.rqap)} /><Row label="FSS" value={fmtCAD(p.fss)} />
-                {isCCQ && <Row label="Avantages CCQ (32.33%)" value={fmtCAD(p.ccq_avantages)} accent="#2563EB" />}
+                {isCCQ && <Row label="Avantages CCQ (32.33% de la base)" value={fmtCAD(p.ccq_avantages)} accent="#2563EB" />}
                 <Row label="CSST" value={fmtCAD(p.csst)} />
                 {!isCCQ && <Row label="RPDB / REER" value={fmtCAD(p.reer)} />}
                 {!isCCQ && <Row label="Assu. collectives" value={fmtCAD(p.assurance)} />}
