@@ -31,6 +31,7 @@ export const api = {
   updateHypotheses: (d, year) => client.put("/hypotheses", d, { params: year ? { year } : {} }).then((r) => r.data),
   getBudget: (params) => client.get("/budget", { params }).then((r) => r.data),
   getBudgetCompare: (params) => client.get("/budget/compare", { params }).then((r) => r.data),
+  getBudgetEvolution: (params) => client.get("/budget/evolution", { params }).then((r) => r.data),
 
   listYears: () => client.get("/years").then((r) => r.data),
   createYear: (d) => client.post("/years", d).then((r) => r.data),

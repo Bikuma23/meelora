@@ -694,6 +694,24 @@ def build_budget_pdf(data, year, dept_label):
     buf.seek(0)
     return buf
 
+@api.get("/budget/evolution")
+async def budget_evolution(department: Optional[str] = None, user: dict = Depends(get_current_user)):
+    depts = await db.departments.find().to_list(1000)
+    query = {"department": department} if department and department != "all" else {}
+    employees = await db.employees.find(query).sort("employee_number", 1).to_list(1000)
+    docs = await db.hypotheses.find().to_list(1000)
+    years = sorted({int(d["year"]) for d in docs if d.get("year")}) or [DEFAULT_YEAR]
+    out = []
+    for y in years:
+        hypo = await _get_hypo(y)
+        ca = compute_budget(employees, hypo, depts, year=y, scenario="ca")
+        revue = compute_budget(employees, hypo, depts, year=y, scenario="revue")
+        actuel = round(sum(_emp_scn(e, y, "actuel")[2] for e in employees), 2)
+        out.append({"year": y, "actuel": actuel,
+                    "ca": ca["totals"]["salaire_base"], "revue": revue["totals"]["salaire_base"],
+                    "ca_budget": ca["totals"]["budget_total"], "revue_budget": revue["totals"]["budget_total"]})
+    return {"years": out}
+
 @api.get("/reports/excel")
 async def report_excel(department: Optional[str] = None, year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
     data, hypo = await _budget_data(department, year, scenario)

@@ -10,6 +10,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Save, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
+function fromLine(line) {
+  return {
+    base_salary: String(line.base_salary),
+    augmentation_pct: String(+(line.augmentation * 100).toFixed(3)),
+    vacation_rate_pct: String(+(line.vacation_rate * 100).toFixed(2)),
+    prime_type: line.prime_type,
+    prime_garde: line.garde > 0, prime_halo: line.halo > 0, alloc_securite: line.alloc > 0,
+    boni: String(line.boni || 0), boni_mode: line.boni_mode || "montant", boni_pct: String(line.boni_pct || 0),
+    reer: String(line.reer || 0), assurance: String(line.assurance || 0),
+  };
+}
+
 function Row({ label, value, strong, accent }) {
   return (
     <div className="flex items-center justify-between px-3 py-1.5 text-sm">
@@ -19,25 +31,40 @@ function Row({ label, value, strong, accent }) {
   );
 }
 
+const SCENARIOS = [["ca", "Budget CA"], ["revue", "Revue Budgétaire"]];
+
 export default function BudgetFicheDialog({ open, onOpenChange, line, year, scenario = "ca", onSaved }) {
   const isCCQ = line.is_ccq;
-  const [f, setF] = useState(() => ({
-    base_salary: String(line.base_salary),
-    augmentation_pct: String(+(line.augmentation * 100).toFixed(3)),
-    vacation_rate_pct: String(+(line.vacation_rate * 100).toFixed(2)),
-    prime_type: line.prime_type,
-    prime_garde: line.garde > 0, prime_halo: line.halo > 0, alloc_securite: line.alloc > 0,
-    boni: String(line.boni || 0), boni_mode: line.boni_mode || "montant", boni_pct: String(line.boni_pct || 0),
-    reer: String(line.reer || 0), assurance: String(line.assurance || 0),
-  }));
+  const isRevue = scenario === "revue";
+  const [scn, setScn] = useState(scenario);
+  const [curLine, setCurLine] = useState(line);
+  const [f, setF] = useState(() => fromLine(line));
   const [p, setP] = useState(line);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const revueMode = scn === "revue";
+
+  // Charger les valeurs sauvegardées du scénario sélectionné dans la fiche.
+  useEffect(() => {
+    let cancel = false;
+    if (scn === scenario) { setCurLine(line); return; }
+    api.getBudget({ year, scenario: scn }).then((d) => {
+      if (cancel) return;
+      const l = d.lines.find((x) => x.employee_id === line.employee_id);
+      if (l) setCurLine(l);
+    }).catch(() => {});
+    return () => { cancel = true; };
+    // eslint-disable-next-line
+  }, [scn]);
+
+  useEffect(() => { setF(fromLine(curLine)); setP(curLine); }, [curLine]);
 
   const override = useMemo(() => {
     const o = {
-      base_salary: Number(f.base_salary) || 0, augmentation: Number(f.augmentation_pct) / 100,
+      augmentation: Number(f.augmentation_pct) / 100,
       vacation_rate: Number(f.vacation_rate_pct) / 100,
     };
+    // En Revue, on ne touche jamais au salaire de base (salaire actuel partagé) ni au Budget CA.
+    if (!revueMode) o.base_salary = Number(f.base_salary) || 0;
     if (isCCQ) {
       o.prime_type = f.prime_type; o.prime_garde = f.prime_garde; o.prime_halo = f.prime_halo; o.alloc_securite = f.alloc_securite;
     } else {
@@ -47,34 +74,52 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
       else o.boni = Number(f.boni) || 0;
     }
     return o;
-  }, [f, isCCQ]);
+  }, [f, isCCQ, revueMode]);
 
   useEffect(() => {
-    const t = setTimeout(() => { api.budgetPreview(line.employee_id, override, { year, scenario }).then(setP).catch(() => {}); }, 200);
+    const t = setTimeout(() => { api.budgetPreview(line.employee_id, override, { year, scenario: scn }).then(setP).catch(() => {}); }, 200);
     return () => clearTimeout(t);
-  }, [override, line.employee_id, year, scenario]);
+  }, [override, line.employee_id, year, scn]);
 
   const save = async () => {
     if (isCCQ && f.prime_garde && f.prime_type === "Aucune Prime") { toast.error("Sélectionnez un type de prime : la Prime de garde est activée"); return; }
-    await api.saveBudgetOverride(line.employee_id, override, { year, scenario }); toast.success("Fiche enregistrée"); onSaved(); onOpenChange(false);
+    await api.saveBudgetOverride(line.employee_id, override, { year, scenario: scn });
+    toast.success(`Fiche ${scn === "revue" ? "Revue Budgétaire" : "Budget CA"} enregistrée`); onSaved(); onOpenChange(false);
   };
-  const reset = async () => { await api.saveBudgetOverride(line.employee_id, {}, { year, scenario }); toast.success("Ligne réinitialisée"); onSaved(); onOpenChange(false); };
+  const reset = async () => { await api.saveBudgetOverride(line.employee_id, {}, { year, scenario: scn }); toast.success("Ligne réinitialisée"); onSaved(); onOpenChange(false); };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto" data-testid="budget-fiche-dialog">
         <DialogHeader>
-          <DialogTitle>Fiche {scenario === "revue" ? "Revue Budgétaire" : "Budget CA"} {year} — {line.name}</DialogTitle>
+          <DialogTitle>Fiche {scn === "revue" ? "Revue Budgétaire" : "Budget CA"} {year} — {line.name}</DialogTitle>
           <DialogDescription className="font-mono-data text-xs">{line.employment_type} · #{String(line.employee_number).padStart(3, "0")} · {line.department_label}</DialogDescription>
         </DialogHeader>
+
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3" data-testid="fiche-scenario-bar">
+          <span className="text-[11px] font-700 uppercase tracking-widest text-slate-500">Saisie</span>
+          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1" data-testid="fiche-scenario-toggle">
+            {SCENARIOS.map(([k, lbl]) => (
+              <button key={k} data-testid={`fiche-scenario-${k}`} onClick={() => setScn(k)}
+                className={`rounded-md px-3 py-1.5 text-xs font-700 transition-colors ${scn === k ? "bg-[#0E1526] text-white shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+          <span className="text-[11px]" style={{ color: revueMode ? "#8B5CF6" : "#64748B" }}>
+            {revueMode
+              ? "Revue Budgétaire : ajustez primes, augmentation et vacances — le Budget CA n'est pas modifié."
+              : "Budget CA : bâti à partir du salaire actuel + augmentations/primes."}
+          </span>
+        </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="space-y-4">
             <div className="rounded-xl border border-slate-200">
               <div className="border-b border-slate-200 bg-slate-50 px-3 py-2"><h3 className="text-xs font-700 uppercase tracking-widest">Salaire</h3></div>
               <div className="grid grid-cols-2 gap-3 p-3">
-                <div><Label className="text-[11px] uppercase text-slate-500">Salaire de base ($)</Label>
-                  <Input data-testid="fiche-base-salary" type="number" className="mt-1 font-mono-data" value={f.base_salary} onChange={(e) => set("base_salary", e.target.value)} /></div>
+                <div><Label className="text-[11px] uppercase text-slate-500">Salaire de base ($){revueMode && <span className="ml-1 normal-case text-slate-400">— salaire actuel</span>}</Label>
+                  <Input data-testid="fiche-base-salary" type="number" disabled={revueMode} className="mt-1 font-mono-data" value={f.base_salary} onChange={(e) => set("base_salary", e.target.value)} /></div>
                 <div><Label className="text-[11px] uppercase text-slate-500">Augmentation (%)</Label>
                   <Input data-testid="fiche-augmentation" type="number" step="0.1" className="mt-1 font-mono-data" value={f.augmentation_pct} onChange={(e) => set("augmentation_pct", e.target.value)} /></div>
                 <div><Label className="text-[11px] uppercase text-slate-500">Taux vacances (%)</Label>
