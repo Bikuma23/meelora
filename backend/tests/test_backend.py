@@ -258,3 +258,48 @@ class TestBudgetFilter:
         j = r.json()
         assert j["kpis"]["headcount"] == 0
         assert len(j["lines"]) == 0
+
+
+# -------- Non-CCQ Prime Rule (new) ---------
+class TestNonCCQPrimeRule:
+    def test_non_ccq_lines_have_zero_primes(self, auth):
+        j = requests.get(f"{API}/budget", headers=auth).json()
+        non_ccq = [l for l in j["lines"] if not l["is_ccq"]]
+        assert non_ccq, "no non-CCQ lines"
+        for l in non_ccq:
+            assert l["prime_amount"] == 0, (l["name"], l["prime_amount"])
+            assert l["garde"] == 0, (l["name"], l["garde"])
+            assert l["halo"] == 0, (l["name"], l["halo"])
+            assert l["alloc"] == 0, (l["name"], l["alloc"])
+            assert l["compagnon"] == 0, (l["name"], l["compagnon"])
+
+    def test_ccq_lines_still_have_primes(self, auth):
+        j = requests.get(f"{API}/budget", headers=auth).json()
+        marie = next((l for l in j["lines"] if "Marie" in l["name"]), None)
+        assert marie is not None, "Marie CCQ Electricien not found"
+        assert marie["is_ccq"] is True
+        assert marie["prime_amount"] > 0
+        assert marie["garde"] > 0
+        assert marie["compagnon"] > 0
+
+    def test_non_ccq_preview_ignores_primes(self, auth):
+        emps = requests.get(f"{API}/employees", headers=auth).json()
+        non_ccq_emp = next((e for e in emps if not e["is_ccq"]), None)
+        assert non_ccq_emp
+        # Try to force primes via override
+        override = {
+            "augmentation": 0.05,
+            "prime_type": "Prime 12%",
+            "prime_garde": True,
+            "prime_halo": True,
+            "alloc_securite": True,
+            "boni": 0
+        }
+        r = requests.post(f"{API}/employees/{non_ccq_emp['id']}/budget-preview", json={"override": override}, headers=auth)
+        assert r.status_code == 200, r.text
+        line = r.json()
+        assert line["prime_amount"] == 0
+        assert line["garde"] == 0
+        assert line["halo"] == 0
+        assert line["alloc"] == 0
+        assert line["compagnon"] == 0

@@ -63,8 +63,8 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
       name: f.name.trim(), department: f.department, title: f.title.trim(), employment_type: f.employment_type,
       ccq_category: isCCQ ? f.ccq_category : "N/A", current_annual_salary: Number(f.current_annual_salary),
       vacation_rate: Number(f.vacation_rate_pct) / 100, sick_personal_days: parseInt(f.sick_personal_days, 10),
-      holiday_days: parseInt(f.holiday_days, 10), is_ccq: isCCQ, prime_type: f.prime_type,
-      prime_garde: f.prime_garde, prime_halo: f.prime_halo, alloc_securite: f.alloc_securite,
+      holiday_days: parseInt(f.holiday_days, 10), is_ccq: isCCQ, prime_type: isCCQ ? f.prime_type : "Aucune Prime",
+      prime_garde: isCCQ && f.prime_garde, prime_halo: isCCQ && f.prime_halo, alloc_securite: isCCQ && f.alloc_securite,
       hire_date: f.hire_date, birth_date: f.birth_date,
     });
   };
@@ -103,12 +103,14 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
           )}
           <Field label="Salaire annuel actuel ($)" error={errors.current_annual_salary} testId="f-salary"><Input data-testid="f-salary" type="number" className="font-mono-data" value={f.current_annual_salary} onChange={(e) => set("current_annual_salary", e.target.value)} /></Field>
           <Field label="Taux de vacances (%)" error={errors.vacation_rate_pct} testId="f-vacation"><Input data-testid="f-vacation" type="number" step="0.1" className="font-mono-data" value={f.vacation_rate_pct} onChange={(e) => set("vacation_rate_pct", e.target.value)} /></Field>
-          <Field label="Type de prime" testId="f-prime-type">
-            <Select value={f.prime_type} onValueChange={(v) => set("prime_type", v)}>
-              <SelectTrigger data-testid="f-prime-type"><SelectValue /></SelectTrigger>
-              <SelectContent>{["Aucune Prime", "Prime 8%", "Prime 11%", "Prime 12%"].map((x) => <SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent>
-            </Select>
-          </Field>
+          {isCCQ && (
+            <Field label="Type de prime" testId="f-prime-type">
+              <Select value={f.prime_type} onValueChange={(v) => set("prime_type", v)}>
+                <SelectTrigger data-testid="f-prime-type"><SelectValue /></SelectTrigger>
+                <SelectContent>{["Aucune Prime", "Prime 8%", "Prime 11%", "Prime 12%"].map((x) => <SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+          )}
           <Field label="Jours maladie / perso (informatif)" error={errors.sick_personal_days} testId="f-sick"><Input data-testid="f-sick" type="number" className="font-mono-data" value={f.sick_personal_days} onChange={(e) => set("sick_personal_days", e.target.value)} /></Field>
           <Field label="Jours fériés (Noël & Jour de l'an) (informatif)" error={errors.holiday_days} testId="f-holiday"><Input data-testid="f-holiday" type="number" className="font-mono-data" value={f.holiday_days} onChange={(e) => set("holiday_days", e.target.value)} /></Field>
           <Field label="Date d'embauche" error={errors.hire_date} testId="f-hire"><Input data-testid="f-hire" type="date" className="font-mono-data" value={f.hire_date} onChange={(e) => set("hire_date", e.target.value)} /></Field>
@@ -127,12 +129,16 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
           </div>
         </div>
         <div className="border-t border-slate-200 pt-4">
-          <p className="mb-2 text-xs font-700 uppercase tracking-widest text-slate-500">Primes & allocations</p>
-          <div className="grid grid-cols-3 gap-3">
-            {[["prime_garde", "Prime de garde"], ["prime_halo", "Prime HALO 5%"], ["alloc_securite", "Alloc. sécurité"]].map(([k, lbl]) => (
-              <label key={k} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"><span className="text-[11px] font-500">{lbl}</span><Switch data-testid={`f-${k}`} checked={f[k]} onCheckedChange={(v) => set(k, v)} /></label>
-            ))}
-          </div>
+          <p className="mb-2 text-xs font-700 uppercase tracking-widest text-slate-500">Primes & allocations {!isCCQ && <span className="font-500 normal-case tracking-normal text-slate-400">— non applicables aux employés non-CCQ</span>}</p>
+          {isCCQ ? (
+            <div className="grid grid-cols-3 gap-3">
+              {[["prime_garde", "Prime de garde"], ["prime_halo", "Prime HALO 5%"], ["alloc_securite", "Alloc. sécurité"]].map(([k, lbl]) => (
+                <label key={k} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"><span className="text-[11px] font-500">{lbl}</span><Switch data-testid={`f-${k}`} checked={f[k]} onCheckedChange={(v) => set(k, v)} /></label>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] text-slate-500">Aucune prime n'est calculée pour cet employé. Le BONI, le REER et l'assurance collective se gèrent dans la fiche Salaires & Budget.</p>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>

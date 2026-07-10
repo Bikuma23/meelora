@@ -1,0 +1,23 @@
+{
+  "summary": "Focused testing of the new Non-CCQ prime rule. Backend: 33/33 pytest cases pass (3 new: non-CCQ zero primes, CCQ still has primes, budget-preview ignores primes for non-CCQ). Frontend Playwright verified prime controls hidden in EmpForm for Régulier temps plein & Stagiaire and shown for CCQ; Salaires & Budget fiche hides prime lines for non-CCQ and shows RPDB/BONI/Assu, while CCQ fiche shows all prime rows and hides REER/BONI/Assu.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_backend.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "BudgetFicheDialog.js has an info-note that literally contains 'RPDB, BONI et Assu. collectives non applicables' — cosmetic only, but harmless.",
+    "Employes.js EmpForm forces prime_type='Aucune Prime' + all flags false on submit when non-CCQ — good defensive coding preventing stale form state.",
+    "server.py compute_budget correctly short-circuits primes for non-CCQ regardless of override contents; garde eligibility restricted to CCQ."
+  ],
+  "updated_files": ["/app/backend/tests/test_backend.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@accslegro.com / admin123",
+  "seed_data_creation": "None persisted. No overrides saved during testing (only budget-preview which is transient).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend suite has 33 tests; TestNonCCQPrimeRule class was added covering GET /api/budget for non-CCQ zeros, CCQ Marie non-zero primes/compagnon, and POST /api/employees/{id}/budget-preview (payload wrapper {'override': {...}}) proving server ignores prime_type/prime_garde/etc for non-CCQ. Frontend flow: after login, Employés → 'add-employee-btn' → default Type='Régulier temps plein' shows note 'Aucune prime n'est calculée...' and no f-prime-type/f-prime_garde/f-prime_halo/f-alloc_securite; switching to Stagiaire keeps them hidden; switching to CCQ reveals all + f-ccq-category. Salaires & Budget → edit Marie (CCQ) row shows fiche-prime-type + Prime/Prime de garde/Prime HALO/Alloc. sécurité rows in Calcul automatique + Avantages CCQ; edit Jean (Régulier temps plein) shows no prime controls & only Nouveau salaire/Taux horaire/Vacances/BONI/RPDB/Assu rows.",
+  "rca of the issue": "N/A — feature works end-to-end."
+}

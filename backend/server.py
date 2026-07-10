@@ -154,7 +154,7 @@ def compute_budget(employees, hypo, depts):
     aug_ccq = hypo["augmentation_ccq"]
     aug_autres = hypo["augmentation_autres"]
 
-    eligible = [e for e in employees if e.get("prime_garde")]
+    eligible = [e for e in employees if e.get("prime_garde") and e.get("is_ccq")]
     garde_avg = (hypo["prime_garde_cout_unitaire"] * hypo["prime_garde_nb_annuel"] / len(eligible)) if eligible else 0
 
     lines = []
@@ -169,12 +169,18 @@ def compute_budget(employees, hypo, depts):
         taux_horaire = new_salary / ANNUAL_HOURS
 
         prime_type = ov.get("prime_type", e.get("prime_type", "Aucune Prime"))
-        prime_amt = new_salary * PRIME_PCT.get(prime_type, 0.0)
-        garde = garde_avg if ov.get("prime_garde", e.get("prime_garde")) else 0
-        halo = new_salary * hypo["prime_halo_rate"] if ov.get("prime_halo", e.get("prime_halo")) else 0
-        alloc = hypo["alloc_securite_montant"] if ov.get("alloc_securite", e.get("alloc_securite")) else 0
-        compagnon = new_salary * hypo["ccq_electricien_compagnon_rate"] if (ccq and e.get("ccq_category") == "Électricien") else 0
-        boni = 0 if ccq else float(ov.get("boni", 0) or 0)
+        if ccq:
+            prime_amt = new_salary * PRIME_PCT.get(prime_type, 0.0)
+            garde = garde_avg if ov.get("prime_garde", e.get("prime_garde")) else 0
+            halo = new_salary * hypo["prime_halo_rate"] if ov.get("prime_halo", e.get("prime_halo")) else 0
+            alloc = hypo["alloc_securite_montant"] if ov.get("alloc_securite", e.get("alloc_securite")) else 0
+            compagnon = new_salary * hypo["ccq_electricien_compagnon_rate"] if e.get("ccq_category") == "Électricien" else 0
+            boni = 0
+        else:
+            # Employés non-CCQ : aucune prime. Seul le boni (+ REER/assurance) s'applique.
+            prime_type = "Aucune Prime"
+            prime_amt = garde = halo = alloc = compagnon = 0
+            boni = float(ov.get("boni", 0) or 0)
         primes_total = prime_amt + garde + halo + alloc + compagnon + boni
 
         vac_rate = ov.get("vacation_rate", e["vacation_rate"])
