@@ -150,20 +150,28 @@ async def create_employee(payload: EmployeeBase):
     return Employee.from_mongo(created)
 
 
+def _oid(employee_id: str) -> ObjectId:
+    try:
+        return ObjectId(employee_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Employé introuvable")
+
+
 @api_router.put("/employees/{employee_id}", response_model=Employee, response_model_by_alias=False)
 async def update_employee(employee_id: str, payload: EmployeeBase):
+    oid = _oid(employee_id)
     res = await db.employees.update_one(
-        {"_id": ObjectId(employee_id)}, {"$set": payload.model_dump()}
+        {"_id": oid}, {"$set": payload.model_dump()}
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Employé introuvable")
-    updated = await db.employees.find_one({"_id": ObjectId(employee_id)})
+    updated = await db.employees.find_one({"_id": oid})
     return Employee.from_mongo(updated)
 
 
 @api_router.delete("/employees/{employee_id}")
 async def delete_employee(employee_id: str):
-    res = await db.employees.delete_one({"_id": ObjectId(employee_id)})
+    res = await db.employees.delete_one({"_id": _oid(employee_id)})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Employé introuvable")
     return {"success": True}
