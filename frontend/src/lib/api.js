@@ -37,4 +37,7 @@ export const api = {
   deleteDepartment: (id) => client.delete(`/departments/${id}`).then((r) => r.data),
 
   getJournal: () => client.get("/journal").then((r) => r.data),
+  downloadReport: (kind, department) => client.get(`/reports/${kind}`, {
+    params: department && department !== "all" ? { department } : {}, responseType: "blob",
+  }).then((r) => r.data),
 };

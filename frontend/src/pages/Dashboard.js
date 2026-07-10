@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { fmtCAD } from "../lib/format";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
@@ -36,12 +37,44 @@ function Kpi({ label, value, sub, icon: Icon, tint, testId }) {
 
 export default function Dashboard() {
   const [b, setB] = useState(null);
-  useEffect(() => { api.getBudget().then(setB); }, []);
-  if (!b) return <p className="font-mono-data text-sm text-slate-500">Chargement…</p>;
-  const k = b.kpis;
+  const [departments, setDepartments] = useState([]);
+  const [dept, setDept] = useState("all");
+  useEffect(() => { api.listDepartments().then(setDepartments); }, []);
+  useEffect(() => { setB(null); api.getBudget(dept !== "all" ? { department: dept } : {}).then(setB); }, [dept]);
 
   return (
     <div className="space-y-6" data-testid="dashboard-page">
+      <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div>
+            <label className="text-[11px] uppercase text-slate-500">Année</label>
+            <Select value="2026" disabled><SelectTrigger className="mt-1 h-9 w-28" data-testid="dash-year"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="2026">2026</SelectItem></SelectContent></Select>
+          </div>
+          <div>
+            <label className="text-[11px] uppercase text-slate-500">Département</label>
+            <Select value={dept} onValueChange={setDept}>
+              <SelectTrigger className="mt-1 h-9 w-64" data-testid="dash-department"><SelectValue /></SelectTrigger>
+              <SelectContent className="max-h-64">
+                <SelectItem value="all">Tous les départements</SelectItem>
+                {departments.map((d) => <SelectItem key={d.code} value={d.code}>{d.code} — {d.description}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <span className="font-mono-data text-xs text-slate-500">{b ? `${b.kpis.headcount} entrée(s) affichée(s)` : "…"}</span>
+      </div>
+
+      {!b ? <p className="font-mono-data text-sm text-slate-500">Chargement…</p> : <DashboardBody b={b} />}
+    </div>
+  );
+}
+
+function DashboardBody({ b }) {
+  const k = b.kpis;
+
+  return (
+    <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Kpi testId="kpi-employes" label="Employés" value={k.headcount} sub="actifs" icon={Users} tint={BLUE} />
         <Kpi testId="kpi-masse" label="Masse salariale" value={fmtCAD(k.masse_salariale)} sub="total charges salariales" icon={DollarSign} tint={TEAL} />

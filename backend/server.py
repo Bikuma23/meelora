@@ -384,6 +384,8 @@ async def list_employees(q: Optional[str] = None, user: dict = Depends(get_curre
 
 @api.post("/employees")
 async def create_employee(payload: EmployeeBase, user: dict = Depends(get_current_user)):
+    if not await db.departments.find_one({"code": payload.department}):
+        raise HTTPException(status_code=400, detail=f"Département '{payload.department}' inexistant")
     doc = payload.model_dump()
     doc["employee_number"] = await _next_number()
     res = await db.employees.insert_one(doc)
@@ -394,6 +396,8 @@ async def create_employee(payload: EmployeeBase, user: dict = Depends(get_curren
 
 @api.put("/employees/{eid}")
 async def update_employee(eid: str, payload: EmployeeBase, user: dict = Depends(get_current_user)):
+    if not await db.departments.find_one({"code": payload.department}):
+        raise HTTPException(status_code=400, detail=f"Département '{payload.department}' inexistant")
     res = await db.employees.update_one({"_id": _oid(eid)}, {"$set": payload.model_dump()})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Employé introuvable")
@@ -466,6 +470,126 @@ async def get_budget(department: Optional[str] = None, user: dict = Depends(get_
     query = {"department": department} if department and department != "all" else {}
     employees = await db.employees.find(query).sort("employee_number", 1).to_list(1000)
     return compute_budget(employees, hypo, depts)
+
+# ---------------------------------------------------------------------------
+# Reports (Excel / PDF)
+# ---------------------------------------------------------------------------
+def _money(v):
+    return f"{v:,.2f}".replace(",", " ").replace(".", ",") + " $"
+
+async def _budget_data(department=None):
+    hypo = await db.hypotheses.find_one({"key": "current"})
+    depts = await db.departments.find().to_list(1000)
+    query = {"department": department} if department and department != "all" else {}
+    employees = await db.employees.find(query).sort("employee_number", 1).to_list(1000)
+    data = compute_budget(employees, hypo, depts)
+    return data, hypo
+
+def build_budget_excel(data, year, dept_label):
+    wb = openpyxl.Workbook()
+    bold = openpyxl.styles.Font(bold=True)
+    # Résumé
+    ws = wb.active; ws.title = "Résumé"
+    ws.append([f"Rapport budgétaire {year} — {dept_label}"]); ws["A1"].font = openpyxl.styles.Font(bold=True, size=14)
+    ws.append([])
+    k = data["kpis"]
+    for lbl, val in [("Effectif", k["headcount"]), ("Masse salariale", data["totals"]["salaire_base"]),
+                     ("Budget global (avec charges)", data["totals"]["budget_total"]),
+                     ("Salaire moyen", k["salaire_moyen"]), ("Employés CCQ", k["ccq_count"])]:
+        ws.append([lbl, val])
+    ws.append([])
+    ws.append(["Ventilation", "Montant", "%"]); [setattr(c, "font", bold) for c in ws[ws.max_row]]
+    t = data["totals"]; bt = t["budget_total"] or 1
+    for lbl, key in [("Salaire de base", "salaire_base"), ("Vacances", "vacances"), ("Primes & Boni", "primes"),
+                     ("Avantages sociaux", "avantages"), ("CSST", "csst"), ("RPDB/REER", "reer"), ("Assu. collectives", "assurance")]:
+        ws.append([lbl, t[key], f"{t[key]/bt*100:.1f}%"])
+    ws.append(["BUDGET TOTAL", t["budget_total"], "100%"]); [setattr(c, "font", bold) for c in ws[ws.max_row]]
+    # Détail employés
+    ws2 = wb.create_sheet("Détail employés")
+    cols = ["#", "Nom", "Titre", "Département", "Type", "Salaire base", "Nouveau salaire", "Vacances",
+            "Primes", "Avantages", "CSST", "REER", "Assurance", "Coût total"]
+    ws2.append(cols); [setattr(c, "font", bold) for c in ws2[1]]
+    for l in data["lines"]:
+        ws2.append([l["employee_number"], l["name"], l["title"], l["department"], l["employment_type"],
+                    l["base_salary"], l["new_salary"], l["vacation"], l["primes_total"], l["avantages"],
+                    l["csst"], l["reer"], l["assurance"], l["total_cost"]])
+    # Par département
+    ws3 = wb.create_sheet("Par département")
+    ws3.append(["Département", "Salaire", "Budget total"]); [setattr(c, "font", bold) for c in ws3[1]]
+    for d in data["by_department"]:
+        ws3.append([f"{d['department']} — {d['label']}", d["salaire"], d["budget"]])
+    # Ventilation mensuelle
+    ws4 = wb.create_sheet("Ventilation mensuelle")
+    ws4.append(["Mois", "Sem. paie", "Jours std", "Jours CCQ", "Salaires", "Charges", "Total"]); [setattr(c, "font", bold) for c in ws4[1]]
+    for m in data["monthly"]:
+        ws4.append([m["month"], m["sem_paie"], m["jours_std"], m["jours_ccq"], m["salaires"], m["charges"], m["total"]])
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return buf
+
+def build_budget_pdf(data, year, dept_label):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=18 * mm, bottomMargin=15 * mm, leftMargin=15 * mm, rightMargin=15 * mm)
+    styles = getSampleStyleSheet()
+    NAVY = colors.HexColor("#0E1526"); TEAL = colors.HexColor("#14B8A6")
+    h = ParagraphStyle("h", parent=styles["Title"], textColor=NAVY, fontSize=18)
+    sub = ParagraphStyle("sub", parent=styles["Normal"], textColor=colors.HexColor("#64748B"), fontSize=9)
+    sec = ParagraphStyle("sec", parent=styles["Heading2"], textColor=NAVY, fontSize=12, spaceBefore=10)
+    el = [Paragraph(f"Rapport budgétaire {year}", h),
+          Paragraph(f"{dept_label} · généré le {datetime.now().strftime('%Y-%m-%d %H:%M')}", sub), Spacer(1, 8)]
+    k = data["kpis"]; t = data["totals"]
+    kpi_tbl = Table([["Effectif", "Masse salariale", "Budget global", "Salaire moyen"],
+                     [str(k["headcount"]), _money(t["salaire_base"]), _money(t["budget_total"]), _money(k["salaire_moyen"])]],
+                    colWidths=[42 * mm] * 4)
+    kpi_tbl.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                                 ("FONTSIZE", (0, 0), (-1, -1), 9), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                                 ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("TOPPADDING", (0, 0), (-1, -1), 6),
+                                 ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"), ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0"))]))
+    el += [kpi_tbl, Spacer(1, 6), Paragraph("Ventilation des coûts", sec)]
+    bt = t["budget_total"] or 1
+    vrows = [["Poste", "Montant", "%"]]
+    for lbl, key in [("Salaire de base", "salaire_base"), ("Vacances", "vacances"), ("Primes & Boni", "primes"),
+                     ("Avantages sociaux", "avantages"), ("CSST", "csst"), ("RPDB/REER", "reer"), ("Assu. collectives", "assurance")]:
+        vrows.append([lbl, _money(t[key]), f"{t[key]/bt*100:.1f}%"])
+    vrows.append(["BUDGET TOTAL", _money(t["budget_total"]), "100%"])
+    vt = Table(vrows, colWidths=[90 * mm, 50 * mm, 25 * mm])
+    vt.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), TEAL), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                            ("FONTSIZE", (0, 0), (-1, -1), 8), ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+                            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
+                            ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#F1F5F9")), ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold")]))
+    el += [vt, Spacer(1, 6), Paragraph("Budget par département", sec)]
+    drows = [["Département", "Salaire", "Budget total"]] + [[f"{d['department']} — {d['label']}", _money(d["salaire"]), _money(d["budget"])] for d in data["by_department"]]
+    dt = Table(drows, colWidths=[95 * mm, 35 * mm, 35 * mm])
+    dt.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                            ("FONTSIZE", (0, 0), (-1, -1), 8), ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+                            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
+                            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")])]))
+    el += [dt]
+    doc.build(el)
+    buf.seek(0)
+    return buf
+
+@api.get("/reports/excel")
+async def report_excel(department: Optional[str] = None, user: dict = Depends(get_current_user)):
+    data, hypo = await _budget_data(department)
+    dept_label = "Tous les départements" if not department or department == "all" else department
+    buf = build_budget_excel(data, hypo["year"], dept_label)
+    await log_action(user, "Modifier", "Rapport", f"Export Excel — {dept_label}")
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename=rapport_budget_{hypo['year']}.xlsx"})
+
+@api.get("/reports/pdf")
+async def report_pdf(department: Optional[str] = None, user: dict = Depends(get_current_user)):
+    data, hypo = await _budget_data(department)
+    dept_label = "Tous les départements" if not department or department == "all" else department
+    buf = build_budget_pdf(data, hypo["year"], dept_label)
+    await log_action(user, "Modifier", "Rapport", f"Export PDF — {dept_label}")
+    return StreamingResponse(buf, media_type="application/pdf",
+                             headers={"Content-Disposition": f"attachment; filename=rapport_budget_{hypo['year']}.pdf"})
 
 # ---------------------------------------------------------------------------
 # Excel import / templates

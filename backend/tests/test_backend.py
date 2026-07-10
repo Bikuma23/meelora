@@ -171,3 +171,90 @@ class TestJournal:
             assert any("TEST_J" in (e.get("label") or "") for e in entries[:10])
         finally:
             requests.delete(f"{API}/departments/{did}", headers=auth)
+
+
+# -------- Phase 2: Reports & filters ---------
+class TestReports:
+    def test_excel_requires_auth(self):
+        assert requests.get(f"{API}/reports/excel").status_code == 401
+
+    def test_pdf_requires_auth(self):
+        assert requests.get(f"{API}/reports/pdf").status_code == 401
+
+    def test_excel_ok(self, auth):
+        r = requests.get(f"{API}/reports/excel", headers=auth, timeout=60)
+        assert r.status_code == 200
+        assert "spreadsheet" in r.headers.get("content-type", "")
+        assert len(r.content) > 1000
+        # xlsx = zip file → starts with PK
+        assert r.content[:2] == b"PK"
+
+    def test_excel_filtered(self, auth):
+        r = requests.get(f"{API}/reports/excel?department=810", headers=auth, timeout=60)
+        assert r.status_code == 200
+        assert r.content[:2] == b"PK"
+
+    def test_pdf_ok(self, auth):
+        r = requests.get(f"{API}/reports/pdf", headers=auth, timeout=60)
+        assert r.status_code == 200
+        assert r.headers.get("content-type", "").startswith("application/pdf")
+        assert r.content[:4] == b"%PDF"
+
+    def test_pdf_filtered(self, auth):
+        r = requests.get(f"{API}/reports/pdf?department=810", headers=auth, timeout=60)
+        assert r.status_code == 200
+        assert r.content[:4] == b"%PDF"
+
+    def test_report_creates_journal_entry(self, auth):
+        requests.get(f"{API}/reports/excel", headers=auth, timeout=60)
+        j = requests.get(f"{API}/journal", headers=auth).json()
+        assert any((e.get("label") or "").startswith("Export") or "Rapport" in (e.get("entity") or "") for e in j[:10])
+
+
+class TestDeptValidation:
+    def _payload(self, dept):
+        return {"name": "TEST_DVEmp", "department": dept, "title": "T",
+                "employment_type": "Régulier temps plein", "ccq_category": "N/A",
+                "current_annual_salary": 50000, "vacation_rate": 0.08,
+                "sick_personal_days": 5, "holiday_days": 10, "is_ccq": False,
+                "prime_type": "Aucune Prime", "prime_garde": False, "prime_halo": False,
+                "alloc_securite": False, "hire_date": "2024-01-01", "birth_date": "1990-01-01"}
+
+    def test_create_bad_dept_400(self, auth):
+        r = requests.post(f"{API}/employees", json=self._payload("ZZZ_NOPE"), headers=auth)
+        assert r.status_code == 400
+        assert "inexistant" in r.text.lower()
+
+    def test_update_bad_dept_400(self, auth):
+        c = requests.post(f"{API}/employees", json=self._payload("400"), headers=auth)
+        assert c.status_code == 200
+        eid = c.json()["id"]
+        try:
+            bad = self._payload("ZZZ_NOPE")
+            u = requests.put(f"{API}/employees/{eid}", json=bad, headers=auth)
+            assert u.status_code == 400
+        finally:
+            requests.delete(f"{API}/employees/{eid}", headers=auth)
+
+    def test_create_valid_dept_ok(self, auth):
+        c = requests.post(f"{API}/employees", json=self._payload("400"), headers=auth)
+        assert c.status_code == 200
+        requests.delete(f"{API}/employees/{c.json()['id']}", headers=auth)
+
+
+class TestBudgetFilter:
+    def test_budget_filter_by_dept(self, auth):
+        full = requests.get(f"{API}/budget", headers=auth).json()
+        r = requests.get(f"{API}/budget?department=810", headers=auth)
+        assert r.status_code == 200
+        j = r.json()
+        assert all(l["department"] == "810" for l in j["lines"])
+        assert j["kpis"]["headcount"] == len(j["lines"])
+        assert j["kpis"]["headcount"] <= full["kpis"]["headcount"]
+
+    def test_budget_filter_empty_dept(self, auth):
+        r = requests.get(f"{API}/budget?department=ZZZ_NOPE", headers=auth)
+        assert r.status_code == 200
+        j = r.json()
+        assert j["kpis"]["headcount"] == 0
+        assert len(j["lines"]) == 0

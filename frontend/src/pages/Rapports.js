@@ -1,14 +1,103 @@
-import { FileText, Clock } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { api } from "../lib/api";
+import { fmtCAD } from "../lib/format";
+import { Button } from "../components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { FileSpreadsheet, FileText, Filter } from "lucide-react";
+import { toast } from "sonner";
+
+const VENTIL = [
+  ["salaire_base", "Salaire de base"], ["vacances", "Vacances"], ["primes", "Primes & Boni"],
+  ["avantages", "Avantages sociaux"], ["csst", "CSST"], ["reer", "RPDB/REER"], ["assurance", "Assu. collectives"],
+];
 
 export default function Rapports() {
+  const [departments, setDepartments] = useState([]);
+  const [dept, setDept] = useState("all");
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState("");
+
+  useEffect(() => { api.listDepartments().then(setDepartments); }, []);
+  useEffect(() => { api.getBudget(dept !== "all" ? { department: dept } : {}).then(setData); }, [dept]);
+
+  const download = async (kind, ext) => {
+    setBusy(kind);
+    try {
+      const blob = await api.downloadReport(kind, dept);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url;
+      a.download = `rapport_budget_2026${dept !== "all" ? "_" + dept : ""}.${ext}`; a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Rapport ${ext.toUpperCase()} téléchargé`);
+    } catch { toast.error("Export échoué"); } finally { setBusy(""); }
+  };
+
+  const scopeLabel = useMemo(() => dept === "all" ? "Tous les départements" : departments.find((d) => d.code === dept)?.description || dept, [dept, departments]);
+
   return (
-    <div className="card flex flex-col items-center justify-center gap-3 p-16 text-center" data-testid="rapports-page">
-      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#2563EB]/10 text-[#2563EB]"><FileText size={26} /></span>
-      <h3 className="text-lg font-700">Rapports — prédéfinis & personnalisés</h3>
-      <p className="max-w-md text-sm text-slate-500">
-        Générez et exportez des rapports budgétaires (par département, par type d'emploi, ventilation mensuelle) en PDF et Excel.
-      </p>
-      <span className="mt-1 flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-600 text-amber-700"><Clock size={13} /> Bientôt disponible (Phase 2)</span>
+    <div className="space-y-5" data-testid="rapports-page">
+      <div className="card flex flex-wrap items-end justify-between gap-4 p-5">
+        <div>
+          <p className="flex items-center gap-1.5 text-xs font-700 uppercase tracking-widest text-slate-500"><Filter size={13} /> Portée du rapport</p>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <div>
+              <label className="text-[11px] uppercase text-slate-500">Année</label>
+              <Select value="2026" disabled><SelectTrigger className="mt-1 w-32" data-testid="report-year"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="2026">2026</SelectItem></SelectContent></Select>
+            </div>
+            <div>
+              <label className="text-[11px] uppercase text-slate-500">Département</label>
+              <Select value={dept} onValueChange={setDept}>
+                <SelectTrigger className="mt-1 w-64" data-testid="report-department"><SelectValue /></SelectTrigger>
+                <SelectContent className="max-h-64">
+                  <SelectItem value="all">Tous les départements</SelectItem>
+                  {departments.map((d) => <SelectItem key={d.code} value={d.code}>{d.code} — {d.description}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button data-testid="export-excel-btn" disabled={busy} onClick={() => download("excel", "xlsx")} className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90">
+            <FileSpreadsheet size={16} /> Exporter Excel
+          </Button>
+          <Button data-testid="export-pdf-btn" disabled={busy} onClick={() => download("pdf", "pdf")} className="gap-2 bg-[#EF4444] hover:bg-[#EF4444]/90">
+            <FileText size={16} /> Exporter PDF
+          </Button>
+        </div>
+      </div>
+
+      {data && (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[["Effectif", data.kpis.headcount], ["Masse salariale", fmtCAD(data.totals.salaire_base)],
+              ["Budget global", fmtCAD(data.totals.budget_total)], ["Salaire moyen", fmtCAD(data.kpis.salaire_moyen)]].map(([l, v]) => (
+              <div key={l} className="card p-4"><p className="text-[11px] font-600 uppercase tracking-wide text-slate-500">{l}</p><p className="mt-1.5 font-mono-data text-lg font-700">{v}</p></div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="card p-5">
+              <h3 className="mb-3 text-sm font-700">Aperçu — Ventilation ({scopeLabel})</h3>
+              <div className="divide-y divide-slate-100">
+                {VENTIL.map(([k, l]) => (
+                  <div key={k} className="flex justify-between py-1.5 text-sm"><span className="text-slate-500">{l}</span><span className="font-mono-data">{fmtCAD(data.totals[k])}</span></div>
+                ))}
+                <div className="flex justify-between py-2 text-sm font-700"><span>Budget total</span><span className="font-mono-data text-[#0E9488]">{fmtCAD(data.totals.budget_total)}</span></div>
+              </div>
+            </div>
+            <div className="card p-5">
+              <h3 className="mb-3 text-sm font-700">Budget par département</h3>
+              <div className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
+                {data.by_department.map((d) => (
+                  <div key={d.department} className="flex justify-between py-1.5 text-sm">
+                    <span className="text-slate-600">{d.department} — {d.label}</span><span className="font-mono-data">{fmtCAD(d.budget)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
