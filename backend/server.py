@@ -645,6 +645,29 @@ async def save_override(eid: str, payload: OverridePayload, year: Optional[int] 
     await log_action(user, "Modifier", "Budget", f"Fiche {SCEN_LABEL.get(scenario, scenario)} {year} — {emp['name']}")
     return {"success": True}
 
+class BulkAugPayload(BaseModel):
+    ccq_pct: float
+    std_pct: float
+
+@api.post("/budget/apply-augmentation")
+async def apply_augmentation(payload: BulkAugPayload, year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
+    """Applique une augmentation globale (%) à tous les employés pour l'année + scénario donnés."""
+    year = year or await _active_year()
+    if scenario not in BUDGET_SCENARIOS:
+        raise HTTPException(status_code=400, detail="Scénario invalide")
+    if user.get("role") != "admin" and await _is_locked(year, scenario):
+        raise HTTPException(status_code=403, detail=f"{SCEN_LABEL.get(scenario, scenario)} {year} est verrouillé. Seul un administrateur peut le modifier.")
+    ccq_aug = round(float(payload.ccq_pct) / 100, 6)
+    std_aug = round(float(payload.std_pct) / 100, 6)
+    employees = await db.employees.find().to_list(2000)
+    for e in employees:
+        aug = ccq_aug if e.get("is_ccq") else std_aug
+        await db.employees.update_one({"_id": e["_id"]}, {"$set": {f"years.{year}.{scenario}.augmentation": aug}})
+    if scenario == "ca":
+        await db.hypotheses.update_one({"key": _hkey(year)}, {"$set": {"augmentation_ccq": ccq_aug, "augmentation_autres": std_aug}})
+    await log_action(user, "Modifier", "Budget", f"Augmentation globale {SCEN_LABEL.get(scenario, scenario)} {year} — CCQ {payload.ccq_pct}% · Standard {payload.std_pct}%")
+    return {"success": True, "updated": len(employees), "augmentation_ccq": ccq_aug, "augmentation_autres": std_aug}
+
 # ---------------------------------------------------------------------------
 # Hypotheses, années & budget
 # ---------------------------------------------------------------------------

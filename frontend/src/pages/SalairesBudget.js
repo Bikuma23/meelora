@@ -6,7 +6,9 @@ import { fmtCAD } from "../lib/format";
 import BudgetFicheDialog from "../components/BudgetFicheDialog";
 import BudgetDetailDialog from "../components/BudgetDetailDialog";
 import { Button } from "../components/ui/button";
-import { Pencil, Lock, Unlock, ShieldCheck } from "lucide-react";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Pencil, Lock, Unlock, ShieldCheck, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
 const SCENARIOS = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
@@ -21,6 +23,9 @@ export default function SalairesBudget() {
   const [locks, setLocks] = useState({});
   const [fiche, setFiche] = useState({ open: false, line: null });
   const [detail, setDetail] = useState({ open: false, line: null });
+  const [augCcq, setAugCcq] = useState("");
+  const [augStd, setAugStd] = useState("");
+  const [applying, setApplying] = useState(false);
 
   const lockKey = `${year}:${scenario}`;
   const lockInfo = locks[lockKey];
@@ -29,8 +34,23 @@ export default function SalairesBudget() {
 
   const load = () => api.getBudget({ year, scenario }).then(setB);
   const loadLocks = () => api.getLocks({ year }).then(setLocks);
-  useEffect(() => { setB(null); load(); loadLocks(); /* eslint-disable-next-line */ }, [year, scenario]);
+  const loadHypo = () => api.getHypotheses(year).then((h) => {
+    setAugCcq(String(+(h.augmentation_ccq * 100).toFixed(3)));
+    setAugStd(String(+(h.augmentation_autres * 100).toFixed(3)));
+  }).catch(() => {});
+  useEffect(() => { setB(null); load(); loadLocks(); loadHypo(); /* eslint-disable-next-line */ }, [year, scenario]);
   if (!b) return <p className="font-mono-data text-sm text-slate-500">Chargement…</p>;
+
+  const applyAug = async () => {
+    if (!canEdit) { toast.error("Budget verrouillé — seul un administrateur peut modifier."); return; }
+    setApplying(true);
+    try {
+      const r = await api.applyAugmentation({ ccq_pct: Number(augCcq) || 0, std_pct: Number(augStd) || 0 }, { year, scenario });
+      toast.success(`Augmentation appliquée à ${r.updated} employé(s)`);
+      await load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Application impossible"); }
+    finally { setApplying(false); }
+  };
 
   const toggleLock = async () => {
     try {
@@ -79,6 +99,28 @@ export default function SalairesBudget() {
           Ce budget est verrouillé. Seul un administrateur peut y apporter des modifications.
         </div>
       )}
+
+      <div className="card flex flex-wrap items-end gap-4 p-4" data-testid="global-aug-panel">
+        <div className="flex items-center gap-2 self-center pr-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#2563EB1a] text-[#2563EB]"><TrendingUp size={16} /></span>
+          <div>
+            <p className="text-sm font-700 leading-tight">Augmentation globale</p>
+            <p className="text-[11px] text-slate-500">Appliquée à tous — {LABEL[scenario]} {year}</p>
+          </div>
+        </div>
+        <div className="w-28">
+          <Label className="text-[11px] uppercase text-slate-500">CCQ (%)</Label>
+          <Input data-testid="global-aug-ccq" type="number" step="0.1" disabled={!canEdit} className="mt-1 font-mono-data" value={augCcq} onChange={(e) => setAugCcq(e.target.value)} />
+        </div>
+        <div className="w-28">
+          <Label className="text-[11px] uppercase text-slate-500">Standard (%)</Label>
+          <Input data-testid="global-aug-std" type="number" step="0.1" disabled={!canEdit} className="mt-1 font-mono-data" value={augStd} onChange={(e) => setAugStd(e.target.value)} />
+        </div>
+        <Button data-testid="global-aug-apply" onClick={applyAug} disabled={!canEdit || applying} className="gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90">
+          <TrendingUp size={15} /> {applying ? "Application…" : "Appliquer à tous"}
+        </Button>
+        <p className="w-full text-[11px] text-slate-400 sm:w-auto sm:flex-1 sm:text-right">Écrase l'augmentation de chaque employé pour ce scénario. Vous pourrez ensuite ajuster individuellement via la fiche.</p>
+      </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {cards.map(([lbl, val, c]) => (

@@ -26,6 +26,7 @@ export const api = {
 
   budgetPreview: (id, override, params) => client.post(`/employees/${id}/budget-preview`, { override }, { params }).then((r) => r.data),
   saveBudgetOverride: (id, override, params) => client.put(`/employees/${id}/budget-override`, { override }, { params }).then((r) => r.data),
+  applyAugmentation: (body, params) => client.post("/budget/apply-augmentation", body, { params }).then((r) => r.data),
 
   getHypotheses: (year) => client.get("/hypotheses", { params: year ? { year } : {} }).then((r) => r.data),
   updateHypotheses: (d, year) => client.put("/hypotheses", d, { params: year ? { year } : {} }).then((r) => r.data),
