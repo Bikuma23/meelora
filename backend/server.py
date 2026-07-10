@@ -102,7 +102,7 @@ DEFAULT_HYPOTHESES = {
     ],
     "assurance_annuelle": 3600, "reer_rate": 0.05,
     "ccq_rate": 0.3233, "ccq_electricien_compagnon_rate": 0.05,
-    "prime_garde_cout_unitaire": 250, "prime_garde_nb_annuel": 365,
+    "prime_garde_cout_unitaire": 250, "prime_garde_nb_annuel": 52,
     "prime_halo_rate": 0.05, "alloc_securite_montant": 260,
     "augmentation_ccq": 0.0333, "augmentation_autres": 0.035,
     "working_days_ccq": WD_CCQ, "working_days_std": WD_STD, "pay_weeks": PAY_WEEKS,
@@ -180,7 +180,11 @@ def compute_budget(employees, hypo, depts):
             # Employés non-CCQ : aucune prime. Seul le boni (+ REER/assurance) s'applique.
             prime_type = "Aucune Prime"
             prime_amt = garde = halo = alloc = compagnon = 0
-            boni = float(ov.get("boni", 0) or 0)
+            boni_mode = ov.get("boni_mode", "montant")
+            if boni_mode == "pct":
+                boni = new_salary * float(ov.get("boni_pct", 0) or 0) / 100
+            else:
+                boni = float(ov.get("boni", 0) or 0)
         primes_total = prime_amt + garde + halo + alloc + compagnon + boni
 
         vac_rate = ov.get("vacation_rate", e["vacation_rate"])
@@ -216,6 +220,8 @@ def compute_budget(employees, hypo, depts):
             "prime_type": prime_type, "prime_amount": round(prime_amt, 2), "garde": round(garde, 2),
             "halo": round(halo, 2), "alloc": round(alloc, 2), "compagnon": round(compagnon, 2),
             "boni": round(boni, 2), "primes_total": round(primes_total, 2),
+            "boni_mode": (ov.get("boni_mode", "montant") if not ccq else "montant"),
+            "boni_pct": float(ov.get("boni_pct", 0) or 0),
             "rrq": round(rrq, 2), "ae": round(ae, 2), "rqap": round(rqap, 2), "fss": round(fss, 2),
             "ccq_avantages": round(ccq_av, 2), "avantages": round(avantages, 2), "csst": round(csst, 2),
             "reer": round(reer, 2), "assurance": round(assurance, 2), "total_cost": round(total, 2),
@@ -763,6 +769,7 @@ async def startup():
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(os.environ["ADMIN_PASSWORD"])}})
     if await db.hypotheses.count_documents({"key": "current"}) == 0:
         await db.hypotheses.insert_one(dict(DEFAULT_HYPOTHESES))
+    await db.hypotheses.update_one({"key": "current", "prime_garde_nb_annuel": 365}, {"$set": {"prime_garde_nb_annuel": 52}})
     if await db.departments.count_documents({}) == 0:
         await db.departments.insert_many([dict(d) for d in DEPARTMENTS_SEED])
     if await db.employees.count_documents({}) == 0:

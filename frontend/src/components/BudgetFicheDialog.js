@@ -27,7 +27,8 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, onSaved })
     vacation_rate_pct: String(+(line.vacation_rate * 100).toFixed(2)),
     prime_type: line.prime_type,
     prime_garde: line.garde > 0, prime_halo: line.halo > 0, alloc_securite: line.alloc > 0,
-    boni: String(line.boni || 0), reer: String(line.reer || 0), assurance: String(line.assurance || 0),
+    boni: String(line.boni || 0), boni_mode: line.boni_mode || "montant", boni_pct: String(line.boni_pct || 0),
+    reer: String(line.reer || 0), assurance: String(line.assurance || 0),
   }));
   const [p, setP] = useState(line);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
@@ -40,7 +41,10 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, onSaved })
     if (isCCQ) {
       o.prime_type = f.prime_type; o.prime_garde = f.prime_garde; o.prime_halo = f.prime_halo; o.alloc_securite = f.alloc_securite;
     } else {
-      o.boni = Number(f.boni) || 0; o.reer = Number(f.reer) || 0; o.assurance = Number(f.assurance) || 0;
+      o.reer = Number(f.reer) || 0; o.assurance = Number(f.assurance) || 0;
+      o.boni_mode = f.boni_mode;
+      if (f.boni_mode === "pct") o.boni_pct = Number(f.boni_pct) || 0;
+      else o.boni = Number(f.boni) || 0;
     }
     return o;
   }, [f, isCCQ]);
@@ -96,7 +100,17 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, onSaved })
                 <div className="grid grid-cols-3 gap-3 p-3">
                   <div><Label className="text-[11px] uppercase text-slate-500">RPDB/REER ($)</Label><Input data-testid="fiche-reer" type="number" className="mt-1 font-mono-data" value={f.reer} onChange={(e) => set("reer", e.target.value)} /></div>
                   <div><Label className="text-[11px] uppercase text-slate-500">Assu. coll. ($)</Label><Input data-testid="fiche-assurance" type="number" className="mt-1 font-mono-data" value={f.assurance} onChange={(e) => set("assurance", e.target.value)} /></div>
-                  <div><Label className="text-[11px] uppercase text-slate-500">BONI ($)</Label><Input data-testid="fiche-boni" type="number" className="mt-1 font-mono-data" value={f.boni} onChange={(e) => set("boni", e.target.value)} /></div>
+                  <div><Label className="text-[11px] uppercase text-slate-500">Boni</Label>
+                    <div className="mt-1 flex gap-1">
+                      <Select value={f.boni_mode} onValueChange={(v) => set("boni_mode", v)}>
+                        <SelectTrigger data-testid="fiche-boni-mode" className="w-16 px-2"><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="montant">$</SelectItem><SelectItem value="pct">%</SelectItem></SelectContent>
+                      </Select>
+                      {f.boni_mode === "pct"
+                        ? <Input data-testid="fiche-boni-pct" type="number" step="0.1" className="font-mono-data" value={f.boni_pct} onChange={(e) => set("boni_pct", e.target.value)} />
+                        : <Input data-testid="fiche-boni" type="number" className="font-mono-data" value={f.boni} onChange={(e) => set("boni", e.target.value)} />}
+                    </div>
+                  </div>
                 </div>
               )}
               {!isCCQ && <p className="border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">Employé non-CCQ : aucune prime applicable. Seuls le BONI, le REER et l'assurance collective s'appliquent.</p>}
@@ -110,13 +124,13 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, onSaved })
               <div className="divide-y divide-slate-100">
                 <Row label="Nouveau salaire" value={fmtCAD(p.new_salary)} strong accent="#2563EB" />
                 <Row label="Taux horaire (réf. 2080 h)" value={`${p.taux_horaire} $/h`} />
-                <Row label="Vacances (sur salaire + primes)" value={fmtCAD(p.vacation)} />
+                <Row label="Vacances" value={fmtCAD(p.vacation)} />
                 {isCCQ && <Row label={`Prime (${p.prime_type})`} value={fmtCAD(p.prime_amount)} />}
                 {isCCQ && <Row label="Prime de garde" value={fmtCAD(p.garde)} />}
                 {p.compagnon > 0 && <Row label="Prime électricien compagnon" value={fmtCAD(p.compagnon)} />}
                 {isCCQ && <Row label="Prime HALO" value={fmtCAD(p.halo)} />}
                 {isCCQ && <Row label="Alloc. sécurité" value={fmtCAD(p.alloc)} />}
-                {!isCCQ && <Row label="BONI" value={fmtCAD(p.boni)} />}
+                {!isCCQ && <Row label="Boni" value={fmtCAD(p.boni)} />}
               </div>
             </div>
             <div className="rounded-xl border border-slate-200">
