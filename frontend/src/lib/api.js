@@ -37,6 +37,14 @@ export const api = {
   createYear: (d) => client.post("/years", d).then((r) => r.data),
   setActiveYear: (year) => client.put("/years/active", { year }).then((r) => r.data),
 
+  getLocks: (params) => client.get("/budget/locks", { params }).then((r) => r.data),
+  setLock: (d) => client.post("/budget/lock", d).then((r) => r.data),
+
+  listUsers: () => client.get("/users").then((r) => r.data),
+  createUser: (d) => client.post("/users", d).then((r) => r.data),
+  updateUser: (id, d) => client.put(`/users/${id}`, d).then((r) => r.data),
+  deleteUser: (id) => client.delete(`/users/${id}`).then((r) => r.data),
+
   listDepartments: () => client.get("/departments").then((r) => r.data),
   createDepartment: (d) => client.post("/departments", d).then((r) => r.data),
   updateDepartment: (id, d) => client.put(`/departments/${id}`, d).then((r) => r.data),

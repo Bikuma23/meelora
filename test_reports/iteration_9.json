@@ -1,0 +1,54 @@
+{
+  "summary": "Itération 9 — Validation complète des nouveautés (bascule scénario 3 options, 2 revues budgétaires, verrouillage par année+scénario, gestion utilisateurs admin, comparatif 4 masses + évolution, rapports 4 catégories, création année avec source_scenario). Backend: 19/19 tests pytest passent. Frontend: tous les flux critiques validés (admin & user). Aucun bug détecté.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_locks_users_v9.py",
+    "/app/test_reports/pytest/iteration_9.xml"
+  ],
+  "backend_tests_validated": [
+    "Login admin & user, rôles corrects",
+    "GET /api/users interdit au user (403), autorisé admin (200)",
+    "POST/PUT/DELETE /api/users : create+update password+role, login avec nouveau mdp, delete confirmé (GET vérifie persistance)",
+    "Dernier admin: rétrogradation & suppression bloquées (400)",
+    "GET /api/budget/compare?year=2026 retourne actuel/ca/revue1/revue2 avec masse+budget_total ; actuel ≈ 479847$",
+    "GET /api/budget/evolution retourne years[] avec actuel/ca/revue1/revue2",
+    "POST /api/budget/lock refusé au user (403)",
+    "Enforcement verrou : user PUT budget-override sur ca verrouillé → 403 ; revue1 non verrouillé → 200 ; admin ca verrouillé → 200",
+    "PUT /api/hypotheses user quand année verrouillée → 403 ; admin → 200",
+    "PUT /api/employees user quand un budget verrouillé → 403 ; admin → 200",
+    "GET /api/reports/excel pour actuel/ca/revue1/revue2 (4/4) — 200 + payload xlsx valide",
+    "GET /api/reports/pdf pour ca et revue1 — 200 + magic bytes %PDF",
+    "POST /api/years avec source_scenario=revue1 : nouvelle année 2097.actuel.masse ≈ 2026.revue1.masse (rollover correct)"
+  ],
+  "frontend_tests_validated": [
+    "Login admin & user avec succès, dashboard chargé",
+    "nav-utilisateurs présent en admin (1), absent en user (0)",
+    "Dashboard : comparatif-card visible, dash-scenario présent",
+    "Salaires & Budget : scenario-toggle avec 3 options (scenario-ca, scenario-revue1, scenario-revue2)",
+    "Verrouillage admin : lock-toggle-btn cliquable, lock-badge apparaît, edit-line-{n} reste actif pour admin même verrouillé",
+    "BudgetFicheDialog : fiche-scenario-toggle 3 options, titre = 'Fiche Budget CA 2026 — Marie Bouchère'",
+    "Rapports : report-scenario propose 4 options (Salaires actuels, Budget CA, Revue Budgétaire 1, Revue Budgétaire 2)",
+    "Users page (admin) : add-user-btn, user-form-dialog, user-save-btn, création & suppression fonctionnelles (row user-row-{email} apparaît puis disparaît)",
+    "new-year-btn : ny-source-scenario propose 3 options (Budget CA, Revue Budgétaire 1, Revue Budgétaire 2)",
+    "User session : pas de lock-toggle-btn visible (0 count)"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py :  _is_locked/_year_locked/_any_locked bien ciblés — save_override utilise _is_locked(year,scenario) [par scénario], update_hypotheses utilise _year_locked [toute l'année], create/update/delete_employee utilise _any_locked [tout verrou global]. Politique cohérente.",
+    "server.py: le login lowercase l'email, mais UserCreate stocke via EmailStr puis .lower() — OK. Les tests ont dû lowercaser l'email pour retrouver l'utilisateur (comportement attendu, non-bug).",
+    "SalairesBudget.js: canEdit = isAdmin || !locked et disabled sur edit-line-{n} + lock-notice conditionnel ({locked && !isAdmin}) — logique correcte (validation code + enforcement backend 403 vérifié).",
+    "BudgetFicheDialog.js: en revueMode, base_salary désactivé et exclu de l'override → garantit l'indépendance des scénarios (déjà validée itération 8, code inchangé).",
+    "Dashboard.js Comparatif rend 4 cartes+bar chart avec libellés exacts. Evolution affichée uniquement si years.length > 1 (correct — 2099 restant en DB depuis itération 8 fournit 2 années).",
+    "(Non bloquant) Pas de DELETE /api/years — l'année 2097 créée dans le test de rollover subsiste (comme 2099 en it.8). Idéalement ajouter endpoint admin de suppression d'année.",
+    "(Non bloquant) create_year modifie active_year → active_year — le test remet 2026, mais si un utilisateur crée une année en prod et actualise, il bascule automatiquement (UX voulue je pense)."
+  ],
+  "updated_files": ["/app/backend/tests/test_locks_users_v9.py (créé)"],
+  "success_rate": {"backend": "100% (19/19)", "frontend": "100% (tous flux critiques)"},
+  "test_credentials": "admin@accslegro.com/admin123, user1@accslegro.com/user123",
+  "seed_data_creation": "Le test test_year_create_with_source_scenario crée l'année 2097 en DB (pas d'endpoint DELETE /api/years pour nettoyer). Active_year restaurée à 2026. Utilisateur UI test_ui_v9@accslegro.com créé puis supprimé. Verrou 2026:ca activé puis désactivé (état propre restauré). Overrides employé créés puis réinitialisés.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Régressions : pytest /app/backend/tests/ (test_backend.py + test_ccq_rules.py + test_multiyear_scenarios.py + test_locks_users_v9.py = 34+ tests). Années 2097 et 2099 subsistent en DB (résidus tests). Le test PUT /budget-override utilise query params (?year=&scenario=), pas de body.year/scenario — attention si signature change. Login UI: type() sur password + Enter (fill seul insuffisant).",
+  "rca of the issue": "N/A — aucune anomalie détectée. Toutes les fonctionnalités A→E décrites dans le review_request sont correctement implémentées et validées end-to-end (backend pytest + frontend Playwright)."
+}

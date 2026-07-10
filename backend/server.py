@@ -73,6 +73,11 @@ def _oid(v):
     except Exception:
         raise HTTPException(status_code=404, detail="Introuvable")
 
+async def require_admin(user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
+    return user
+
 async def log_action(user, action, entity, label, details=""):
     await db.journal.insert_one({
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -325,6 +330,80 @@ async def me(user: dict = Depends(get_current_user)):
     return {"id": user["id"], "email": user["email"], "name": user.get("name", ""), "role": user.get("role", "user")}
 
 # ---------------------------------------------------------------------------
+# Gestion des utilisateurs (admin uniquement)
+# ---------------------------------------------------------------------------
+class UserCreate(BaseModel):
+    email: EmailStr
+    name: str
+    password: str
+    role: Literal["admin", "user"] = "user"
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[Literal["admin", "user"]] = None
+    password: Optional[str] = None
+
+def _user_public(u):
+    return {"id": str(u["_id"]), "email": u["email"], "name": u.get("name", ""), "role": u.get("role", "user"),
+            "created_at": u.get("created_at", "")}
+
+@api.get("/users")
+async def list_users(user: dict = Depends(require_admin)):
+    docs = await db.users.find().sort("email", 1).to_list(1000)
+    return [_user_public(u) for u in docs]
+
+@api.post("/users")
+async def create_user(payload: UserCreate, user: dict = Depends(require_admin)):
+    email = payload.email.lower()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="Ce courriel existe déjà")
+    if len(payload.password) < 6:
+        raise HTTPException(status_code=400, detail="Le mot de passe doit contenir au moins 6 caractères")
+    doc = {"email": email, "name": payload.name.strip(), "password_hash": hash_password(payload.password),
+           "role": payload.role, "created_at": datetime.now(timezone.utc).isoformat()}
+    res = await db.users.insert_one(doc)
+    await log_action(user, "Créer", "Utilisateur", f"{payload.name} ({email}) — {payload.role}")
+    u = await db.users.find_one({"_id": res.inserted_id})
+    return _user_public(u)
+
+@api.put("/users/{uid}")
+async def update_user(uid: str, payload: UserUpdate, user: dict = Depends(require_admin)):
+    target = await db.users.find_one({"_id": _oid(uid)})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    upd = {}
+    if payload.name is not None:
+        upd["name"] = payload.name.strip()
+    if payload.password:
+        if len(payload.password) < 6:
+            raise HTTPException(status_code=400, detail="Le mot de passe doit contenir au moins 6 caractères")
+        upd["password_hash"] = hash_password(payload.password)
+    if payload.role is not None and payload.role != target.get("role"):
+        if target.get("role") == "admin" and payload.role != "admin":
+            admins = await db.users.count_documents({"role": "admin"})
+            if admins <= 1:
+                raise HTTPException(status_code=400, detail="Impossible de rétrograder le dernier administrateur")
+        upd["role"] = payload.role
+    if upd:
+        await db.users.update_one({"_id": _oid(uid)}, {"$set": upd})
+    await log_action(user, "Modifier", "Utilisateur", f"{target.get('name')} ({target['email']})")
+    u = await db.users.find_one({"_id": _oid(uid)})
+    return _user_public(u)
+
+@api.delete("/users/{uid}")
+async def delete_user(uid: str, user: dict = Depends(require_admin)):
+    target = await db.users.find_one({"_id": _oid(uid)})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if str(target["_id"]) == user["id"]:
+        raise HTTPException(status_code=400, detail="Vous ne pouvez pas supprimer votre propre compte")
+    if target.get("role") == "admin" and await db.users.count_documents({"role": "admin"}) <= 1:
+        raise HTTPException(status_code=400, detail="Impossible de supprimer le dernier administrateur")
+    await db.users.delete_one({"_id": _oid(uid)})
+    await log_action(user, "Supprimer", "Utilisateur", f"{target.get('name')} ({target['email']})")
+    return {"success": True}
+
+# ---------------------------------------------------------------------------
 # Departments
 # ---------------------------------------------------------------------------
 class Department(BaseModel):
@@ -410,6 +489,8 @@ async def list_employees(q: Optional[str] = None, user: dict = Depends(get_curre
 
 @api.post("/employees")
 async def create_employee(payload: EmployeeBase, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin" and await _any_locked():
+        raise HTTPException(status_code=403, detail="Un budget est verrouillé. Seul un administrateur peut modifier les employés.")
     if not await db.departments.find_one({"code": payload.department}):
         raise HTTPException(status_code=400, detail=f"Département '{payload.department}' inexistant")
     doc = payload.model_dump()
@@ -422,6 +503,8 @@ async def create_employee(payload: EmployeeBase, user: dict = Depends(get_curren
 
 @api.put("/employees/{eid}")
 async def update_employee(eid: str, payload: EmployeeBase, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin" and await _any_locked():
+        raise HTTPException(status_code=403, detail="Un budget est verrouillé. Seul un administrateur peut modifier les employés.")
     if not await db.departments.find_one({"code": payload.department}):
         raise HTTPException(status_code=400, detail=f"Département '{payload.department}' inexistant")
     res = await db.employees.update_one({"_id": _oid(eid)}, {"$set": payload.model_dump()})
@@ -434,6 +517,8 @@ async def update_employee(eid: str, payload: EmployeeBase, user: dict = Depends(
 
 @api.delete("/employees/{eid}")
 async def delete_employee(eid: str, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin" and await _any_locked():
+        raise HTTPException(status_code=403, detail="Un budget est verrouillé. Seul un administrateur peut supprimer un employé.")
     e = await db.employees.find_one({"_id": _oid(eid)})
     res = await db.employees.delete_one({"_id": _oid(eid)})
     if res.deleted_count == 0:
@@ -468,6 +553,8 @@ async def save_override(eid: str, payload: OverridePayload, year: Optional[int] 
     if not emp:
         raise HTTPException(status_code=404, detail="Employé introuvable")
     year = year or await _active_year()
+    if user.get("role") != "admin" and await _is_locked(year, scenario):
+        raise HTTPException(status_code=403, detail=f"{SCEN_LABEL.get(scenario, scenario)} {year} est verrouillé. Seul un administrateur peut le modifier.")
     ov = dict(payload.override or {})
     base = ov.pop("base_salary", None)
     sets, unsets = {}, {}
@@ -491,7 +578,17 @@ async def save_override(eid: str, payload: OverridePayload, year: Optional[int] 
 # Hypotheses, années & budget
 # ---------------------------------------------------------------------------
 DEFAULT_YEAR = 2026
-SCEN_LABEL = {"actuel": "Salaires actuels", "ca": "Budget CA", "revue": "Revue Budgétaire"}
+SCEN_LABEL = {"actuel": "Salaires actuels", "ca": "Budget CA", "revue1": "Revue Budgétaire 1", "revue2": "Revue Budgétaire 2"}
+BUDGET_SCENARIOS = ["ca", "revue1", "revue2"]
+
+async def _is_locked(year, scenario):
+    return await db.locks.find_one({"key": f"{int(year)}:{scenario}", "locked": True}) is not None
+
+async def _year_locked(year):
+    return await db.locks.find_one({"key": {"$regex": f"^{int(year)}:"}, "locked": True}) is not None
+
+async def _any_locked():
+    return await db.locks.find_one({"locked": True}) is not None
 
 def _hkey(year):
     return f"y{int(year)}"
@@ -519,7 +616,7 @@ async def list_years(user: dict = Depends(get_current_user)):
 class YearCreate(BaseModel):
     year: int
     source_year: int
-    source_scenario: Literal["ca", "revue"]
+    source_scenario: Literal["ca", "revue1", "revue2"]
 
 @api.post("/years")
 async def create_year(payload: YearCreate, user: dict = Depends(get_current_user)):
@@ -558,6 +655,8 @@ async def get_hypotheses(year: Optional[int] = None, user: dict = Depends(get_cu
 @api.put("/hypotheses")
 async def update_hypotheses(payload: dict, year: Optional[int] = None, user: dict = Depends(get_current_user)):
     year = year or payload.get("year") or await _active_year()
+    if user.get("role") != "admin" and await _year_locked(year):
+        raise HTTPException(status_code=403, detail=f"Un budget {year} est verrouillé. Seul un administrateur peut modifier les hypothèses.")
     payload["key"] = _hkey(year); payload["year"] = int(year)
     await db.hypotheses.update_one({"key": _hkey(year)}, {"$set": payload}, upsert=True)
     await log_action(user, "Modifier", "Hypothèses", f"Taux & paramètres {year}")
@@ -581,15 +680,37 @@ async def budget_compare(year: Optional[int] = None, department: Optional[str] =
     depts = await db.departments.find().to_list(1000)
     query = {"department": department} if department and department != "all" else {}
     employees = await db.employees.find(query).sort("employee_number", 1).to_list(1000)
-    ca = compute_budget(employees, hypo, depts, year=year, scenario="ca")
-    revue = compute_budget(employees, hypo, depts, year=year, scenario="revue")
     actuel_base = round(sum(_emp_scn(e, year, "actuel")[2] for e in employees), 2)
-    return {
-        "year": year, "headcount": len(employees),
-        "actuel": {"masse": actuel_base, "budget_total": actuel_base},
-        "ca": {"masse": ca["totals"]["salaire_base"], "budget_total": ca["totals"]["budget_total"], "by_department": ca["by_department"]},
-        "revue": {"masse": revue["totals"]["salaire_base"], "budget_total": revue["totals"]["budget_total"], "by_department": revue["by_department"]},
-    }
+    out = {"year": year, "headcount": len(employees),
+           "actuel": {"masse": actuel_base, "budget_total": actuel_base}}
+    for scn in BUDGET_SCENARIOS:
+        d = compute_budget(employees, hypo, depts, year=year, scenario=scn)
+        out[scn] = {"masse": d["totals"]["salaire_base"], "budget_total": d["totals"]["budget_total"], "by_department": d["by_department"]}
+    return out
+
+# ---------------------------------------------------------------------------
+# Verrouillage du budget (par année + scénario)
+# ---------------------------------------------------------------------------
+@api.get("/budget/locks")
+async def get_locks(year: Optional[int] = None, user: dict = Depends(get_current_user)):
+    q = {"key": {"$regex": f"^{int(year)}:"}} if year else {}
+    docs = await db.locks.find(q).to_list(1000)
+    return {d["key"]: bool(d.get("locked")) for d in docs}
+
+class LockPayload(BaseModel):
+    year: int
+    scenario: Literal["ca", "revue1", "revue2"]
+    locked: bool
+
+@api.post("/budget/lock")
+async def set_lock(payload: LockPayload, user: dict = Depends(require_admin)):
+    key = f"{int(payload.year)}:{payload.scenario}"
+    await db.locks.update_one({"key": key}, {"$set": {
+        "key": key, "year": int(payload.year), "scenario": payload.scenario, "locked": payload.locked,
+        "locked_by": user.get("email"), "locked_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    await log_action(user, "Verrouiller" if payload.locked else "Déverrouiller", "Budget",
+                     f"{SCEN_LABEL.get(payload.scenario, payload.scenario)} {payload.year}")
+    return {"success": True, "locked": payload.locked}
 
 # ---------------------------------------------------------------------------
 # Reports (Excel / PDF)
@@ -705,11 +826,12 @@ async def budget_evolution(department: Optional[str] = None, user: dict = Depend
     for y in years:
         hypo = await _get_hypo(y)
         ca = compute_budget(employees, hypo, depts, year=y, scenario="ca")
-        revue = compute_budget(employees, hypo, depts, year=y, scenario="revue")
+        revue1 = compute_budget(employees, hypo, depts, year=y, scenario="revue1")
+        revue2 = compute_budget(employees, hypo, depts, year=y, scenario="revue2")
         actuel = round(sum(_emp_scn(e, y, "actuel")[2] for e in employees), 2)
         out.append({"year": y, "actuel": actuel,
-                    "ca": ca["totals"]["salaire_base"], "revue": revue["totals"]["salaire_base"],
-                    "ca_budget": ca["totals"]["budget_total"], "revue_budget": revue["totals"]["budget_total"]})
+                    "ca": ca["totals"]["salaire_base"], "revue1": revue1["totals"]["salaire_base"], "revue2": revue2["totals"]["salaire_base"],
+                    "ca_budget": ca["totals"]["budget_total"], "revue1_budget": revue1["totals"]["budget_total"], "revue2_budget": revue2["totals"]["budget_total"]})
     return {"years": out}
 
 @api.get("/reports/excel")
@@ -906,6 +1028,15 @@ async def startup():
         await db.hypotheses.insert_one(base)
     await db.hypotheses.update_many({"prime_garde_nb_annuel": 365}, {"$set": {"prime_garde_nb_annuel": 52}})
     await db.hypotheses.update_many({}, {"$unset": {"ccq_electricien_compagnon_rate": ""}})
+    # Migration : renommer l'ancien scénario "revue" en "revue1".
+    async for e in db.employees.find({}):
+        yrs = e.get("years") or {}
+        changed = False
+        for ystr, yd in yrs.items():
+            if isinstance(yd, dict) and "revue" in yd:
+                yd["revue1"] = yd.pop("revue"); changed = True
+        if changed:
+            await db.employees.update_one({"_id": e["_id"]}, {"$set": {"years": yrs}})
     years = sorted({int(d["year"]) for d in await db.hypotheses.find().to_list(1000) if d.get("year")}) or [DEFAULT_YEAR]
     if await db.settings.count_documents({"key": "app"}) == 0:
         await db.settings.insert_one({"key": "app", "active_year": DEFAULT_YEAR, "years": years})

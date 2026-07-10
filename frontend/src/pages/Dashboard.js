@@ -10,7 +10,7 @@ import { Users, DollarSign, Wallet, TrendingUp, Calendar, PieChart as PieIcon, B
 
 const TEAL = "#14B8A6", NAVY = "#0E1526", ORANGE = "#F59E0B", BLUE = "#2563EB", VIOLET = "#8B5CF6";
 const TYPE_COLORS = { "CCQ": BLUE, "Régulier temps plein": TEAL, "Stagiaire": ORANGE };
-const SCEN = [["ca", "Budget CA"], ["revue", "Revue Budgétaire"]];
+const SCEN = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 
 const Tip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -41,6 +41,7 @@ export default function Dashboard() {
   const { year, years, selectYear } = useYear();
   const [b, setB] = useState(null);
   const [cmp, setCmp] = useState(null);
+  const [evo, setEvo] = useState(null);
   const [scenario, setScenario] = useState("ca");
   const [departments, setDepartments] = useState([]);
   const [dept, setDept] = useState("all");
@@ -50,6 +51,7 @@ export default function Dashboard() {
     const p = dept !== "all" ? { department: dept } : {};
     api.getBudget({ year, scenario, ...p }).then(setB);
     api.getBudgetCompare({ year, ...p }).then(setCmp);
+    api.getBudgetEvolution(p).then(setEvo);
   }, [dept, year, scenario]);
 
   return (
@@ -81,6 +83,7 @@ export default function Dashboard() {
       </div>
 
       {cmp && <Comparatif cmp={cmp} />}
+      {evo && evo.years.length > 1 && <Evolution evo={evo} />}
       {!b ? <p className="font-mono-data text-sm text-slate-500">Chargement…</p> : <DashboardBody b={b} />}
     </div>
   );
@@ -90,19 +93,19 @@ function Comparatif({ cmp }) {
   const rows = [
     ["Salaires actuels", cmp.actuel.masse, "#64748B", "Somme des salaires de base"],
     ["Budget CA", cmp.ca.masse, BLUE, "Après augmentations & primes"],
-    ["Revue Budgétaire", cmp.revue.masse, VIOLET, "Ajustements de la revue"],
+    ["Revue Budgétaire 1", cmp.revue1.masse, VIOLET, "1re revue budgétaire"],
+    ["Revue Budgétaire 2", cmp.revue2.masse, ORANGE, "2e revue budgétaire"],
   ];
   const chart = [
-    { name: "Masse salariale", "Salaires actuels": cmp.actuel.masse, "Budget CA": cmp.ca.masse, "Revue Budgétaire": cmp.revue.masse },
-    { name: "Budget total", "Salaires actuels": cmp.actuel.budget_total, "Budget CA": cmp.ca.budget_total, "Revue Budgétaire": cmp.revue.budget_total },
+    { name: "Masse salariale", "Salaires actuels": cmp.actuel.masse, "Budget CA": cmp.ca.masse, "Revue 1": cmp.revue1.masse, "Revue 2": cmp.revue2.masse },
+    { name: "Budget total", "Salaires actuels": cmp.actuel.budget_total, "Budget CA": cmp.ca.budget_total, "Revue 1": cmp.revue1.budget_total, "Revue 2": cmp.revue2.budget_total },
   ];
   const dCA = cmp.actuel.masse ? ((cmp.ca.masse - cmp.actuel.masse) / cmp.actuel.masse) * 100 : 0;
-  const dRV = cmp.ca.masse ? ((cmp.revue.masse - cmp.ca.masse) / cmp.ca.masse) * 100 : 0;
   return (
     <div className="card p-6" data-testid="comparatif-card">
       <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><Scale size={16} className="text-[#2563EB]" /> Comparatif des masses salariales — {cmp.year}</h3>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3">
           {rows.map(([lbl, val, c, sub]) => (
             <div key={lbl} className="rounded-xl border border-slate-200 p-4" data-testid={`cmp-${lbl}`}>
               <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: c }} />
@@ -113,23 +116,42 @@ function Comparatif({ cmp }) {
           ))}
         </div>
         <div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={chart} margin={{ left: 4, right: 8 }} barGap={4}>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={chart} margin={{ left: 4, right: 8 }} barGap={3}>
               <CartesianGrid stroke="#EEF2F7" vertical={false} />
               <XAxis dataKey="name" tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#94A3B8" }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#94A3B8" }} axisLine={false} tickLine={false} width={40} />
               <Tooltip content={<Tip />} />
-              <Bar dataKey="Salaires actuels" fill="#64748B" radius={[3, 3, 0, 0]} maxBarSize={34} />
-              <Bar dataKey="Budget CA" fill={BLUE} radius={[3, 3, 0, 0]} maxBarSize={34} />
-              <Bar dataKey="Revue Budgétaire" fill={VIOLET} radius={[3, 3, 0, 0]} maxBarSize={34} />
+              <Bar dataKey="Salaires actuels" fill="#64748B" radius={[3, 3, 0, 0]} maxBarSize={26} />
+              <Bar dataKey="Budget CA" fill={BLUE} radius={[3, 3, 0, 0]} maxBarSize={26} />
+              <Bar dataKey="Revue 1" fill={VIOLET} radius={[3, 3, 0, 0]} maxBarSize={26} />
+              <Bar dataKey="Revue 2" fill={ORANGE} radius={[3, 3, 0, 0]} maxBarSize={26} />
             </BarChart>
           </ResponsiveContainer>
-          <div className="mt-2 flex flex-wrap gap-4 text-[11px] text-slate-500">
-            <span>CA vs actuels : <b className="text-[#2563EB]">{dCA >= 0 ? "+" : ""}{dCA.toFixed(1)}%</b></span>
-            <span>Revue vs CA : <b className="text-[#8B5CF6]">{dRV >= 0 ? "+" : ""}{dRV.toFixed(1)}%</b></span>
-          </div>
+          <p className="mt-2 text-[11px] text-slate-500">Budget CA vs Salaires actuels : <b className="text-[#2563EB]">{dCA >= 0 ? "+" : ""}{dCA.toFixed(1)}%</b></p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Evolution({ evo }) {
+  const data = evo.years.map((y) => ({ year: String(y.year), "Salaires actuels": y.actuel, "Budget CA": y.ca, "Revue 1": y.revue1, "Revue 2": y.revue2 }));
+  return (
+    <div className="card p-6" data-testid="evolution-card">
+      <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><TrendingUp size={16} className="text-[#14B8A6]" /> Évolution pluriannuelle de la masse salariale</h3>
+      <ResponsiveContainer width="100%" height={260}>
+        <BarChart data={data} margin={{ left: 4, right: 8 }} barGap={3}>
+          <CartesianGrid stroke="#EEF2F7" vertical={false} />
+          <XAxis dataKey="year" tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+          <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#94A3B8" }} axisLine={false} tickLine={false} width={40} />
+          <Tooltip content={<Tip />} />
+          <Bar dataKey="Salaires actuels" fill="#64748B" radius={[3, 3, 0, 0]} maxBarSize={30} />
+          <Bar dataKey="Budget CA" fill={BLUE} radius={[3, 3, 0, 0]} maxBarSize={30} />
+          <Bar dataKey="Revue 1" fill={VIOLET} radius={[3, 3, 0, 0]} maxBarSize={30} />
+          <Bar dataKey="Revue 2" fill={ORANGE} radius={[3, 3, 0, 0]} maxBarSize={30} />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }

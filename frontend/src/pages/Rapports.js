@@ -11,7 +11,7 @@ const VENTIL = [
   ["salaire_base", "Salaire de base"], ["vacances", "Vacances"], ["primes", "Primes & Boni"],
   ["avantages", "Avantages sociaux"], ["csst", "CSST"], ["reer", "RPDB/REER"], ["assurance", "Assu. collectives"],
 ];
-const SCEN = [["actuel", "Salaires actuels"], ["ca", "Budget CA"], ["revue", "Revue Budgétaire"]];
+const SCEN = [["actuel", "Salaires actuels"], ["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 
 export default function Rapports() {
   const { year, years, selectYear } = useYear();

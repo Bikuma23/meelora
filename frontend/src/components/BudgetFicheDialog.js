@@ -31,17 +31,18 @@ function Row({ label, value, strong, accent }) {
   );
 }
 
-const SCENARIOS = [["ca", "Budget CA"], ["revue", "Revue Budgétaire"]];
+const SCENARIOS = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
+const SCEN_LABEL = Object.fromEntries(SCENARIOS);
 
-export default function BudgetFicheDialog({ open, onOpenChange, line, year, scenario = "ca", onSaved }) {
+export default function BudgetFicheDialog({ open, onOpenChange, line, year, scenario = "ca", locks = {}, isAdmin = true, onSaved }) {
   const isCCQ = line.is_ccq;
-  const isRevue = scenario === "revue";
   const [scn, setScn] = useState(scenario);
   const [curLine, setCurLine] = useState(line);
   const [f, setF] = useState(() => fromLine(line));
   const [p, setP] = useState(line);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
-  const revueMode = scn === "revue";
+  const revueMode = scn.startsWith("revue");
+  const locked = !isAdmin && !!locks[`${year}:${scn}`];
 
   // Charger les valeurs sauvegardées du scénario sélectionné dans la fiche.
   useEffect(() => {
@@ -82,17 +83,24 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
   }, [override, line.employee_id, year, scn]);
 
   const save = async () => {
+    if (locked) { toast.error("Budget verrouillé — seul un administrateur peut modifier."); return; }
     if (isCCQ && f.prime_garde && f.prime_type === "Aucune Prime") { toast.error("Sélectionnez un type de prime : la Prime de garde est activée"); return; }
-    await api.saveBudgetOverride(line.employee_id, override, { year, scenario: scn });
-    toast.success(`Fiche ${scn === "revue" ? "Revue Budgétaire" : "Budget CA"} enregistrée`); onSaved(); onOpenChange(false);
+    try {
+      await api.saveBudgetOverride(line.employee_id, override, { year, scenario: scn });
+      toast.success(`Fiche ${SCEN_LABEL[scn]} enregistrée`); onSaved(); onOpenChange(false);
+    } catch (e) { toast.error(e.response?.data?.detail || "Enregistrement impossible"); }
   };
-  const reset = async () => { await api.saveBudgetOverride(line.employee_id, {}, { year, scenario: scn }); toast.success("Ligne réinitialisée"); onSaved(); onOpenChange(false); };
+  const reset = async () => {
+    if (locked) { toast.error("Budget verrouillé — seul un administrateur peut modifier."); return; }
+    try { await api.saveBudgetOverride(line.employee_id, {}, { year, scenario: scn }); toast.success("Ligne réinitialisée"); onSaved(); onOpenChange(false); }
+    catch (e) { toast.error(e.response?.data?.detail || "Action impossible"); }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto" data-testid="budget-fiche-dialog">
         <DialogHeader>
-          <DialogTitle>Fiche {scn === "revue" ? "Revue Budgétaire" : "Budget CA"} {year} — {line.name}</DialogTitle>
+          <DialogTitle>Fiche {SCEN_LABEL[scn]} {year} — {line.name}</DialogTitle>
           <DialogDescription className="font-mono-data text-xs">{line.employment_type} · #{String(line.employee_number).padStart(3, "0")} · {line.department_label}</DialogDescription>
         </DialogHeader>
 
@@ -111,6 +119,7 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
               ? "Revue Budgétaire : ajustez primes, augmentation et vacances — le Budget CA n'est pas modifié."
               : "Budget CA : bâti à partir du salaire actuel + augmentations/primes."}
           </span>
+          {locked && <span className="flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-700 text-red-600" data-testid="fiche-lock-badge">🔒 Verrouillé — lecture seule</span>}
         </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -199,10 +208,10 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
         </div>
 
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
-          <Button variant="outline" data-testid="fiche-reset-btn" onClick={reset} className="gap-1.5"><RotateCcw size={15} /> Réinitialiser</Button>
+          <Button variant="outline" data-testid="fiche-reset-btn" onClick={reset} disabled={locked} className="gap-1.5"><RotateCcw size={15} /> Réinitialiser</Button>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Fermer</Button>
-            <Button data-testid="fiche-save-btn" onClick={save} className="gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90"><Save size={15} /> Enregistrer</Button>
+            <Button data-testid="fiche-save-btn" onClick={save} disabled={locked} className="gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90"><Save size={15} /> Enregistrer</Button>
           </div>
         </DialogFooter>
       </DialogContent>

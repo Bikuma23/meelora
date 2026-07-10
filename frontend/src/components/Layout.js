@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
 import {
-  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange,
+  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
@@ -17,6 +17,7 @@ import Hypotheses from "../pages/Hypotheses";
 import Departements from "../pages/Departements";
 import Rapports from "../pages/Rapports";
 import Journal from "../pages/Journal";
+import UsersPage from "../pages/Users";
 
 const PAGES = {
   dashboard: { title: "Tableau de bord", sub: "Vue globale", comp: Dashboard },
@@ -25,6 +26,7 @@ const PAGES = {
   hypotheses: { title: "Hypothèses", sub: "Taux & paramètres", comp: Hypotheses },
   departements: { title: "Départements", sub: "Codes & superviseurs", comp: Departements },
   rapports: { title: "Rapports", sub: "Prédéfinis & custom", comp: Rapports },
+  utilisateurs: { title: "Utilisateurs", sub: "Comptes & accès", comp: UsersPage },
   journal: { title: "Journal", sub: "Historique des modifications", comp: Journal },
 };
 
@@ -37,6 +39,7 @@ const NAV_GROUP = [
   { key: "rapports", label: "Rapports", sub: "Prédéfinis & custom", icon: FileText },
 ];
 const NAV_BOTTOM = [{ key: "journal", label: "Journal", sub: "Historique des modifications", icon: ScrollText }];
+const NAV_ADMIN = [{ key: "utilisateurs", label: "Utilisateurs", sub: "Comptes & accès", icon: ShieldCheck }];
 
 function NavItem({ item, active, onClick }) {
   const Icon = item.icon;
@@ -102,7 +105,7 @@ function YearControls() {
             <div><label className="text-[11px] uppercase text-slate-500">Report basé sur</label>
               <Select value={f.source_scenario} onValueChange={(v) => setF((p) => ({ ...p, source_scenario: v }))}>
                 <SelectTrigger data-testid="ny-source-scenario" className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="ca">Budget CA</SelectItem><SelectItem value="revue">Revue Budgétaire</SelectItem></SelectContent>
+                <SelectContent><SelectItem value="ca">Budget CA</SelectItem><SelectItem value="revue1">Revue Budgétaire 1</SelectItem><SelectItem value="revue2">Revue Budgétaire 2</SelectItem></SelectContent>
               </Select></div>
           </div>
           <DialogFooter>
@@ -147,6 +150,7 @@ function LayoutInner() {
           {NAV_GROUP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={setActive} />)}
           <div className="pt-4">
             {NAV_BOTTOM.map((i) => <NavItem key={i.key} item={i} active={active} onClick={setActive} />)}
+            {user?.role === "admin" && NAV_ADMIN.map((i) => <NavItem key={i.key} item={i} active={active} onClick={setActive} />)}
           </div>
         </nav>
 
