@@ -253,7 +253,9 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
         months_active = sum(1 for x in frac if x > 0)
         hire_month = next((i + 1 for i, x in enumerate(frac) if x > 0), 0)
         prorated = factor < 0.9999
-        monthly = [round(total / 12 * frac[m], 2) for m in range(12)]
+        wd = hypo["working_days_ccq"] if ccq else hypo["working_days_std"]
+        wd_total = sum(wd) or 1
+        monthly = [round(total * wd[m] * frac[m] / wd_total, 2) for m in range(12)]
         total_budgeted = round(total * factor, 2)
         lines.append({
             "employee_id": str(e.get("_id", "")), "employee_number": e["employee_number"],
@@ -295,15 +297,14 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
     for ln in lines:
         by_type_map[ln["employment_type"]] = by_type_map.get(ln["employment_type"], 0) + ln["total_budgeted"]
     by_type = [{"type": k, "total": round(v, 2)} for k, v in by_type_map.items()]
-    # monthly ventilation
-    total_weeks = sum(hypo["pay_weeks"]) or 1
+    # monthly ventilation — distribution par jours ouvrables (CCQ/standard selon l'employé),
+    # agrégée à partir des ventilations mensuelles individuelles pondérées par les jours ouvrables.
     sal_ratio = (totals["salaire_base"] + totals["vacances"] + totals["primes"]) / totals["budget_total"] if totals["budget_total"] else 0
     monthly = []
     for i, m in enumerate(MONTHS):
-        w = hypo["pay_weeks"][i]
-        mt = totals["budget_total"] * w / total_weeks
+        mt = round(sum(ln["monthly"][i] for ln in lines), 2)
         sal = mt * sal_ratio
-        monthly.append({"month": m, "sem_paie": w, "jours_std": hypo["working_days_std"][i],
+        monthly.append({"month": m, "sem_paie": hypo["pay_weeks"][i], "jours_std": hypo["working_days_std"][i],
                         "jours_ccq": hypo["working_days_ccq"][i], "salaires": round(sal, 2),
                         "charges": round(mt - sal, 2), "total": round(mt, 2)})
     # decomposition

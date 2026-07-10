@@ -231,7 +231,7 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
               <h3 className="text-xs font-700 uppercase tracking-widest">Ventilation mensuelle {year}</h3>
               {p.prorated
                 ? <span className="text-[11px] text-[#B45309]">Embauche en cours d'année → pro-rata dès le mois {p.hire_month} ({p.months_active} mois)</span>
-                : <span className="text-[11px] text-slate-400">Répartie sur 12 mois</span>}
+                : <span className="text-[11px] text-slate-400">Répartie selon les jours ouvrables</span>}
             </div>
             <div className="grid grid-cols-4 gap-px bg-slate-100 sm:grid-cols-6 lg:grid-cols-12">
               {MONTHS.map((mo, i) => (
