@@ -948,6 +948,7 @@ def build_employee_fiche_pdf(ln, year, scenario_label):
                   ["Total primes", _money(ln["primes_total"])]]
     else:
         primes = [["Boni", _money(ln["boni"])], ["Alloc. sécurité", _money(ln["alloc"])], ["Total primes & boni", _money(ln["primes_total"])]]
+    primes.append(["Salaire brut total", _money(ln["new_salary"] + ln["vacation"] + ln["primes_total"])])
     charges = [["RRQ", _money(ln["rrq"])], ["AE", _money(ln["ae"])], ["RQAP", _money(ln["rqap"])], ["FSS", _money(ln["fss"])]]
     if ccq:
         charges.append(["Avantages CCQ (32.33%)", _money(ln["ccq_avantages"])])

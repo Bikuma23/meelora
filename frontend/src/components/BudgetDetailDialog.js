@@ -64,6 +64,7 @@ export default function BudgetDetailDialog({ open, onOpenChange, line, year, sce
                 {!ccq && <Row label="Boni" value={fmtCAD(line.boni)} />}
                 {!ccq && <Row label="Alloc. sécurité" value={fmtCAD(line.alloc)} />}
                 <Row label="Total primes & boni" value={fmtCAD(line.primes_total)} strong accent="#F59E0B" />
+                <Row label="Salaire brut total" value={fmtCAD(line.new_salary + line.vacation + line.primes_total)} strong accent="#0E9488" />
               </div>
             </div>
           </div>
