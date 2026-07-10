@@ -88,8 +88,8 @@ export default function Hypotheses() {
           <h3 className="mb-4 flex items-center gap-2 text-sm font-700"><Settings2 size={16} className="text-[#2563EB]" /> Autres paramètres</h3>
           <div className="grid grid-cols-2 gap-3">
             {[
-              ["ccq_rate", "Avantages CCQ (%)", true], ["ccq_electricien_compagnon_rate", "Compagnon élec. (%)", true],
-              ["reer_rate", "REER (%)", true], ["prime_halo_rate", "Prime HALO (%)", true],
+              ["ccq_rate", "Avantages CCQ (%)", true], ["prime_halo_rate", "Prime HALO (%)", true],
+              ["reer_rate", "REER (%)", true],
               ["assurance_annuelle", "Assurance ($/an)", false], ["alloc_securite_montant", "Alloc. sécurité ($/an)", false],
               ["prime_garde_cout_unitaire", "Garde — coût unitaire ($)", false], ["prime_garde_nb_annuel", "Garde — nb / an", false],
             ].map(([k, lbl, pct]) => (

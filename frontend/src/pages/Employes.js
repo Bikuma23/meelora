@@ -51,6 +51,7 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
     if (!f.department) e.department = REQ;
     if (!f.title.trim()) e.title = REQ;
     if (isCCQ && f.ccq_category === "N/A") e.ccq_category = "Électricien ou Frigoriste";
+    if (isCCQ && f.prime_garde && f.prime_type === "Aucune Prime") e.prime_type = "Type de prime requis (Prime de garde activée)";
     if (f.current_annual_salary === "" || Number(f.current_annual_salary) <= 0) e.current_annual_salary = "Salaire requis (> 0)";
     if (f.vacation_rate_pct === "") e.vacation_rate_pct = REQ;
     if (f.sick_personal_days === "") e.sick_personal_days = REQ;
@@ -104,7 +105,7 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
           <Field label="Salaire annuel actuel ($)" error={errors.current_annual_salary} testId="f-salary"><Input data-testid="f-salary" type="number" className="font-mono-data" value={f.current_annual_salary} onChange={(e) => set("current_annual_salary", e.target.value)} /></Field>
           <Field label="Taux de vacances (%)" error={errors.vacation_rate_pct} testId="f-vacation"><Input data-testid="f-vacation" type="number" step="0.1" className="font-mono-data" value={f.vacation_rate_pct} onChange={(e) => set("vacation_rate_pct", e.target.value)} /></Field>
           {isCCQ && (
-            <Field label="Type de prime" testId="f-prime-type">
+            <Field label="Type de prime" error={errors.prime_type} testId="f-prime-type">
               <Select value={f.prime_type} onValueChange={(v) => set("prime_type", v)}>
                 <SelectTrigger data-testid="f-prime-type"><SelectValue /></SelectTrigger>
                 <SelectContent>{["Aucune Prime", "Prime 8%", "Prime 11%", "Prime 12%"].map((x) => <SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent>

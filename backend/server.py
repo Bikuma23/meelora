@@ -101,7 +101,7 @@ DEFAULT_HYPOTHESES = {
         {"code": "CSST", "name": "Commission de la santé et de la sécurité du travail", "rate": 0.0175, "ceiling": 103000, "exemption": 0},
     ],
     "assurance_annuelle": 3600, "reer_rate": 0.05,
-    "ccq_rate": 0.3233, "ccq_electricien_compagnon_rate": 0.05,
+    "ccq_rate": 0.3233,
     "prime_garde_cout_unitaire": 250, "prime_garde_nb_annuel": 52,
     "prime_halo_rate": 0.05, "alloc_securite_montant": 260,
     "augmentation_ccq": 0.0333, "augmentation_autres": 0.035,
@@ -174,18 +174,17 @@ def compute_budget(employees, hypo, depts):
             garde = garde_avg if ov.get("prime_garde", e.get("prime_garde")) else 0
             halo = new_salary * hypo["prime_halo_rate"] if ov.get("prime_halo", e.get("prime_halo")) else 0
             alloc = hypo["alloc_securite_montant"] if ov.get("alloc_securite", e.get("alloc_securite")) else 0
-            compagnon = new_salary * hypo["ccq_electricien_compagnon_rate"] if e.get("ccq_category") == "Électricien" else 0
             boni = 0
         else:
             # Employés non-CCQ : aucune prime. Seul le boni (+ REER/assurance) s'applique.
             prime_type = "Aucune Prime"
-            prime_amt = garde = halo = alloc = compagnon = 0
+            prime_amt = garde = halo = alloc = 0
             boni_mode = ov.get("boni_mode", "montant")
             if boni_mode == "pct":
                 boni = new_salary * float(ov.get("boni_pct", 0) or 0) / 100
             else:
                 boni = float(ov.get("boni", 0) or 0)
-        primes_total = prime_amt + garde + halo + alloc + compagnon + boni
+        primes_total = prime_amt + garde + halo + alloc + boni
 
         vac_rate = ov.get("vacation_rate", e["vacation_rate"])
         vacation = 0 if ccq else vac_rate * (new_salary + primes_total)
@@ -218,7 +217,7 @@ def compute_budget(employees, hypo, depts):
             "base_salary": round(base, 2), "augmentation": aug, "new_salary": round(new_salary, 2),
             "taux_horaire": round(taux_horaire, 2), "vacation_rate": vac_rate, "vacation": round(vacation, 2),
             "prime_type": prime_type, "prime_amount": round(prime_amt, 2), "garde": round(garde, 2),
-            "halo": round(halo, 2), "alloc": round(alloc, 2), "compagnon": round(compagnon, 2),
+            "halo": round(halo, 2), "alloc": round(alloc, 2),
             "boni": round(boni, 2), "primes_total": round(primes_total, 2),
             "boni_mode": (ov.get("boni_mode", "montant") if not ccq else "montant"),
             "boni_pct": float(ov.get("boni_pct", 0) or 0),

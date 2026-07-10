@@ -54,7 +54,10 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, onSaved })
     return () => clearTimeout(t);
   }, [override, line.employee_id]);
 
-  const save = async () => { await api.saveBudgetOverride(line.employee_id, override); toast.success("Fiche enregistrée"); onSaved(); onOpenChange(false); };
+  const save = async () => {
+    if (isCCQ && f.prime_garde && f.prime_type === "Aucune Prime") { toast.error("Sélectionnez un type de prime : la Prime de garde est activée"); return; }
+    await api.saveBudgetOverride(line.employee_id, override); toast.success("Fiche enregistrée"); onSaved(); onOpenChange(false);
+  };
   const reset = async () => { await api.saveBudgetOverride(line.employee_id, {}); toast.success("Ligne réinitialisée"); onSaved(); onOpenChange(false); };
 
   return (
@@ -127,7 +130,6 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, onSaved })
                 <Row label="Vacances" value={fmtCAD(p.vacation)} />
                 {isCCQ && <Row label={`Prime (${p.prime_type})`} value={fmtCAD(p.prime_amount)} />}
                 {isCCQ && <Row label="Prime de garde" value={fmtCAD(p.garde)} />}
-                {p.compagnon > 0 && <Row label="Prime électricien compagnon" value={fmtCAD(p.compagnon)} />}
                 {isCCQ && <Row label="Prime HALO" value={fmtCAD(p.halo)} />}
                 {isCCQ && <Row label="Alloc. sécurité" value={fmtCAD(p.alloc)} />}
                 {!isCCQ && <Row label="Boni" value={fmtCAD(p.boni)} />}
