@@ -66,6 +66,15 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 - [x] **Dashboard** : comparatif des 4 masses + graphique d'évolution pluriannuelle (si ≥2 années). **Rapports** : 4 catégories exportables (Excel/PDF).
 - [x] Tests : backend 19/19 (pytest, iteration_9), frontend 100 %. Comptes : admin@accslegro.com/admin123, user1@accslegro.com/user123.
 
+## Ajustements UI/UX & garde 2,08 (2026-07-10)
+- [x] Titre de la fiche de saisie sans le mot « Fiche » (ex. « Budget CA 2026 — Nom »).
+- [x] Prime de garde = **2,08 gardes/an/employé** (montant fixe = 2,08 × 250 $ = 520 $ par employé CCQ admissible, sans division par l'effectif).
+- [x] La fiche de saisie **reste ouverte après « Enregistrer »** (refetch en place) ; « Fermer » ferme.
+- [x] Titre du formulaire employé = « Nom — #matricule » (sans « Modifier — »).
+- [x] **Clic sur une ligne** (Saisie & calcul par employé) ouvre un **détail lecture seule** (BudgetDetailDialog) de tous les éléments de la masse salariale ; le crayon (modification) reste disponible.
+- [x] Badge de verrou enrichi : « Verrouillé · courriel le date » (locked_by/locked_at).
+- [x] Tests : frontend 100 % (8/8, iteration_10), backend garde=520 $ validé (curl).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
