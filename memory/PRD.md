@@ -1,36 +1,34 @@
-# PRD — Budget Masse Salariale CCQ (rebuild du modèle Excel)
+# PRD — Budget Salaires Pro (Masse salariale CCQ, Québec)
 
 ## Problème / Objectif
-Refaire entièrement le fichier Excel de budget salarial (Québec CCQ) en application web fluide : dashboards, saisie et extraction faciles, formulaires de saisie + recherche, tables d'employés, hypothèses facilement modifiables, en conservant la philosophie de calcul de l'Excel.
+Application web de budgétisation de la masse salariale (Québec, convention CCQ) reconstruite d'après un modèle Excel puis refondue d'après des maquettes fournies. Saisie & extraction faciles, tableaux de bord, hypothèses modifiables, séparation stricte employés CCQ (Électricien/Frigoriste) vs standard.
 
-## Choix utilisateur
-- Remplace l'ancien simulateur de scénarios.
-- 4 onglets : Tableau de bord · Employés · Budget Salaires · Hypothèses.
-- Comparatif des 3 sections (Salaire Actuel / Budget CA / Budget Revue) — important.
-- Fiche Employé : # auto-incrémenté, âge auto (date naissance), ancienneté auto (date embauche), tous champs obligatoires + messages d'erreur.
-- Hypothèses persistées en MongoDB, éditables. Champ "augmentation" retiré des hypothèses → piloté dans l'onglet Budget.
-- Respect des conditions du fichier Template App Budget.
-
-## Conditions Excel implémentées
-- CCQ : avantages sociaux 32.33% + RRQ/AE/RQAP/FSS normaux ; pas de vacances, assurance, REER (RPDB/BONI/Assu. masqués) ; prime électricien compagnon +5%.
-- Prime de garde = (365 × 250$) / nb employés admissibles (coût moyen).
-- Primes 8/11/12% calculées automatiquement sur le nouveau salaire.
-- Charges sociales avec plafonds/exemptions ; CSST par département.
+## Authentification
+- JWT email/mot de passe. Admin seed : admin@accslegro.com / admin123.
+- Token en cookie httpOnly + body (localStorage + Bearer). Toutes les routes /api protégées.
 
 ## Architecture
-- Backend FastAPI + MongoDB. Collections: employees, hypotheses (doc key="current"). Endpoints: /api/employees (CRUD + ?q recherche, employee_number auto), /api/hypotheses (GET/PUT), /api/budget (3 sections + agrégats dashboard). Moteur de calcul compute_section().
-- Frontend React SPA, nav par état (4 onglets). Recharts, framer-motion, shadcn/ui. Design Swiss brutalist (Archivo + IBM Plex Mono/Sans).
+- Backend FastAPI + MongoDB. Collections : users, employees, departments, hypotheses, journal.
+- Moteur `compute_budget` : CCQ (avantages 32.33% + charges normales, sans vacances/assurance/REER, +5% élec. compagnon) vs Régulier/Stagiaire. Vacances = taux × (nouveau salaire + toutes primes, boni inclus). Alloc. sécurité 260$/an. Aucune « prime chef d'équipe ». Cotisations RRQ/AE/RQAP/FSS/CSST avec maximums assurables (plafonds Québec, éditables).
+- Import Excel (Employés + Départements) + modèles téléchargeables (openpyxl).
+- Journal d'audit : chaque create/update/delete est journalisé (log_action).
+- Frontend React : AuthContext + Login, Layout sidebar navy/teal, pages : Dashboard, Employés, Salaires & Budget (fiche éditable), Hypothèses, Départements, Rapports (placeholder), Journal.
 
-## Implémenté (2026-06)
-- [x] CRUD employés + recherche, # auto, âge/ancienneté auto, validation champs obligatoires.
-- [x] Onglet Hypothèses éditable (taux RRQ/AE/RQAP/FSS, CCQ, primes, CSST par département) persisté.
-- [x] Budget Salaires : 3 sections comparatives + contrôles d'augmentation temps réel + détail par employé.
-- [x] Tableau de bord : KPI + graphiques (comparatif scénarios, camembert CCQ/Régulier, coût par département).
-- [x] Tests : 100% backend (pytest) + 100% frontend (Playwright E2E).
+## Implémenté (Phase 1 — 2026-07)
+- [x] Auth JWT (login/logout/me, admin seed, routes protégées).
+- [x] Refonte visuelle complète (sidebar sombre, thème teal/bleu, cartes blanches).
+- [x] Types d'emploi élargis (CCQ, Régulier temps plein, Stagiaire).
+- [x] Module Départements CRUD (code, description, superviseur, compte GL, groupe P&L, CSST) + import/modèle Excel.
+- [x] Journal de logs (historique des modifications).
+- [x] Tableau de bord : 4 KPI, budget par département, types d'emploi (donut), ventilation mensuelle (table + barres empilées), décomposition, Top 5.
+- [x] Employés : CRUD + recherche + validation obligatoire + âge/ancienneté auto + « Aucune Prime » + import/modèle Excel.
+- [x] Fiche Salaires & Budget éditable (preview live, sans chef d'équipe, alloc 260$, vacances sur salaire+primes+boni).
+- [x] Hypothèses : jours ouvrables CCQ/standard, charges sociales avec maximums assurables, augmentations, autres paramètres.
+- [x] Tests : 18/18 backend + 100% frontend.
 
-## Backlog / Next
-- P1: Export Excel/PDF du budget et de l'effectif.
-- P1: Modèle Pydantic pour PUT /api/hypotheses (validation d'entrée).
-- P2: Compteur atomique MongoDB pour employee_number (concurrence).
-- P2: Historique multi-années et duplication d'année budgétaire.
-- P2: Champ BONI éditable pour employés Réguliers.
+## Backlog Phase 2
+- Rapports prédéfinis & personnalisés (export PDF/Excel).
+- Filtres Année + Département sur le tableau de bord (backend /budget?department déjà prêt).
+- Validation du code département à la création d'un employé.
+- Édition rapide (double-clic) des taux ; gestion d'utilisateurs multiples.
+- Gestion multi-années / budget actif.
