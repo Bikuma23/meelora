@@ -1,0 +1,100 @@
+{
+  "project_context": {
+    "app_type": "SaaS Financial/Budgeting Dashboard",
+    "industry": "Technical/Construction (Quebec CCQ)",
+    "language": "French",
+    "core_task": "Calculate complex payroll projections (masse salariale) with multi-scenario comparison."
+  },
+  "design_system": {
+    "theme": "Light mode",
+    "archetype": "Swiss Brutalist & High Density Data",
+    "emotional_tone": "Precise, authoritative, industrial, clear.",
+    "typography": {
+      "headings": {
+        "family": "Cabinet Grotesk, sans-serif",
+        "description": "Raw, industrial, wide architecture.",
+        "usage": "Mainly for KPIs and high-level headers (tracking-tight, uppercase for section headers)."
+      },
+      "body": {
+        "family": "IBM Plex Sans, sans-serif",
+        "description": "Sterile, highly legible for SaaS reading."
+      },
+      "data": {
+        "family": "IBM Plex Mono, monospace",
+        "description": "Used exclusively for numerical data, KPIs, and table cells for exact alignment."
+      },
+      "imports": "@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap'); /* For Cabinet Grotesk, use local assets or fallback to a standard wide sans like Space Grotesk/Syncopate if unavailable, but aim for architectural wide font */"
+    },
+    "colors": {
+      "background": "#F4F4F5",
+      "surface": "#FFFFFF",
+      "border": "#D4D4D8",
+      "text_main": "#09090B",
+      "text_muted": "#52525B",
+      "brand_primary": "#0055FF",
+      "accent_growth": "#00C781",
+      "accent_restriction": "#FF4500",
+      "chart_ccq_elec": "#0055FF",
+      "chart_ccq_frig": "#FF4500",
+      "chart_standard": "#09090B"
+    },
+    "surfaces_and_borders": {
+      "style": "Grid Borders (Technical Look). Minimal radii (rounded-none or max rounded-sm).",
+      "shadows": "None. Rely on 1px solid borders to establish hierarchy.",
+      "glassmorphism": "Avoid in this specific app to maintain clinical financial precision."
+    }
+  },
+  "layout_architecture": {
+    "structure": "Split-pane Dashboard. Left-hand Control Panel (w-96) + Right-hand Canvas (flex-1). h-screen overflow-hidden flex flex-row bg-[#F4F4F5].",
+    "left_panel": {
+      "type": "Control Center",
+      "style": "bg-white border-r border-[#D4D4D8] overflow-y-auto",
+      "content": "Scenario selector tabs at top (Budget Initial, Scénario Croissance, Scénario Restrictif). Accordions or stacked sections for employee categories (Électriciens CCQ, Frigoristes CCQ, Employés Standard). Dense sliders for augmentation %, hours, headcount."
+    },
+    "right_canvas": {
+      "type": "Visualization Canvas",
+      "style": "flex-1 p-6 overflow-y-auto space-y-6",
+      "content": "Top row: 3 Massive KPI Cards (Total Masse Salariale, Total Cotisations CCQ, Solde de Trésorerie Restant). Middle: Stacked Bar Chart. Bottom: Dense data table for Employee CRUD."
+    },
+    "spacing": "Dense internally within components (gap-4, p-4), generous between macro-sections (gap-8)."
+  },
+  "component_guidelines": {
+    "tabs": "Blocky, segmented controls. Active state gets dark background (#09090B) with white text, inactive gets grey (#F4F4F5).",
+    "sliders": "Sharp square thumbs. Distinct track colors matching the employee category (Blue for Elec, Orange for Frig, Black for Std).",
+    "kpi_cards": "Bordered (#D4D4D8), white background. Values must be massive (text-4xl or 5xl) using IBM Plex Mono font. Label on top, value below.",
+    "chart": "Recharts Stacked Bar. Monthly breakdown. Tooltips must have squared corners and 1px borders. No soft shadows.",
+    "table": "Dense layout, uppercase headers (tracking-wider, text-xs), right-aligned Mono numbers. 1px borders.",
+    "buttons": "Square edges. Primary actions in #0055FF, hover: opacity-90."
+  },
+  "motion": {
+    "strategy": "Instantaneous feel. Use 150ms ease-out transitions for interactions.",
+    "sliders": "Chart and KPIs must update in real-time as the slider moves. Avoid debounce if possible to maintain a fluid, zero page-reload feel."
+  },
+  "assets": {
+    "icons": "lucide-react. Use sharp, linear icons.",
+    "images": [
+      {
+        "url": "https://images.pexels.com/photos/16029834/pexels-photo-16029834.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "user_avatar",
+        "description": "Professional avatar for header or bottom of sidebar"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Write code in .js files, NOT .tsx (use standard React JSX).",
+    "Use standard Tailwind CSS classes. Add custom fonts via Google Fonts import in index.css.",
+    "Build a unified React state object to hold base scenarios ('Budget Initial', 'Scénario Croissance', 'Scénario Restrictif') and let the sliders override them dynamically.",
+    "Use Recharts (`recharts` package) for the interactive stacked bar chart showing monthly salary cost breakdown.",
+    "Strictly separate standard employees from CCQ union employees in data structure and visualization colors.",
+    "All UI text, labels, and dummy data MUST be strictly in French.",
+    "Implement real-time updates: as sliders (augmentation salaire %, heures supplémentaires, nouveaux recrutements) are dragged, the chart and KPIs immediately re-render.",
+    "Include CRUD functionality (Add/Edit/Delete buttons) in the employee table at the bottom of the right canvas."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You MUST NOT apply universal transition (e.g., transition: all). Add explicit transitions to specific elements.",
+    "You MUST NOT center align the app container (.App { text-align: left; } not center).",
+    "NEVER use placeholder text for logos or images; use provided URLs.",
+    "NEVER use generic AI emojis for icons. Use lucide-react.",
+    "All interactive elements (buttons, sliders, tabs) MUST include `data-testid` attributes."
+  ]
+}
