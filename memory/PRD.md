@@ -84,6 +84,10 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 - [x] `GET /api/reports/fiches-pdf` (paysage) & `GET /api/reports/fiches-excel` : fiches détaillées de tous les employés regroupées par département, avec sous-totaux par département + budget total. Filtres année/scénario/département.
 - [x] Page Rapports : boutons « Fiches détaillées (Excel) » et « Fiches détaillées (PDF) » en plus des synthèses. Validé backend (curl, PDF %PDF + xlsx 200).
 
+## Import avec matricules définis (2026-07-10)
+- [x] Le modèle Excel employés (`GET /api/employees/template`) inclut en 1re colonne « Matricule (# — laisser vide pour auto) ».
+- [x] Import (`POST /api/employees/import`) : utilise le matricule fourni (validation entier + unicité), sinon auto-attribution. Contrôle de verrou (non-admin bloqué si budget verrouillé). Validé par curl (matricule 501 respecté).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

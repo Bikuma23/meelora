@@ -1032,7 +1032,7 @@ async def report_fiches_excel(department: Optional[str] = None, year: Optional[i
 # ---------------------------------------------------------------------------
 # Excel import / templates
 # ---------------------------------------------------------------------------
-EMP_HEADERS = ["Nom", "Département (code)", "Titre", "Type emploi (CCQ / Régulier temps plein / Stagiaire)",
+EMP_HEADERS = ["Matricule (# — laisser vide pour auto)", "Nom", "Département (code)", "Titre", "Type emploi (CCQ / Régulier temps plein / Stagiaire)",
                "Catégorie CCQ (Électricien / Frigoriste / N/A)", "Salaire annuel", "Taux vacances %",
                "Jours maladie", "Jours fériés", "Type prime (Aucune Prime / Prime 8% / Prime 11% / Prime 12%)",
                "Prime garde (Oui/Non)", "Prime HALO (Oui/Non)", "Alloc sécurité (Oui/Non)",
@@ -1066,7 +1066,7 @@ def _xlsx_response(headers, example, sheet, filename):
 
 @api.get("/employees/template")
 async def emp_template(user: dict = Depends(get_current_user)):
-    ex = ["Jean Exemple", "400", "Comptable", "Régulier temps plein", "N/A", 80000, 8, 8, 14,
+    ex = [101, "Jean Exemple", "400", "Comptable", "Régulier temps plein", "N/A", 80000, 8, 8, 14,
           "Prime 8%", "Non", "Non", "Non", "2020-01-15", "1985-05-20"]
     return _xlsx_response(EMP_HEADERS, ex, "Employés", "modele_employes.xlsx")
 
@@ -1077,6 +1077,8 @@ async def dep_template(user: dict = Depends(get_current_user)):
 
 @api.post("/employees/import")
 async def import_employees(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin" and await _any_locked():
+        raise HTTPException(status_code=403, detail="Un budget est verrouillé. Seul un administrateur peut importer des employés.")
     content = await file.read()
     try:
         wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
@@ -1086,45 +1088,59 @@ async def import_employees(file: UploadFile = File(...), user: dict = Depends(ge
     valid_types = {"CCQ", "Régulier temps plein", "Stagiaire"}
     valid_primes = {"Aucune Prime", "Prime 8%", "Prime 11%", "Prime 12%"}
     dept_codes = {d["code"] for d in await db.departments.find().to_list(1000)}
+    existing_nums = {e["employee_number"] for e in await db.employees.find({}, {"employee_number": 1}).to_list(100000)}
+    used = set()
     inserted, errors = 0, []
     n = await _next_number()
     for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         if not row or all(c is None for c in row):
             continue
-        name = _cell(row, 0)
+        name = _cell(row, 1)
         if not name:
             continue
         try:
-            etype = str(_cell(row, 3) or "Régulier temps plein").strip()
+            mat_raw = _cell(row, 0)
+            if mat_raw is not None and str(mat_raw).strip() != "":
+                try:
+                    num = int(float(mat_raw))
+                except Exception:
+                    raise ValueError(f"Matricule invalide '{mat_raw}'")
+                if num in existing_nums or num in used:
+                    raise ValueError(f"Matricule {num} déjà utilisé")
+            else:
+                while n in existing_nums or n in used:
+                    n += 1
+                num = n
+            etype = str(_cell(row, 4) or "Régulier temps plein").strip()
             if etype not in valid_types:
                 raise ValueError(f"Type emploi invalide '{etype}'")
-            cat = str(_cell(row, 4) or "N/A").strip() or "N/A"
+            cat = str(_cell(row, 5) or "N/A").strip() or "N/A"
             is_ccq = etype == "CCQ"
             if is_ccq and cat not in ("Électricien", "Frigoriste"):
                 raise ValueError("Catégorie CCQ requise (Électricien/Frigoriste)")
             if not is_ccq:
                 cat = "N/A"
-            prime = str(_cell(row, 9) or "Aucune Prime").strip()
+            prime = str(_cell(row, 10) or "Aucune Prime").strip()
             if prime not in valid_primes:
                 prime = "Aucune Prime"
-            vac = float(_cell(row, 6) or 0)
+            vac = float(_cell(row, 7) or 0)
             doc = {
-                "name": str(name).strip(), "department": str(_cell(row, 1) or "").strip(),
-                "title": str(_cell(row, 2) or "").strip(), "employment_type": etype, "ccq_category": cat,
-                "current_annual_salary": float(_cell(row, 5) or 0),
+                "name": str(name).strip(), "department": str(_cell(row, 2) or "").strip(),
+                "title": str(_cell(row, 3) or "").strip(), "employment_type": etype, "ccq_category": cat,
+                "current_annual_salary": float(_cell(row, 6) or 0),
                 "vacation_rate": vac / 100 if vac > 1 else vac,
-                "sick_personal_days": int(_cell(row, 7) or 0), "holiday_days": int(_cell(row, 8) or 0),
+                "sick_personal_days": int(_cell(row, 8) or 0), "holiday_days": int(_cell(row, 9) or 0),
                 "is_ccq": is_ccq, "prime_type": prime,
-                "prime_garde": _b(_cell(row, 10)), "prime_halo": _b(_cell(row, 11)), "alloc_securite": _b(_cell(row, 12)),
-                "hire_date": _date(_cell(row, 13)), "birth_date": _date(_cell(row, 14)),
-                "employee_number": n,
+                "prime_garde": _b(_cell(row, 11)), "prime_halo": _b(_cell(row, 12)), "alloc_securite": _b(_cell(row, 13)),
+                "hire_date": _date(_cell(row, 14)), "birth_date": _date(_cell(row, 15)),
+                "employee_number": num,
             }
             if not doc["department"]:
                 raise ValueError("Département requis")
             if doc["department"] not in dept_codes:
                 raise ValueError(f"Département '{doc['department']}' inexistant")
             await db.employees.insert_one(doc)
-            n += 1
+            used.add(num)
             inserted += 1
         except Exception as ex:
             errors.append(f"Ligne {idx}: {ex}")
