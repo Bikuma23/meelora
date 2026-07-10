@@ -138,7 +138,7 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
                 <div><Label className="text-[11px] uppercase text-slate-500">Augmentation (%)</Label>
                   <Input data-testid="fiche-augmentation" type="number" step="0.1" className="mt-1 font-mono-data" value={f.augmentation_pct} onChange={(e) => set("augmentation_pct", e.target.value)} /></div>
                 <div><Label className="text-[11px] uppercase text-slate-500">Taux vacances (%)</Label>
-                  <Input data-testid="fiche-vacation" type="number" step="0.1" disabled={isCCQ} className="mt-1 font-mono-data" value={f.vacation_rate_pct} onChange={(e) => set("vacation_rate_pct", e.target.value)} /></div>
+                  <Input data-testid="fiche-vacation" type="number" step="0.1" className="mt-1 font-mono-data" value={f.vacation_rate_pct} onChange={(e) => set("vacation_rate_pct", e.target.value)} /></div>
                 {isCCQ && (
                   <div><Label className="text-[11px] uppercase text-slate-500">Type de prime</Label>
                     <Select value={f.prime_type} onValueChange={(v) => set("prime_type", v)}>

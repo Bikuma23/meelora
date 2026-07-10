@@ -267,7 +267,7 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
         primes_total = prime_amt + garde + halo + alloc + boni
 
         vac_rate = ov.get("vacation_rate", e["vacation_rate"])
-        vacation = 0 if (ccq or is_actuel) else vac_rate * (new_salary + primes_total)
+        vacation = 0 if is_actuel else vac_rate * (new_salary + primes_total)
 
         if is_actuel:
             rrq = ae = rqap = fss = csst = gov = ccq_av = avantages = reer = assurance = 0
@@ -281,7 +281,7 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
             csst = _capped(gross, dept_csst.get(e["department"], charges["CSST"]["rate"]), charges["CSST"]["ceiling"])
             gov = rrq + ae + rqap + fss
             if ccq:
-                ccq_av = new_salary * hypo["ccq_rate"]
+                ccq_av = (new_salary + primes_total) * hypo["ccq_rate"]
                 avantages = gov + ccq_av
                 reer = 0
                 assurance = 0
