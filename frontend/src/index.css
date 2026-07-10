@@ -1,55 +1,41 @@
-@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --navy: #0E1526;
+  --navy-soft: #1B2438;
+  --teal: #14B8A6;
+  --blue: #2563EB;
+}
+
 body {
   margin: 0;
-  font-family: "IBM Plex Sans", sans-serif;
+  font-family: "Plus Jakarta Sans", sans-serif;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: #F4F4F5;
-  color: #09090B;
+  background-color: #F1F5F9;
+  color: #0F172A;
 }
 
-.font-heading { font-family: "Archivo", sans-serif; }
-.font-mono-data { font-family: "IBM Plex Mono", monospace; }
+.font-mono-data { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
 
-/* Square industrial slider thumbs */
-.slider-track [role="slider"] {
-  border-radius: 2px !important;
-}
+::selection { background: #14B8A6; color: #fff; }
 
-::selection {
-  background: #0055FF;
-  color: #ffffff;
-}
+.card { background:#fff; border:1px solid #E2E8F0; border-radius:16px; box-shadow:0 1px 3px rgba(15,23,42,.04); }
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --radius: 0.25rem;
+    --background: 0 0% 100%; --foreground: 222 47% 11%;
+    --card: 0 0% 100%; --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%; --popover-foreground: 222 47% 11%;
+    --primary: 222 47% 11%; --primary-foreground: 0 0% 98%;
+    --secondary: 210 40% 96%; --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%; --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%; --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%; --destructive-foreground: 0 0% 98%;
+    --border: 214 32% 91%; --input: 214 32% 91%; --ring: 173 80% 40%;
+    --radius: 0.6rem;
   }
 }
-
-@layer base {
-  * { @apply border-border; }
-}
+@layer base { * { @apply border-border; } }
