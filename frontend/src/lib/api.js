@@ -37,6 +37,8 @@ export const api = {
   createYear: (d) => client.post("/years", d).then((r) => r.data),
   setActiveYear: (year) => client.put("/years/active", { year }).then((r) => r.data),
 
+  downloadEmployeeFiche: (eid, year, scenario) => client.get(`/employees/${eid}/fiche-pdf`, { params: { ...(year ? { year } : {}), ...(scenario ? { scenario } : {}) }, responseType: "blob" }).then((r) => r.data),
+
   getLocks: (params) => client.get("/budget/locks", { params }).then((r) => r.data),
   setLock: (d) => client.post("/budget/lock", d).then((r) => r.data),
 

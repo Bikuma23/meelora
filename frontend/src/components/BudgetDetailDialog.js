@@ -1,7 +1,10 @@
 import { fmtCAD } from "../lib/format";
+import { api } from "../lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
-import { Pencil } from "lucide-react";
+import { Pencil, FileDown } from "lucide-react";
 import { Button } from "../components/ui/button";
+import { toast } from "sonner";
+import { useState } from "react";
 
 function Row({ label, value, strong, accent }) {
   return (
@@ -15,8 +18,20 @@ function Row({ label, value, strong, accent }) {
 const SCEN_LABEL = { ca: "Budget CA", revue1: "Revue Budgétaire 1", revue2: "Revue Budgétaire 2" };
 
 export default function BudgetDetailDialog({ open, onOpenChange, line, year, scenario, onEdit, canEdit }) {
+  const [busy, setBusy] = useState(false);
   if (!line) return null;
   const ccq = line.is_ccq;
+  const exportPdf = async () => {
+    setBusy(true);
+    try {
+      const blob = await api.downloadEmployeeFiche(line.employee_id, year, scenario);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url;
+      a.download = `fiche_${line.name.replace(/\s+/g, "_")}_${scenario}_${year}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Fiche PDF téléchargée");
+    } catch { toast.error("Export PDF échoué"); } finally { setBusy(false); }
+  };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto" data-testid="budget-detail-dialog">
@@ -69,11 +84,16 @@ export default function BudgetDetailDialog({ open, onOpenChange, line, year, sce
               <span className="text-xs font-700 uppercase tracking-widest text-white">Masse salariale totale</span>
               <span className="font-mono-data text-lg font-700 text-[#14B8A6]" data-testid="detail-total">{fmtCAD(line.total_cost)}</span>
             </div>
-            {canEdit && (
-              <Button data-testid="detail-edit-btn" onClick={() => { onOpenChange(false); onEdit(line); }} className="w-full gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90">
-                <Pencil size={15} /> Modifier cette fiche
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button data-testid="detail-pdf-btn" variant="outline" onClick={exportPdf} disabled={busy} className="flex-1 gap-1.5">
+                <FileDown size={15} /> {busy ? "Génération…" : "Exporter en PDF"}
               </Button>
-            )}
+              {canEdit && (
+                <Button data-testid="detail-edit-btn" onClick={() => { onOpenChange(false); onEdit(line); }} className="flex-1 gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90">
+                  <Pencil size={15} /> Modifier cette fiche
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </DialogContent>

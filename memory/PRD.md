@@ -75,6 +75,11 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 - [x] Badge de verrou enrichi : « Verrouillé · courriel le date » (locked_by/locked_at).
 - [x] Tests : frontend 100 % (8/8, iteration_10), backend garde=520 $ validé (curl).
 
+## Export PDF fiche employé (2026-07-10)
+- [x] Endpoint `GET /api/employees/{eid}/fiche-pdf?year=&scenario=` : génère un PDF détaillé de la masse salariale d'un employé (salaire, primes, cotisations/avantages, total) via reportlab.
+- [x] Bouton « Exporter en PDF » (detail-pdf-btn) dans la fenêtre de détail (lecture seule).
+- [x] Validé : backend HTTP 200 + application/pdf (curl).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

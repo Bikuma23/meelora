@@ -815,6 +815,64 @@ def build_budget_pdf(data, year, dept_label):
     buf.seek(0)
     return buf
 
+def build_employee_fiche_pdf(ln, year, scenario_label):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=18 * mm, bottomMargin=15 * mm, leftMargin=18 * mm, rightMargin=18 * mm)
+    styles = getSampleStyleSheet()
+    NAVY = colors.HexColor("#0E1526"); TEAL = colors.HexColor("#14B8A6")
+    h = ParagraphStyle("h", parent=styles["Title"], textColor=NAVY, fontSize=17)
+    sub = ParagraphStyle("sub", parent=styles["Normal"], textColor=colors.HexColor("#64748B"), fontSize=9)
+    sec = ParagraphStyle("sec", parent=styles["Heading2"], textColor=NAVY, fontSize=11, spaceBefore=10)
+    ccq = ln["is_ccq"]
+    el = [Paragraph(f"{ln['name']} — #{str(ln['employee_number']).zfill(3)}", h),
+          Paragraph(f"{scenario_label} {year} · {ln['employment_type']} · {ln['department_label']} · généré le {datetime.now().strftime('%Y-%m-%d %H:%M')}", sub), Spacer(1, 8)]
+
+    def block(title, rows, color):
+        t = Table([[title, ""]] + rows, colWidths=[100 * mm, 60 * mm])
+        t.setStyle(TableStyle([("SPAN", (0, 0), (-1, 0)), ("BACKGROUND", (0, 0), (-1, 0), color), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                               ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 9),
+                               ("ALIGN", (1, 1), (1, -1), "RIGHT"), ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
+                               ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+                               ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
+        return t
+
+    salaire = [["Salaire de base (actuel)", _money(ln["base_salary"])],
+               ["Augmentation", f"{ln['augmentation']*100:.2f} %"],
+               ["Nouveau salaire", _money(ln["new_salary"])],
+               ["Taux horaire (réf. 2080 h)", f"{ln['taux_horaire']} $/h"],
+               ["Vacances", _money(ln["vacation"])]]
+    if ccq:
+        primes = [[f"Prime ({ln['prime_type']})", _money(ln["prime_amount"])], ["Prime de garde", _money(ln["garde"])],
+                  ["Prime HALO", _money(ln["halo"])], ["Alloc. sécurité", _money(ln["alloc"])],
+                  ["Total primes", _money(ln["primes_total"])]]
+    else:
+        primes = [["Boni", _money(ln["boni"])], ["Total primes & boni", _money(ln["primes_total"])]]
+    charges = [["RRQ", _money(ln["rrq"])], ["AE", _money(ln["ae"])], ["RQAP", _money(ln["rqap"])], ["FSS", _money(ln["fss"])]]
+    if ccq:
+        charges.append(["Avantages CCQ (32.33%)", _money(ln["ccq_avantages"])])
+    charges.append(["CSST", _money(ln["csst"])])
+    if not ccq:
+        charges += [["RPDB / REER", _money(ln["reer"])], ["Assu. collectives", _money(ln["assurance"])]]
+    charges.append(["Total avantages sociaux", _money(ln["avantages"])])
+
+    el += [block("Salaire", salaire, NAVY), Spacer(1, 6),
+           block("Primes & rémunération additionnelle", primes, colors.HexColor("#F59E0B")), Spacer(1, 6),
+           block("Cotisations & avantages (max. assurables)", charges, colors.HexColor("#8B5CF6")), Spacer(1, 10)]
+    tot = Table([["MASSE SALARIALE TOTALE", _money(ln["total_cost"])]], colWidths=[100 * mm, 60 * mm])
+    tot.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), NAVY), ("TEXTCOLOR", (0, 0), (0, -1), colors.white),
+                             ("TEXTCOLOR", (1, 0), (1, -1), TEAL), ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+                             ("FONTSIZE", (0, 0), (-1, -1), 12), ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                             ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]))
+    el += [tot]
+    doc.build(el)
+    buf.seek(0)
+    return buf
+
 @api.get("/budget/evolution")
 async def budget_evolution(department: Optional[str] = None, user: dict = Depends(get_current_user)):
     depts = await db.departments.find().to_list(1000)
@@ -833,6 +891,21 @@ async def budget_evolution(department: Optional[str] = None, user: dict = Depend
                     "ca": ca["totals"]["salaire_base"], "revue1": revue1["totals"]["salaire_base"], "revue2": revue2["totals"]["salaire_base"],
                     "ca_budget": ca["totals"]["budget_total"], "revue1_budget": revue1["totals"]["budget_total"], "revue2_budget": revue2["totals"]["budget_total"]})
     return {"years": out}
+
+@api.get("/employees/{eid}/fiche-pdf")
+async def employee_fiche_pdf(eid: str, year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
+    emp = await db.employees.find_one({"_id": _oid(eid)})
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employé introuvable")
+    year = year or await _active_year()
+    hypo = await _get_hypo(year)
+    depts = await db.departments.find().to_list(1000)
+    ln = compute_budget([emp], hypo, depts, year=year, scenario=scenario)["lines"][0]
+    buf = build_employee_fiche_pdf(ln, year, SCEN_LABEL.get(scenario, scenario))
+    await log_action(user, "Modifier", "Rapport", f"Fiche PDF {SCEN_LABEL.get(scenario, scenario)} {year} — {emp['name']}")
+    fname = f"fiche_{ln['name'].replace(' ', '_')}_{scenario}_{year}.pdf"
+    return StreamingResponse(buf, media_type="application/pdf",
+                             headers={"Content-Disposition": f"attachment; filename={fname}"})
 
 @api.get("/reports/excel")
 async def report_excel(department: Optional[str] = None, year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
