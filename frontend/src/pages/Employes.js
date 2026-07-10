@@ -175,7 +175,7 @@ export default function Employes() {
     if (!file) return;
     try {
       const res = await api.importEmployees(file);
-      toast.success(`${res.inserted} employé(s) importé(s)${res.errors?.length ? ` · ${res.errors.length} erreur(s)` : ""}`);
+      toast.success(`${res.inserted} ajout(s)${res.updated ? `, ${res.updated} mise(s) à jour` : ""}${res.errors?.length ? ` · ${res.errors.length} erreur(s)` : ""}`);
       if (res.errors?.length) res.errors.slice(0, 3).forEach((er) => toast.error(er));
       load(query);
     } catch (e) { toast.error(e.response?.data?.detail || "Import échoué"); }

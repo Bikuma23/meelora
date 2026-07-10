@@ -86,7 +86,7 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 
 ## Import avec matricules définis (2026-07-10)
 - [x] Le modèle Excel employés (`GET /api/employees/template`) inclut en 1re colonne « Matricule (# — laisser vide pour auto) ».
-- [x] Import (`POST /api/employees/import`) : utilise le matricule fourni (validation entier + unicité), sinon auto-attribution. Contrôle de verrou (non-admin bloqué si budget verrouillé). Validé par curl (matricule 501 respecté).
+- [x] Import (`POST /api/employees/import`) : utilise le matricule fourni (validation entier + unicité dans le fichier), sinon auto-attribution. **Upsert** : si le matricule existe déjà, l'employé est mis à jour (champs de base, sans toucher aux overrides `years`) au lieu d'être rejeté. Retour {inserted, updated, errors}. Validé par curl.
 
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).

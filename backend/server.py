@@ -1090,7 +1090,7 @@ async def import_employees(file: UploadFile = File(...), user: dict = Depends(ge
     dept_codes = {d["code"] for d in await db.departments.find().to_list(1000)}
     existing_nums = {e["employee_number"] for e in await db.employees.find({}, {"employee_number": 1}).to_list(100000)}
     used = set()
-    inserted, errors = 0, []
+    inserted, updated, errors = 0, 0, []
     n = await _next_number()
     for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         if not row or all(c is None for c in row):
@@ -1100,13 +1100,16 @@ async def import_employees(file: UploadFile = File(...), user: dict = Depends(ge
             continue
         try:
             mat_raw = _cell(row, 0)
+            is_update = False
             if mat_raw is not None and str(mat_raw).strip() != "":
                 try:
                     num = int(float(mat_raw))
                 except Exception:
                     raise ValueError(f"Matricule invalide '{mat_raw}'")
-                if num in existing_nums or num in used:
-                    raise ValueError(f"Matricule {num} déjà utilisé")
+                if num in used:
+                    raise ValueError(f"Matricule {num} en double dans le fichier")
+                if num in existing_nums:
+                    is_update = True
             else:
                 while n in existing_nums or n in used:
                     n += 1
@@ -1139,13 +1142,18 @@ async def import_employees(file: UploadFile = File(...), user: dict = Depends(ge
                 raise ValueError("Département requis")
             if doc["department"] not in dept_codes:
                 raise ValueError(f"Département '{doc['department']}' inexistant")
-            await db.employees.insert_one(doc)
+            if is_update:
+                # Met à jour les champs de base sans toucher aux overrides annuels (years).
+                await db.employees.update_one({"employee_number": num}, {"$set": doc})
+                updated += 1
+            else:
+                await db.employees.insert_one(doc)
+                inserted += 1
             used.add(num)
-            inserted += 1
         except Exception as ex:
             errors.append(f"Ligne {idx}: {ex}")
-    await log_action(user, "Créer", "Employé", f"Import Excel — {inserted} employé(s)")
-    return {"inserted": inserted, "errors": errors}
+    await log_action(user, "Créer", "Employé", f"Import Excel — {inserted} ajout(s), {updated} mise(s) à jour")
+    return {"inserted": inserted, "updated": updated, "errors": errors}
 
 @api.post("/departments/import")
 async def import_departments(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
