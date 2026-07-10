@@ -1,0 +1,36 @@
+{
+  "summary": "Tests frontend UI/UX complets. Tous les 8 comportements demandés passent : clic ligne ouvre BudgetDetailDialog (lecture seule), garde CCQ = 520$, titre fiche sans 'Fiche' (Budget CA 2026 — Marie Bouchère), crayon ouvre fiche sans détail (stopPropagation OK), Enregistrer garde la fenêtre ouverte + toast succès, Fermer ferme, badge verrou affiche 'Verrouillé · admin@accslegro.com le 2026-07-10', titre modification employé = 'Marie Bouchère — #001' sans 'Modifier', detail-edit-btn bascule vers fiche. État laissé propre (déverrouillé).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100% (8/8)"},
+  "test_credentials": "admin@accslegro.com/admin123",
+  "seed_data_creation": "aucune",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "SPA sans react-router. Nav testids: nav-dashboard, nav-employes (pas 'employees'), nav-budget, nav-hypotheses, nav-departements, nav-rapports, nav-journal, nav-utilisateurs. Login: type() + Enter sur password.",
+  "verified_flows": {
+    "budget_row_click_opens_detail_readonly": true,
+    "detail_total_visible": "165 274 $",
+    "detail_shows_garde_520_for_ccq": true,
+    "detail_edit_btn_switches_to_fiche": true,
+    "pencil_edit_line_opens_fiche_only": true,
+    "pencil_does_not_trigger_row_detail": true,
+    "fiche_title_no_Fiche_word": true,
+    "fiche_title_format": "Budget CA 2026 — Marie Bouchère",
+    "save_keeps_fiche_open_with_toast": true,
+    "toast_message": "Budget CA enregistré",
+    "fermer_button_closes_fiche": true,
+    "lock_badge_shows_admin_and_date": true,
+    "lock_badge_text": "Verrouillé · admin@accslegro.com le 2026-07-10",
+    "employee_edit_title_no_Modifier": true,
+    "employee_edit_title": "Marie Bouchère — #001"
+  }
+}

@@ -93,7 +93,7 @@ export default function Hypotheses() {
               ["ccq_rate", "Avantages CCQ (%)", true], ["prime_halo_rate", "Prime HALO (%)", true],
               ["reer_rate", "REER (%)", true],
               ["assurance_annuelle", "Assurance ($/an)", false], ["alloc_securite_montant", "Alloc. sécurité ($/an)", false],
-              ["prime_garde_cout_unitaire", "Garde — coût unitaire ($)", false], ["prime_garde_nb_annuel", "Garde — nb / an", false],
+              ["prime_garde_cout_unitaire", "Garde — coût unitaire ($)", false], ["prime_garde_nb_annuel", "Garde — nb / an / employé", false],
             ].map(([k, lbl, pct]) => (
               <div key={k}><label className="text-[11px] uppercase text-slate-500">{lbl}</label>
                 <Input data-testid={`param-${k}`} type="number" step={pct ? "0.01" : "1"} className="mt-1 font-mono-data"

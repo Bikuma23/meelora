@@ -76,7 +76,7 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto" data-testid="employee-form-dialog">
         <DialogHeader>
-          <DialogTitle>{initial ? `Modifier — #${initial.employee_number} ${initial.name}` : "Nouvel employé"}</DialogTitle>
+          <DialogTitle>{initial ? `${initial.name} — #${String(initial.employee_number).padStart(3, "0")}` : "Nouvel employé"}</DialogTitle>
           <DialogDescription className="text-xs">Tous les champs sont obligatoires. Âge et ancienneté calculés automatiquement.</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-1 gap-4 py-1 sm:grid-cols-2">

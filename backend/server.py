@@ -107,7 +107,7 @@ DEFAULT_HYPOTHESES = {
     ],
     "assurance_annuelle": 3600, "reer_rate": 0.05,
     "ccq_rate": 0.3233,
-    "prime_garde_cout_unitaire": 250, "prime_garde_nb_annuel": 52,
+    "prime_garde_cout_unitaire": 250, "prime_garde_nb_annuel": 2.08,
     "prime_halo_rate": 0.05, "alloc_securite_montant": 260,
     "augmentation_ccq": 0.0333, "augmentation_autres": 0.035,
     "working_days_ccq": WD_CCQ, "working_days_std": WD_STD, "pay_weeks": PAY_WEEKS,
@@ -170,7 +170,7 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
         _, o, _ = _emp_scn(e, year, scenario)
         return e.get("is_ccq") and o.get("prime_garde", e.get("prime_garde"))
     eligible = [] if is_actuel else [e for e in employees if _garde_on(e)]
-    garde_avg = (hypo["prime_garde_cout_unitaire"] * hypo["prime_garde_nb_annuel"] / len(eligible)) if eligible else 0
+    garde_avg = hypo["prime_garde_cout_unitaire"] * hypo["prime_garde_nb_annuel"]
 
     lines = []
     tot = {"salaire_base": 0, "vacances": 0, "primes": 0, "avantages": 0,
@@ -695,7 +695,7 @@ async def budget_compare(year: Optional[int] = None, department: Optional[str] =
 async def get_locks(year: Optional[int] = None, user: dict = Depends(get_current_user)):
     q = {"key": {"$regex": f"^{int(year)}:"}} if year else {}
     docs = await db.locks.find(q).to_list(1000)
-    return {d["key"]: bool(d.get("locked")) for d in docs}
+    return {d["key"]: {"locked": bool(d.get("locked")), "locked_by": d.get("locked_by", ""), "locked_at": d.get("locked_at", "")} for d in docs}
 
 class LockPayload(BaseModel):
     year: int
@@ -1026,7 +1026,8 @@ async def startup():
     if await db.hypotheses.count_documents({"key": _hkey(DEFAULT_YEAR)}) == 0:
         base = dict(DEFAULT_HYPOTHESES); base["key"] = _hkey(DEFAULT_YEAR); base["year"] = DEFAULT_YEAR
         await db.hypotheses.insert_one(base)
-    await db.hypotheses.update_many({"prime_garde_nb_annuel": 365}, {"$set": {"prime_garde_nb_annuel": 52}})
+    await db.hypotheses.update_many({"prime_garde_nb_annuel": 365}, {"$set": {"prime_garde_nb_annuel": 2.08}})
+    await db.hypotheses.update_many({"prime_garde_nb_annuel": 52}, {"$set": {"prime_garde_nb_annuel": 2.08}})
     await db.hypotheses.update_many({}, {"$unset": {"ccq_electricien_compagnon_rate": ""}})
     # Migration : renommer l'ancien scénario "revue" en "revue1".
     async for e in db.employees.find({}):

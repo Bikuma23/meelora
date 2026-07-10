@@ -42,7 +42,7 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
   const [p, setP] = useState(line);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const revueMode = scn.startsWith("revue");
-  const locked = !isAdmin && !!locks[`${year}:${scn}`];
+  const locked = !isAdmin && !!locks[`${year}:${scn}`]?.locked;
 
   // Charger les valeurs sauvegardées du scénario sélectionné dans la fiche.
   useEffect(() => {
@@ -82,17 +82,21 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
     return () => clearTimeout(t);
   }, [override, line.employee_id, year, scn]);
 
+  const refetch = () => api.getBudget({ year, scenario: scn }).then((d) => {
+    const l = d.lines.find((x) => x.employee_id === line.employee_id); if (l) setCurLine(l);
+  }).catch(() => {});
+
   const save = async () => {
     if (locked) { toast.error("Budget verrouillé — seul un administrateur peut modifier."); return; }
     if (isCCQ && f.prime_garde && f.prime_type === "Aucune Prime") { toast.error("Sélectionnez un type de prime : la Prime de garde est activée"); return; }
     try {
       await api.saveBudgetOverride(line.employee_id, override, { year, scenario: scn });
-      toast.success(`Fiche ${SCEN_LABEL[scn]} enregistrée`); onSaved(); onOpenChange(false);
+      toast.success(`${SCEN_LABEL[scn]} enregistré`); onSaved(); await refetch();
     } catch (e) { toast.error(e.response?.data?.detail || "Enregistrement impossible"); }
   };
   const reset = async () => {
     if (locked) { toast.error("Budget verrouillé — seul un administrateur peut modifier."); return; }
-    try { await api.saveBudgetOverride(line.employee_id, {}, { year, scenario: scn }); toast.success("Ligne réinitialisée"); onSaved(); onOpenChange(false); }
+    try { await api.saveBudgetOverride(line.employee_id, {}, { year, scenario: scn }); toast.success("Ligne réinitialisée"); onSaved(); await refetch(); }
     catch (e) { toast.error(e.response?.data?.detail || "Action impossible"); }
   };
 
@@ -100,7 +104,7 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto" data-testid="budget-fiche-dialog">
         <DialogHeader>
-          <DialogTitle>Fiche {SCEN_LABEL[scn]} {year} — {line.name}</DialogTitle>
+          <DialogTitle>{SCEN_LABEL[scn]} {year} — {line.name}</DialogTitle>
           <DialogDescription className="font-mono-data text-xs">{line.employment_type} · #{String(line.employee_number).padStart(3, "0")} · {line.department_label}</DialogDescription>
         </DialogHeader>
 

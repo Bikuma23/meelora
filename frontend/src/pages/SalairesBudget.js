@@ -4,6 +4,7 @@ import { useYear } from "../context/YearContext";
 import { useAuth } from "../context/AuthContext";
 import { fmtCAD } from "../lib/format";
 import BudgetFicheDialog from "../components/BudgetFicheDialog";
+import BudgetDetailDialog from "../components/BudgetDetailDialog";
 import { Button } from "../components/ui/button";
 import { Pencil, Lock, Unlock, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -19,9 +20,11 @@ export default function SalairesBudget() {
   const [b, setB] = useState(null);
   const [locks, setLocks] = useState({});
   const [fiche, setFiche] = useState({ open: false, line: null });
+  const [detail, setDetail] = useState({ open: false, line: null });
 
   const lockKey = `${year}:${scenario}`;
-  const locked = !!locks[lockKey];
+  const lockInfo = locks[lockKey];
+  const locked = !!lockInfo?.locked;
   const canEdit = isAdmin || !locked;
 
   const load = () => api.getBudget({ year, scenario }).then(setB);
@@ -59,7 +62,7 @@ export default function SalairesBudget() {
         <div className="flex items-center gap-3">
           {locked && (
             <span className="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-xs font-700 text-red-600" data-testid="lock-badge">
-              <Lock size={13} /> Verrouillé
+              <Lock size={13} /> Verrouillé{lockInfo?.locked_by ? ` · ${lockInfo.locked_by}${lockInfo.locked_at ? " le " + new Date(lockInfo.locked_at).toLocaleDateString("fr-CA") : ""}` : ""}
             </span>
           )}
           {isAdmin && (
@@ -89,7 +92,7 @@ export default function SalairesBudget() {
       <div className="card overflow-hidden">
         <div className="border-b border-slate-200 px-5 py-3.5">
           <h3 className="text-sm font-700">Saisie & calculs par employé — {LABEL[scenario]} {year}</h3>
-          <p className="text-xs text-slate-500">{canEdit ? "Cliquez « modifier » pour ajuster la fiche d'un employé." : "Budget verrouillé — consultation seule."}</p>
+          <p className="text-xs text-slate-500">{canEdit ? "Cliquez sur une ligne pour voir le détail, ou « modifier » pour ajuster la fiche." : "Cliquez sur une ligne pour voir le détail. Budget verrouillé — consultation seule."}</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -108,7 +111,7 @@ export default function SalairesBudget() {
             </thead>
             <tbody>
               {b.lines.map((ln) => (
-                <tr key={ln.employee_number} className="border-b border-slate-100 hover:bg-slate-50" data-testid={`budget-row-${ln.employee_number}`}>
+                <tr key={ln.employee_number} onClick={() => setDetail({ open: true, line: ln })} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" data-testid={`budget-row-${ln.employee_number}`}>
                   <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(ln.employee_number).padStart(3, "0")}</td>
                   <td className="px-4 py-2.5 font-600">{ln.name}{ln.overridden && <span className="ml-2 rounded bg-[#14B8A61a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">Ajusté</span>}</td>
                   <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#2563EB" : "#64748B" }}>{ln.is_ccq ? "CCQ" : ln.employment_type}</span></td>
@@ -118,7 +121,7 @@ export default function SalairesBudget() {
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.avantages)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data font-700">{fmtCAD(ln.total_cost)}</td>
                   <td className="px-4 py-2.5 text-right">
-                    <button data-testid={`edit-line-${ln.employee_number}`} disabled={!canEdit} onClick={() => setFiche({ open: true, line: ln })}
+                    <button data-testid={`edit-line-${ln.employee_number}`} disabled={!canEdit} onClick={(ev) => { ev.stopPropagation(); setFiche({ open: true, line: ln }); }}
                       className="p-1.5 text-slate-400 hover:text-[#2563EB] disabled:cursor-not-allowed disabled:opacity-30">
                       {canEdit ? <Pencil size={15} /> : <Lock size={15} />}
                     </button>
@@ -132,6 +135,10 @@ export default function SalairesBudget() {
 
       {fiche.open && fiche.line && (
         <BudgetFicheDialog open={fiche.open} onOpenChange={(v) => setFiche((p) => ({ ...p, open: v }))} line={fiche.line} year={year} scenario={scenario} locks={locks} isAdmin={isAdmin} onSaved={load} />
+      )}
+      {detail.open && detail.line && (
+        <BudgetDetailDialog open={detail.open} onOpenChange={(v) => setDetail((p) => ({ ...p, open: v }))} line={detail.line} year={year} scenario={scenario}
+          canEdit={canEdit} onEdit={(ln) => setFiche({ open: true, line: ln })} />
       )}
     </div>
   );
