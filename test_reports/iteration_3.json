@@ -1,0 +1,29 @@
+{
+  "summary": "Tested new Budget Fiche modal, 'Aucune Prime' option, budget-preview/budget-override endpoints and informational days behavior. All 6 new pytest cases PASS (12/12 total across regression + fiche suite). Full frontend flow verified via Playwright: edit-line button opens fiche, live preview updates total, save persists with 'Ajusté' badge, reset clears it, CCQ hides RPDB/BONI/Assurance and shows CCQ note + Avantages CCQ, 'Aucune Prime' appears in both fiche and employee-form selects.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "EmployeeForm dialog", "issues": ["Hire date & birth date inputs use browser native date picker (type=date) instead of shadcn calendar component — carry-over from prev iterations."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_budget_fiche.py",
+    "/app/backend/tests/test_budget_masse.py",
+    "/app/test_reports/pytest/pytest_fiche.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "compute_section: override 'boni'/'reer'/'assurance' values are cast via float(...) with no bounds — negative numbers would reduce totals. Consider max(0, ...).",
+    "BudgetFicheDialog seeds vacation_rate_pct from the *computed* line.vacation_rate, which is fine, but if the user leaves 'Augmentation (%)' empty it becomes 0 (Number('') === 0). Small UX gotcha.",
+    "budget-preview endpoint does not validate that override keys are known (unknown keys silently ignored). Acceptable but worth an allowlist.",
+    "PUT /api/employees/{id}/budget-override with empty override + non-existent section is a no-op $unset returning success — harmless but could be documented."
+  ],
+  "updated_files": ["/app/backend/tests/test_budget_fiche.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Created and deleted TEST_NoPrime employee inside test. Applied and cleared budget overrides on Isabelle Caron and a CCQ employee within test teardown. No residual test data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Fiche editor uses debounced (200ms) /budget-preview call — allow ~800-1000ms after typing before asserting fiche-total. Editing hire/birth dates still uses native <input type=date>. detail-tab-actuel/ca/revue switch which section is edited (aug=0 for actuel). All 8 seeded employees present; #5 Isabelle Caron is Régulier, #1-#4 are CCQ."
+}

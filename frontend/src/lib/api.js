@@ -10,4 +10,6 @@ export const api = {
   getHypotheses: () => axios.get(`${API}/hypotheses`).then((r) => r.data),
   updateHypotheses: (d) => axios.put(`${API}/hypotheses`, d).then((r) => r.data),
   getBudget: (params) => axios.get(`${API}/budget`, { params }).then((r) => r.data),
+  budgetPreview: (id, body) => axios.post(`${API}/employees/${id}/budget-preview`, body).then((r) => r.data),
+  saveBudgetOverride: (id, body) => axios.put(`${API}/employees/${id}/budget-override`, body).then((r) => r.data),
 };

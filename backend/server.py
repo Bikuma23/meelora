@@ -104,7 +104,7 @@ class EmployeeBase(BaseModel):
     sick_personal_days: int
     holiday_days: int
     is_ccq: bool
-    prime_type: Literal["Prime 8%", "Prime 11%", "Prime 12%"]
+    prime_type: Literal["Aucune Prime", "Prime 8%", "Prime 11%", "Prime 12%"]
     prime_garde: bool
     prime_chef_equipe: bool
     prime_halo: bool
@@ -122,7 +122,8 @@ class Employee(EmployeeBase):
 # ---------------------------------------------------------------------------
 # Budget engine
 # ---------------------------------------------------------------------------
-PRIME_PCT = {"Prime 8%": 0.08, "Prime 11%": 0.11, "Prime 12%": 0.12}
+PRIME_PCT = {"Aucune Prime": 0.0, "Prime 8%": 0.08, "Prime 11%": 0.11, "Prime 12%": 0.12}
+ANNUAL_HOURS = 2080  # heures payées / an (informative — jours maladie/fériés n'impactent pas la masse)
 
 
 def _capped(salary, rate, ceiling, exemption=0):
@@ -130,26 +131,32 @@ def _capped(salary, rate, ceiling, exemption=0):
     return base * rate
 
 
-def compute_section(employees, hypo, aug_reg, aug_ccq, garde_avg):
+def compute_section(employees, hypo, aug_reg, aug_ccq, garde_avg, section_key):
     dept_csst = {d["code"]: d["csst"] for d in hypo.get("departments", [])}
     lines = []
     tot = {"salaire_base": 0, "vacances": 0, "primes": 0, "avantages": 0,
            "csst": 0, "reer": 0, "assurance": 0, "budget_total": 0}
     for e in employees:
         ccq = e["is_ccq"]
-        aug = aug_ccq if ccq else aug_reg
-        base = e["current_annual_salary"]
+        ov = (e.get("budget_overrides") or {}).get(section_key, {}) or {}
+
+        aug = ov.get("augmentation", aug_ccq if ccq else aug_reg)
+        base = ov.get("base_salary", e["current_annual_salary"])
         new_salary = base * (1 + aug)
+        taux_horaire = new_salary / ANNUAL_HOURS if ANNUAL_HOURS else 0
 
-        vacation = 0 if ccq else new_salary * e["vacation_rate"]
+        vac_rate = ov.get("vacation_rate", e["vacation_rate"])
+        vacation = 0 if ccq else new_salary * vac_rate
 
-        prime_amt = new_salary * PRIME_PCT.get(e.get("prime_type"), 0.08)
-        garde = garde_avg if e["prime_garde"] else 0
-        halo = new_salary * hypo["prime_halo_rate"] if e["prime_halo"] else 0
-        chef = hypo["prime_chef_equipe_montant"] if e["prime_chef_equipe"] else 0
-        alloc = hypo["alloc_securite_montant"] if e["alloc_securite"] else 0
+        prime_type = ov.get("prime_type", e["prime_type"])
+        prime_amt = new_salary * PRIME_PCT.get(prime_type, 0.0)
+        garde = garde_avg if ov.get("prime_garde", e["prime_garde"]) else 0
+        halo = new_salary * hypo["prime_halo_rate"] if ov.get("prime_halo", e["prime_halo"]) else 0
+        chef = hypo["prime_chef_equipe_montant"] if ov.get("prime_chef_equipe", e["prime_chef_equipe"]) else 0
+        alloc = hypo["alloc_securite_montant"] if ov.get("alloc_securite", e["alloc_securite"]) else 0
         compagnon = new_salary * hypo["ccq_electricien_compagnon_rate"] if (ccq and e["ccq_category"] == "Électricien") else 0
-        primes_total = prime_amt + garde + halo + chef + alloc + compagnon
+        boni = 0 if ccq else float(ov.get("boni", 0) or 0)
+        primes_total = prime_amt + garde + halo + chef + alloc + compagnon + boni
 
         rrq = _capped(new_salary, hypo["rrq_rate"], hypo["rrq_ceiling"], hypo["rrq_exemption"])
         ae = _capped(new_salary, hypo["ae_rate"], hypo["ae_ceiling"])
@@ -158,23 +165,32 @@ def compute_section(employees, hypo, aug_reg, aug_ccq, garde_avg):
         gov = rrq + ae + rqap + fss
 
         if ccq:
-            avantages = gov + new_salary * hypo["ccq_rate"]
+            ccq_av = new_salary * hypo["ccq_rate"]
+            avantages = gov + ccq_av
             reer = 0
             assurance = 0
         else:
+            ccq_av = 0
             avantages = gov
-            reer = new_salary * hypo["reer_rate"]
-            assurance = hypo["assurance_annuelle"]
+            reer = float(ov.get("reer", new_salary * hypo["reer_rate"]))
+            assurance = float(ov.get("assurance", hypo["assurance_annuelle"]))
 
         csst = new_salary * dept_csst.get(e["department"], 0)
         total = new_salary + vacation + primes_total + avantages + csst + reer + assurance
 
         lines.append({
-            "employee_number": e["employee_number"], "name": e["name"],
-            "department": e["department"], "employment_type": e["employment_type"],
-            "is_ccq": ccq, "base_salary": round(base), "augmentation": aug,
-            "new_salary": round(new_salary), "vacation": round(vacation),
-            "primes_total": round(primes_total), "avantages": round(avantages),
+            "employee_id": str(e.get("_id", "")), "employee_number": e["employee_number"],
+            "name": e["name"], "department": e["department"],
+            "employment_type": e["employment_type"], "is_ccq": ccq,
+            "overridden": bool(ov),
+            "base_salary": round(base), "augmentation": aug, "new_salary": round(new_salary),
+            "taux_horaire": round(taux_horaire, 2), "vacation_rate": vac_rate,
+            "vacation": round(vacation), "prime_type": prime_type,
+            "prime_amount": round(prime_amt), "garde": round(garde), "halo": round(halo),
+            "chef": round(chef), "alloc": round(alloc), "compagnon": round(compagnon),
+            "boni": round(boni), "primes_total": round(primes_total),
+            "rrq": round(rrq), "ae": round(ae), "rqap": round(rqap), "fss": round(fss),
+            "ccq_avantages": round(ccq_av), "avantages": round(avantages),
             "csst": round(csst), "reer": round(reer), "assurance": round(assurance),
             "total_cost": round(total),
         })
@@ -247,6 +263,48 @@ async def delete_employee(employee_id: str):
     return {"success": True}
 
 
+async def _garde_avg(hypo, employees):
+    eligible = [e for e in employees if e.get("prime_garde")]
+    total = hypo["prime_garde_cout_unitaire"] * hypo["prime_garde_nb_annuel"]
+    return (total / len(eligible)) if eligible else 0
+
+
+class BudgetOverridePayload(BaseModel):
+    section: Literal["actuel", "ca", "revue"]
+    override: dict
+    aug_reg: float = 0
+    aug_ccq: float = 0
+
+
+@api_router.post("/employees/{employee_id}/budget-preview")
+async def budget_preview(employee_id: str, payload: BudgetOverridePayload):
+    oid = _oid(employee_id)
+    emp = await db.employees.find_one({"_id": oid})
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employé introuvable")
+    hypo = await db.hypotheses.find_one({"key": "current"})
+    employees = await db.employees.find().to_list(1000)
+    garde = await _garde_avg(hypo, employees)
+    emp = dict(emp)
+    emp.setdefault("budget_overrides", {})
+    emp["budget_overrides"] = {**emp["budget_overrides"], payload.section: payload.override}
+    res = compute_section([emp], hypo, payload.aug_reg, payload.aug_ccq, garde, payload.section)
+    return res["lines"][0]
+
+
+@api_router.put("/employees/{employee_id}/budget-override")
+async def save_budget_override(employee_id: str, payload: BudgetOverridePayload):
+    oid = _oid(employee_id)
+    if payload.override:
+        upd = {"$set": {f"budget_overrides.{payload.section}": payload.override}}
+    else:
+        upd = {"$unset": {f"budget_overrides.{payload.section}": ""}}
+    res = await db.employees.update_one({"_id": oid}, upd)
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Employé introuvable")
+    return {"success": True}
+
+
 @api_router.get("/hypotheses")
 async def get_hypotheses():
     doc = await db.hypotheses.find_one({"key": "current"})
@@ -284,11 +342,11 @@ async def get_budget(
 
     sections = [
         {"key": "actuel", "label": "Salaire Actuel", "augmentation": {"regulier": 0, "ccq": 0},
-         **compute_section(employees, hypo, 0, 0, garde_avg)},
+         **compute_section(employees, hypo, 0, 0, garde_avg, "actuel")},
         {"key": "ca", "label": "Budget (CA)", "augmentation": {"regulier": aug_reg_ca, "ccq": aug_ccq},
-         **compute_section(employees, hypo, aug_reg_ca, aug_ccq, garde_avg)},
+         **compute_section(employees, hypo, aug_reg_ca, aug_ccq, garde_avg, "ca")},
         {"key": "revue", "label": "Budget (Revue)", "augmentation": {"regulier": aug_reg_revue, "ccq": aug_ccq},
-         **compute_section(employees, hypo, aug_reg_revue, aug_ccq, garde_avg)},
+         **compute_section(employees, hypo, aug_reg_revue, aug_ccq, garde_avg, "revue")},
     ]
 
     # Dashboard aggregates (based on Budget CA)

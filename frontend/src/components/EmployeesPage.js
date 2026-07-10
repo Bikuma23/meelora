@@ -165,6 +165,7 @@ function EmployeeForm({ open, onOpenChange, initial, departments, onSubmit }) {
             <Select value={f.prime_type} onValueChange={(v) => set("prime_type", v)}>
               <SelectTrigger data-testid="f-prime-type" className="rounded-none"><SelectValue /></SelectTrigger>
               <SelectContent>
+                <SelectItem value="Aucune Prime">Aucune Prime</SelectItem>
                 <SelectItem value="Prime 8%">Prime 8%</SelectItem>
                 <SelectItem value="Prime 11%">Prime 11%</SelectItem>
                 <SelectItem value="Prime 12%">Prime 12%</SelectItem>

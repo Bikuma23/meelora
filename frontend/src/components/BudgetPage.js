@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { api } from "../lib/api";
 import { fmtCAD } from "../lib/format";
 import { Input } from "./ui/input";
+import { Pencil } from "lucide-react";
+import BudgetFicheDialog from "./BudgetFicheDialog";
 
 const VENTIL = [
   ["salaire_base", "Salaire de base"],
@@ -19,22 +21,31 @@ export default function BudgetPage() {
   const [budget, setBudget] = useState(null);
   const [aug, setAug] = useState({ aug_reg_ca: 5, aug_reg_revue: 3.5, aug_ccq: 3.3333 });
   const [detail, setDetail] = useState("ca");
+  const [fiche, setFiche] = useState({ open: false, line: null });
+
+  const fetchBudget = useCallback(() => {
+    return api.getBudget({
+      aug_reg_ca: aug.aug_reg_ca / 100,
+      aug_reg_revue: aug.aug_reg_revue / 100,
+      aug_ccq: aug.aug_ccq / 100,
+    }).then(setBudget);
+  }, [aug]);
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      api.getBudget({
-        aug_reg_ca: aug.aug_reg_ca / 100,
-        aug_reg_revue: aug.aug_reg_revue / 100,
-        aug_ccq: aug.aug_ccq / 100,
-      }).then(setBudget);
-    }, 250);
+    const t = setTimeout(fetchBudget, 250);
     return () => clearTimeout(t);
-  }, [aug]);
+  }, [fetchBudget]);
 
   const detailSection = useMemo(
     () => budget?.sections.find((s) => s.key === detail),
     [budget, detail]
   );
+
+  const detailAug = useMemo(() => {
+    if (detail === "ca") return { reg: aug.aug_reg_ca / 100, ccq: aug.aug_ccq / 100 };
+    if (detail === "revue") return { reg: aug.aug_reg_revue / 100, ccq: aug.aug_ccq / 100 };
+    return { reg: 0, ccq: 0 };
+  }, [detail, aug]);
 
   if (!budget) return <p className="font-mono-data text-sm text-[#52525B]">Chargement…</p>;
 
@@ -122,13 +133,17 @@ export default function BudgetPage() {
                 <th className="px-3 py-2.5 text-right font-600">Avantages</th>
                 <th className="px-3 py-2.5 text-right font-600">CSST</th>
                 <th className="px-3 py-2.5 text-right font-600">Coût total</th>
+                <th className="px-3 py-2.5 text-right font-600">Modifier</th>
               </tr>
             </thead>
             <tbody>
               {detailSection.lines.map((ln) => (
                 <tr key={ln.employee_number} className="border-b border-[#F4F4F5] hover:bg-[#F4F4F5]" data-testid={`detail-row-${ln.employee_number}`}>
                   <td className="px-3 py-2 font-mono-data text-[#52525B]">{String(ln.employee_number).padStart(3, "0")}</td>
-                  <td className="px-3 py-2 font-medium">{ln.name}</td>
+                  <td className="px-3 py-2 font-medium">
+                    {ln.name}
+                    {ln.overridden && <span className="ml-2 bg-[#00C781] px-1 py-0.5 text-[9px] font-600 uppercase text-white">Ajusté</span>}
+                  </td>
                   <td className="px-3 py-2">
                     <span className="px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#0055FF" : "#09090B" }}>{ln.employment_type}</span>
                   </td>
@@ -138,12 +153,34 @@ export default function BudgetPage() {
                   <td className="px-3 py-2 text-right font-mono-data">{fmtCAD(ln.avantages)}</td>
                   <td className="px-3 py-2 text-right font-mono-data">{fmtCAD(ln.csst)}</td>
                   <td className="px-3 py-2 text-right font-mono-data font-600">{fmtCAD(ln.total_cost)}</td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      data-testid={`edit-line-${ln.employee_number}`}
+                      onClick={() => setFiche({ open: true, line: ln })}
+                      className="p-1.5 text-[#52525B] transition-colors hover:text-[#0055FF]"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {fiche.open && fiche.line && (
+        <BudgetFicheDialog
+          open={fiche.open}
+          onOpenChange={(v) => setFiche((p) => ({ ...p, open: v }))}
+          line={fiche.line}
+          section={detail}
+          sectionLabel={detailSection.label}
+          augReg={detailAug.reg}
+          augCcq={detailAug.ccq}
+          onSaved={fetchBudget}
+        />
+      )}
     </div>
   );
 }
