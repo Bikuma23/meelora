@@ -769,6 +769,7 @@ async def startup():
     if await db.hypotheses.count_documents({"key": "current"}) == 0:
         await db.hypotheses.insert_one(dict(DEFAULT_HYPOTHESES))
     await db.hypotheses.update_one({"key": "current", "prime_garde_nb_annuel": 365}, {"$set": {"prime_garde_nb_annuel": 52}})
+    await db.hypotheses.update_one({"key": "current"}, {"$unset": {"ccq_electricien_compagnon_rate": ""}})
     if await db.departments.count_documents({}) == 0:
         await db.departments.insert_many([dict(d) for d in DEPARTMENTS_SEED])
     if await db.employees.count_documents({}) == 0:
