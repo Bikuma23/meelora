@@ -147,14 +147,24 @@ def _capped(amount, rate, ceiling, exemption=0):
 
 MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"]
 
-def compute_budget(employees, hypo, depts):
+def _emp_scn(e, year, scenario):
+    yd = (e.get("years") or {}).get(str(year), {}) if year else {}
+    ov = (yd.get(scenario) or {}) if (scenario and scenario != "actuel") else {}
+    base = ov.get("base_salary", yd.get("base_salary", e["current_annual_salary"]))
+    return yd, ov, base
+
+def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
     dept_csst = {d["code"]: d.get("csst", 0) for d in depts}
     dept_label = {d["code"]: d["description"] for d in depts}
     charges = {c["code"]: c for c in hypo["charges"]}
     aug_ccq = hypo["augmentation_ccq"]
     aug_autres = hypo["augmentation_autres"]
+    is_actuel = scenario == "actuel"
 
-    eligible = [e for e in employees if e.get("prime_garde") and e.get("is_ccq")]
+    def _garde_on(e):
+        _, o, _ = _emp_scn(e, year, scenario)
+        return e.get("is_ccq") and o.get("prime_garde", e.get("prime_garde"))
+    eligible = [] if is_actuel else [e for e in employees if _garde_on(e)]
     garde_avg = (hypo["prime_garde_cout_unitaire"] * hypo["prime_garde_nb_annuel"] / len(eligible)) if eligible else 0
 
     lines = []
@@ -162,19 +172,22 @@ def compute_budget(employees, hypo, depts):
            "csst": 0, "reer": 0, "assurance": 0, "budget_total": 0}
     for e in employees:
         ccq = e["is_ccq"]
-        ov = (e.get("budget_overrides") or {}).get("budget", {}) or {}
-        aug = ov.get("augmentation", aug_ccq if ccq else aug_autres)
-        base = ov.get("base_salary", e["current_annual_salary"])
+        ydata, ov, base = _emp_scn(e, year, scenario)
+        aug = 0 if is_actuel else ov.get("augmentation", aug_ccq if ccq else aug_autres)
         new_salary = base * (1 + aug)
         taux_horaire = new_salary / ANNUAL_HOURS
 
         prime_type = ov.get("prime_type", e.get("prime_type", "Aucune Prime"))
-        if ccq:
+        boni = 0
+        if is_actuel:
+            # Salaires actuels : uniquement le salaire de base, sans prime ni charge.
+            prime_type = "Aucune Prime"
+            prime_amt = garde = halo = alloc = 0
+        elif ccq:
             prime_amt = new_salary * PRIME_PCT.get(prime_type, 0.0)
             garde = garde_avg if ov.get("prime_garde", e.get("prime_garde")) else 0
             halo = new_salary * hypo["prime_halo_rate"] if ov.get("prime_halo", e.get("prime_halo")) else 0
             alloc = hypo["alloc_securite_montant"] if ov.get("alloc_securite", e.get("alloc_securite")) else 0
-            boni = 0
         else:
             # Employés non-CCQ : aucune prime. Seul le boni (+ REER/assurance) s'applique.
             prime_type = "Aucune Prime"
@@ -187,28 +200,30 @@ def compute_budget(employees, hypo, depts):
         primes_total = prime_amt + garde + halo + alloc + boni
 
         vac_rate = ov.get("vacation_rate", e["vacation_rate"])
-        vacation = 0 if ccq else vac_rate * (new_salary + primes_total)
+        vacation = 0 if (ccq or is_actuel) else vac_rate * (new_salary + primes_total)
 
-        gross = new_salary + vacation + primes_total
-        rrq = _capped(gross, charges["RRQ"]["rate"], charges["RRQ"]["ceiling"], charges["RRQ"]["exemption"])
-        ae = _capped(gross, charges["AE"]["rate"], charges["AE"]["ceiling"])
-        rqap = _capped(gross, charges["RQAP"]["rate"], charges["RQAP"]["ceiling"])
-        fss = _capped(gross, charges["FSS"]["rate"], charges["FSS"]["ceiling"])
-        csst = _capped(gross, dept_csst.get(e["department"], charges["CSST"]["rate"]), charges["CSST"]["ceiling"])
-        gov = rrq + ae + rqap + fss
-
-        if ccq:
-            ccq_av = new_salary * hypo["ccq_rate"]
-            avantages = gov + ccq_av
-            reer = 0
-            assurance = 0
+        if is_actuel:
+            rrq = ae = rqap = fss = csst = gov = ccq_av = avantages = reer = assurance = 0
+            total = new_salary
         else:
-            ccq_av = 0
-            avantages = gov
-            reer = float(ov.get("reer", new_salary * hypo["reer_rate"]))
-            assurance = float(ov.get("assurance", hypo["assurance_annuelle"]))
-
-        total = new_salary + vacation + primes_total + avantages + csst + reer + assurance
+            gross = new_salary + vacation + primes_total
+            rrq = _capped(gross, charges["RRQ"]["rate"], charges["RRQ"]["ceiling"], charges["RRQ"]["exemption"])
+            ae = _capped(gross, charges["AE"]["rate"], charges["AE"]["ceiling"])
+            rqap = _capped(gross, charges["RQAP"]["rate"], charges["RQAP"]["ceiling"])
+            fss = _capped(gross, charges["FSS"]["rate"], charges["FSS"]["ceiling"])
+            csst = _capped(gross, dept_csst.get(e["department"], charges["CSST"]["rate"]), charges["CSST"]["ceiling"])
+            gov = rrq + ae + rqap + fss
+            if ccq:
+                ccq_av = new_salary * hypo["ccq_rate"]
+                avantages = gov + ccq_av
+                reer = 0
+                assurance = 0
+            else:
+                ccq_av = 0
+                avantages = gov
+                reer = float(ov.get("reer", new_salary * hypo["reer_rate"]))
+                assurance = float(ov.get("assurance", hypo["assurance_annuelle"]))
+            total = new_salary + vacation + primes_total + avantages + csst + reer + assurance
         lines.append({
             "employee_id": str(e.get("_id", "")), "employee_number": e["employee_number"],
             "name": e["name"], "title": e.get("title", ""), "department": e["department"],
@@ -430,57 +445,151 @@ class OverridePayload(BaseModel):
     override: dict
 
 @api.post("/employees/{eid}/budget-preview")
-async def budget_preview(eid: str, payload: OverridePayload, user: dict = Depends(get_current_user)):
+async def budget_preview(eid: str, payload: OverridePayload, year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
     emp = await db.employees.find_one({"_id": _oid(eid)})
     if not emp:
         raise HTTPException(status_code=404, detail="Employé introuvable")
-    hypo = await db.hypotheses.find_one({"key": "current"})
+    year = year or await _active_year()
+    hypo = await _get_hypo(year)
     depts = await db.departments.find().to_list(1000)
     emp = dict(emp)
-    emp["budget_overrides"] = {"budget": payload.override}
-    return compute_budget([emp], hypo, depts)["lines"][0]
+    ov = dict(payload.override or {})
+    base = ov.pop("base_salary", None)
+    yd = dict((emp.get("years") or {}).get(str(year), {}))
+    if base is not None:
+        yd["base_salary"] = base
+    yd[scenario] = ov
+    emp.setdefault("years", {})[str(year)] = yd
+    return compute_budget([emp], hypo, depts, year=year, scenario=scenario)["lines"][0]
 
 @api.put("/employees/{eid}/budget-override")
-async def save_override(eid: str, payload: OverridePayload, user: dict = Depends(get_current_user)):
+async def save_override(eid: str, payload: OverridePayload, year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
     emp = await db.employees.find_one({"_id": _oid(eid)})
     if not emp:
         raise HTTPException(status_code=404, detail="Employé introuvable")
-    if payload.override:
-        upd = {"$set": {"budget_overrides.budget": payload.override}}
+    year = year or await _active_year()
+    ov = dict(payload.override or {})
+    base = ov.pop("base_salary", None)
+    sets, unsets = {}, {}
+    if ov:
+        sets[f"years.{year}.{scenario}"] = ov
     else:
-        upd = {"$unset": {"budget_overrides.budget": ""}}
-    await db.employees.update_one({"_id": _oid(eid)}, upd)
-    await log_action(user, "Modifier", "Budget", f"Fiche — {emp['name']}")
+        unsets[f"years.{year}.{scenario}"] = ""
+    if base is not None:
+        sets[f"years.{year}.base_salary"] = base
+    upd = {}
+    if sets:
+        upd["$set"] = sets
+    if unsets:
+        upd["$unset"] = unsets
+    if upd:
+        await db.employees.update_one({"_id": _oid(eid)}, upd)
+    await log_action(user, "Modifier", "Budget", f"Fiche {SCEN_LABEL.get(scenario, scenario)} {year} — {emp['name']}")
     return {"success": True}
 
 # ---------------------------------------------------------------------------
-# Hypotheses & budget
+# Hypotheses, années & budget
 # ---------------------------------------------------------------------------
-@api.get("/hypotheses")
-async def get_hypotheses(user: dict = Depends(get_current_user)):
-    doc = await db.hypotheses.find_one({"key": "current"})
+DEFAULT_YEAR = 2026
+SCEN_LABEL = {"actuel": "Salaires actuels", "ca": "Budget CA", "revue": "Revue Budgétaire"}
+
+def _hkey(year):
+    return f"y{int(year)}"
+
+async def _get_hypo(year):
+    doc = await db.hypotheses.find_one({"key": _hkey(year)})
     if not doc:
-        await db.hypotheses.insert_one(dict(DEFAULT_HYPOTHESES))
-        doc = await db.hypotheses.find_one({"key": "current"})
+        base = dict(DEFAULT_HYPOTHESES); base["key"] = _hkey(year); base["year"] = int(year)
+        await db.hypotheses.insert_one(base)
+        doc = await db.hypotheses.find_one({"key": _hkey(year)})
+    return doc
+
+async def _active_year():
+    s = await db.settings.find_one({"key": "app"})
+    return int((s or {}).get("active_year", DEFAULT_YEAR))
+
+@api.get("/years")
+async def list_years(user: dict = Depends(get_current_user)):
+    docs = await db.hypotheses.find().to_list(1000)
+    years = sorted({int(d["year"]) for d in docs if d.get("year")})
+    if not years:
+        years = [DEFAULT_YEAR]
+    return {"years": years, "active_year": await _active_year()}
+
+class YearCreate(BaseModel):
+    year: int
+    source_year: int
+    source_scenario: Literal["ca", "revue"]
+
+@api.post("/years")
+async def create_year(payload: YearCreate, user: dict = Depends(get_current_user)):
+    ny = int(payload.year)
+    if await db.hypotheses.find_one({"key": _hkey(ny)}):
+        raise HTTPException(status_code=400, detail="Cette année existe déjà")
+    src = await _get_hypo(payload.source_year)
+    newh = {k: v for k, v in src.items() if k != "_id"}
+    newh["key"] = _hkey(ny); newh["year"] = ny
+    await db.hypotheses.insert_one(newh)
+    # Report : le scénario source de l'année précédente devient le salaire actuel de la nouvelle année.
+    depts = await db.departments.find().to_list(1000)
+    employees = await db.employees.find().to_list(1000)
+    data = compute_budget(employees, src, depts, year=payload.source_year, scenario=payload.source_scenario)
+    by_num = {l["employee_number"]: l for l in data["lines"]}
+    for e in employees:
+        ln = by_num.get(e["employee_number"])
+        newbase = round(ln["new_salary"], 2) if ln else e["current_annual_salary"]
+        await db.employees.update_one({"_id": e["_id"]}, {"$set": {f"years.{ny}.base_salary": newbase}})
+    await db.settings.update_one({"key": "app"}, {"$set": {"active_year": ny}, "$addToSet": {"years": ny}}, upsert=True)
+    await log_action(user, "Créer", "Année", f"{ny} (report {SCEN_LABEL[payload.source_scenario]} {payload.source_year})")
+    return {"success": True, "year": ny}
+
+@api.put("/years/active")
+async def set_active_year(payload: dict, user: dict = Depends(get_current_user)):
+    await db.settings.update_one({"key": "app"}, {"$set": {"active_year": int(payload["year"])}}, upsert=True)
+    return {"success": True}
+
+@api.get("/hypotheses")
+async def get_hypotheses(year: Optional[int] = None, user: dict = Depends(get_current_user)):
+    year = year or await _active_year()
+    doc = await _get_hypo(year)
     doc.pop("_id", None)
     return doc
 
 @api.put("/hypotheses")
-async def update_hypotheses(payload: dict, user: dict = Depends(get_current_user)):
-    payload["key"] = "current"
-    await db.hypotheses.update_one({"key": "current"}, {"$set": payload}, upsert=True)
-    await log_action(user, "Modifier", "Hypothèses", f"Taux & paramètres {payload.get('year', '')}")
-    doc = await db.hypotheses.find_one({"key": "current"})
+async def update_hypotheses(payload: dict, year: Optional[int] = None, user: dict = Depends(get_current_user)):
+    year = year or payload.get("year") or await _active_year()
+    payload["key"] = _hkey(year); payload["year"] = int(year)
+    await db.hypotheses.update_one({"key": _hkey(year)}, {"$set": payload}, upsert=True)
+    await log_action(user, "Modifier", "Hypothèses", f"Taux & paramètres {year}")
+    doc = await db.hypotheses.find_one({"key": _hkey(year)})
     doc.pop("_id", None)
     return doc
 
 @api.get("/budget")
-async def get_budget(department: Optional[str] = None, user: dict = Depends(get_current_user)):
-    hypo = await db.hypotheses.find_one({"key": "current"})
+async def get_budget(year: Optional[int] = None, scenario: str = "ca", department: Optional[str] = None, user: dict = Depends(get_current_user)):
+    year = year or await _active_year()
+    hypo = await _get_hypo(year)
     depts = await db.departments.find().to_list(1000)
     query = {"department": department} if department and department != "all" else {}
     employees = await db.employees.find(query).sort("employee_number", 1).to_list(1000)
-    return compute_budget(employees, hypo, depts)
+    return compute_budget(employees, hypo, depts, year=year, scenario=scenario)
+
+@api.get("/budget/compare")
+async def budget_compare(year: Optional[int] = None, department: Optional[str] = None, user: dict = Depends(get_current_user)):
+    year = year or await _active_year()
+    hypo = await _get_hypo(year)
+    depts = await db.departments.find().to_list(1000)
+    query = {"department": department} if department and department != "all" else {}
+    employees = await db.employees.find(query).sort("employee_number", 1).to_list(1000)
+    ca = compute_budget(employees, hypo, depts, year=year, scenario="ca")
+    revue = compute_budget(employees, hypo, depts, year=year, scenario="revue")
+    actuel_base = round(sum(_emp_scn(e, year, "actuel")[2] for e in employees), 2)
+    return {
+        "year": year, "headcount": len(employees),
+        "actuel": {"masse": actuel_base, "budget_total": actuel_base},
+        "ca": {"masse": ca["totals"]["salaire_base"], "budget_total": ca["totals"]["budget_total"], "by_department": ca["by_department"]},
+        "revue": {"masse": revue["totals"]["salaire_base"], "budget_total": revue["totals"]["budget_total"], "by_department": revue["by_department"]},
+    }
 
 # ---------------------------------------------------------------------------
 # Reports (Excel / PDF)
@@ -488,12 +597,13 @@ async def get_budget(department: Optional[str] = None, user: dict = Depends(get_
 def _money(v):
     return f"{v:,.2f}".replace(",", " ").replace(".", ",") + " $"
 
-async def _budget_data(department=None):
-    hypo = await db.hypotheses.find_one({"key": "current"})
+async def _budget_data(department=None, year=None, scenario="ca"):
+    year = year or await _active_year()
+    hypo = await _get_hypo(year)
     depts = await db.departments.find().to_list(1000)
     query = {"department": department} if department and department != "all" else {}
     employees = await db.employees.find(query).sort("employee_number", 1).to_list(1000)
-    data = compute_budget(employees, hypo, depts)
+    data = compute_budget(employees, hypo, depts, year=year, scenario=scenario)
     return data, hypo
 
 def build_budget_excel(data, year, dept_label):
@@ -585,22 +695,24 @@ def build_budget_pdf(data, year, dept_label):
     return buf
 
 @api.get("/reports/excel")
-async def report_excel(department: Optional[str] = None, user: dict = Depends(get_current_user)):
-    data, hypo = await _budget_data(department)
-    dept_label = "Tous les départements" if not department or department == "all" else department
+async def report_excel(department: Optional[str] = None, year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
+    data, hypo = await _budget_data(department, year, scenario)
+    scope = "Tous les départements" if not department or department == "all" else department
+    dept_label = f"{scope} · {SCEN_LABEL.get(scenario, scenario)}"
     buf = build_budget_excel(data, hypo["year"], dept_label)
-    await log_action(user, "Modifier", "Rapport", f"Export Excel — {dept_label}")
+    await log_action(user, "Modifier", "Rapport", f"Export Excel {SCEN_LABEL.get(scenario, scenario)} — {scope}")
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                             headers={"Content-Disposition": f"attachment; filename=rapport_budget_{hypo['year']}.xlsx"})
+                             headers={"Content-Disposition": f"attachment; filename=rapport_{scenario}_{hypo['year']}.xlsx"})
 
 @api.get("/reports/pdf")
-async def report_pdf(department: Optional[str] = None, user: dict = Depends(get_current_user)):
-    data, hypo = await _budget_data(department)
-    dept_label = "Tous les départements" if not department or department == "all" else department
+async def report_pdf(department: Optional[str] = None, year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
+    data, hypo = await _budget_data(department, year, scenario)
+    scope = "Tous les départements" if not department or department == "all" else department
+    dept_label = f"{scope} · {SCEN_LABEL.get(scenario, scenario)}"
     buf = build_budget_pdf(data, hypo["year"], dept_label)
-    await log_action(user, "Modifier", "Rapport", f"Export PDF — {dept_label}")
+    await log_action(user, "Modifier", "Rapport", f"Export PDF {SCEN_LABEL.get(scenario, scenario)} — {scope}")
     return StreamingResponse(buf, media_type="application/pdf",
-                             headers={"Content-Disposition": f"attachment; filename=rapport_budget_{hypo['year']}.pdf"})
+                             headers={"Content-Disposition": f"attachment; filename=rapport_{scenario}_{hypo['year']}.pdf"})
 
 # ---------------------------------------------------------------------------
 # Excel import / templates
@@ -766,10 +878,19 @@ async def startup():
                                    "name": "Administrateur", "role": "admin", "created_at": datetime.now(timezone.utc).isoformat()})
     elif not verify_password(os.environ["ADMIN_PASSWORD"], existing["password_hash"]):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(os.environ["ADMIN_PASSWORD"])}})
-    if await db.hypotheses.count_documents({"key": "current"}) == 0:
-        await db.hypotheses.insert_one(dict(DEFAULT_HYPOTHESES))
-    await db.hypotheses.update_one({"key": "current", "prime_garde_nb_annuel": 365}, {"$set": {"prime_garde_nb_annuel": 52}})
-    await db.hypotheses.update_one({"key": "current"}, {"$unset": {"ccq_electricien_compagnon_rate": ""}})
+    # Migration multi-années : renommer l'ancien doc "current" en clé annuelle.
+    cur = await db.hypotheses.find_one({"key": "current"})
+    if cur:
+        y = int(cur.get("year", DEFAULT_YEAR))
+        await db.hypotheses.update_one({"key": "current"}, {"$set": {"key": _hkey(y), "year": y}})
+    if await db.hypotheses.count_documents({"key": _hkey(DEFAULT_YEAR)}) == 0:
+        base = dict(DEFAULT_HYPOTHESES); base["key"] = _hkey(DEFAULT_YEAR); base["year"] = DEFAULT_YEAR
+        await db.hypotheses.insert_one(base)
+    await db.hypotheses.update_many({"prime_garde_nb_annuel": 365}, {"$set": {"prime_garde_nb_annuel": 52}})
+    await db.hypotheses.update_many({}, {"$unset": {"ccq_electricien_compagnon_rate": ""}})
+    years = sorted({int(d["year"]) for d in await db.hypotheses.find().to_list(1000) if d.get("year")}) or [DEFAULT_YEAR]
+    if await db.settings.count_documents({"key": "app"}) == 0:
+        await db.settings.insert_one({"key": "app", "active_year": DEFAULT_YEAR, "years": years})
     if await db.departments.count_documents({}) == 0:
         await db.departments.insert_many([dict(d) for d in DEPARTMENTS_SEED])
     if await db.employees.count_documents({}) == 0:

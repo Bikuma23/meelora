@@ -1,0 +1,39 @@
+{
+  "summary": "Tests backend + frontend de la nouvelle fonctionnalité multi-années + 3 scénarios (Salaires actuels / Budget CA / Revue Budgétaire). 15/15 tests backend pytest passent. Frontend: login, sélecteur d'année, dialogue de création d'année, carte Comparatif (479 847$ / 496 310$ / 496 310$), Salaires & Budget (scenario-toggle CA/Revue), fiche avec titre scénario + année + nom, indépendance CA vs Revue confirmée, Hypothèses par année, Rapports Excel/PDF pour tous scénarios — tout fonctionne.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/years", "issue": "Aucun endpoint DELETE /api/years — l'année 2099 créée par le test de rollover reste dans la base (nettoyage impossible via API). Pas bloquant, mais idéalement ajouter un endpoint admin de suppression d'année ou un mécanisme de reset pour les tests."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_multiyear_scenarios.py",
+    "/app/test_reports/pytest/multiyear.xml"
+  ],
+  "action_items": [
+    "(Non bloquant) Ajouter un endpoint DELETE /api/years/{year} pour permettre le nettoyage des années de test — actuellement 2099 (créée par le test rollover) subsiste en DB."
+  ],
+  "critical_code_review_comments": [
+    "compute_budget(...year, scenario) + _emp_scn lisant employee.years[str(year)][scenario] : bien isolé, chaque scénario n'écrit que dans son propre sous-document. Confirmé end-to-end : override Revue = augmentation 0.5 ne modifie PAS ca.masse (backend test test_revue_override_does_not_affect_ca).",
+    "Rollover à la création d'année : compute_budget(source_scenario) → new_salary reporté dans years.{ny}.base_salary. Vérifié: compare(2099).actuel.masse == compare(2026).ca.masse à 1$ près.",
+    "GET /api/budget/compare retourne bien actuel/ca/revue avec masse & budget_total, plus by_department pour ca et revue.",
+    "Frontend: BudgetFicheDialog titre = 'Fiche {Budget CA|Revue Budgétaire} {year} — {name}' ✔.",
+    "Independance UI verifiée: Salaires total (KPI Budget total) reste à 722 812 $ après avoir modifié une fiche Revue à +10% et sauvegardé ; le total Revue passe à 732 782 $.",
+    "Validation CCQ Prime de garde + Aucune Prime toujours en place (vue à la précédente itération, code inchangé)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_multiyear_scenarios.py (créé)"
+  ],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% (flux critiques testés)"},
+  "test_credentials": "admin@accslegro.com / admin123",
+  "seed_data_creation": "Test rollover a créé l'année 2099 en DB (report du Budget CA 2026). Active year restaurée à 2026. Une fiche Revue Marie Bouchère a été modifiée puis réinitialisée via le bouton 'Rétablir' en UI (toast 'Ligne réinitialisée' confirmé).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Année 2099 présente dans /api/years (résidu du test rollover). Login UI : utiliser click + Control+A + Delete + type avec delay puis press('Enter') sur le champ password — fill() seul ne déclenche pas la soumission (le champ a required). Tests backend regressions: pytest /app/backend/tests/ (test_backend.py + test_ccq_rules.py + test_multiyear_scenarios.py).",
+  "rca of the issue": "N/A — aucune anomalie détectée. Toutes les exigences fonctionnelles de la nouvelle feature multi-années + 3 scénarios sont validées."
+}

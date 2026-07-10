@@ -19,7 +19,7 @@ function Row({ label, value, strong, accent }) {
   );
 }
 
-export default function BudgetFicheDialog({ open, onOpenChange, line, onSaved }) {
+export default function BudgetFicheDialog({ open, onOpenChange, line, year, scenario = "ca", onSaved }) {
   const isCCQ = line.is_ccq;
   const [f, setF] = useState(() => ({
     base_salary: String(line.base_salary),
@@ -50,21 +50,21 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, onSaved })
   }, [f, isCCQ]);
 
   useEffect(() => {
-    const t = setTimeout(() => { api.budgetPreview(line.employee_id, override).then(setP).catch(() => {}); }, 200);
+    const t = setTimeout(() => { api.budgetPreview(line.employee_id, override, { year, scenario }).then(setP).catch(() => {}); }, 200);
     return () => clearTimeout(t);
-  }, [override, line.employee_id]);
+  }, [override, line.employee_id, year, scenario]);
 
   const save = async () => {
     if (isCCQ && f.prime_garde && f.prime_type === "Aucune Prime") { toast.error("Sélectionnez un type de prime : la Prime de garde est activée"); return; }
-    await api.saveBudgetOverride(line.employee_id, override); toast.success("Fiche enregistrée"); onSaved(); onOpenChange(false);
+    await api.saveBudgetOverride(line.employee_id, override, { year, scenario }); toast.success("Fiche enregistrée"); onSaved(); onOpenChange(false);
   };
-  const reset = async () => { await api.saveBudgetOverride(line.employee_id, {}); toast.success("Ligne réinitialisée"); onSaved(); onOpenChange(false); };
+  const reset = async () => { await api.saveBudgetOverride(line.employee_id, {}, { year, scenario }); toast.success("Ligne réinitialisée"); onSaved(); onOpenChange(false); };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto" data-testid="budget-fiche-dialog">
         <DialogHeader>
-          <DialogTitle>Fiche Salaires & Budget — {line.name}</DialogTitle>
+          <DialogTitle>Fiche {scenario === "revue" ? "Revue Budgétaire" : "Budget CA"} {year} — {line.name}</DialogTitle>
           <DialogDescription className="font-mono-data text-xs">{line.employment_type} · #{String(line.employee_number).padStart(3, "0")} · {line.department_label}</DialogDescription>
         </DialogHeader>
 

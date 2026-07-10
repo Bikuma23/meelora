@@ -1,14 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { useYear } from "../context/YearContext";
 import { fmtCAD } from "../lib/format";
 import BudgetFicheDialog from "../components/BudgetFicheDialog";
 import { Pencil } from "lucide-react";
 
+const SCENARIOS = [["ca", "Budget CA"], ["revue", "Revue Budgétaire"]];
+
 export default function SalairesBudget() {
+  const { year } = useYear();
+  const [scenario, setScenario] = useState("ca");
   const [b, setB] = useState(null);
   const [fiche, setFiche] = useState({ open: false, line: null });
-  const load = () => api.getBudget().then(setB);
-  useEffect(() => { load(); }, []);
+  const load = () => api.getBudget({ year, scenario }).then(setB);
+  useEffect(() => { setB(null); load(); /* eslint-disable-next-line */ }, [year, scenario]);
   if (!b) return <p className="font-mono-data text-sm text-slate-500">Chargement…</p>;
 
   const cards = [
@@ -21,6 +26,21 @@ export default function SalairesBudget() {
 
   return (
     <div className="space-y-5" data-testid="budget-page">
+      <div className="card flex flex-wrap items-center justify-between gap-3 p-3">
+        <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1" data-testid="scenario-toggle">
+          {SCENARIOS.map(([k, lbl]) => (
+            <button key={k} data-testid={`scenario-${k}`} onClick={() => setScenario(k)}
+              className={`rounded-md px-3.5 py-1.5 text-xs font-700 transition-colors ${scenario === k ? "bg-white text-[#0E1526] shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-slate-500">
+          {scenario === "ca"
+            ? "Budget CA : bâti à partir du salaire actuel + augmentations/primes."
+            : "Revue Budgétaire : ajustez primes, augmentations et vacances sans toucher au Budget CA."}
+        </p>
+      </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {cards.map(([lbl, val, c]) => (
           <div key={lbl} className="card p-4">
@@ -72,7 +92,7 @@ export default function SalairesBudget() {
       </div>
 
       {fiche.open && fiche.line && (
-        <BudgetFicheDialog open={fiche.open} onOpenChange={(v) => setFiche((p) => ({ ...p, open: v }))} line={fiche.line} onSaved={load} />
+        <BudgetFicheDialog open={fiche.open} onOpenChange={(v) => setFiche((p) => ({ ...p, open: v }))} line={fiche.line} year={year} scenario={scenario} onSaved={load} />
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { useYear } from "../context/YearContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Save, HardHat, Briefcase, ShieldCheck, TrendingUp, Settings2 } from "lucide-react";
@@ -8,9 +9,10 @@ import { toast } from "sonner";
 const MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
 
 export default function Hypotheses() {
+  const { year } = useYear();
   const [h, setH] = useState(null);
   const [saving, setSaving] = useState(false);
-  useEffect(() => { api.getHypotheses().then(setH); }, []);
+  useEffect(() => { setH(null); api.getHypotheses(year).then(setH); }, [year]);
   if (!h) return <p className="font-mono-data text-sm text-slate-500">Chargement…</p>;
 
   const setF = (k, v) => setH((p) => ({ ...p, [k]: v }));
@@ -19,7 +21,7 @@ export default function Hypotheses() {
 
   const save = async () => {
     setSaving(true);
-    try { await api.updateHypotheses(h); toast.success("Hypothèses enregistrées"); }
+    try { await api.updateHypotheses(h, year); toast.success(`Hypothèses ${year} enregistrées`); }
     catch { toast.error("Erreur d'enregistrement"); } finally { setSaving(false); }
   };
 

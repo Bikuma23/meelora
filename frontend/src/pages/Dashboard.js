@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { useYear } from "../context/YearContext";
 import { fmtCAD } from "../lib/format";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
-import { Users, DollarSign, Wallet, TrendingUp, Calendar, PieChart as PieIcon, BarChart3, Layers } from "lucide-react";
+import { Users, DollarSign, Wallet, TrendingUp, Calendar, PieChart as PieIcon, BarChart3, Layers, Scale } from "lucide-react";
 
-const TEAL = "#14B8A6", NAVY = "#0E1526", ORANGE = "#F59E0B", BLUE = "#2563EB";
+const TEAL = "#14B8A6", NAVY = "#0E1526", ORANGE = "#F59E0B", BLUE = "#2563EB", VIOLET = "#8B5CF6";
 const TYPE_COLORS = { "CCQ": BLUE, "Régulier temps plein": TEAL, "Stagiaire": ORANGE };
+const SCEN = [["ca", "Budget CA"], ["revue", "Revue Budgétaire"]];
 
 const Tip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -36,11 +38,19 @@ function Kpi({ label, value, sub, icon: Icon, tint, testId }) {
 }
 
 export default function Dashboard() {
+  const { year, years, selectYear } = useYear();
   const [b, setB] = useState(null);
+  const [cmp, setCmp] = useState(null);
+  const [scenario, setScenario] = useState("ca");
   const [departments, setDepartments] = useState([]);
   const [dept, setDept] = useState("all");
   useEffect(() => { api.listDepartments().then(setDepartments); }, []);
-  useEffect(() => { setB(null); api.getBudget(dept !== "all" ? { department: dept } : {}).then(setB); }, [dept]);
+  useEffect(() => {
+    setB(null);
+    const p = dept !== "all" ? { department: dept } : {};
+    api.getBudget({ year, scenario, ...p }).then(setB);
+    api.getBudgetCompare({ year, ...p }).then(setCmp);
+  }, [dept, year, scenario]);
 
   return (
     <div className="space-y-6" data-testid="dashboard-page">
@@ -48,8 +58,13 @@ export default function Dashboard() {
         <div className="flex flex-wrap items-center gap-3">
           <div>
             <label className="text-[11px] uppercase text-slate-500">Année</label>
-            <Select value="2026" disabled><SelectTrigger className="mt-1 h-9 w-28" data-testid="dash-year"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="2026">2026</SelectItem></SelectContent></Select>
+            <Select value={String(year)} onValueChange={(v) => selectYear(v)}><SelectTrigger className="mt-1 h-9 w-28" data-testid="dash-year"><SelectValue /></SelectTrigger>
+              <SelectContent>{years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
+          </div>
+          <div>
+            <label className="text-[11px] uppercase text-slate-500">Scénario</label>
+            <Select value={scenario} onValueChange={setScenario}><SelectTrigger className="mt-1 h-9 w-48" data-testid="dash-scenario"><SelectValue /></SelectTrigger>
+              <SelectContent>{SCEN.map(([k, l]) => <SelectItem key={k} value={k}>{l}</SelectItem>)}</SelectContent></Select>
           </div>
           <div>
             <label className="text-[11px] uppercase text-slate-500">Département</label>
@@ -65,7 +80,56 @@ export default function Dashboard() {
         <span className="font-mono-data text-xs text-slate-500">{b ? `${b.kpis.headcount} entrée(s) affichée(s)` : "…"}</span>
       </div>
 
+      {cmp && <Comparatif cmp={cmp} />}
       {!b ? <p className="font-mono-data text-sm text-slate-500">Chargement…</p> : <DashboardBody b={b} />}
+    </div>
+  );
+}
+
+function Comparatif({ cmp }) {
+  const rows = [
+    ["Salaires actuels", cmp.actuel.masse, "#64748B", "Somme des salaires de base"],
+    ["Budget CA", cmp.ca.masse, BLUE, "Après augmentations & primes"],
+    ["Revue Budgétaire", cmp.revue.masse, VIOLET, "Ajustements de la revue"],
+  ];
+  const chart = [
+    { name: "Masse salariale", "Salaires actuels": cmp.actuel.masse, "Budget CA": cmp.ca.masse, "Revue Budgétaire": cmp.revue.masse },
+    { name: "Budget total", "Salaires actuels": cmp.actuel.budget_total, "Budget CA": cmp.ca.budget_total, "Revue Budgétaire": cmp.revue.budget_total },
+  ];
+  const dCA = cmp.actuel.masse ? ((cmp.ca.masse - cmp.actuel.masse) / cmp.actuel.masse) * 100 : 0;
+  const dRV = cmp.ca.masse ? ((cmp.revue.masse - cmp.ca.masse) / cmp.ca.masse) * 100 : 0;
+  return (
+    <div className="card p-6" data-testid="comparatif-card">
+      <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><Scale size={16} className="text-[#2563EB]" /> Comparatif des masses salariales — {cmp.year}</h3>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {rows.map(([lbl, val, c, sub]) => (
+            <div key={lbl} className="rounded-xl border border-slate-200 p-4" data-testid={`cmp-${lbl}`}>
+              <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: c }} />
+              <p className="mt-2 text-[11px] font-600 uppercase tracking-wide text-slate-500">{lbl}</p>
+              <p className="mt-1 font-mono-data text-lg font-700" style={{ color: c }}>{fmtCAD(val)}</p>
+              <p className="mt-0.5 text-[10px] text-slate-400">{sub}</p>
+            </div>
+          ))}
+        </div>
+        <div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={chart} margin={{ left: 4, right: 8 }} barGap={4}>
+              <CartesianGrid stroke="#EEF2F7" vertical={false} />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#94A3B8" }} axisLine={false} tickLine={false} width={40} />
+              <Tooltip content={<Tip />} />
+              <Bar dataKey="Salaires actuels" fill="#64748B" radius={[3, 3, 0, 0]} maxBarSize={34} />
+              <Bar dataKey="Budget CA" fill={BLUE} radius={[3, 3, 0, 0]} maxBarSize={34} />
+              <Bar dataKey="Revue Budgétaire" fill={VIOLET} radius={[3, 3, 0, 0]} maxBarSize={34} />
+            </BarChart>
+          </ResponsiveContainer>
+          <div className="mt-2 flex flex-wrap gap-4 text-[11px] text-slate-500">
+            <span>CA vs actuels : <b className="text-[#2563EB]">{dCA >= 0 ? "+" : ""}{dCA.toFixed(1)}%</b></span>
+            <span>Revue vs CA : <b className="text-[#8B5CF6]">{dRV >= 0 ? "+" : ""}{dRV.toFixed(1)}%</b></span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

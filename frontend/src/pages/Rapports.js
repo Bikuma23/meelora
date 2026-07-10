@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
+import { useYear } from "../context/YearContext";
 import { fmtCAD } from "../lib/format";
 import { Button } from "../components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
@@ -10,23 +11,26 @@ const VENTIL = [
   ["salaire_base", "Salaire de base"], ["vacances", "Vacances"], ["primes", "Primes & Boni"],
   ["avantages", "Avantages sociaux"], ["csst", "CSST"], ["reer", "RPDB/REER"], ["assurance", "Assu. collectives"],
 ];
+const SCEN = [["actuel", "Salaires actuels"], ["ca", "Budget CA"], ["revue", "Revue Budgétaire"]];
 
 export default function Rapports() {
+  const { year, years, selectYear } = useYear();
   const [departments, setDepartments] = useState([]);
   const [dept, setDept] = useState("all");
+  const [scenario, setScenario] = useState("ca");
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState("");
 
   useEffect(() => { api.listDepartments().then(setDepartments); }, []);
-  useEffect(() => { api.getBudget(dept !== "all" ? { department: dept } : {}).then(setData); }, [dept]);
+  useEffect(() => { setData(null); api.getBudget({ year, scenario, ...(dept !== "all" ? { department: dept } : {}) }).then(setData); }, [dept, year, scenario]);
 
   const download = async (kind, ext) => {
     setBusy(kind);
     try {
-      const blob = await api.downloadReport(kind, dept);
+      const blob = await api.downloadReport(kind, dept, year, scenario);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url;
-      a.download = `rapport_budget_2026${dept !== "all" ? "_" + dept : ""}.${ext}`; a.click();
+      a.download = `rapport_${scenario}_${year}${dept !== "all" ? "_" + dept : ""}.${ext}`; a.click();
       URL.revokeObjectURL(url);
       toast.success(`Rapport ${ext.toUpperCase()} téléchargé`);
     } catch { toast.error("Export échoué"); } finally { setBusy(""); }
@@ -42,8 +46,15 @@ export default function Rapports() {
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <div>
               <label className="text-[11px] uppercase text-slate-500">Année</label>
-              <Select value="2026" disabled><SelectTrigger className="mt-1 w-32" data-testid="report-year"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="2026">2026</SelectItem></SelectContent></Select>
+              <Select value={String(year)} onValueChange={(v) => selectYear(v)}><SelectTrigger className="mt-1 w-28" data-testid="report-year"><SelectValue /></SelectTrigger>
+                <SelectContent>{years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
+            </div>
+            <div>
+              <label className="text-[11px] uppercase text-slate-500">Catégorie</label>
+              <Select value={scenario} onValueChange={setScenario}>
+                <SelectTrigger className="mt-1 w-48" data-testid="report-scenario"><SelectValue /></SelectTrigger>
+                <SelectContent>{SCEN.map(([k, l]) => <SelectItem key={k} value={k}>{l}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
             <div>
               <label className="text-[11px] uppercase text-slate-500">Département</label>

@@ -1,8 +1,15 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { YearProvider, useYear } from "../context/YearContext";
 import {
-  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase,
+  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange,
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Button } from "./ui/button";
+import { toast } from "sonner";
+import { api } from "../lib/api";
 import Dashboard from "../pages/Dashboard";
 import Employes from "../pages/Employes";
 import SalairesBudget from "../pages/SalairesBudget";
@@ -53,7 +60,66 @@ function NavItem({ item, active, onClick }) {
   );
 }
 
+function YearControls() {
+  const { years, year, selectYear, refresh } = useYear();
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ year: "", source_year: "", source_scenario: "ca" });
+  const openDialog = () => {
+    const next = Math.max(...years) + 1;
+    setF({ year: String(next), source_year: String(year), source_scenario: "ca" });
+    setOpen(true);
+  };
+  const create = async () => {
+    try {
+      await api.createYear({ year: Number(f.year), source_year: Number(f.source_year), source_scenario: f.source_scenario });
+      toast.success(`Année ${f.year} créée (report ${f.source_scenario === "ca" ? "Budget CA" : "Revue"} ${f.source_year})`);
+      await refresh(); await selectYear(Number(f.year)); setOpen(false);
+    } catch (e) { toast.error(e.response?.data?.detail || "Création impossible"); }
+  };
+  return (
+    <div className="flex items-center gap-2">
+      <CalendarRange size={15} className="text-[#2563EB]" />
+      <Select value={String(year)} onValueChange={(v) => selectYear(v)}>
+        <SelectTrigger className="h-8 w-24" data-testid="header-year-select"><SelectValue /></SelectTrigger>
+        <SelectContent>{years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+      </Select>
+      <Button variant="outline" size="sm" className="h-8 gap-1.5" data-testid="new-year-btn" onClick={openDialog}><Plus size={14} /> Année</Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent data-testid="new-year-dialog">
+          <DialogHeader>
+            <DialogTitle>Nouvelle année budgétaire</DialogTitle>
+            <DialogDescription className="text-xs">Le scénario source de l'année de départ devient le « Salaire actuel » de la nouvelle année.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3 py-1 sm:grid-cols-3">
+            <div><label className="text-[11px] uppercase text-slate-500">Nouvelle année</label>
+              <Input data-testid="ny-year" type="number" className="mt-1 font-mono-data" value={f.year} onChange={(e) => setF((p) => ({ ...p, year: e.target.value }))} /></div>
+            <div><label className="text-[11px] uppercase text-slate-500">Année source</label>
+              <Select value={f.source_year} onValueChange={(v) => setF((p) => ({ ...p, source_year: v }))}>
+                <SelectTrigger data-testid="ny-source-year" className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>{years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+              </Select></div>
+            <div><label className="text-[11px] uppercase text-slate-500">Report basé sur</label>
+              <Select value={f.source_scenario} onValueChange={(v) => setF((p) => ({ ...p, source_scenario: v }))}>
+                <SelectTrigger data-testid="ny-source-scenario" className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="ca">Budget CA</SelectItem><SelectItem value="revue">Revue Budgétaire</SelectItem></SelectContent>
+              </Select></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
+            <Button data-testid="ny-create-btn" className="bg-[#2563EB] hover:bg-[#2563EB]/90" onClick={create}>Créer l'année</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 export default function Layout() {
+  return <YearProvider><LayoutInner /></YearProvider>;
+}
+
+function LayoutInner() {
   const { user, logout } = useAuth();
   const [active, setActive] = useState("dashboard");
   const page = PAGES[active];
@@ -107,7 +173,10 @@ export default function Layout() {
             <h2 className="text-lg font-800 tracking-tight">{page.title}</h2>
             <p className="text-xs text-slate-500">{page.sub}</p>
           </div>
-          <span className="rounded-full bg-[#2563EB]/10 px-3 py-1 text-xs font-600 text-[#2563EB]">2026 — Budget actif</span>
+          <div className="flex items-center gap-3">
+          <span className="rounded-full bg-[#2563EB]/10 px-3 py-1 text-xs font-600 text-[#2563EB]">Budget actif</span>
+          <YearControls />
+          </div>
         </header>
         <main className="p-8">
           <Active />

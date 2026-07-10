@@ -24,12 +24,17 @@ export const api = {
   importDepartments: (file) => { const fd = new FormData(); fd.append("file", file); return client.post("/departments/import", fd).then((r) => r.data); },
   downloadTemplate: (kind) => client.get(`/${kind}/template`, { responseType: "blob" }).then((r) => r.data),
 
-  budgetPreview: (id, override) => client.post(`/employees/${id}/budget-preview`, { override }).then((r) => r.data),
-  saveBudgetOverride: (id, override) => client.put(`/employees/${id}/budget-override`, { override }).then((r) => r.data),
+  budgetPreview: (id, override, params) => client.post(`/employees/${id}/budget-preview`, { override }, { params }).then((r) => r.data),
+  saveBudgetOverride: (id, override, params) => client.put(`/employees/${id}/budget-override`, { override }, { params }).then((r) => r.data),
 
-  getHypotheses: () => client.get("/hypotheses").then((r) => r.data),
-  updateHypotheses: (d) => client.put("/hypotheses", d).then((r) => r.data),
+  getHypotheses: (year) => client.get("/hypotheses", { params: year ? { year } : {} }).then((r) => r.data),
+  updateHypotheses: (d, year) => client.put("/hypotheses", d, { params: year ? { year } : {} }).then((r) => r.data),
   getBudget: (params) => client.get("/budget", { params }).then((r) => r.data),
+  getBudgetCompare: (params) => client.get("/budget/compare", { params }).then((r) => r.data),
+
+  listYears: () => client.get("/years").then((r) => r.data),
+  createYear: (d) => client.post("/years", d).then((r) => r.data),
+  setActiveYear: (year) => client.put("/years/active", { year }).then((r) => r.data),
 
   listDepartments: () => client.get("/departments").then((r) => r.data),
   createDepartment: (d) => client.post("/departments", d).then((r) => r.data),
@@ -37,7 +42,7 @@ export const api = {
   deleteDepartment: (id) => client.delete(`/departments/${id}`).then((r) => r.data),
 
   getJournal: () => client.get("/journal").then((r) => r.data),
-  downloadReport: (kind, department) => client.get(`/reports/${kind}`, {
-    params: department && department !== "all" ? { department } : {}, responseType: "blob",
+  downloadReport: (kind, department, year, scenario) => client.get(`/reports/${kind}`, {
+    params: { ...(department && department !== "all" ? { department } : {}), ...(year ? { year } : {}), ...(scenario ? { scenario } : {}) }, responseType: "blob",
   }).then((r) => r.data),
 };
