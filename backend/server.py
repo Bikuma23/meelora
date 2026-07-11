@@ -453,6 +453,20 @@ async def logout(response: Response, user: dict = Depends(get_current_user)):
 async def me(user: dict = Depends(get_current_user)):
     return {"id": user["id"], "email": user["email"], "name": user.get("name", ""), "role": user.get("role", "user")}
 
+@api.get("/me/preferences")
+async def get_preferences(user: dict = Depends(get_current_user)):
+    return user.get("preferences", {}) or {}
+
+@api.put("/me/preferences")
+async def update_preferences(request: Request, user: dict = Depends(get_current_user)):
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Format invalide")
+    prefs = {**(user.get("preferences") or {}), **payload}
+    await db.users.update_one({"_id": ObjectId(user["id"])}, {"$set": {"preferences": prefs}})
+    return prefs
+
+
 # ---------------------------------------------------------------------------
 # Gestion des utilisateurs (admin uniquement)
 # ---------------------------------------------------------------------------

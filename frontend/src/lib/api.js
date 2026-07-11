@@ -61,6 +61,8 @@ export const api = {
   getByClass: (params) => client.get("/reports/by-class", { params }).then((r) => r.data),
   getCustomColumns: () => client.get("/reports/custom-columns").then((r) => r.data),
   getCustomReport: (params) => client.get("/reports/custom", { params }).then((r) => r.data),
+  getPreferences: () => client.get("/me/preferences").then((r) => r.data),
+  updatePreferences: (body) => client.put("/me/preferences", body).then((r) => r.data),
   listReportTemplates: () => client.get("/report-templates").then((r) => r.data),
   createReportTemplate: (body) => client.post("/report-templates", body).then((r) => r.data),
   deleteReportTemplate: (id) => client.delete(`/report-templates/${id}`).then((r) => r.data),

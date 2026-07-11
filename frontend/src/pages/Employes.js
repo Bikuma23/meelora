@@ -195,12 +195,19 @@ export default function Employes() {
   const [showInactive, setShowInactive] = useState(false);
   const [securityClasses, setSecurityClasses] = useState([]);
   const [sort, setSort] = useState({ key: "employee_number", dir: "asc" });
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const toggleSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
   const fileRef = useRef();
 
   const load = (q, inc) => api.listEmployees({ ...(q ? { q } : {}), ...((inc ?? showInactive) ? { include_inactive: true } : {}) }).then(setEmployees);
   useEffect(() => { api.listDepartments().then(setDepartments); api.getHypotheses().then((h) => setSecurityClasses(h.security_classes || [])).catch(() => {}); load(); }, []);
   useEffect(() => { const t = setTimeout(() => load(query), 250); return () => clearTimeout(t); }, [query, showInactive]);
+  useEffect(() => {
+    api.getPreferences().then((p) => { if (p?.employees_sort?.key) setSort(p.employees_sort); }).catch(() => {}).finally(() => setPrefsLoaded(true));
+  }, []);
+  useEffect(() => {
+    if (prefsLoaded) api.updatePreferences({ employees_sort: sort }).catch(() => {});
+  }, [sort, prefsLoaded]);
 
   const submit = async (data) => {
     try {
