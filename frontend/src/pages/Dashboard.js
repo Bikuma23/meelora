@@ -193,7 +193,9 @@ function EmployeesKpi({ k }) {
 function SexDistribution({ b }) {
   const sc = b.kpis.sex_counts || {};
   const pieData = SEX_CATS.map((s) => ({ name: s, value: sc[s === "Non spécifié" ? "Non spécifié" : s] || 0 })).filter((d) => d.value > 0);
-  const depts = (b.sex_by_department || []).filter((d) => d.total > 0);
+  const depts = [...(b.sex_by_department || []).filter((d) => d.total > 0)]
+    .sort((a, c) => a.department.localeCompare(c.department, undefined, { numeric: true }));
+  const topFem = depts.reduce((best, d) => (d.Féminin > (best?.Féminin ?? -1) ? d : best), null);
   return (
     <div className="card p-5" data-testid="chart-sex">
       <h3 className="mb-4 flex items-center gap-2 text-sm font-700"><PieIcon size={16} className="text-[#EC4899]" /> Répartition par sexe à la naissance</h3>
@@ -218,6 +220,15 @@ function SexDistribution({ b }) {
         </div>
         <div className="lg:col-span-2">
           <p className="mb-1.5 text-[10px] font-600 uppercase tracking-wide text-slate-400">Par département</p>
+          {topFem && topFem.Féminin > 0 && (
+            <div className="mb-2 flex items-center justify-between rounded-lg border border-[#EC4899]/30 bg-[#EC4899]/5 px-3 py-2" data-testid="sex-top-fem">
+              <span className="flex items-center gap-1.5 text-[11px] text-slate-600">
+                <span className="h-2 w-2 rounded-sm" style={{ background: "#EC4899" }} />
+                Plus de femmes : <b className="text-slate-800">{topFem.department} — {topFem.label}</b>
+              </span>
+              <span className="font-mono-data text-[11px] font-700 text-[#EC4899]">{topFem.Féminin} F <span className="text-slate-400">/ {topFem.total} total</span></span>
+            </div>
+          )}
           <div className="max-h-[220px] overflow-y-auto">
             <table className="w-full text-[11px]">
               <thead className="sticky top-0 bg-white">
