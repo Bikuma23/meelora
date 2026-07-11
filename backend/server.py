@@ -309,6 +309,7 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
             "prime_type": prime_type, "prime_amount": round(prime_amt, 2), "garde": round(garde, 2),
             "halo": round(halo, 2), "alloc": round(alloc, 2),
             "boni": round(boni, 2), "primes_total": round(primes_total, 2),
+            "salaire_brut": round(new_salary + vacation + primes_total, 2),
             "boni_mode": (ov.get("boni_mode", "montant") if not ccq else "montant"),
             "boni_pct": float(ov.get("boni_pct", 0) or 0),
             "rrq": round(rrq, 2), "ae": round(ae, 2), "rqap": round(rqap, 2), "fss": round(fss, 2),
@@ -845,11 +846,12 @@ def build_budget_excel(data, year, dept_label):
     # Détail employés
     ws2 = wb.create_sheet("Détail employés")
     cols = ["#", "Nom", "Titre", "Département", "Type", "Salaire base", "Nouveau salaire", "Vacances",
-            "Primes", "Avantages", "CSST", "REER", "Assurance", "Coût total"]
+            "Primes", "Salaire brut total", "Avantages", "CSST", "REER", "Assurance", "Coût total"]
     ws2.append(cols); [setattr(c, "font", bold) for c in ws2[1]]
     for l in data["lines"]:
         ws2.append([l["employee_number"], l["name"], l["title"], l["department"], l["employment_type"],
-                    l["base_salary"], l["new_salary"], l["vacation"], l["primes_total"], l["avantages"],
+                    l["base_salary"], l["new_salary"], l["vacation"], l["primes_total"],
+                    l["salaire_brut"], l["avantages"],
                     l["csst"], l["reer"], l["assurance"], l["total_cost"]])
     # Par département
     ws3 = wb.create_sheet("Par département")
@@ -977,33 +979,34 @@ def _group_by_dept(lines):
         g["lines"].append(l)
     return sorted(groups.items(), key=lambda kv: kv[0])
 
-FICHE_COLS = ["#", "Nom", "Type", "Sal. base", "Aug.", "Nouv. salaire", "Vacances", "Primes", "Avantages", "CSST", "REER", "Assur.", "Coût total"]
+FICHE_COLS = ["#", "Nom", "Type", "Sal. base", "Aug.", "Nouv. salaire", "Vacances", "Primes", "Sal. brut total", "Avantages", "CSST", "REER", "Assur.", "Coût total"]
 def _fiche_row(l):
     return [str(l["employee_number"]).zfill(3), l["name"], "CCQ" if l["is_ccq"] else l["employment_type"],
             l["base_salary"], f"{l['augmentation']*100:.1f}%", l["new_salary"], l["vacation"], l["primes_total"],
-            l["avantages"], l["csst"], l["reer"], l["assurance"], l["total_cost"]]
+            l["salaire_brut"], l["avantages"], l["csst"], l["reer"], l["assurance"], l["total_cost"]]
 
 def build_fiches_excel(data, year, scenario_label, scope):
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Fiches détaillées"
     bold = openpyxl.styles.Font(bold=True)
     ws.append([f"Fiches détaillées {scenario_label} {year} — {scope}"]); ws["A1"].font = openpyxl.styles.Font(bold=True, size=14)
     ws.append([])
-    num_cols = ["Sal. base", "Nouv. salaire", "Vacances", "Primes", "Avantages", "CSST", "REER", "Assur.", "Coût total"]
+    num_cols = ["Sal. base", "Nouv. salaire", "Vacances", "Primes", "Sal. brut total", "Avantages", "CSST", "REER", "Assur.", "Coût total"]
     for dept, g in _group_by_dept(data["lines"]):
         ws.append([f"Département {dept} — {g['label']}"]); ws[ws.max_row][0].font = bold
         ws.append(FICHE_COLS); [setattr(c, "font", bold) for c in ws[ws.max_row]]
         sub = {k: 0 for k in num_cols}
         for l in g["lines"]:
             ws.append(_fiche_row(l))
-            for k, key in zip(num_cols, ["base_salary", "new_salary", "vacation", "primes_total", "avantages", "csst", "reer", "assurance", "total_cost"]):
+            for k, key in zip(num_cols, ["base_salary", "new_salary", "vacation", "primes_total", "salaire_brut", "avantages", "csst", "reer", "assurance", "total_cost"]):
                 sub[k] += l[key]
         ws.append(["", "Sous-total", "", round(sub["Sal. base"], 2), "", round(sub["Nouv. salaire"], 2), round(sub["Vacances"], 2),
-                   round(sub["Primes"], 2), round(sub["Avantages"], 2), round(sub["CSST"], 2), round(sub["REER"], 2),
+                   round(sub["Primes"], 2), round(sub["Sal. brut total"], 2), round(sub["Avantages"], 2), round(sub["CSST"], 2), round(sub["REER"], 2),
                    round(sub["Assur."], 2), round(sub["Coût total"], 2)])
         [setattr(c, "font", bold) for c in ws[ws.max_row]]
         ws.append([])
     t = data["totals"]
-    ws.append(["", "BUDGET TOTAL", "", t["salaire_base"], "", t["salaire_base"], t["vacances"], t["primes"], t["avantages"], t["csst"], t["reer"], t["assurance"], t["budget_total"]])
+    brut_total = round(t["salaire_base"] + t["vacances"] + t["primes"], 2)
+    ws.append(["", "BUDGET TOTAL", "", t["salaire_base"], "", t["salaire_base"], t["vacances"], t["primes"], brut_total, t["avantages"], t["csst"], t["reer"], t["assurance"], t["budget_total"]])
     [setattr(c, "font", openpyxl.styles.Font(bold=True, size=12)) for c in ws[ws.max_row]]
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     return buf

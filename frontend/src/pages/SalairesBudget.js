@@ -146,6 +146,7 @@ export default function SalairesBudget() {
                 <th className="px-4 py-3 text-right font-600">Nouveau salaire</th>
                 <th className="px-4 py-3 text-right font-600">Vacances</th>
                 <th className="px-4 py-3 text-right font-600">Primes</th>
+                <th className="px-4 py-3 text-right font-600">Salaire brut total</th>
                 <th className="px-4 py-3 text-right font-600">Avantages</th>
                 <th className="px-4 py-3 text-right font-600">Coût total</th>
                 <th className="px-4 py-3 text-right font-600">Modifier</th>
@@ -160,6 +161,7 @@ export default function SalairesBudget() {
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.new_salary)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.vacation)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.primes_total)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(ln.salaire_brut)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.avantages)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data font-700">{fmtCAD(ln.total_budgeted)}</td>
                   <td className="px-4 py-2.5 text-right">
