@@ -49,7 +49,7 @@ export default function SalairesBudget() {
   const lockKey = `${year}:${scenario}`;
   const lockInfo = locks[lockKey];
   const locked = !!lockInfo?.locked;
-  const canEdit = isAdmin;
+  const canEdit = isAdmin || (user?.role === "editor" && !locked);
 
   const load = () => api.getBudget({ year, scenario }).then(setB);
   const loadLocks = () => api.getLocks({ year }).then(setLocks);
@@ -69,7 +69,7 @@ export default function SalairesBudget() {
   if (!b) return <p className="font-mono-data text-sm text-slate-500">Chargement…</p>;
 
   const applyAug = async () => {
-    if (!canEdit) { toast.error("Budget verrouillé — seul un administrateur peut modifier."); return; }
+    if (!canEdit) { toast.error("Vous n'avez pas les droits pour modifier ce budget."); return; }
     setApplying(true);
     try {
       const r = await api.applyAugmentation({ ccq_pct: Number(augCcq) || 0, std_pct: Number(augStd) || 0 }, { year, scenario });
@@ -134,12 +134,6 @@ export default function SalairesBudget() {
           )}
         </div>
       </div>
-
-      {!isAdmin && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800" data-testid="readonly-notice">
-          Lecture seule — seuls les administrateurs peuvent modifier les données.
-        </div>
-      )}
 
       <div className="card flex flex-wrap items-end gap-4 p-4" data-testid="global-aug-panel">
         <div className="flex items-center gap-2 self-center pr-2">

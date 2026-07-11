@@ -54,12 +54,8 @@ export default function Hypotheses() {
         <p className="text-sm text-slate-500">Paramètres pour <b className="text-slate-800">{h.year}</b> — alimentent tous les calculs budgétaires</p>
         {isAdmin && <Button data-testid="save-hypotheses-btn" onClick={save} disabled={saving} className="gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90"><Save size={16} /> {saving ? "Enregistrement…" : "Enregistrer"}</Button>}
       </div>
-      {!isAdmin && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800" data-testid="readonly-notice">
-          Lecture seule — seuls les administrateurs peuvent modifier les hypothèses.
-        </div>
-      )}
 
+      <fieldset disabled={!isAdmin} className="m-0 min-w-0 space-y-5 border-0 p-0">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <DayGrid arr="working_days_ccq" tint="#F59E0B" icon={HardHat} title={`Jours ouvrables CCQ — ${h.year}`} />
         <DayGrid arr="working_days_std" tint="#2563EB" icon={Briefcase} title={`Jours ouvrables (standard) — ${h.year}`} />
@@ -135,6 +131,7 @@ export default function Hypotheses() {
           </div>
         </div>
       </div>
+      </fieldset>
     </div>
   );
 }

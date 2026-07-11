@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Plus, Pencil, Trash2, ShieldCheck, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 
-const ROLE_LABEL = { admin: "Administrateur", user: "Utilisateur" };
+const ROLE_LABEL = { admin: "Administrateur", editor: "Éditeur", user: "Utilisateur" };
 const empty = { email: "", name: "", password: "", role: "user" };
 
 function UserForm({ open, onOpenChange, initial, onSubmit }) {
@@ -45,7 +45,7 @@ function UserForm({ open, onOpenChange, initial, onSubmit }) {
           <div><Label className="text-[11px] uppercase text-slate-500">Rôle</Label>
             <Select value={f.role} onValueChange={(v) => set("role", v)}>
               <SelectTrigger data-testid="user-role"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="user">Utilisateur</SelectItem><SelectItem value="admin">Administrateur</SelectItem></SelectContent>
+              <SelectContent><SelectItem value="user">Utilisateur (lecture seule)</SelectItem><SelectItem value="editor">Éditeur (modifie les données)</SelectItem><SelectItem value="admin">Administrateur (accès complet)</SelectItem></SelectContent>
             </Select></div>
           <div className="sm:col-span-2"><Label className="text-[11px] uppercase text-slate-500">{initial ? "Nouveau mot de passe (optionnel)" : "Mot de passe"}</Label>
             <Input data-testid="user-password" type="password" value={f.password} onChange={(e) => set("password", e.target.value)} />
@@ -96,7 +96,7 @@ export default function Users() {
                 <td className="px-4 py-2.5 font-600">{u.name}{u.id === user?.id && <span className="ml-2 text-[10px] text-slate-400">(vous)</span>}</td>
                 <td className="px-4 py-2.5 font-mono-data text-[13px] text-slate-600">{u.email}</td>
                 <td className="px-4 py-2.5">
-                  <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-700 uppercase ${u.role === "admin" ? "bg-[#2563EB] text-white" : "bg-slate-200 text-slate-600"}`}>
+                  <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-700 uppercase ${u.role === "admin" ? "bg-[#2563EB] text-white" : u.role === "editor" ? "bg-[#0E9488] text-white" : "bg-slate-200 text-slate-600"}`}>
                     {u.role === "admin" ? <ShieldCheck size={11} /> : <UserIcon size={11} />}{ROLE_LABEL[u.role]}
                   </span>
                 </td>

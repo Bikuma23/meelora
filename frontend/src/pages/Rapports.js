@@ -22,7 +22,7 @@ const fmtK = (v) => `${Math.round(v / 1000)}k`;
 export default function Rapports() {
   const { year, years, selectYear } = useYear();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = ["admin", "editor"].includes(user?.role);
   const [departments, setDepartments] = useState([]);
   const [dept, setDept] = useState("all");
   const [scenario, setScenario] = useState("ca");

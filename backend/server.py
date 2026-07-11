@@ -478,11 +478,11 @@ class UserCreate(BaseModel):
     email: EmailStr
     name: str
     password: str
-    role: Literal["admin", "user"] = "user"
+    role: Literal["admin", "editor", "user"] = "user"
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
-    role: Optional[Literal["admin", "user"]] = None
+    role: Optional[Literal["admin", "editor", "user"]] = None
     password: Optional[str] = None
 
 def _user_public(u):
@@ -1615,12 +1615,18 @@ async def root():
 
 app.include_router(api)
 
-ADMIN_WRITE_ALLOW = {"/api/auth/login", "/api/auth/logout", "/api/me/preferences"}
+WRITE_ALLOW_ALL = {"/api/auth/login", "/api/auth/logout", "/api/me/preferences"}
+
+def _is_admin_only_path(path: str) -> bool:
+    return (path.startswith("/api/users")
+            or path == "/api/hypotheses"
+            or path == "/api/budget/lock"
+            or path.startswith("/api/years"))
 
 @app.middleware("http")
-async def admin_write_guard(request: Request, call_next):
+async def write_guard(request: Request, call_next):
     path = request.url.path
-    if request.method in ("POST", "PUT", "DELETE", "PATCH") and path.startswith("/api") and path not in ADMIN_WRITE_ALLOW:
+    if request.method in ("POST", "PUT", "DELETE", "PATCH") and path.startswith("/api") and path not in WRITE_ALLOW_ALL:
         token = request.cookies.get("access_token")
         if not token:
             auth = request.headers.get("Authorization", "")
@@ -1630,8 +1636,13 @@ async def admin_write_guard(request: Request, call_next):
             try:
                 payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
                 u = await db.users.find_one({"_id": ObjectId(payload["sub"])})
-                if u and u.get("role") != "admin":
-                    return JSONResponse(status_code=403, content={"detail": "Modification réservée aux administrateurs"})
+                role = (u or {}).get("role")
+                if u:
+                    if _is_admin_only_path(path):
+                        if role != "admin":
+                            return JSONResponse(status_code=403, content={"detail": "Action réservée aux administrateurs"})
+                    elif role not in ("admin", "editor"):
+                        return JSONResponse(status_code=403, content={"detail": "Modification réservée aux administrateurs et éditeurs"})
             except Exception:
                 pass
     return await call_next(request)

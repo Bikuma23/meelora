@@ -135,6 +135,7 @@ function LayoutInner() {
   const page = PAGES[active];
   const Active = page.comp;
   const go = (k) => { setActive(k); setMobileOpen(false); };
+  const roleMeta = { admin: { label: "Admin", c: "#2563EB", t: "#93B4FF" }, editor: { label: "Éditeur", c: "#0E9488", t: "#5EEAD4" }, user: { label: "Utilisateur", c: "#64748B", t: "#94A3B8" } }[user?.role] || { label: "Utilisateur", c: "#64748B", t: "#94A3B8" };
   useEffect(() => { api.getPreferences().then((p) => { applyTheme(p?.theme); if (p?.avatar_color) setAvatarColor(p.avatar_color); }).catch(() => {}); }, []);
 
   return (
@@ -185,7 +186,7 @@ function LayoutInner() {
             <div className="min-w-0 flex-1 text-left">
               <div className="flex items-center gap-1.5">
                 <p className="truncate text-sm font-600 text-white">{user?.name}</p>
-                <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-700 uppercase" style={{ backgroundColor: (user?.role === "admin" ? "#2563EB" : "#64748B") + "33", color: user?.role === "admin" ? "#93B4FF" : "#94A3B8" }}>{user?.role === "admin" ? "Admin" : "Utilisateur"}</span>
+                <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-700 uppercase" style={{ backgroundColor: roleMeta.c + "33", color: roleMeta.t }}>{roleMeta.label}</span>
               </div>
               <p className="truncate text-[11px] text-slate-500">{user?.email}</p>
             </div>

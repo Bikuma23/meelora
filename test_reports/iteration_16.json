@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 16 — full validation of new 'editor' role plus regression on admin/user. Backend pytest: 38 passed / 1 skipped (budget-lines list endpoint not exposed). Frontend Playwright: 36/36 assertions pass across editor, user (viewer), and admin sessions. Editor can write to employees/departments/apply-augmentation/report-templates (200) but is 403 on hypotheses, budget/lock, users, years, years/active. Viewer: every mutating call 403 except /api/me/preferences (200). Admin: all writes 200 including hypotheses PUT & lock. UI: editor sees add/import/edit controls on Employés & Départements, edit-line buttons enabled on unlocked Budget (244 rows), save-template-btn enabled on Rapports, Hypothèses page has NO save-hypotheses-btn and csst-max/param-*/class-code-0/charge-rate-* are all disabled, no nav-utilisateurs in submenu, role badge = 'Éditeur'. Viewer confirmed: no add/import, 122 '—' action cells on Employés, all 244 edit-line disabled, Hypothèses fully disabled + no save, Rapports save-template disabled, no lock-toggle-btn, badge 'Utilisateur'. Admin: nav-utilisateurs present, Hypothèses editable + save visible, lock-toggle-btn present, user-role select exposes 'Éditeur (modifie les données)'. Confirmed: readonly-notice element is absent on Employés/Départements/Hypothèses/Budget for ALL roles. Preferences reset to defaults for all three accounts. DB left intact (all TEST_ items deleted).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_role_matrix_editor.py",
+    "/app/test_reports/pytest/iteration_16.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 1710 lines — still recommend router-splitting (auth/prefs, users, employees, departments, budget, reports, hypotheses, admin-guard middleware).",
+    "write_guard middleware silently swallows JWT decode errors (except Exception: pass); if a token is corrupt/expired, the request bypasses the guard and only fails downstream. Consider explicit 401 for malformed tokens.",
+    "write_guard grants 'editor' full write access without checking budget lock state — server relies on individual endpoints (e.g., create/update_employee) to enforce lock. This is fine today but is a scattered rule; a centralized 'is-locked' guard invoked from the middleware or a helper decorator would reduce risk.",
+    "budget-line PUT override endpoint shape not obviously listed (test skipped) — main agent may want to add integration test coverage once endpoint contract is documented."
+  ],
+  "updated_files": ["/app/backend/tests/test_role_matrix_editor.py (NEW — 39 tests)"],
+  "success_rate": {"backend": "100% (38/38 executed, 1 skipped)", "frontend": "100% (36/36 UI assertions)"},
+  "test_credentials": "admin@accslegro.com/admin123, editor1@accslegro.com/editor123, user1@accslegro.com/user123 — all exist and log in successfully.",
+  "seed_data_creation": "None persisted. Editor test created & deleted 1 employee (TEST Editor Emp), 1 department (TED code), 1 report template (TEST_ED_TPL). All cleaned up during test run. Preferences for all 3 accounts reset to defaults (light theme, scenario 'ca', employee_number/code asc) at the end via /api/me/preferences.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Editor role fully working. Frontend is SPA (no react-router) — use nav-{key} data-testid clicks to navigate: dashboard, employes, budget, hypotheses, departements, rapports, journal, preferences, utilisateurs (admin only). Login flow: clear cookies + full logout (user-menu-toggle -> logout-btn) is required between role switches; otherwise React AuthContext persists. write_guard middleware at server.py:1626 gates all POST/PUT/DELETE/PATCH under /api except WRITE_ALLOW_ALL={/api/auth/login,/api/auth/logout,/api/me/preferences}; admin-only paths: /api/users*, /api/hypotheses, /api/budget/lock, /api/years*. Hypotheses page wraps content in <fieldset disabled={!isAdmin}> at Hypotheses.js:58. Editor gating uses ['admin','editor'].includes(role) in Employes/Departements/Rapports; SalairesBudget adds locked-scenario check.",
+  "verified_scenarios": {
+    "backend_editor_writes_allowed": "PASS (employees CRUD, departments CRUD, apply-augmentation, report-templates)",
+    "backend_editor_admin_only_paths_403": "PASS (hypotheses, budget/lock, users, years, years/active)",
+    "backend_user_all_mutations_403_except_preferences": "PASS (8 endpoints -> 403, prefs -> 200)",
+    "backend_admin_writes_regression": "PASS (hypotheses, lock/unlock)",
+    "backend_all_roles_GET_200": "PASS (6 endpoints x 3 roles)",
+    "ui_editor_full_edit_controls": "PASS (Employés/Départements/Budget unlocked/Rapports save)",
+    "ui_editor_hypotheses_fully_disabled_no_save": "PASS (csst-max, param-*, class-code-0, charge-rate-* all disabled; no save btn)",
+    "ui_editor_no_nav_utilisateurs_no_lock_btn": "PASS",
+    "ui_editor_badge_Editeur": "PASS",
+    "ui_user_viewer_all_readonly": "PASS (add/import hidden, 122 dash cells, 244 edit-line disabled, no save-hypotheses/save-template/lock-toggle)",
+    "ui_user_badge_Utilisateur": "PASS",
+    "ui_admin_full_controls_incl_lock_and_hypotheses_save": "PASS",
+    "ui_admin_users_role_select_has_Editeur": "PASS",
+    "ui_no_readonly_notice_anywhere": "PASS (Employés/Départements/Hypothèses/Budget checked across all 3 roles)"
+  }
+}

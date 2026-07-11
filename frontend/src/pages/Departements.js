@@ -75,7 +75,7 @@ function DeptForm({ open, onOpenChange, initial, onSubmit }) {
 
 export default function Departements() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canEdit = ["admin", "editor"].includes(user?.role);
   const [depts, setDepts] = useState([]);
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState({ open: false, item: null });
@@ -130,7 +130,7 @@ export default function Departements() {
         <p className="text-sm text-slate-500"><b className="text-slate-800">{filtered.length}</b> / {depts.length} départements</p>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" className="gap-1.5" data-testid="dept-template-btn" onClick={dlTemplate}><Download size={15} /> Modèle</Button>
-          {isAdmin && <>
+          {canEdit && <>
           <input ref={fileRef} type="file" accept=".xlsx" className="hidden" data-testid="dept-import-input" onChange={onImport} />
           <Button variant="outline" className="gap-1.5" data-testid="dept-import-btn" onClick={() => fileRef.current?.click()}><Upload size={15} /> Importer Excel</Button>
           <Button data-testid="add-dept-btn" className="gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90" onClick={() => setDialog({ open: true, item: null })}>
@@ -139,11 +139,6 @@ export default function Departements() {
           </>}
         </div>
       </div>
-      {!isAdmin && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800" data-testid="readonly-notice">
-          Lecture seule — seuls les administrateurs peuvent modifier les données.
-        </div>
-      )}
       <div className="card flex items-center gap-2 px-4 py-2.5">
         <Search size={16} className="text-slate-400" />
         <input data-testid="dept-search" className="w-full bg-transparent text-sm outline-none" placeholder="Rechercher par code, description, superviseur…" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -169,7 +164,7 @@ export default function Departements() {
                 <td className="px-4 py-3 font-mono-data text-slate-500">{d.compte_gl}</td>
                 <td className="px-4 py-3 text-slate-600">{d.groupe_pl}</td>
                 <td className="px-4 py-3">
-                  {isAdmin ? (
+                  {canEdit ? (
                   <div className="flex justify-end gap-1">
                     <button data-testid={`edit-dept-${d.code}`} onClick={() => setDialog({ open: true, item: d })} className="p-1.5 text-slate-400 hover:text-[#2563EB]"><Pencil size={15} /></button>
                     <button data-testid={`delete-dept-${d.code}`} onClick={() => del(d)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
