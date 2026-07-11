@@ -10,13 +10,13 @@ import { toast } from "sonner";
 import ImportErrorsDialog from "../components/ImportErrorsDialog";
 
 const PL_GROUPS = ["Projets", "Services", "Ventes", "Marketing", "RH", "Administration", "Informatique", "Opération Commun (FGF)"];
-const empty = { code: "", description: "", superviseur: "", compte_gl: "", groupe_pl: "Services", csst_pct: "0.61" };
+const empty = { code: "", description: "", superviseur: "", compte_gl: "", groupe_pl: "Services" };
 
 function DeptForm({ open, onOpenChange, initial, onSubmit }) {
   const [f, setF] = useState(empty);
   const [errors, setErrors] = useState({});
   useEffect(() => {
-    setF(initial ? { ...initial, csst_pct: String(+(initial.csst * 100).toFixed(4)) } : empty);
+    setF(initial ? { ...initial } : empty);
     setErrors({});
   }, [initial, open]);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
@@ -28,7 +28,7 @@ function DeptForm({ open, onOpenChange, initial, onSubmit }) {
     if (Object.keys(e).length) { toast.error("Champs obligatoires manquants"); return; }
     onSubmit({
       code: f.code.trim(), description: f.description.trim(), superviseur: f.superviseur.trim(),
-      compte_gl: f.compte_gl.trim(), groupe_pl: f.groupe_pl, csst: (Number(f.csst_pct) || 0) / 100,
+      compte_gl: f.compte_gl.trim(), groupe_pl: f.groupe_pl, csst: initial?.csst ?? 0,
     });
   };
 
@@ -61,10 +61,6 @@ function DeptForm({ open, onOpenChange, initial, onSubmit }) {
                 <SelectContent>{PL_GROUPS.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-          </div>
-          <div>
-            <Label className="text-xs">Taux CSST (%)</Label>
-            <Input data-testid="dept-csst" type="number" step="0.0001" className="mt-1 font-mono-data" value={f.csst_pct} onChange={(e) => set("csst_pct", e.target.value)} />
           </div>
         </div>
         <DialogFooter>
@@ -151,7 +147,6 @@ export default function Departements() {
               <th className="px-4 py-3 text-left font-600">Superviseur</th>
               <th className="px-4 py-3 text-left font-600">Compte GL</th>
               <th className="px-4 py-3 text-left font-600">Groupe P&L</th>
-              <th className="px-4 py-3 text-right font-600">CSST</th>
               <th className="px-4 py-3 text-right font-600">Actions</th>
             </tr>
           </thead>
@@ -163,7 +158,6 @@ export default function Departements() {
                 <td className="px-4 py-3 text-slate-600">{d.superviseur}</td>
                 <td className="px-4 py-3 font-mono-data text-slate-500">{d.compte_gl}</td>
                 <td className="px-4 py-3 text-slate-600">{d.groupe_pl}</td>
-                <td className="px-4 py-3 text-right font-mono-data text-slate-500">{(d.csst * 100).toFixed(3)}%</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1">
                     <button data-testid={`edit-dept-${d.code}`} onClick={() => setDialog({ open: true, item: d })} className="p-1.5 text-slate-400 hover:text-[#2563EB]"><Pencil size={15} /></button>

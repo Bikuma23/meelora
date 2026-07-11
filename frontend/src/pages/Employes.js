@@ -7,7 +7,7 @@ import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Plus, Pencil, Trash2, Search, Cake, CalendarClock, Upload, Download } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Cake, CalendarClock, Upload, Download, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import ImportErrorsDialog from "../components/ImportErrorsDialog";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "../components/ui/alert-dialog";
@@ -194,6 +194,8 @@ export default function Employes() {
   const [confirmDel, setConfirmDel] = useState(null);
   const [showInactive, setShowInactive] = useState(false);
   const [securityClasses, setSecurityClasses] = useState([]);
+  const [sort, setSort] = useState({ key: "employee_number", dir: "asc" });
+  const toggleSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
   const fileRef = useRef();
 
   const load = (q, inc) => api.listEmployees({ ...(q ? { q } : {}), ...((inc ?? showInactive) ? { include_inactive: true } : {}) }).then(setEmployees);
@@ -226,6 +228,25 @@ export default function Employes() {
 
   const dl = employees.reduce((s, e) => s + e.current_annual_salary, 0);
   const classMap = Object.fromEntries((securityClasses || []).map((c) => [c.code, c]));
+
+  const sortVal = (e, key) => {
+    if (key === "age") return computeAge(e.birth_date) ?? -1;
+    if (key === "seniority") return computeSeniority(e.hire_date) ?? -1;
+    if (key === "employment_type") return e.is_ccq ? "CCQ" : typeLabel(e.employment_type);
+    if (key === "security_class") return classMap[e.security_class]?.description || e.security_class || "";
+    const v = e[key];
+    return v == null ? "" : v;
+  };
+  const sortedEmployees = [...employees].sort((a, b) => {
+    const va = sortVal(a, sort.key), vb = sortVal(b, sort.key);
+    const cmp = typeof va === "string" ? va.localeCompare(vb, "fr") : (va - vb);
+    return sort.dir === "asc" ? cmp : -cmp;
+  });
+  const HEAD = [
+    ["#", "left", "employee_number"], ["Titre / Poste", "left", "title"], ["Nom", "left", "name"],
+    ["Dépt", "left", "department"], ["Type", "left", "employment_type"], ["Classe de sécurité", "left", "security_class"],
+    ["Salaire", "right", "current_annual_salary"], ["Âge", "right", "age"], ["Ancien.", "right", "seniority"], ["Actions", "right", null],
+  ];
 
   const dlTemplate = async () => {
     try {
@@ -260,13 +281,21 @@ export default function Employes() {
           <table className="w-full min-w-[860px] text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
-                {[["#", "left"], ["Titre / Poste", "left"], ["Nom", "left"], ["Dépt", "left"], ["Type", "left"], ["Classe de sécurité", "left"], ["Salaire", "right"], ["Âge", "right"], ["Ancien.", "right"], ["Actions", "right"]].map(([h, al]) => (
-                  <th key={h} className={`px-4 py-3 font-600 ${al === "right" ? "text-right" : "text-left"}`}>{h}</th>
+                {HEAD.map(([h, al, key]) => (
+                  <th key={h} data-testid={key ? `sort-${key}` : "col-actions"} onClick={key ? () => toggleSort(key) : undefined}
+                    className={`px-4 py-3 font-600 ${al === "right" ? "text-right" : "text-left"} ${key ? "cursor-pointer select-none hover:text-slate-600" : ""}`}>
+                    <span className={`inline-flex items-center gap-1 ${al === "right" ? "flex-row-reverse" : ""}`}>
+                      {h}
+                      {key && (sort.key === key
+                        ? (sort.dir === "asc" ? <ChevronUp size={13} className="text-[#2563EB]" /> : <ChevronDown size={13} className="text-[#2563EB]" />)
+                        : <ChevronsUpDown size={12} className="opacity-40" />)}
+                    </span>
+                  </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {employees.map((e) => (
+              {sortedEmployees.map((e) => (
                 <tr key={e.id} className={`border-b border-slate-100 hover:bg-slate-50 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-row-${e.employee_number}`}>
                   <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(e.employee_number).padStart(3, "0")}</td>
                   <td className="px-4 py-2.5 text-[13px] text-slate-600">{e.title || "—"}</td>
@@ -298,7 +327,7 @@ export default function Employes() {
         </div>
 
         <div className="divide-y divide-slate-100 md:hidden" data-testid="employee-cards">
-          {employees.map((e) => (
+          {sortedEmployees.map((e) => (
             <div key={e.id} className={`p-4 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-card-${e.employee_number}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
