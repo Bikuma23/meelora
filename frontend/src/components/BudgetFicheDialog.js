@@ -230,9 +230,16 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
           <div className="rounded-xl border border-slate-200" data-testid="fiche-ventilation">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
               <h3 className="text-xs font-700 uppercase tracking-widest">Ventilation mensuelle {year}</h3>
-              {p.prorated
-                ? <span className="text-[11px] text-[#B45309]">Embauche en cours d'année → pro-rata dès le mois {p.hire_month} ({p.months_active} mois)</span>
-                : <span className="text-[11px] text-slate-400">Répartie selon les jours ouvrables</span>}
+              {p.prorated ? (() => {
+                const act = p.monthly.map((v, i) => (v > 0 ? i : -1)).filter((i) => i >= 0);
+                const first = act.length ? act[0] : 0, last = act.length ? act[act.length - 1] : 11;
+                const late = first > 0, early = last < 11;
+                let txt;
+                if (late && early) txt = `Actif de ${MONTHS[first]} à ${MONTHS[last]} (${p.months_active} mois)`;
+                else if (early) txt = `Fin d'emploi en cours d'année → actif jusqu'à ${MONTHS[last]} (${p.months_active} mois)`;
+                else txt = `Embauche en cours d'année → pro-rata dès ${MONTHS[first]} (${p.months_active} mois)`;
+                return <span className="text-[11px] text-[#B45309]">{txt}</span>;
+              })() : <span className="text-[11px] text-slate-400">Répartie selon les jours ouvrables</span>}
             </div>
             <div className="grid grid-cols-4 gap-px bg-slate-100 sm:grid-cols-6 lg:grid-cols-12">
               {MONTHS.map((mo, i) => (
