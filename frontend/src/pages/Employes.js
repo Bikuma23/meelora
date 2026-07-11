@@ -15,10 +15,12 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 const REQ = "Ce champ est obligatoire";
 const TYPES = ["CCQ", "Régulier temps plein", "Régulier temps partiel", "Stagiaire"];
 const typeLabel = (t) => ({ "Régulier temps plein": "Rég. Temps Plein", "Régulier temps partiel": "Rég. Temps Partiel" }[t] || t);
+const SEXES = ["Masculin", "Féminin", "Autre", "Préfère ne pas répondre"];
 const empty = {
   name: "", department: "", title: "", employment_type: "Régulier temps plein", ccq_category: "N/A",
   current_annual_salary: "", vacation_rate_pct: "", sick_personal_days: "", holiday_days: "",
   prime_type: "Aucune Prime", prime_garde: false, prime_halo: false, alloc_securite: false, hire_date: "", birth_date: "",
+  active: true, sex_at_birth: "",
 };
 
 function Field({ label, error, testId, children }) {
@@ -41,6 +43,7 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
       vacation_rate_pct: String(+(initial.vacation_rate * 100).toFixed(2)), sick_personal_days: String(initial.sick_personal_days),
       holiday_days: String(initial.holiday_days), prime_type: initial.prime_type, prime_garde: initial.prime_garde,
       prime_halo: initial.prime_halo, alloc_securite: initial.alloc_securite, hire_date: initial.hire_date, birth_date: initial.birth_date,
+      active: initial.active !== false, sex_at_birth: initial.sex_at_birth || "",
     });
     else setF(empty);
     setErrors({});
@@ -70,6 +73,7 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
       holiday_days: parseInt(f.holiday_days, 10), is_ccq: isCCQ, prime_type: isCCQ ? f.prime_type : "Aucune Prime",
       prime_garde: isCCQ && f.prime_garde, prime_halo: isCCQ && f.prime_halo, alloc_securite: f.alloc_securite,
       hire_date: f.hire_date, birth_date: f.birth_date,
+      active: f.active, sex_at_birth: f.sex_at_birth || null,
     });
   };
 
@@ -80,7 +84,7 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto" data-testid="employee-form-dialog">
         <DialogHeader>
           <DialogTitle>{initial ? `${initial.name} — #${String(initial.employee_number).padStart(3, "0")}` : "Nouvel employé"}</DialogTitle>
-          <DialogDescription className="text-xs">Tous les champs sont obligatoires. Âge et ancienneté calculés automatiquement.</DialogDescription>
+          <DialogDescription className="text-xs">Âge et ancienneté calculés automatiquement. Le sexe à la naissance est facultatif.</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-1 gap-4 py-1 sm:grid-cols-2">
           <Field label="Nom complet" error={errors.name} testId="f-name"><Input data-testid="f-name" value={f.name} onChange={(e) => set("name", e.target.value)} /></Field>
@@ -96,6 +100,18 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
               <SelectTrigger data-testid="f-type"><SelectValue /></SelectTrigger>
               <SelectContent>{TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
             </Select>
+          </Field>
+          <Field label="Sexe à la naissance" testId="f-sex">
+            <Select value={f.sex_at_birth} onValueChange={(v) => set("sex_at_birth", v)}>
+              <SelectTrigger data-testid="f-sex"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
+              <SelectContent>{SEXES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+          <Field label="Statut" testId="f-active">
+            <label className="flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 px-3">
+              <span className={`text-[11px] font-600 uppercase ${f.active ? "text-emerald-600" : "text-red-500"}`}>{f.active ? "Actif" : "Inactif"}</span>
+              <Switch data-testid="f-active" checked={f.active} onCheckedChange={(v) => set("active", v)} />
+            </label>
           </Field>
           {isCCQ && (
             <Field label="Catégorie CCQ" error={errors.ccq_category} testId="f-ccq-category">
@@ -165,11 +181,12 @@ export default function Employes() {
   const [dialog, setDialog] = useState({ open: false, item: null });
   const [importErrors, setImportErrors] = useState({ open: false, errors: [], fileName: "" });
   const [confirmDel, setConfirmDel] = useState(null);
+  const [showInactive, setShowInactive] = useState(false);
   const fileRef = useRef();
 
-  const load = (q) => api.listEmployees(q).then(setEmployees);
+  const load = (q, inc) => api.listEmployees({ ...(q ? { q } : {}), ...((inc ?? showInactive) ? { include_inactive: true } : {}) }).then(setEmployees);
   useEffect(() => { api.listDepartments().then(setDepartments); load(); }, []);
-  useEffect(() => { const t = setTimeout(() => load(query), 250); return () => clearTimeout(t); }, [query]);
+  useEffect(() => { const t = setTimeout(() => load(query), 250); return () => clearTimeout(t); }, [query, showInactive]);
 
   const submit = async (data) => {
     try {
@@ -211,6 +228,9 @@ export default function Employes() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-500"><b className="text-slate-800">{employees.length}</b> employés · masse actuelle {fmtCAD(dl)}</p>
         <div className="flex flex-wrap items-center gap-2">
+          <label className="card flex items-center gap-2 px-3 py-2 text-[11px] font-600 uppercase text-slate-500" data-testid="toggle-inactive-label">
+            Afficher inactifs <Switch data-testid="toggle-inactive" checked={showInactive} onCheckedChange={setShowInactive} />
+          </label>
           <div className="card flex items-center gap-2 px-3 py-2">
             <Search size={15} className="text-slate-400" />
             <input data-testid="employee-search" className="w-56 bg-transparent text-sm outline-none" placeholder="Rechercher…" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -233,9 +253,9 @@ export default function Employes() {
           </thead>
           <tbody>
             {employees.map((e) => (
-              <tr key={e.id} className="border-b border-slate-100 hover:bg-slate-50" data-testid={`employee-row-${e.employee_number}`}>
+              <tr key={e.id} className={`border-b border-slate-100 hover:bg-slate-50 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-row-${e.employee_number}`}>
                 <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(e.employee_number).padStart(3, "0")}</td>
-                <td className="px-4 py-2.5 font-600">{e.name}<div className="text-[11px] text-slate-500">{e.title}</div></td>
+                <td className="px-4 py-2.5 font-600">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">Inactif</span>}<div className="text-[11px] text-slate-500">{e.title}</div></td>
                 <td className="px-4 py-2.5 text-[13px]">{e.department}</td>
                 <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#2563EB" : "#64748B" }}>{e.is_ccq ? "CCQ" : typeLabel(e.employment_type)}</span></td>
                 <td className="px-4 py-2.5 text-[13px]">{e.ccq_category !== "N/A" ? e.ccq_category : "—"}</td>

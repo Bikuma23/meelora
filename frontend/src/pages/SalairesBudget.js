@@ -8,7 +8,7 @@ import BudgetDetailDialog from "../components/BudgetDetailDialog";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Pencil, Lock, Unlock, ShieldCheck, TrendingUp, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Pencil, Lock, Unlock, ShieldCheck, TrendingUp, ChevronUp, ChevronDown, ChevronsUpDown, Search } from "lucide-react";
 import { toast } from "sonner";
 
 const SCENARIOS = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
@@ -41,6 +41,7 @@ export default function SalairesBudget() {
   const [augStd, setAugStd] = useState("");
   const [applying, setApplying] = useState(false);
   const [sort, setSort] = useState({ key: "employee_number", dir: "asc" });
+  const [tableQuery, setTableQuery] = useState("");
 
   const toggleSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
 
@@ -77,7 +78,15 @@ export default function SalairesBudget() {
     } catch (e) { toast.error(e.response?.data?.detail || "Action impossible"); }
   };
 
-  const sortedLines = [...b.lines].sort((a, c) => {
+  const q = tableQuery.trim().toLowerCase();
+  const filteredLines = !q ? b.lines : b.lines.filter((l) => {
+    const hay = [String(l.employee_number).padStart(3, "0"), l.name, l.department, l.title,
+      l.is_ccq ? "ccq" : (TYPE_LABELS[l.employment_type] || l.employment_type),
+      fmtCAD(l.new_salary), fmtCAD(l.vacation), fmtCAD(l.primes_total), fmtCAD(l.salaire_brut), fmtCAD(l.avantages), fmtCAD(l.total_budgeted)]
+      .join(" ").toLowerCase();
+    return hay.includes(q);
+  });
+  const sortedLines = [...filteredLines].sort((a, c) => {
     const va = a[sort.key], vc = c[sort.key];
     const cmp = typeof va === "string" ? va.localeCompare(vc, "fr") : (va - vc);
     return sort.dir === "asc" ? cmp : -cmp;
@@ -155,9 +164,16 @@ export default function SalairesBudget() {
       </div>
 
       <div className="card overflow-hidden">
-        <div className="border-b border-slate-200 px-5 py-3.5">
-          <h3 className="text-sm font-700">Saisie & calculs par employé — {LABEL[scenario]} {year}</h3>
-          <p className="text-xs text-slate-500">{canEdit ? "Cliquez sur une ligne pour voir le détail, ou « modifier » pour ajuster la fiche." : "Cliquez sur une ligne pour voir le détail. Budget verrouillé — consultation seule."}</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3.5">
+          <div>
+            <h3 className="text-sm font-700">Saisie & calculs par employé — {LABEL[scenario]} {year}</h3>
+            <p className="text-xs text-slate-500">{canEdit ? "Cliquez sur une ligne pour voir le détail, ou « modifier » pour ajuster la fiche." : "Cliquez sur une ligne pour voir le détail. Budget verrouillé — consultation seule."}</p>
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+            <Search size={15} className="text-slate-400" />
+            <input data-testid="budget-table-search" className="w-64 bg-transparent text-sm outline-none"
+              placeholder="Rechercher (nom, dépt, type, montant…)" value={tableQuery} onChange={(e) => setTableQuery(e.target.value)} />
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

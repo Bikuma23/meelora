@@ -369,6 +369,14 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
         "budget_global": totals["budget_total"],
         "salaire_moyen": round(totals["salaire_base"] / len(employees), 2) if employees else 0,
         "ccq_count": sum(1 for e in employees if e.get("is_ccq")),
+        "non_ccq_count": sum(1 for e in employees if not e.get("is_ccq") and e.get("employment_type") != "Stagiaire"),
+        "stagiaire_count": sum(1 for e in employees if e.get("employment_type") == "Stagiaire"),
+        "sex_counts": {
+            "Masculin": sum(1 for e in employees if e.get("sex_at_birth") == "Masculin"),
+            "Féminin": sum(1 for e in employees if e.get("sex_at_birth") == "Féminin"),
+            "Autre": sum(1 for e in employees if e.get("sex_at_birth") == "Autre"),
+            "Non spécifié": sum(1 for e in employees if e.get("sex_at_birth") in (None, "", "Préfère ne pas répondre")),
+        },
         "garde_moyenne": round(garde_avg, 2),
     }
     return {"lines": lines, "totals": totals, "by_department": by_department, "by_type": by_type,
@@ -543,17 +551,24 @@ class EmployeeBase(BaseModel):
     alloc_securite: bool
     hire_date: str
     birth_date: str
+    active: bool = True
+    sex_at_birth: Optional[Literal["Masculin", "Féminin", "Autre", "Préfère ne pas répondre"]] = None
+
+def _active_q(base=None):
+    q = dict(base or {})
+    q["active"] = {"$ne": False}
+    return q
 
 async def _next_number():
     last = await db.employees.find_one(sort=[("employee_number", -1)])
     return (last["employee_number"] + 1) if last else 1
 
 @api.get("/employees")
-async def list_employees(q: Optional[str] = None, user: dict = Depends(get_current_user)):
-    query = {}
+async def list_employees(q: Optional[str] = None, include_inactive: bool = False, user: dict = Depends(get_current_user)):
+    query = {} if include_inactive else {"active": {"$ne": False}}
     if q:
-        query = {"$or": [{"name": {"$regex": q, "$options": "i"}}, {"department": {"$regex": q, "$options": "i"}},
-                         {"title": {"$regex": q, "$options": "i"}}, {"employment_type": {"$regex": q, "$options": "i"}}]}
+        query["$or"] = [{"name": {"$regex": q, "$options": "i"}}, {"department": {"$regex": q, "$options": "i"}},
+                        {"title": {"$regex": q, "$options": "i"}}, {"employment_type": {"$regex": q, "$options": "i"}}]
     docs = await db.employees.find(query).sort("employee_number", 1).to_list(1000)
     for d in docs:
         d["id"] = str(d.pop("_id"))
@@ -660,7 +675,7 @@ async def apply_augmentation(payload: BulkAugPayload, year: Optional[int] = None
         raise HTTPException(status_code=403, detail=f"{SCEN_LABEL.get(scenario, scenario)} {year} est verrouillé. Seul un administrateur peut le modifier.")
     ccq_aug = round(float(payload.ccq_pct) / 100, 6)
     std_aug = round(float(payload.std_pct) / 100, 6)
-    employees = await db.employees.find().to_list(2000)
+    employees = await db.employees.find(_active_q()).to_list(2000)
     for e in employees:
         aug = ccq_aug if e.get("is_ccq") else std_aug
         await db.employees.update_one({"_id": e["_id"]}, {"$set": {f"years.{year}.{scenario}.augmentation": aug}})
@@ -726,7 +741,7 @@ async def create_year(payload: YearCreate, user: dict = Depends(get_current_user
     await db.hypotheses.insert_one(newh)
     # Report : le scénario source de l'année précédente devient le salaire actuel de la nouvelle année.
     depts = await db.departments.find().to_list(1000)
-    employees = await db.employees.find().to_list(1000)
+    employees = await db.employees.find(_active_q()).to_list(1000)
     data = compute_budget(employees, src, depts, year=payload.source_year, scenario=payload.source_scenario)
     by_num = {l["employee_number"]: l for l in data["lines"]}
     for e in employees:
@@ -767,7 +782,7 @@ async def get_budget(year: Optional[int] = None, scenario: str = "ca", departmen
     hypo = await _get_hypo(year)
     depts = await db.departments.find().to_list(1000)
     query = {"department": department} if department and department != "all" else {}
-    employees = await db.employees.find(query).sort("employee_number", 1).to_list(1000)
+    employees = await db.employees.find(_active_q(query)).sort("employee_number", 1).to_list(1000)
     return compute_budget(employees, hypo, depts, year=year, scenario=scenario)
 
 @api.get("/budget/compare")
@@ -776,7 +791,7 @@ async def budget_compare(year: Optional[int] = None, department: Optional[str] =
     hypo = await _get_hypo(year)
     depts = await db.departments.find().to_list(1000)
     query = {"department": department} if department and department != "all" else {}
-    employees = await db.employees.find(query).sort("employee_number", 1).to_list(1000)
+    employees = await db.employees.find(_active_q(query)).sort("employee_number", 1).to_list(1000)
     actuel_base = round(sum(_emp_scn(e, year, "actuel")[2] * _proration(e, year)[1] for e in employees), 2)
     out = {"year": year, "headcount": len(employees),
            "actuel": {"masse": actuel_base, "budget_total": actuel_base}}
@@ -820,7 +835,7 @@ async def _budget_data(department=None, year=None, scenario="ca"):
     hypo = await _get_hypo(year)
     depts = await db.departments.find().to_list(1000)
     query = {"department": department} if department and department != "all" else {}
-    employees = await db.employees.find(query).sort("employee_number", 1).to_list(1000)
+    employees = await db.employees.find(_active_q(query)).sort("employee_number", 1).to_list(1000)
     data = compute_budget(employees, hypo, depts, year=year, scenario=scenario)
     return data, hypo
 
@@ -1061,7 +1076,7 @@ def build_fiches_pdf(data, year, scenario_label, scope):
 async def budget_evolution(department: Optional[str] = None, user: dict = Depends(get_current_user)):
     depts = await db.departments.find().to_list(1000)
     query = {"department": department} if department and department != "all" else {}
-    employees = await db.employees.find(query).sort("employee_number", 1).to_list(1000)
+    employees = await db.employees.find(_active_q(query)).sort("employee_number", 1).to_list(1000)
     docs = await db.hypotheses.find().to_list(1000)
     years = sorted({int(d["year"]) for d in docs if d.get("year")}) or [DEFAULT_YEAR]
     out = []
@@ -1361,11 +1376,17 @@ async def startup():
         await db.settings.insert_one({"key": "app", "active_year": DEFAULT_YEAR, "years": years})
     if await db.departments.count_documents({}) == 0:
         await db.departments.insert_many([dict(d) for d in DEPARTMENTS_SEED])
-    if await db.employees.count_documents({}) == 0:
-        n = 1
-        for e in EMPLOYEES_SEED:
-            e = dict(e); e["employee_number"] = n; n += 1
-            await db.employees.insert_one(e)
+    # Seed initial des employés : une seule fois. Après cela, si l'utilisateur vide
+    # volontairement la liste, les fiches de démonstration ne réapparaissent PAS.
+    app_settings = await db.settings.find_one({"key": "app"})
+    already_seeded = bool(app_settings and app_settings.get("employees_seeded"))
+    if not already_seeded:
+        if await db.employees.count_documents({}) == 0:
+            n = 1
+            for e in EMPLOYEES_SEED:
+                e = dict(e); e["employee_number"] = n; n += 1
+                await db.employees.insert_one(e)
+        await db.settings.update_one({"key": "app"}, {"$set": {"employees_seeded": True}}, upsert=True)
 
 @app.on_event("shutdown")
 async def shutdown():

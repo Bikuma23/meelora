@@ -16,7 +16,7 @@ export const api = {
   logout: () => client.post("/auth/logout").then((r) => r.data),
   me: () => client.get("/auth/me").then((r) => r.data),
 
-  listEmployees: (q) => client.get("/employees", { params: q ? { q } : {} }).then((r) => r.data),
+  listEmployees: (params) => client.get("/employees", { params: params || {} }).then((r) => r.data),
   createEmployee: (d) => client.post("/employees", d).then((r) => r.data),
   updateEmployee: (id, d) => client.put(`/employees/${id}`, d).then((r) => r.data),
   deleteEmployee: (id) => client.delete(`/employees/${id}`).then((r) => r.data),

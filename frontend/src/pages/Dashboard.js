@@ -156,13 +156,45 @@ function Evolution({ evo }) {
   );
 }
 
+function EmployeesKpi({ k }) {
+  const sx = k.sex_counts || {};
+  const typeRows = [["CCQ", k.ccq_count, "#2563EB"], ["Non-CCQ", k.non_ccq_count, "#64748B"], ["Stagiaire", k.stagiaire_count, "#F59E0B"]];
+  const sexRows = [["Masculin", sx.Masculin], ["Féminin", sx.Féminin], ["Autre", sx.Autre], ["Non spéc.", sx["Non spécifié"]]];
+  return (
+    <div className="card p-5" data-testid="kpi-employes">
+      <div className="flex items-start justify-between">
+        <span className="text-[11px] font-600 uppercase tracking-widest text-slate-500">Employés actifs</span>
+        <span className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ backgroundColor: BLUE + "1a", color: BLUE }}><Users size={18} /></span>
+      </div>
+      <p className="mt-2 font-mono-data text-2xl font-700 tracking-tight lg:text-3xl">{k.headcount}</p>
+      <div className="mt-3 grid grid-cols-3 gap-1.5">
+        {typeRows.map(([lbl, val, c]) => (
+          <div key={lbl} className="rounded-md bg-slate-50 px-2 py-1.5 text-center" data-testid={`emp-type-${lbl}`}>
+            <p className="font-mono-data text-sm font-700" style={{ color: c }}>{val ?? 0}</p>
+            <p className="text-[9px] font-600 uppercase leading-tight text-slate-400">{lbl}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-1.5 grid grid-cols-4 gap-1.5">
+        {sexRows.map(([lbl, val]) => (
+          <div key={lbl} className="rounded-md bg-slate-50 px-1 py-1.5 text-center" data-testid={`emp-sex-${lbl}`}>
+            <p className="font-mono-data text-sm font-700 text-slate-700">{val ?? 0}</p>
+            <p className="text-[9px] font-600 uppercase leading-tight text-slate-400">{lbl}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-1.5 text-[9px] uppercase tracking-wide text-slate-400">Sexe à la naissance</p>
+    </div>
+  );
+}
+
 function DashboardBody({ b }) {
   const k = b.kpis;
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Kpi testId="kpi-employes" label="Employés" value={k.headcount} sub="actifs" icon={Users} tint={BLUE} />
+        <EmployeesKpi k={k} />
         <Kpi testId="kpi-masse" label="Masse salariale" value={fmtCAD(k.masse_salariale)} sub="total charges salariales" icon={DollarSign} tint={TEAL} />
         <Kpi testId="kpi-budget-global" label="Budget global" value={fmtCAD(k.budget_global)} sub="avec charges sociales" icon={Wallet} tint="#8B5CF6" />
         <Kpi testId="kpi-salaire-moyen" label="Salaire moyen" value={fmtCAD(k.salaire_moyen)} sub="par employé" icon={TrendingUp} tint={ORANGE} />
