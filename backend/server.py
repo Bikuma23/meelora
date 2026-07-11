@@ -459,7 +459,10 @@ async def get_preferences(user: dict = Depends(get_current_user)):
 
 @api.put("/me/preferences")
 async def update_preferences(request: Request, user: dict = Depends(get_current_user)):
-    payload = await request.json()
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Corps JSON invalide")
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Format invalide")
     prefs = {**(user.get("preferences") or {}), **payload}

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
 import {
-  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog,
+  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
@@ -42,10 +42,8 @@ const NAV_GROUP = [
   { key: "rapports", label: "Rapports", sub: "Prédéfinis & custom", icon: FileText },
 ];
 const NAV_BOTTOM = [
-  { key: "preferences", label: "Mon profil", sub: "Préférences & apparence", icon: UserCog },
   { key: "journal", label: "Journal", sub: "Historique des modifications", icon: ScrollText },
 ];
-const NAV_ADMIN = [{ key: "utilisateurs", label: "Utilisateurs", sub: "Comptes & accès", icon: ShieldCheck }];
 
 function NavItem({ item, active, onClick }) {
   const Icon = item.icon;
@@ -132,6 +130,7 @@ function LayoutInner() {
   const { user, logout } = useAuth();
   const [active, setActive] = useState("dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const page = PAGES[active];
   const Active = page.comp;
   const go = (k) => { setActive(k); setMobileOpen(false); };
@@ -163,23 +162,30 @@ function LayoutInner() {
           {NAV_GROUP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           <div className="pt-4">
             {NAV_BOTTOM.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
-            {user?.role === "admin" && NAV_ADMIN.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           </div>
         </nav>
 
         <div className="mt-3 border-t border-white/10 pt-3">
-          <div className="flex items-center gap-2.5 px-2 py-2">
+          {userMenuOpen && (
+            <div className="mb-2 space-y-1" data-testid="user-submenu">
+              <NavItem item={{ key: "preferences", label: "Mon profil", sub: "Préférences & apparence", icon: UserCog }} active={active} onClick={(k) => { go(k); setUserMenuOpen(false); }} />
+              {user?.role === "admin" && <NavItem item={{ key: "utilisateurs", label: "Utilisateurs", sub: "Comptes & accès", icon: ShieldCheck }} active={active} onClick={(k) => { go(k); setUserMenuOpen(false); }} />}
+              <button data-testid="logout-btn" onClick={logout}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-600 text-slate-400 transition-colors hover:bg-white/5 hover:text-red-300">
+                <LogOut size={16} /> Déconnexion
+              </button>
+            </div>
+          )}
+          <button data-testid="user-menu-toggle" onClick={() => setUserMenuOpen((o) => !o)}
+            className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-white/5">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#14B8A6] text-sm font-700 text-white">
               {(user?.name || "U").charAt(0)}
             </span>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 text-left">
               <p className="truncate text-sm font-600 text-white">{user?.name}</p>
               <p className="truncate text-[11px] text-slate-500">{user?.email}</p>
             </div>
-          </div>
-          <button data-testid="logout-btn" onClick={logout}
-            className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-600 text-slate-400 transition-colors hover:bg-white/5 hover:text-red-300">
-            <LogOut size={16} /> Déconnexion
+            {userMenuOpen ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronUp size={16} className="text-slate-400" />}
           </button>
         </div>
       </aside>
