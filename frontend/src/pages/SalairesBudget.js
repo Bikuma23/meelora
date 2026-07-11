@@ -8,11 +8,22 @@ import BudgetDetailDialog from "../components/BudgetDetailDialog";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Pencil, Lock, Unlock, ShieldCheck, TrendingUp } from "lucide-react";
+import { Pencil, Lock, Unlock, ShieldCheck, TrendingUp, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 
 const SCENARIOS = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 const LABEL = Object.fromEntries(SCENARIOS);
+const COLS = [
+  { key: "employee_number", label: "#", align: "left" },
+  { key: "name", label: "Nom", align: "left" },
+  { key: "employment_type", label: "Type", align: "left" },
+  { key: "new_salary", label: "Nouveau salaire", align: "right" },
+  { key: "vacation", label: "Vacances", align: "right" },
+  { key: "primes_total", label: "Primes", align: "right" },
+  { key: "salaire_brut", label: "Salaire brut total", align: "right" },
+  { key: "avantages", label: "Avantages", align: "right" },
+  { key: "total_budgeted", label: "Coût total", align: "right" },
+];
 
 export default function SalairesBudget() {
   const { year } = useYear();
@@ -26,6 +37,9 @@ export default function SalairesBudget() {
   const [augCcq, setAugCcq] = useState("");
   const [augStd, setAugStd] = useState("");
   const [applying, setApplying] = useState(false);
+  const [sort, setSort] = useState({ key: "employee_number", dir: "asc" });
+
+  const toggleSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
 
   const lockKey = `${year}:${scenario}`;
   const lockInfo = locks[lockKey];
@@ -59,6 +73,12 @@ export default function SalairesBudget() {
       loadLocks();
     } catch (e) { toast.error(e.response?.data?.detail || "Action impossible"); }
   };
+
+  const sortedLines = [...b.lines].sort((a, c) => {
+    const va = a[sort.key], vc = c[sort.key];
+    const cmp = typeof va === "string" ? va.localeCompare(vc, "fr") : (va - vc);
+    return sort.dir === "asc" ? cmp : -cmp;
+  });
 
   const cards = [
     ["Salaire de base", b.totals.salaire_base, "#2563EB"],
@@ -140,20 +160,22 @@ export default function SalairesBudget() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
-                <th className="px-4 py-3 text-left font-600">#</th>
-                <th className="px-4 py-3 text-left font-600">Nom</th>
-                <th className="px-4 py-3 text-left font-600">Type</th>
-                <th className="px-4 py-3 text-right font-600">Nouveau salaire</th>
-                <th className="px-4 py-3 text-right font-600">Vacances</th>
-                <th className="px-4 py-3 text-right font-600">Primes</th>
-                <th className="px-4 py-3 text-right font-600">Salaire brut total</th>
-                <th className="px-4 py-3 text-right font-600">Avantages</th>
-                <th className="px-4 py-3 text-right font-600">Coût total</th>
+                {COLS.map((col) => (
+                  <th key={col.key} data-testid={`sort-${col.key}`} onClick={() => toggleSort(col.key)}
+                    className={`cursor-pointer select-none px-4 py-3 font-600 hover:text-slate-600 ${col.align === "right" ? "text-right" : "text-left"}`}>
+                    <span className={`inline-flex items-center gap-1 ${col.align === "right" ? "flex-row-reverse" : ""}`}>
+                      {col.label}
+                      {sort.key === col.key
+                        ? (sort.dir === "asc" ? <ChevronUp size={13} className="text-[#2563EB]" /> : <ChevronDown size={13} className="text-[#2563EB]" />)
+                        : <ChevronsUpDown size={12} className="opacity-40" />}
+                    </span>
+                  </th>
+                ))}
                 <th className="px-4 py-3 text-right font-600">Modifier</th>
               </tr>
             </thead>
             <tbody>
-              {b.lines.map((ln) => (
+              {sortedLines.map((ln) => (
                 <tr key={ln.employee_number} onClick={() => setDetail({ open: true, line: ln })} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" data-testid={`budget-row-${ln.employee_number}`}>
                   <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(ln.employee_number).padStart(3, "0")}</td>
                   <td className="px-4 py-2.5 font-600">{ln.name}{ln.overridden && <span className="ml-2 rounded bg-[#14B8A61a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">Ajusté</span>}{ln.prorated && <span className="ml-2 rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active} mois</span>}</td>
