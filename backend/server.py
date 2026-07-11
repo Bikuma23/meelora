@@ -202,21 +202,40 @@ def _emp_scn(e, year, scenario):
     return yd, ov, base
 
 def _proration(e, year):
-    """Retourne (fractions mensuelles [12], facteur annuel). Pro-rata au jour pour l'embauche en cours d'année."""
+    """Retourne (fractions mensuelles [12], facteur annuel). Pro-rata au jour pour l'embauche
+    et la fin d'emploi survenant en cours d'année."""
     frac = [1.0] * 12
-    hd = e.get("hire_date")
-    if hd and year:
+    if not year:
+        return frac, 1.0
+    y = int(year)
+
+    def _parse(d):
         try:
-            p = str(hd)[:10].split("-"); hy = int(p[0]); hm = int(p[1]); hday = int(p[2])
+            p = str(d)[:10].split("-")
+            return int(p[0]), int(p[1]), int(p[2])
         except Exception:
-            hy = None
-        if hy is not None and 1 <= (hm if hy else 1) <= 12:
-            if hy > int(year):
-                frac = [0.0] * 12
-            elif hy == int(year):
-                dim = calendar.monthrange(int(year), hm)[1]
-                first = max(0.0, min(1.0, (dim - hday + 1) / dim))
-                frac = [0.0] * (hm - 1) + [round(first, 6)] + [1.0] * (12 - hm)
+            return None
+    hd = _parse(e.get("hire_date"))
+    ed = _parse(e.get("end_date"))
+    for m in range(1, 13):
+        dim = calendar.monthrange(y, m)[1]
+        start_day, end_day = 1, dim
+        if hd:
+            hy, hm, hday = hd
+            if hy > y or (hy == y and hm > m):
+                frac[m - 1] = 0.0
+                continue
+            if hy == y and hm == m:
+                start_day = hday
+        if ed:
+            ey, em, eday = ed
+            if ey < y or (ey == y and em < m):
+                frac[m - 1] = 0.0
+                continue
+            if ey == y and em == m:
+                end_day = min(end_day, eday)
+        active = end_day - start_day + 1
+        frac[m - 1] = 0.0 if active <= 0 else (1.0 if active >= dim else round(active / dim, 6))
     return frac, sum(frac) / 12
 
 def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
@@ -564,6 +583,7 @@ class EmployeeBase(BaseModel):
     alloc_securite: bool
     hire_date: str
     birth_date: str
+    end_date: Optional[str] = None
     active: bool = True
     sex_at_birth: Optional[Literal["Masculin", "Féminin", "Autre", "Préfère ne pas répondre"]] = None
 

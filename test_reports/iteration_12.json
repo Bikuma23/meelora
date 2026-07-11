@@ -1,0 +1,39 @@
+{
+  "summary": "E2E validation of (1) alignment fix in Employee form and (2) new end_date pro-rata feature. Bug fix confirmed visually — hire/seniority and birth/age pairs sit on the same grid rows. end_date pro-rata works correctly end-to-end: backend returns proration_factor=0.5, months_active=6, monthly=[13k,12k,13k,13k,12k,13k,0,0,0,0,0,0], total_budgeted=79 657 $ ≈ 50% of 159 314 $ full year. Budget table row displays 'PRO-RATA 6 MOIS' badge. BudgetFicheDialog shows correct monthly ventilation (JAN..JUIN > 0, JUIL..DEC = 0 $) and total 79 657 $. Cleanup done.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "BudgetFicheDialog — Ventilation mensuelle header",
+        "issues": [
+          "For an employee prorated because of end_date (not hire_date), the header still displays 'Embauche en cours d'année → pro-rata dès le mois 1 (6 mois)'. Wording is misleading: should say 'Fin d'emploi en cours d'année → actif jusqu'au mois X (N mois)' when only end_date triggers proration. See BudgetFicheDialog around the section displaying `p.hire_month` and `months_active`."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: refine BudgetFicheDialog ventilation header label to distinguish between mid-year hire vs mid-year end_date (currently only mentions 'Embauche en cours d'année').",
+    "Note for QA: creating an employee via the UI requires filling 'Titre / Poste' (f-title), 'Jours maladie / perso' (f-sick) and 'Jours fériés' (f-holiday) — these are validated as required by EmpForm. The original test spec omitted them; the form correctly refused save with toast 'Veuillez corriger les champs obligatoires'. Not a bug; only a testing-spec caveat."
+  ],
+  "critical_code_review_comments": [
+    "Employes.js EmpForm has no default for sick_personal_days / holiday_days (both '' in `empty`) yet marks them required in validation. Consider seeding them to 0 or 'N/A' to reduce friction, OR making them optional in the schema.",
+    "BudgetFicheDialog header string 'Embauche en cours d'année → pro-rata dès le mois {hire_month}' is used for any prorated line, even when the cause is end_date. Distinguish the two cases."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100% (with API-created seed employee due to unrelated required-field omissions in the test spec)"},
+  "test_credentials": "admin@accslegro.com / admin123",
+  "seed_data_creation": "Created employee 'QA Fin Test' (#365) via backend API with end_date=2026-06-30 to exercise the ventilation UI, then deleted it via the UI at the end. Environment left in original state (122 employees).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Employees testids on rows: delete-employee-{n}, edit-employee-{n}. Budget row edit btn: edit-line-{n} (NOT budget-edit-*). Search input on budget page: budget-table-search. Search input on employees page: employee-search. Delete confirmation: delete-confirm-btn. Employee form requires: name, department, title, current_annual_salary>0, vacation_rate_pct, sick_personal_days, holiday_days, hire_date, birth_date (see Employes.js:56-66). Vacation is stored as decimal (0.08 for 8%); frontend divides pct by 100 before POST.",
+  "verified_scenarios": {
+    "alignment_bug_fix": "PASS — Employee form 'Nouvel employé' shows: (Date d'embauche | Ancienneté calculée), (Date de fin d'emploi | vide), (Date de naissance | Âge calculé). Screenshot confirms pairs share the same grid row and are vertically centered.",
+    "end_date_backend_prorata": "PASS — GET /api/budget?year=2026&scenario=ca for QA Fin Test (end_date=2026-06-30): proration_factor=0.5, months_active=6, monthly Jan..Jun ≈ 13k, Jul..Dec = 0, total_budgeted=79 657, cout année pleine=159 314.",
+    "budget_row_badge": "PASS — Table row shows 'PRO-RATA 6 MOIS' badge next to name.",
+    "budget_fiche_ventilation": "PASS — BudgetFicheDialog 'Ventilation mensuelle 2026' displays JAN 13 429$, FÉV 12 208$, MAR 13 429$, AVR 13 429$, MAI 12 818$, JUIN 13 429$, JUIL..DEC = 0$. Total budgété · Pro-rata 6 mois = 79 657 $. Masse salariale (année pleine) = 159 314 $.",
+    "cleanup_delete": "PASS — QA Fin Test employee deleted via UI (delete-employee-{n} → delete-confirm-btn). Confirmed removed."
+  }
+}

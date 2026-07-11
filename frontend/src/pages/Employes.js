@@ -20,7 +20,7 @@ const empty = {
   name: "", department: "", title: "", employment_type: "Régulier temps plein", ccq_category: "N/A",
   current_annual_salary: "", vacation_rate_pct: "", sick_personal_days: "", holiday_days: "",
   prime_type: "Aucune Prime", prime_garde: false, prime_halo: false, alloc_securite: false, hire_date: "", birth_date: "",
-  active: true, sex_at_birth: "",
+  active: true, sex_at_birth: "", end_date: "",
 };
 
 function Field({ label, error, testId, children }) {
@@ -43,7 +43,7 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
       vacation_rate_pct: String(+(initial.vacation_rate * 100).toFixed(2)), sick_personal_days: String(initial.sick_personal_days),
       holiday_days: String(initial.holiday_days), prime_type: initial.prime_type, prime_garde: initial.prime_garde,
       prime_halo: initial.prime_halo, alloc_securite: initial.alloc_securite, hire_date: initial.hire_date, birth_date: initial.birth_date,
-      active: initial.active !== false, sex_at_birth: initial.sex_at_birth || "",
+      active: initial.active !== false, sex_at_birth: initial.sex_at_birth || "", end_date: initial.end_date || "",
     });
     else setF(empty);
     setErrors({});
@@ -73,7 +73,7 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
       holiday_days: parseInt(f.holiday_days, 10), is_ccq: isCCQ, prime_type: isCCQ ? f.prime_type : "Aucune Prime",
       prime_garde: isCCQ && f.prime_garde, prime_halo: isCCQ && f.prime_halo, alloc_securite: f.alloc_securite,
       hire_date: f.hire_date, birth_date: f.birth_date,
-      active: f.active, sex_at_birth: f.sex_at_birth || null,
+      active: f.active, sex_at_birth: f.sex_at_birth || null, end_date: f.end_date || null,
     });
   };
 
@@ -93,7 +93,12 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
               <SelectContent>{SEXES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
-          <div className="hidden sm:block" />
+          <Field label="Statut" testId="f-active">
+            <label className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 px-3">
+              <span className={`text-[11px] font-600 uppercase ${f.active ? "text-emerald-600" : "text-red-500"}`}>{f.active ? "Actif" : "Inactif"}</span>
+              <Switch data-testid="f-active" checked={f.active} onCheckedChange={(v) => set("active", v)} />
+            </label>
+          </Field>
           <Field label="Nom complet" error={errors.name} testId="f-name"><Input data-testid="f-name" value={f.name} onChange={(e) => set("name", e.target.value)} /></Field>
           <Field label="Titre / Poste" error={errors.title} testId="f-title"><Input data-testid="f-title" value={f.title} onChange={(e) => set("title", e.target.value)} /></Field>
           <Field label="Département" error={errors.department} testId="f-department">
@@ -108,12 +113,6 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
               <SelectContent>{TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
-          <Field label="Statut" testId="f-active">
-            <label className="flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 px-3">
-              <span className={`text-[11px] font-600 uppercase ${f.active ? "text-emerald-600" : "text-red-500"}`}>{f.active ? "Actif" : "Inactif"}</span>
-              <Switch data-testid="f-active" checked={f.active} onCheckedChange={(v) => set("active", v)} />
-            </label>
-          </Field>
           {isCCQ && (
             <Field label="Catégorie CCQ" error={errors.ccq_category} testId="f-ccq-category">
               <Select value={f.ccq_category} onValueChange={(v) => set("ccq_category", v)}>
@@ -122,8 +121,6 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
               </Select>
             </Field>
           )}
-          <Field label="Salaire annuel actuel ($)" error={errors.current_annual_salary} testId="f-salary"><Input data-testid="f-salary" type="number" className="font-mono-data" value={f.current_annual_salary} onChange={(e) => set("current_annual_salary", e.target.value)} /></Field>
-          <Field label="Taux de vacances (%)" error={errors.vacation_rate_pct} testId="f-vacation"><Input data-testid="f-vacation" type="number" step="0.1" className="font-mono-data" value={f.vacation_rate_pct} onChange={(e) => set("vacation_rate_pct", e.target.value)} /></Field>
           {isCCQ && (
             <Field label="Type de prime" error={errors.prime_type} testId="f-prime-type">
               <Select value={f.prime_type} onValueChange={(v) => set("prime_type", v)}>
@@ -132,22 +129,26 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
               </Select>
             </Field>
           )}
+          <Field label="Salaire annuel actuel ($)" error={errors.current_annual_salary} testId="f-salary"><Input data-testid="f-salary" type="number" className="font-mono-data" value={f.current_annual_salary} onChange={(e) => set("current_annual_salary", e.target.value)} /></Field>
+          <Field label="Taux de vacances (%)" error={errors.vacation_rate_pct} testId="f-vacation"><Input data-testid="f-vacation" type="number" step="0.1" className="font-mono-data" value={f.vacation_rate_pct} onChange={(e) => set("vacation_rate_pct", e.target.value)} /></Field>
           <Field label="Jours maladie / perso (informatif)" error={errors.sick_personal_days} testId="f-sick"><Input data-testid="f-sick" type="number" className="font-mono-data" value={f.sick_personal_days} onChange={(e) => set("sick_personal_days", e.target.value)} /></Field>
           <Field label="Jours fériés (Noël & Jour de l'an) (informatif)" error={errors.holiday_days} testId="f-holiday"><Input data-testid="f-holiday" type="number" className="font-mono-data" value={f.holiday_days} onChange={(e) => set("holiday_days", e.target.value)} /></Field>
           <Field label="Date d'embauche" error={errors.hire_date} testId="f-hire"><Input data-testid="f-hire" type="date" className="font-mono-data" value={f.hire_date} onChange={(e) => set("hire_date", e.target.value)} /></Field>
-          <div className="flex items-end">
-            <div className="flex w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2">
-              <CalendarClock size={15} className="text-[#2563EB]" /><span className="text-[11px] uppercase text-slate-500">Ancienneté</span>
+          <Field label="Ancienneté (calculée)" testId="f-seniority-box">
+            <div className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3">
+              <CalendarClock size={15} className="text-[#2563EB]" />
               <span data-testid="f-seniority" className="ml-auto font-mono-data text-sm font-700">{sen != null ? `${sen} an${sen > 1 ? "s" : ""}` : "—"}</span>
             </div>
-          </div>
+          </Field>
+          <Field label="Date de fin d'emploi (optionnel)" testId="f-end"><Input data-testid="f-end" type="date" className="font-mono-data" value={f.end_date} onChange={(e) => set("end_date", e.target.value)} /></Field>
+          <div className="hidden sm:block" />
           <Field label="Date de naissance" error={errors.birth_date} testId="f-birth"><Input data-testid="f-birth" type="date" className="font-mono-data" value={f.birth_date} onChange={(e) => set("birth_date", e.target.value)} /></Field>
-          <div className="flex items-end">
-            <div className="flex w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2">
-              <Cake size={15} className="text-[#2563EB]" /><span className="text-[11px] uppercase text-slate-500">Âge</span>
+          <Field label="Âge (calculé)" testId="f-age-box">
+            <div className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3">
+              <Cake size={15} className="text-[#2563EB]" />
               <span data-testid="f-age" className="ml-auto font-mono-data text-sm font-700">{age != null ? `${age} ans` : "—"}</span>
             </div>
-          </div>
+          </Field>
         </div>
         <div className="border-t border-slate-200 pt-4">
           <p className="mb-2 text-xs font-700 uppercase tracking-widest text-slate-500">Primes & allocations</p>
