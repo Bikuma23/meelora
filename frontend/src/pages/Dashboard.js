@@ -94,9 +94,9 @@ export default function Dashboard() {
 function Comparatif({ cmp }) {
   const rows = [
     ["Salaires actuels", cmp.actuel.masse, "#64748B", "Somme des salaires de base"],
-    ["Budget CA", cmp.ca.masse, BLUE, "Après augmentations & primes"],
-    ["Revue Budgétaire 1", cmp.revue1.masse, VIOLET, "1re revue budgétaire"],
-    ["Revue Budgétaire 2", cmp.revue2.masse, ORANGE, "2e revue budgétaire"],
+    ["Budget CA", cmp.ca.budget_total, BLUE, "Coût total (avec charges)"],
+    ["Revue Budgétaire 1", cmp.revue1.budget_total, VIOLET, "Coût total (avec charges)"],
+    ["Revue Budgétaire 2", cmp.revue2.budget_total, ORANGE, "Coût total (avec charges)"],
   ];
   const chart = [
     { name: "Masse salariale", "Salaires actuels": cmp.actuel.masse, "Budget CA": cmp.ca.masse, "Revue 1": cmp.revue1.masse, "Revue 2": cmp.revue2.masse },
