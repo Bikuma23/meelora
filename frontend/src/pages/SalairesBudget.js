@@ -42,6 +42,7 @@ export default function SalairesBudget() {
   const [applying, setApplying] = useState(false);
   const [sort, setSort] = useState({ key: "employee_number", dir: "asc" });
   const [tableQuery, setTableQuery] = useState("");
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
 
   const toggleSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
 
@@ -57,6 +58,14 @@ export default function SalairesBudget() {
     setAugStd(String(+(h.augmentation_autres * 100).toFixed(3)));
   }).catch(() => {});
   useEffect(() => { setB(null); load(); loadLocks(); loadHypo(); /* eslint-disable-next-line */ }, [year, scenario]);
+  useEffect(() => {
+    api.getPreferences().then((p) => {
+      if (p?.budget_scenario && SCENARIOS.some(([k]) => k === p.budget_scenario)) setScenario(p.budget_scenario);
+      if (p?.budget_sort?.key) setSort(p.budget_sort);
+    }).catch(() => {}).finally(() => setPrefsLoaded(true));
+  }, []);
+  useEffect(() => { if (prefsLoaded) api.updatePreferences({ budget_scenario: scenario }).catch(() => {}); }, [scenario, prefsLoaded]);
+  useEffect(() => { if (prefsLoaded) api.updatePreferences({ budget_sort: sort }).catch(() => {}); }, [sort, prefsLoaded]);
   if (!b) return <p className="font-mono-data text-sm text-slate-500">Chargement…</p>;
 
   const applyAug = async () => {
