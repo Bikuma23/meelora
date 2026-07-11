@@ -990,6 +990,43 @@ async def report_custom(columns: str = "", group_by: str = "", sort_key: str = "
 async def report_custom_columns(user: dict = Depends(get_current_user)):
     return {"columns": [{"key": k, "label": v} for k, v in CUSTOM_COLS.items()]}
 
+class ReportTemplate(BaseModel):
+    name: str
+    columns: List[str] = []
+    employment_type: str = "all"
+    group_by: str = ""
+    department: str = "all"
+
+@api.get("/report-templates")
+async def list_report_templates(user: dict = Depends(get_current_user)):
+    docs = await db.report_templates.find().to_list(1000)
+    docs.sort(key=lambda d: d.get("name", "").lower())
+    for d in docs:
+        d["id"] = str(d.pop("_id"))
+    return docs
+
+@api.post("/report-templates")
+async def create_report_template(payload: ReportTemplate, user: dict = Depends(get_current_user)):
+    if not payload.name.strip():
+        raise HTTPException(status_code=400, detail="Nom requis")
+    doc = payload.model_dump()
+    doc["name"] = payload.name.strip()
+    res = await db.report_templates.insert_one(doc)
+    await log_action(user, "Créer", "Modèle de rapport", doc["name"])
+    d = await db.report_templates.find_one({"_id": res.inserted_id})
+    d["id"] = str(d.pop("_id"))
+    return d
+
+@api.delete("/report-templates/{tid}")
+async def delete_report_template(tid: str, user: dict = Depends(get_current_user)):
+    d = await db.report_templates.find_one({"_id": _oid(tid)})
+    res = await db.report_templates.delete_one({"_id": _oid(tid)})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Modèle introuvable")
+    await log_action(user, "Supprimer", "Modèle de rapport", d.get("name", tid) if d else tid)
+    return {"success": True}
+
+
 def _pnl_excel(pnl, year, scenario_label):
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "État des résultats"
     bold = openpyxl.styles.Font(bold=True)

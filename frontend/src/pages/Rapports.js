@@ -4,7 +4,7 @@ import { useYear } from "../context/YearContext";
 import { fmtCAD } from "../lib/format";
 import { Button } from "../components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { FileSpreadsheet, FileText, Filter, BarChart3, Layers, Table2, LayoutDashboard } from "lucide-react";
+import { FileSpreadsheet, FileText, Filter, BarChart3, Layers, Table2, LayoutDashboard, Save } from "lucide-react";
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell, CartesianGrid } from "recharts";
 
@@ -33,10 +33,12 @@ export default function Rapports() {
   const [empType, setEmpType] = useState("all");
   const [groupBy, setGroupBy] = useState("");
   const [custom, setCustom] = useState(null);
+  const [templates, setTemplates] = useState([]);
+  const [tplName, setTplName] = useState("");
 
   const params = useMemo(() => ({ year, scenario, ...(dept !== "all" ? { department: dept } : {}) }), [year, scenario, dept]);
 
-  useEffect(() => { api.listDepartments().then(setDepartments); api.getCustomColumns().then((r) => setAllCols(r.columns)); }, []);
+  useEffect(() => { api.listDepartments().then(setDepartments); api.getCustomColumns().then((r) => setAllCols(r.columns)); api.listReportTemplates().then(setTemplates).catch(() => {}); }, []);
   useEffect(() => { setData(null); api.getBudget(params).then(setData); }, [params]);
   useEffect(() => { if (tab === "pnl") { setPnl(null); api.getPnl(params).then(setPnl); } if (tab === "classe") { setByClass(null); api.getByClass(params).then(setByClass); } }, [tab, params]);
 
@@ -53,6 +55,25 @@ export default function Rapports() {
   const runCustom = () => { api.getCustomReport({ ...params, columns: cols.join(","), employment_type: empType, group_by: groupBy }).then(setCustom); };
   const toggleCol = (k) => setCols((p) => p.includes(k) ? p.filter((c) => c !== k) : [...p, k]);
   const scopeLabel = dept === "all" ? "Tous les départements" : departments.find((d) => d.code === dept)?.description || dept;
+
+  const saveTemplate = async () => {
+    if (!tplName.trim()) { toast.error("Donnez un nom au modèle"); return; }
+    try {
+      await api.createReportTemplate({ name: tplName.trim(), columns: cols, employment_type: empType, group_by: groupBy, department: dept });
+      setTplName(""); setTemplates(await api.listReportTemplates()); toast.success("Modèle enregistré");
+    } catch { toast.error("Enregistrement du modèle échoué"); }
+  };
+  const applyTemplate = (t) => {
+    setCols(t.columns && t.columns.length ? t.columns : cols);
+    setEmpType(t.employment_type || "all"); setGroupBy(t.group_by || "");
+    if (t.department) setDept(t.department);
+    api.getCustomReport({ year, scenario, ...(t.department && t.department !== "all" ? { department: t.department } : {}), columns: (t.columns || []).join(","), employment_type: t.employment_type || "all", group_by: t.group_by || "" }).then(setCustom);
+    toast.success(`Modèle « ${t.name} » appliqué`);
+  };
+  const deleteTemplate = async (t) => {
+    try { await api.deleteReportTemplate(t.id); setTemplates(await api.listReportTemplates()); toast.success("Modèle supprimé"); }
+    catch { toast.error("Suppression échouée"); }
+  };
 
   return (
     <div className="space-y-5" data-testid="rapports-page">
@@ -163,6 +184,26 @@ export default function Rapports() {
 
       {tab === "custom" && (
         <div className="space-y-4" data-testid="custom-report">
+          <div className="card p-5" data-testid="templates-card">
+            <h3 className="mb-3 text-sm font-700">Modèles enregistrés</h3>
+            {templates.length === 0 ? (
+              <p className="text-[11px] text-slate-400">Aucun modèle. Configurez colonnes et filtres ci-dessous, puis enregistrez pour générer ce rapport en un clic plus tard.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {templates.map((t) => (
+                  <div key={t.id} data-testid={`template-${t.id}`} className="group flex items-center gap-1 rounded-full border border-[#0E9488]/40 bg-[#0E9488]/10 py-1 pl-3 pr-1.5 text-xs font-600 text-[#0E7168]">
+                    <button data-testid={`template-apply-${t.id}`} onClick={() => applyTemplate(t)} className="hover:underline">{t.name}</button>
+                    <button data-testid={`template-del-${t.id}`} onClick={() => deleteTemplate(t)} className="rounded-full px-1 text-slate-400 hover:bg-red-100 hover:text-red-500" title="Supprimer">✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-3 flex items-end gap-2">
+              <input data-testid="template-name" value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="Nom du modèle (ex. Masse par département)"
+                className="h-9 flex-1 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[#2563EB]" />
+              <Button data-testid="save-template-btn" onClick={saveTemplate} className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Save size={15} /> Enregistrer le modèle</Button>
+            </div>
+          </div>
           <div className="card p-5">
             <h3 className="mb-3 text-sm font-700">Constructeur de rapport personnalisé</h3>
             <p className="text-[11px] font-600 uppercase text-slate-500">Colonnes</p>
