@@ -13,7 +13,7 @@ import { toast } from "sonner";
 
 const SCENARIOS = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 const LABEL = Object.fromEntries(SCENARIOS);
-const TYPE_LABELS = { "Régulier temps plein": "Rég. Temps Plein" };
+const TYPE_LABELS = { "Régulier temps plein": "Rég. Temps Plein", "Régulier temps partiel": "Rég. Temps Partiel" };
 const typeLabel = (t) => TYPE_LABELS[t] || t;
 const COLS = [
   { key: "employee_number", label: "#", align: "left" },

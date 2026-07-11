@@ -10,10 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Plus, Pencil, Trash2, Search, Cake, CalendarClock, Upload, Download } from "lucide-react";
 import { toast } from "sonner";
 import ImportErrorsDialog from "../components/ImportErrorsDialog";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "../components/ui/alert-dialog";
 
 const REQ = "Ce champ est obligatoire";
-const TYPES = ["CCQ", "Régulier temps plein", "Stagiaire"];
-const typeLabel = (t) => (t === "Régulier temps plein" ? "Rég. Temps Plein" : t);
+const TYPES = ["CCQ", "Régulier temps plein", "Régulier temps partiel", "Stagiaire"];
+const typeLabel = (t) => ({ "Régulier temps plein": "Rég. Temps Plein", "Régulier temps partiel": "Rég. Temps Partiel" }[t] || t);
 const empty = {
   name: "", department: "", title: "", employment_type: "Régulier temps plein", ccq_category: "N/A",
   current_annual_salary: "", vacation_rate_pct: "", sick_personal_days: "", holiday_days: "",
@@ -163,6 +164,7 @@ export default function Employes() {
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState({ open: false, item: null });
   const [importErrors, setImportErrors] = useState({ open: false, errors: [], fileName: "" });
+  const [confirmDel, setConfirmDel] = useState(null);
   const fileRef = useRef();
 
   const load = (q) => api.listEmployees(q).then(setEmployees);
@@ -177,7 +179,6 @@ export default function Employes() {
     } catch { toast.error("Erreur lors de l'enregistrement"); }
   };
   const del = async (e) => { await api.deleteEmployee(e.id); toast.success("Employé supprimé"); load(query); };
-
   const onImport = async (ev) => {
     const file = ev.target.files?.[0];
     if (!file) return;
@@ -244,7 +245,7 @@ export default function Employes() {
                 <td className="px-4 py-2.5">
                   <div className="flex justify-end gap-1">
                     <button data-testid={`edit-employee-${e.employee_number}`} onClick={() => setDialog({ open: true, item: e })} className="p-1.5 text-slate-400 hover:text-[#2563EB]"><Pencil size={15} /></button>
-                    <button data-testid={`delete-employee-${e.employee_number}`} onClick={() => del(e)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
+                    <button data-testid={`delete-employee-${e.employee_number}`} onClick={() => setConfirmDel(e)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
                   </div>
                 </td>
               </tr>
@@ -256,6 +257,23 @@ export default function Employes() {
 
       {dialog.open && <EmpForm open={dialog.open} onOpenChange={(v) => setDialog((p) => ({ ...p, open: v }))} initial={dialog.item} departments={departments} onSubmit={submit} />}
       <ImportErrorsDialog open={importErrors.open} onOpenChange={(v) => setImportErrors((p) => ({ ...p, open: v }))} errors={importErrors.errors} fileName={importErrors.fileName} />
+      <AlertDialog open={!!confirmDel} onOpenChange={(v) => !v && setConfirmDel(null)}>
+        <AlertDialogContent data-testid="delete-confirm-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer cet employé ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDel ? `« ${confirmDel.name} » (#${String(confirmDel.employee_number).padStart(3, "0")}) sera définitivement supprimé, ainsi que ses budgets saisis. Cette action est irréversible.` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="delete-cancel-btn">Annuler</AlertDialogCancel>
+            <AlertDialogAction data-testid="delete-confirm-btn" className="bg-red-600 hover:bg-red-700"
+              onClick={async () => { const e = confirmDel; setConfirmDel(null); await del(e); }}>
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

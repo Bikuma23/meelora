@@ -530,7 +530,7 @@ class EmployeeBase(BaseModel):
     name: str
     department: str
     title: str
-    employment_type: Literal["CCQ", "Régulier temps plein", "Stagiaire"]
+    employment_type: Literal["CCQ", "Régulier temps plein", "Régulier temps partiel", "Stagiaire"]
     ccq_category: Literal["Électricien", "Frigoriste", "N/A"]
     current_annual_salary: float
     vacation_rate: float
@@ -1185,7 +1185,7 @@ async def import_employees(file: UploadFile = File(...), user: dict = Depends(ge
     except Exception:
         raise HTTPException(status_code=400, detail="Fichier Excel (.xlsx) invalide")
     ws = wb.active
-    valid_types = {"CCQ", "Régulier temps plein", "Stagiaire"}
+    valid_types = {"CCQ", "Régulier temps plein", "Régulier temps partiel", "Stagiaire"}
     valid_primes = {"Aucune Prime", "Prime 8%", "Prime 11%", "Prime 12%"}
     dept_codes = {d["code"] for d in await db.departments.find().to_list(1000)}
     existing_nums = {e["employee_number"] for e in await db.employees.find({}, {"employee_number": 1}).to_list(100000)}
