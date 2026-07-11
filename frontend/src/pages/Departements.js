@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Plus, Pencil, Trash2, Search, Building2, Info, Upload, Download } from "lucide-react";
 import { toast } from "sonner";
+import ImportErrorsDialog from "../components/ImportErrorsDialog";
 
 const PL_GROUPS = ["Projets", "Services", "Ventes", "Marketing", "RH", "Administration", "Informatique", "Opération Commun (FGF)"];
 const empty = { code: "", description: "", superviseur: "", compte_gl: "", groupe_pl: "Services", csst_pct: "0.61" };
@@ -79,6 +80,7 @@ export default function Departements() {
   const [depts, setDepts] = useState([]);
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState({ open: false, item: null });
+  const [importErrors, setImportErrors] = useState({ open: false, errors: [], fileName: "" });
 
   const load = () => api.listDepartments().then(setDepts);
   useEffect(() => { load(); }, []);
@@ -89,9 +91,13 @@ export default function Departements() {
     if (!file) return;
     try {
       const res = await api.importDepartments(file);
-      toast.success(`${res.inserted} département(s) importé(s)${res.errors?.length ? ` · ${res.errors.length} erreur(s)` : ""}`);
-      if (res.errors?.length) res.errors.slice(0, 3).forEach((er) => toast.error(er));
-      load();
+      if (res.aborted || res.errors?.length) {
+        setImportErrors({ open: true, errors: res.errors || [], fileName: file.name });
+        toast.error(`Importation annulée — ${res.errors.length} erreur(s)`);
+      } else {
+        toast.success(`${res.inserted} département(s) importé(s)`);
+        load();
+      }
     } catch (e) { toast.error(e.response?.data?.detail || "Import échoué"); }
     finally { ev.target.value = ""; }
   };
@@ -170,6 +176,7 @@ export default function Departements() {
         </table>
       </div>
       {dialog.open && <DeptForm open={dialog.open} onOpenChange={(v) => setDialog((p) => ({ ...p, open: v }))} initial={dialog.item} onSubmit={submit} />}
+      <ImportErrorsDialog open={importErrors.open} onOpenChange={(v) => setImportErrors((p) => ({ ...p, open: v }))} errors={importErrors.errors} fileName={importErrors.fileName} />
     </div>
   );
 }

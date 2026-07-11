@@ -1190,7 +1190,8 @@ async def import_employees(file: UploadFile = File(...), user: dict = Depends(ge
     dept_codes = {d["code"] for d in await db.departments.find().to_list(1000)}
     existing_nums = {e["employee_number"] for e in await db.employees.find({}, {"employee_number": 1}).to_list(100000)}
     used = set()
-    inserted, updated, errors = 0, 0, []
+    errors = []
+    to_insert, to_update = [], []
     n = await _next_number()
     for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         if not row or all(c is None for c in row):
@@ -1243,17 +1244,24 @@ async def import_employees(file: UploadFile = File(...), user: dict = Depends(ge
             if doc["department"] not in dept_codes:
                 raise ValueError(f"Département '{doc['department']}' inexistant")
             if is_update:
-                # Met à jour les champs de base sans toucher aux overrides annuels (years).
-                await db.employees.update_one({"employee_number": num}, {"$set": doc})
-                updated += 1
+                to_update.append((num, doc))
             else:
-                await db.employees.insert_one(doc)
-                inserted += 1
+                to_insert.append(doc)
             used.add(num)
         except Exception as ex:
-            errors.append(f"Ligne {idx}: {ex}")
+            errors.append({"line": idx, "name": str(name).strip() if name else "", "message": str(ex)})
+    if errors:
+        return {"inserted": 0, "updated": 0, "errors": errors, "aborted": True}
+    inserted, updated = 0, 0
+    for num, doc in to_update:
+        # Met à jour les champs de base sans toucher aux overrides annuels (years).
+        await db.employees.update_one({"employee_number": num}, {"$set": doc})
+        updated += 1
+    for doc in to_insert:
+        await db.employees.insert_one(doc)
+        inserted += 1
     await log_action(user, "Créer", "Employé", f"Import Excel — {inserted} ajout(s), {updated} mise(s) à jour")
-    return {"inserted": inserted, "updated": updated, "errors": errors}
+    return {"inserted": inserted, "updated": updated, "errors": [], "aborted": False}
 
 @api.post("/departments/import")
 async def import_departments(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
@@ -1263,7 +1271,10 @@ async def import_departments(file: UploadFile = File(...), user: dict = Depends(
     except Exception:
         raise HTTPException(status_code=400, detail="Fichier Excel (.xlsx) invalide")
     ws = wb.active
-    inserted, errors = 0, []
+    errors = []
+    to_insert = []
+    seen = set()
+    existing_codes = {d["code"] for d in await db.departments.find({}, {"code": 1}).to_list(100000)}
     for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         if not row or all(c is None for c in row):
             continue
@@ -1272,18 +1283,26 @@ async def import_departments(file: UploadFile = File(...), user: dict = Depends(
             continue
         try:
             code = str(code).strip()
-            if await db.departments.find_one({"code": code}):
+            if code in seen:
+                raise ValueError(f"Code '{code}' en double dans le fichier")
+            if code in existing_codes:
                 raise ValueError(f"Code '{code}' existe déjà")
             csst = float(_cell(row, 5) or 0)
             doc = {"code": code, "description": str(_cell(row, 1) or "").strip(),
                    "superviseur": str(_cell(row, 2) or "").strip(), "compte_gl": str(_cell(row, 3) or "").strip(),
                    "groupe_pl": str(_cell(row, 4) or "Services").strip(), "csst": csst / 100 if csst > 1 else csst}
-            await db.departments.insert_one(doc)
-            inserted += 1
+            to_insert.append(doc)
+            seen.add(code)
         except Exception as ex:
-            errors.append(f"Ligne {idx}: {ex}")
+            errors.append({"line": idx, "name": str(code).strip() if code else "", "message": str(ex)})
+    if errors:
+        return {"inserted": 0, "errors": errors, "aborted": True}
+    inserted = 0
+    for doc in to_insert:
+        await db.departments.insert_one(doc)
+        inserted += 1
     await log_action(user, "Créer", "Département", f"Import Excel — {inserted} département(s)")
-    return {"inserted": inserted, "errors": errors}
+    return {"inserted": inserted, "errors": [], "aborted": False}
 
 @api.get("/journal")
 async def get_journal(user: dict = Depends(get_current_user)):
