@@ -12,6 +12,7 @@ import { toast } from "sonner";
 
 const REQ = "Ce champ est obligatoire";
 const TYPES = ["CCQ", "Régulier temps plein", "Stagiaire"];
+const typeLabel = (t) => (t === "Régulier temps plein" ? "Rég. Temps Plein" : t);
 const empty = {
   name: "", department: "", title: "", employment_type: "Régulier temps plein", ccq_category: "N/A",
   current_annual_salary: "", vacation_rate_pct: "", sick_personal_days: "", holiday_days: "",
@@ -229,7 +230,7 @@ export default function Employes() {
                 <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(e.employee_number).padStart(3, "0")}</td>
                 <td className="px-4 py-2.5 font-600">{e.name}<div className="text-[11px] text-slate-500">{e.title}</div></td>
                 <td className="px-4 py-2.5 text-[13px]">{e.department}</td>
-                <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#2563EB" : "#64748B" }}>{e.is_ccq ? "CCQ" : e.employment_type}</span></td>
+                <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#2563EB" : "#64748B" }}>{e.is_ccq ? "CCQ" : typeLabel(e.employment_type)}</span></td>
                 <td className="px-4 py-2.5 text-[13px]">{e.ccq_category !== "N/A" ? e.ccq_category : "—"}</td>
                 <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(e.current_annual_salary)}</td>
                 <td className="px-4 py-2.5 text-right font-mono-data">{computeAge(e.birth_date)}</td>

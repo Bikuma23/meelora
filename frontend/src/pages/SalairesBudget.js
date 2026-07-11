@@ -13,9 +13,12 @@ import { toast } from "sonner";
 
 const SCENARIOS = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 const LABEL = Object.fromEntries(SCENARIOS);
+const TYPE_LABELS = { "Régulier temps plein": "Rég. Temps Plein" };
+const typeLabel = (t) => TYPE_LABELS[t] || t;
 const COLS = [
   { key: "employee_number", label: "#", align: "left" },
   { key: "name", label: "Nom", align: "left" },
+  { key: "department", label: "Dépt", align: "left" },
   { key: "employment_type", label: "Type", align: "left" },
   { key: "new_salary", label: "Nouveau salaire", align: "right" },
   { key: "vacation", label: "Vacances", align: "right" },
@@ -179,7 +182,8 @@ export default function SalairesBudget() {
                 <tr key={ln.employee_number} onClick={() => setDetail({ open: true, line: ln })} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" data-testid={`budget-row-${ln.employee_number}`}>
                   <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(ln.employee_number).padStart(3, "0")}</td>
                   <td className="px-4 py-2.5 font-600">{ln.name}{ln.overridden && <span className="ml-2 rounded bg-[#14B8A61a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">Ajusté</span>}{ln.prorated && <span className="ml-2 rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active} mois</span>}</td>
-                  <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#2563EB" : "#64748B" }}>{ln.is_ccq ? "CCQ" : ln.employment_type}</span></td>
+                  <td className="px-4 py-2.5 font-mono-data text-slate-500">{ln.department}</td>
+                  <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#2563EB" : "#64748B" }}>{ln.is_ccq ? "CCQ" : typeLabel(ln.employment_type)}</span></td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.new_salary)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.vacation)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.primes_total)}</td>
@@ -195,6 +199,18 @@ export default function SalairesBudget() {
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-slate-300 bg-slate-50 text-sm font-700" data-testid="budget-total-row">
+                <td className="px-4 py-3" colSpan={4}>TOTAL — {sortedLines.length} employé(s)</td>
+                <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.new_salary, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.vacation, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.primes_total, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono-data" style={{ color: "#0E9488" }}>{fmtCAD(sortedLines.reduce((s, l) => s + l.salaire_brut, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.avantages, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.total_budgeted, 0))}</td>
+                <td className="px-4 py-3"></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
