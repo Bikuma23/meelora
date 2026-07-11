@@ -1,8 +1,20 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Download } from "lucide-react";
 
 export default function ImportErrorsDialog({ open, onOpenChange, errors = [], fileName = "" }) {
+  const exportCsv = () => {
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const rows = [["Ligne Excel", "Élément", "Erreur"], ...errors.map((e) => [e.line ?? "", e.name || "", e.message || ""])];
+    const csv = "\uFEFF" + rows.map((r) => r.map(esc).join(";")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `erreurs_import_${(fileName || "fichier").replace(/\.[^.]+$/, "")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto" data-testid="import-errors-dialog">
@@ -38,6 +50,9 @@ export default function ImportErrorsDialog({ open, onOpenChange, errors = [], fi
         </div>
 
         <DialogFooter>
+          <Button data-testid="import-errors-export-btn" variant="outline" onClick={exportCsv} className="gap-1.5">
+            <Download size={15} /> Exporter les erreurs (CSV)
+          </Button>
           <Button data-testid="import-errors-close-btn" onClick={() => onOpenChange(false)} className="bg-[#2563EB] hover:bg-[#2563EB]/90">
             J'ai compris
           </Button>
