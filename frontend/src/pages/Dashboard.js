@@ -206,11 +206,12 @@ function SexDistribution({ b }) {
               </Pie>
             </PieChart>
           </ResponsiveContainer>
-          <div className="mt-1 grid grid-cols-2 gap-1">
+          <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1">
             {SEX_CATS.map((s) => (
-              <div key={s} className="flex items-center justify-between text-[10px]">
-                <span className="flex items-center gap-1 text-slate-500"><span className="h-2 w-2 rounded-sm" style={{ background: SEX_COLORS[s] }} />{s}</span>
-                <span className="font-mono-data font-700">{sc[s] || 0}</span>
+              <div key={s} className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: SEX_COLORS[s] }} />
+                <span className="truncate">{s}</span>
+                <span className="ml-1 font-mono-data font-700 text-slate-700">{sc[s] || 0}</span>
               </div>
             ))}
           </div>
