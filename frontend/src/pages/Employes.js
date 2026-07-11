@@ -87,6 +87,13 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
           <DialogDescription className="text-xs">Âge et ancienneté calculés automatiquement. Le sexe à la naissance est facultatif.</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-1 gap-4 py-1 sm:grid-cols-2">
+          <Field label="Sexe à la naissance" testId="f-sex">
+            <Select value={f.sex_at_birth} onValueChange={(v) => set("sex_at_birth", v)}>
+              <SelectTrigger data-testid="f-sex"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
+              <SelectContent>{SEXES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+          <div className="hidden sm:block" />
           <Field label="Nom complet" error={errors.name} testId="f-name"><Input data-testid="f-name" value={f.name} onChange={(e) => set("name", e.target.value)} /></Field>
           <Field label="Titre / Poste" error={errors.title} testId="f-title"><Input data-testid="f-title" value={f.title} onChange={(e) => set("title", e.target.value)} /></Field>
           <Field label="Département" error={errors.department} testId="f-department">
@@ -99,12 +106,6 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
             <Select value={f.employment_type} onValueChange={(v) => set("employment_type", v)}>
               <SelectTrigger data-testid="f-type"><SelectValue /></SelectTrigger>
               <SelectContent>{TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-            </Select>
-          </Field>
-          <Field label="Sexe à la naissance" testId="f-sex">
-            <Select value={f.sex_at_birth} onValueChange={(v) => set("sex_at_birth", v)}>
-              <SelectTrigger data-testid="f-sex"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
-              <SelectContent>{SEXES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
           <Field label="Statut" testId="f-active">

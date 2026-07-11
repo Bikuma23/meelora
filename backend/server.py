@@ -1147,11 +1147,12 @@ async def report_fiches_excel(department: Optional[str] = None, year: Optional[i
 # ---------------------------------------------------------------------------
 # Excel import / templates
 # ---------------------------------------------------------------------------
-EMP_HEADERS = ["Matricule (# — laisser vide pour auto)", "Nom", "Département (code)", "Titre", "Type emploi (CCQ / Régulier temps plein / Stagiaire)",
+EMP_HEADERS = ["Matricule (# — laisser vide pour auto)", "Nom", "Département (code)", "Titre", "Type emploi (CCQ / Régulier temps plein / Régulier temps partiel / Stagiaire)",
                "Catégorie CCQ (Électricien / Frigoriste / N/A)", "Salaire annuel", "Taux vacances %",
                "Jours maladie", "Jours fériés", "Type prime (Aucune Prime / Prime 8% / Prime 11% / Prime 12%)",
                "Prime garde (Oui/Non)", "Prime HALO (Oui/Non)", "Alloc sécurité (Oui/Non)",
-               "Date embauche (AAAA-MM-JJ)", "Date naissance (AAAA-MM-JJ)"]
+               "Date embauche (AAAA-MM-JJ)", "Date naissance (AAAA-MM-JJ)",
+               "Sexe à la naissance (Masculin / Féminin / Autre / Préfère ne pas répondre)", "Statut (Actif / Inactif)"]
 DEP_HEADERS = ["Code", "Description", "Superviseur", "Compte GL", "Groupe P&L", "CSST %"]
 
 def _b(v):
@@ -1182,7 +1183,7 @@ def _xlsx_response(headers, example, sheet, filename):
 @api.get("/employees/template")
 async def emp_template(user: dict = Depends(get_current_user)):
     ex = [101, "Jean Exemple", "400", "Comptable", "Régulier temps plein", "N/A", 80000, 8, 8, 14,
-          "Prime 8%", "Non", "Non", "Non", "2020-01-15", "1985-05-20"]
+          "Prime 8%", "Non", "Non", "Non", "2020-01-15", "1985-05-20", "Masculin", "Actif"]
     return _xlsx_response(EMP_HEADERS, ex, "Employés", "modele_employes.xlsx")
 
 @api.get("/departments/template")
@@ -1243,6 +1244,12 @@ async def import_employees(file: UploadFile = File(...), user: dict = Depends(ge
             if prime not in valid_primes:
                 prime = "Aucune Prime"
             vac = float(_cell(row, 7) or 0)
+            sex_raw = str(_cell(row, 16) or "").strip()
+            valid_sexes = {"Masculin", "Féminin", "Autre", "Préfère ne pas répondre"}
+            if sex_raw and sex_raw not in valid_sexes:
+                raise ValueError(f"Sexe à la naissance invalide '{sex_raw}'")
+            status_raw = str(_cell(row, 17) or "").strip().lower()
+            active = False if status_raw in ("inactif", "inactive", "non", "false", "0", "no") else True
             doc = {
                 "name": str(name).strip(), "department": str(_cell(row, 2) or "").strip(),
                 "title": str(_cell(row, 3) or "").strip(), "employment_type": etype, "ccq_category": cat,
@@ -1252,6 +1259,7 @@ async def import_employees(file: UploadFile = File(...), user: dict = Depends(ge
                 "is_ccq": is_ccq, "prime_type": prime,
                 "prime_garde": _b(_cell(row, 11)), "prime_halo": _b(_cell(row, 12)), "alloc_securite": _b(_cell(row, 13)),
                 "hire_date": _date(_cell(row, 14)), "birth_date": _date(_cell(row, 15)),
+                "sex_at_birth": sex_raw or None, "active": active,
                 "employee_number": num,
             }
             if not doc["department"]:
