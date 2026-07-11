@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 import { fmtCAD, computeAge, computeSeniority } from "../lib/format";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -186,6 +187,8 @@ function EmpForm({ open, onOpenChange, initial, departments, securityClasses = [
 }
 
 export default function Employes() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [query, setQuery] = useState("");
@@ -277,11 +280,18 @@ export default function Employes() {
             <input data-testid="employee-search" className="w-56 bg-transparent text-sm outline-none" placeholder="Rechercher…" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
           <Button variant="outline" className="gap-1.5" data-testid="employee-template-btn" onClick={dlTemplate}><Download size={15} /> Modèle</Button>
+          {isAdmin && <>
           <input ref={fileRef} type="file" accept=".xlsx" className="hidden" data-testid="employee-import-input" onChange={onImport} />
           <Button variant="outline" className="gap-1.5" data-testid="employee-import-btn" onClick={() => fileRef.current?.click()}><Upload size={15} /> Importer Excel</Button>
           <Button data-testid="add-employee-btn" className="gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90" onClick={() => setDialog({ open: true, item: null })}><Plus size={16} /> Ajouter</Button>
+          </>}
         </div>
       </div>
+      {!isAdmin && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800" data-testid="readonly-notice">
+          Lecture seule — seuls les administrateurs peuvent modifier les données.
+        </div>
+      )}
 
       <div className="card">
         <div className="hidden overflow-x-auto md:block">
@@ -321,10 +331,12 @@ export default function Employes() {
                   <td className="px-4 py-2.5 text-right font-mono-data">{computeAge(e.birth_date)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{computeSeniority(e.hire_date)} ans</td>
                   <td className="px-4 py-2.5">
+                    {isAdmin ? (
                     <div className="flex justify-end gap-1">
                       <button data-testid={`edit-employee-${e.employee_number}`} onClick={() => setDialog({ open: true, item: e })} className="p-1.5 text-slate-400 hover:text-[#2563EB]"><Pencil size={15} /></button>
                       <button data-testid={`delete-employee-${e.employee_number}`} onClick={() => setConfirmDel(e)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
                     </div>
+                    ) : <div className="text-right text-slate-300">—</div>}
                   </td>
                 </tr>
               ))}
@@ -346,10 +358,12 @@ export default function Employes() {
                     <span className="rounded px-1.5 py-0.5 text-[9px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#2563EB" : "#64748B" }}>{e.is_ccq ? "CCQ" : typeLabel(e.employment_type)}</span>
                   </div>
                 </div>
+                {isAdmin && (
                 <div className="flex shrink-0 gap-1">
                   <button data-testid={`edit-employee-card-${e.employee_number}`} onClick={() => setDialog({ open: true, item: e })} className="rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-[#2563EB]"><Pencil size={15} /></button>
                   <button data-testid={`delete-employee-card-${e.employee_number}`} onClick={() => setConfirmDel(e)} className="rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
                 </div>
+                )}
               </div>
               <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px]">
                 <div className="flex justify-between"><span className="text-slate-500">Salaire</span><span className="font-mono-data">{fmtCAD(e.current_annual_salary)}</span></div>

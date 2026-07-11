@@ -9,6 +9,7 @@ load_dotenv(ROOT_DIR / '.env')
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional, Literal
@@ -1613,6 +1614,28 @@ async def root():
     return {"message": "API Budget Salaires Pro"}
 
 app.include_router(api)
+
+ADMIN_WRITE_ALLOW = {"/api/auth/login", "/api/auth/logout", "/api/me/preferences"}
+
+@app.middleware("http")
+async def admin_write_guard(request: Request, call_next):
+    path = request.url.path
+    if request.method in ("POST", "PUT", "DELETE", "PATCH") and path.startswith("/api") and path not in ADMIN_WRITE_ALLOW:
+        token = request.cookies.get("access_token")
+        if not token:
+            auth = request.headers.get("Authorization", "")
+            if auth.startswith("Bearer "):
+                token = auth[7:]
+        if token:
+            try:
+                payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+                u = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+                if u and u.get("role") != "admin":
+                    return JSONResponse(status_code=403, content={"detail": "Modification réservée aux administrateurs"})
+            except Exception:
+                pass
+    return await call_next(request)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.environ.get("FRONTEND_URL", "http://localhost:3000")],

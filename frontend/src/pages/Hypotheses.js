@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useYear } from "../context/YearContext";
+import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Save, HardHat, Briefcase, ShieldCheck, TrendingUp, Settings2 } from "lucide-react";
@@ -10,6 +11,8 @@ const MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Se
 
 export default function Hypotheses() {
   const { year } = useYear();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [h, setH] = useState(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => { setH(null); api.getHypotheses(year).then(setH); }, [year]);
@@ -49,8 +52,13 @@ export default function Hypotheses() {
     <div className="space-y-5" data-testid="hypotheses-page">
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">Paramètres pour <b className="text-slate-800">{h.year}</b> — alimentent tous les calculs budgétaires</p>
-        <Button data-testid="save-hypotheses-btn" onClick={save} disabled={saving} className="gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90"><Save size={16} /> {saving ? "Enregistrement…" : "Enregistrer"}</Button>
+        {isAdmin && <Button data-testid="save-hypotheses-btn" onClick={save} disabled={saving} className="gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90"><Save size={16} /> {saving ? "Enregistrement…" : "Enregistrer"}</Button>}
       </div>
+      {!isAdmin && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800" data-testid="readonly-notice">
+          Lecture seule — seuls les administrateurs peuvent modifier les hypothèses.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <DayGrid arr="working_days_ccq" tint="#F59E0B" icon={HardHat} title={`Jours ouvrables CCQ — ${h.year}`} />

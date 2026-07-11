@@ -131,10 +131,11 @@ function LayoutInner() {
   const [active, setActive] = useState("dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [avatarColor, setAvatarColor] = useState("#14B8A6");
   const page = PAGES[active];
   const Active = page.comp;
   const go = (k) => { setActive(k); setMobileOpen(false); };
-  useEffect(() => { api.getPreferences().then((p) => applyTheme(p?.theme)).catch(() => {}); }, []);
+  useEffect(() => { api.getPreferences().then((p) => { applyTheme(p?.theme); if (p?.avatar_color) setAvatarColor(p.avatar_color); }).catch(() => {}); }, []);
 
   return (
     <div className="flex min-h-screen bg-[#F1F5F9]">
@@ -178,11 +179,14 @@ function LayoutInner() {
           )}
           <button data-testid="user-menu-toggle" onClick={() => setUserMenuOpen((o) => !o)}
             className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-white/5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#14B8A6] text-sm font-700 text-white">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-700 text-white" style={{ backgroundColor: avatarColor }}>
               {(user?.name || "U").charAt(0)}
             </span>
             <div className="min-w-0 flex-1 text-left">
-              <p className="truncate text-sm font-600 text-white">{user?.name}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-sm font-600 text-white">{user?.name}</p>
+                <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-700 uppercase" style={{ backgroundColor: (user?.role === "admin" ? "#2563EB" : "#64748B") + "33", color: user?.role === "admin" ? "#93B4FF" : "#94A3B8" }}>{user?.role === "admin" ? "Admin" : "Utilisateur"}</span>
+              </div>
               <p className="truncate text-[11px] text-slate-500">{user?.email}</p>
             </div>
             {userMenuOpen ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronUp size={16} className="text-slate-400" />}

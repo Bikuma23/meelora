@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { useYear } from "../context/YearContext";
+import { useAuth } from "../context/AuthContext";
 import { fmtCAD } from "../lib/format";
 import { Button } from "../components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
@@ -20,6 +21,8 @@ const fmtK = (v) => `${Math.round(v / 1000)}k`;
 
 export default function Rapports() {
   const { year, years, selectYear } = useYear();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [departments, setDepartments] = useState([]);
   const [dept, setDept] = useState("all");
   const [scenario, setScenario] = useState("ca");
@@ -193,15 +196,15 @@ export default function Rapports() {
                 {templates.map((t) => (
                   <div key={t.id} data-testid={`template-${t.id}`} className="group flex items-center gap-1 rounded-full border border-[#0E9488]/40 bg-[#0E9488]/10 py-1 pl-3 pr-1.5 text-xs font-600 text-[#0E7168]">
                     <button data-testid={`template-apply-${t.id}`} onClick={() => applyTemplate(t)} className="hover:underline">{t.name}</button>
-                    <button data-testid={`template-del-${t.id}`} onClick={() => deleteTemplate(t)} className="rounded-full px-1 text-slate-400 hover:bg-red-100 hover:text-red-500" title="Supprimer">✕</button>
+                    {isAdmin && <button data-testid={`template-del-${t.id}`} onClick={() => deleteTemplate(t)} className="rounded-full px-1 text-slate-400 hover:bg-red-100 hover:text-red-500" title="Supprimer">✕</button>}
                   </div>
                 ))}
               </div>
             )}
             <div className="mt-3 flex items-end gap-2">
-              <input data-testid="template-name" value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="Nom du modèle (ex. Masse par département)"
-                className="h-9 flex-1 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[#2563EB]" />
-              <Button data-testid="save-template-btn" onClick={saveTemplate} className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Save size={15} /> Enregistrer le modèle</Button>
+              <input data-testid="template-name" value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder={isAdmin ? "Nom du modèle (ex. Masse par département)" : "Enregistrement réservé aux administrateurs"} disabled={!isAdmin}
+                className="h-9 flex-1 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[#2563EB] disabled:bg-slate-50 disabled:text-slate-400" />
+              <Button data-testid="save-template-btn" onClick={saveTemplate} disabled={!isAdmin} className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Save size={15} /> Enregistrer le modèle</Button>
             </div>
           </div>
           <div className="card p-5">

@@ -1,0 +1,36 @@
+{
+  "summary": "Verified admin-only write restriction (backend middleware + frontend gating) and new sidebar submenu / role badge / customizable avatar color. Backend pytest: 21/21 pass. Frontend Playwright: 25/25 assertions pass. All expected user1 mutating endpoints -> 403; user1 GETs -> 200; user1 PUT /api/me/preferences -> 200; admin can still write (PUT /api/hypotheses, POST /api/departments, POST /api/report-templates). UI: user1 sees readonly-notice + hidden add/import/save on Employés/Départements/Hypothèses/Budget/Rapports, no nav-utilisateurs; admin sees all controls + nav-utilisateurs and profile-role-badge/avatar-card work. Preferences reset to defaults at end. DB intact: 122 employees.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_admin_write_guard.py",
+    "/app/test_reports/pytest/iteration_15.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is still 1699 lines — consider splitting into routers (auth/prefs, users, employees, budget, reports, admin-guard middleware).",
+    "admin_write_guard uses substring match ADMIN_WRITE_ALLOW set with exact-path equality; consider startswith or explicit list to avoid future path-suffix regressions (e.g., /api/me/preferences/xyz would not be allowed if ever added).",
+    "admin_write_guard silently ignores JWT decode errors (except: pass) — a malformed/expired token results in the request passing through the middleware; the actual endpoint still requires auth so it fails downstream, but consider explicit 401 for clarity."
+  ],
+  "updated_files": ["/app/backend/tests/test_admin_write_guard.py (NEW — 21 tests)"],
+  "success_rate": {"backend": "100% (21/21 pytest)", "frontend": "100% (25/25 UI assertions)"},
+  "test_credentials": "admin@accslegro.com/admin123 and user1@accslegro.com/user123 (both existed).",
+  "seed_data_creation": "None. Cleaned up TEST_ departments (2) created during admin writability test. Both accounts reset to defaults (light theme, scenario ca, sorts # asc) via cleanup fixture and UI reset button.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Admin-write guard middleware lives at /app/backend/server.py:1618-1637 with ADMIN_WRITE_ALLOW={/api/auth/login,/api/auth/logout,/api/me/preferences}. Frontend gating via useAuth().user.role==='admin' in Employes/Departements/Hypotheses/SalairesBudget/Rapports and Layout.js user submenu. Sidebar testids: user-menu-toggle, user-submenu, nav-preferences, nav-utilisateurs (admin-only), logout-btn. Prefs page: preferences-page, avatar-card, avatar-color-{HEX_NO_HASH}, profile-role-badge, reset-prefs-btn.",
+  "verified_scenarios": {
+    "backend_user1_writes_return_403": "PASS (11 endpoints)",
+    "backend_user1_reads_return_200": "PASS (6 endpoints)",
+    "backend_user1_put_prefs_allowed": "PASS",
+    "backend_admin_can_write": "PASS (hypotheses, departments, report-templates)",
+    "ui_user1_sidebar_submenu_no_utilisateurs": "PASS",
+    "ui_user1_role_badge_Utilisateur": "PASS",
+    "ui_user1_employes_readonly_actions_dash": "PASS (122 dash cells)",
+    "ui_user1_departements_hypotheses_budget_readonly": "PASS",
+    "ui_user1_rapports_save_template_disabled": "PASS",
+    "ui_admin_full_controls_visible": "PASS",
+    "ui_admin_avatar_color_picker_and_role_badge": "PASS",
+    "ui_admin_reset_prefs_works": "PASS"
+  }
+}

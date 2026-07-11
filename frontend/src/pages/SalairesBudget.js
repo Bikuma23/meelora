@@ -49,7 +49,7 @@ export default function SalairesBudget() {
   const lockKey = `${year}:${scenario}`;
   const lockInfo = locks[lockKey];
   const locked = !!lockInfo?.locked;
-  const canEdit = isAdmin || !locked;
+  const canEdit = isAdmin;
 
   const load = () => api.getBudget({ year, scenario }).then(setB);
   const loadLocks = () => api.getLocks({ year }).then(setLocks);
@@ -135,9 +135,9 @@ export default function SalairesBudget() {
         </div>
       </div>
 
-      {locked && !isAdmin && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-700" data-testid="lock-notice">
-          Ce budget est verrouillé. Seul un administrateur peut y apporter des modifications.
+      {!isAdmin && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800" data-testid="readonly-notice">
+          Lecture seule — seuls les administrateurs peuvent modifier les données.
         </div>
       )}
 
