@@ -335,6 +335,18 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
         d["salaire"] += ln["new_salary"] * ln["proration_factor"]
         d["budget"] += ln["total_budgeted"]
     by_department = sorted([{**v, "salaire": round(v["salaire"], 2), "budget": round(v["budget"], 2)} for v in by_dept.values()], key=lambda x: -x["budget"])
+    # répartition par sexe à la naissance, par département
+    _label_map = {ln["department"]: ln["department_label"] for ln in lines}
+    def _sexcat(e):
+        s = e.get("sex_at_birth")
+        return s if s in ("Masculin", "Féminin", "Autre") else "Non spécifié"
+    sxd = {}
+    for e in employees:
+        dep = e.get("department", "")
+        d = sxd.setdefault(dep, {"department": dep, "label": _label_map.get(dep, dep), "Masculin": 0, "Féminin": 0, "Autre": 0, "Non spécifié": 0, "total": 0})
+        d[_sexcat(e)] += 1
+        d["total"] += 1
+    sex_by_department = sorted(sxd.values(), key=lambda x: -x["total"])
     # by type
     by_type_map = {}
     for ln in lines:
@@ -380,6 +392,7 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
         "garde_moyenne": round(garde_avg, 2),
     }
     return {"lines": lines, "totals": totals, "by_department": by_department, "by_type": by_type,
+            "sex_by_department": sex_by_department,
             "monthly": monthly, "decomposition": decomposition, "top5": top5, "kpis": kpis}
 
 # ---------------------------------------------------------------------------

@@ -10,6 +10,8 @@ import { Users, DollarSign, Wallet, TrendingUp, Calendar, PieChart as PieIcon, B
 
 const TEAL = "#14B8A6", NAVY = "#0E1526", ORANGE = "#F59E0B", BLUE = "#2563EB", VIOLET = "#8B5CF6";
 const TYPE_COLORS = { "CCQ": BLUE, "Régulier temps plein": TEAL, "Stagiaire": ORANGE };
+const SEX_CATS = ["Masculin", "Féminin", "Autre", "Non spécifié"];
+const SEX_COLORS = { "Masculin": BLUE, "Féminin": "#EC4899", "Autre": TEAL, "Non spécifié": "#94A3B8" };
 const SCEN = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 
 const Tip = ({ active, payload, label }) => {
@@ -188,6 +190,59 @@ function EmployeesKpi({ k }) {
   );
 }
 
+function SexDistribution({ b }) {
+  const sc = b.kpis.sex_counts || {};
+  const pieData = SEX_CATS.map((s) => ({ name: s, value: sc[s === "Non spécifié" ? "Non spécifié" : s] || 0 })).filter((d) => d.value > 0);
+  const depts = (b.sex_by_department || []).filter((d) => d.total > 0);
+  return (
+    <div className="card p-5" data-testid="chart-sex">
+      <h3 className="mb-4 flex items-center gap-2 text-sm font-700"><PieIcon size={16} className="text-[#EC4899]" /> Répartition par sexe à la naissance</h3>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <div className="lg:col-span-1">
+          <ResponsiveContainer width="100%" height={170}>
+            <PieChart>
+              <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={44} outerRadius={70} paddingAngle={2} isAnimationActive={false}>
+                {pieData.map((d, i) => <Cell key={i} fill={SEX_COLORS[d.name]} />)}
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="mt-1 grid grid-cols-2 gap-1">
+            {SEX_CATS.map((s) => (
+              <div key={s} className="flex items-center justify-between text-[10px]">
+                <span className="flex items-center gap-1 text-slate-500"><span className="h-2 w-2 rounded-sm" style={{ background: SEX_COLORS[s] }} />{s}</span>
+                <span className="font-mono-data font-700">{sc[s] || 0}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="lg:col-span-2">
+          <p className="mb-1.5 text-[10px] font-600 uppercase tracking-wide text-slate-400">Par département</p>
+          <div className="max-h-[220px] overflow-y-auto">
+            <table className="w-full text-[11px]">
+              <thead className="sticky top-0 bg-white">
+                <tr className="text-slate-400">
+                  <th className="px-2 py-1 text-left font-600">Dépt</th>
+                  {SEX_CATS.map((s) => <th key={s} className="px-1.5 py-1 text-right font-600" style={{ color: SEX_COLORS[s] }}>{s === "Non spécifié" ? "N/S" : s.slice(0, 3)}</th>)}
+                  <th className="px-1.5 py-1 text-right font-700 text-slate-600">Tot.</th>
+                </tr>
+              </thead>
+              <tbody className="font-mono-data">
+                {depts.map((d) => (
+                  <tr key={d.department} className="border-t border-slate-100" data-testid={`sex-dept-${d.department}`}>
+                    <td className="px-2 py-1 text-left"><b className="text-slate-700">{d.department}</b> <span className="text-slate-400">{d.label}</span></td>
+                    {SEX_CATS.map((s) => <td key={s} className="px-1.5 py-1 text-right">{d[s] || 0}</td>)}
+                    <td className="px-1.5 py-1 text-right font-700 text-slate-700">{d.total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DashboardBody({ b }) {
   const k = b.kpis;
 
@@ -239,6 +294,8 @@ function DashboardBody({ b }) {
           </div>
         </div>
       </div>
+
+      <SexDistribution b={b} />
 
       <div className="card p-6" data-testid="chart-monthly">
         <div className="mb-4 flex items-center justify-between">
