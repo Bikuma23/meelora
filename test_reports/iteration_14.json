@@ -1,0 +1,48 @@
+{
+  "summary": "Validated 'Mon profil / Préférences' feature end-to-end: per-user prefs storage, theme toggle+persistence across pages+reload, sort/scenario reflection in summary, reset, cross-user isolation (admin vs user1), and Rapports 4-tabs regression. Backend 7/7 pytest pass. Frontend Playwright: all assertions passed including PER-USER ISOLATION (admin remained dark while user1 switched himself to light). Both accounts reset to defaults (light theme, # asc sorts, scenario CA). 122 employees intact.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/me/preferences", "issue": "Sending an invalid (non-JSON) body returns HTTP 500 instead of 400/422 because `await request.json()` throws unhandled JSONDecodeError. Consider try/except -> HTTPException(400). Low priority."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_preferences.py",
+    "/app/test_reports/pytest/iteration_14.xml"
+  ],
+  "action_items": [
+    "(Optional/minor) Wrap `await request.json()` in PUT /api/me/preferences with a try/except to return 400 on malformed JSON instead of 500.",
+    "(Pre-existing from iter_13) Add `supervisor: Optional[str] = None` to EmployeeBase Pydantic model or stop sending it from the frontend."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 1673 lines — please split into routers (auth/prefs, users, employees, budget, reports).",
+    "Preferences model is a free-form dict (no Pydantic validation): any client can persist arbitrary keys/values under user.preferences. Consider a Pydantic PreferencesUpdate schema with whitelisted keys (theme in {light,dark}, budget_scenario in {actuel,ca,revue1,revue2}, employees_sort/budget_sort with key+dir enums) to prevent junk data on the user document."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_preferences.py (NEW — 7 tests)"
+  ],
+  "success_rate": {"backend": "100% (7/7 pytest)", "frontend": "100% (all critical flows verified)"},
+  "test_credentials": "admin@accslegro.com/admin123 and user1@accslegro.com/user123 (user1 was MISSING from DB at the start of testing; tester created it via admin API using the credentials documented in /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created user1@accslegro.com (role=user, password=user123) via POST /api/users because the account documented in test_credentials.md did not exist. Left in DB for future testing. Both admin and user1 preferences reset to defaults (theme=light, scenario=ca, sorts=# asc) at end.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "user1@accslegro.com/user123 now exists in DB (created during iter_14). Preferences endpoint stores a free-form merged dict at users.preferences. Theme is applied by Layout useEffect calling api.getPreferences on mount. Testids used: nav-preferences, preferences-page, theme-light-btn, theme-dark-btn, reset-prefs-btn, prefs-summary-card, tab-{synthese|pnl|classe|custom}, sort-{key}, scenario-{ca|revue1|revue2}.",
+  "verified_scenarios": {
+    "nav_preferences_opens_page": "PASS",
+    "theme_dark_toggle_sets_html_dark_class": "PASS",
+    "dark_persists_across_dashboard_budget_employes_pages": "PASS (body-bg rgb(11,17,32) on all)",
+    "dark_persists_after_full_reload": "PASS",
+    "summary_reflects_sort_and_scenario_changes": "PASS (Revue Budgétaire 1, Salaire · croissant)",
+    "reset_button_restores_defaults_and_light_theme": "PASS",
+    "per_user_isolation_admin_vs_user1": "PASS — admin remained dark after user1 switched his own to light",
+    "regression_rapports_4_tabs": "PASS",
+    "backend_prefs_persistence_and_merge": "PASS",
+    "backend_unauth_get_returns_401": "PASS"
+  },
+  "rca of the issue": "N/A — no functional issue. Only note: PUT /api/me/preferences returns 500 (not 400) on malformed JSON body due to unhandled JSONDecodeError from `await request.json()`."
+}

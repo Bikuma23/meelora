@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
 import {
-  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X,
+  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
@@ -18,6 +18,8 @@ import Departements from "../pages/Departements";
 import Rapports from "../pages/Rapports";
 import Journal from "../pages/Journal";
 import UsersPage from "../pages/Users";
+import Preferences from "../pages/Preferences";
+import { applyTheme } from "../lib/theme";
 
 const PAGES = {
   dashboard: { title: "Tableau de bord", sub: "Vue globale", comp: Dashboard },
@@ -28,6 +30,7 @@ const PAGES = {
   rapports: { title: "Rapports", sub: "Prédéfinis & custom", comp: Rapports },
   utilisateurs: { title: "Utilisateurs", sub: "Comptes & accès", comp: UsersPage },
   journal: { title: "Journal", sub: "Historique des modifications", comp: Journal },
+  preferences: { title: "Mon profil", sub: "Préférences & apparence", comp: Preferences },
 };
 
 const NAV_TOP = [{ key: "dashboard", label: "Tableau de bord", sub: "Vue globale", icon: LayoutDashboard }];
@@ -38,7 +41,10 @@ const NAV_GROUP = [
   { key: "departements", label: "Départements", sub: "Codes & superviseurs", icon: Building2 },
   { key: "rapports", label: "Rapports", sub: "Prédéfinis & custom", icon: FileText },
 ];
-const NAV_BOTTOM = [{ key: "journal", label: "Journal", sub: "Historique des modifications", icon: ScrollText }];
+const NAV_BOTTOM = [
+  { key: "preferences", label: "Mon profil", sub: "Préférences & apparence", icon: UserCog },
+  { key: "journal", label: "Journal", sub: "Historique des modifications", icon: ScrollText },
+];
 const NAV_ADMIN = [{ key: "utilisateurs", label: "Utilisateurs", sub: "Comptes & accès", icon: ShieldCheck }];
 
 function NavItem({ item, active, onClick }) {
@@ -129,6 +135,7 @@ function LayoutInner() {
   const page = PAGES[active];
   const Active = page.comp;
   const go = (k) => { setActive(k); setMobileOpen(false); };
+  useEffect(() => { api.getPreferences().then((p) => applyTheme(p?.theme)).catch(() => {}); }, []);
 
   return (
     <div className="flex min-h-screen bg-[#F1F5F9]">

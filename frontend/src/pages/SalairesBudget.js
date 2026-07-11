@@ -106,7 +106,7 @@ export default function SalairesBudget() {
     ["Vacances", b.totals.vacances, "#14B8A6"],
     ["Primes & Boni", b.totals.primes, "#F59E0B"],
     ["Avantages soc.", b.totals.avantages, "#8B5CF6"],
-    ["Budget total", b.totals.budget_total, "#0E1526"],
+    ["Budget total", b.totals.budget_total, null],
   ];
 
   return (
@@ -115,7 +115,7 @@ export default function SalairesBudget() {
         <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1" data-testid="scenario-toggle">
           {SCENARIOS.map(([k, lbl]) => (
             <button key={k} data-testid={`scenario-${k}`} onClick={() => setScenario(k)}
-              className={`rounded-md px-3.5 py-1.5 text-xs font-700 transition-colors ${scenario === k ? "bg-white text-[#0E1526] shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+              className={`rounded-md px-3.5 py-1.5 text-xs font-700 transition-colors ${scenario === k ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
               {lbl}
             </button>
           ))}
@@ -167,7 +167,7 @@ export default function SalairesBudget() {
         {cards.map(([lbl, val, c]) => (
           <div key={lbl} className="card p-4">
             <p className="text-[11px] font-600 uppercase tracking-wide text-slate-500">{lbl}</p>
-            <p className="mt-1.5 font-mono-data text-lg font-700" style={{ color: c }}>{fmtCAD(val)}</p>
+            <p className="mt-1.5 font-mono-data text-lg font-700 text-slate-800" style={c ? { color: c } : undefined}>{fmtCAD(val)}</p>
           </div>
         ))}
       </div>
