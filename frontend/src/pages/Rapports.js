@@ -121,7 +121,7 @@ export default function Rapports() {
               </div></div>
             <div className="card p-5"><h3 className="mb-3 text-sm font-700">Budget par département</h3>
               <div className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
-                {data.by_department.map((d) => <div key={d.department} className="flex justify-between py-1.5 text-sm"><span className="text-slate-600">{d.department} — {d.label}</span><span className="font-mono-data">{fmtCAD(d.budget)}</span></div>)}
+                {[...data.by_department].sort((a, b) => (parseInt(a.department, 10) || 0) - (parseInt(b.department, 10) || 0)).map((d) => <div key={d.department} className="flex justify-between py-1.5 text-sm"><span className="text-slate-600">{d.department} — {d.label}</span><span className="font-mono-data">{fmtCAD(d.budget)}</span></div>)}
               </div></div>
           </div>
         </>
