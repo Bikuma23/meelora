@@ -1,0 +1,50 @@
+{
+  "summary": "E2E validation of new Rapports ERP page, CNESST security classes with CSST cap at 103 000 $, employee supervisor auto-fill from department, and P0 fix removing the 'Aucune Prime' save block in BudgetFicheDialog. Backend: 12/12 pytest cases pass. Frontend: all 4 Rapports tabs render correctly (Synthèse, P&L with GL table + chart, Masse par classe with header 'max assurable 103 000 $', Constructeur personnalisé with column picker + run + result table). Excel exports (pnl-excel, class-excel, custom-excel) all download properly. P0 fix confirmed: saving with prime_type=Aucune Prime + prime_garde=true now shows 'Budget CA enregistré' (no blocking toast). Supervisor autofill works: dept 810 → 'Chef(fe) d\\'équipe-Électrique', dept 400 → 'Directeur/trice Finances'. Hypothèses page shows security-classes-card with 5 classes and csst-max=103000. Environment left in original state (122 employés).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/reports/excel (Synthèse Excel)", "issue": "Endpoint was returning 500 due to NameError: 'build_budget_excel' is not defined — the function's `def` line had been accidentally removed in server.py around line 1013, leaving orphan function body. FIXED by re-adding the def signature. Endpoint now returns 200."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Employé création — supervisor persistence", "issue": "The `supervisor` field is sent by the frontend on POST/PUT /api/employees but is NOT declared in the backend Pydantic EmployeeBase schema. Pydantic's `.model_dump()` therefore drops the field before it reaches Mongo — no employee has a persisted `supervisor` value (verified: 0/122). This is OK visually because Employes.js re-derives the supervisor from the Départements table each time the form opens (departments.find(d.code===emp.department).superviseur). If the intent was to allow per-employee override, the backend schema needs a `supervisor: Optional[str] = None` field. Not blocking — auto-fill from department works and displays correctly.", "affected_selectors": ["f-supervisor"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iteration_13.py", "/app/test_reports/pytest/iteration_13.xml"],
+  "action_items": [
+    "(Optional) Add `supervisor: Optional[str] = None` to EmployeeBase in /app/backend/server.py if per-employee supervisor override is desired; otherwise remove the field from the payload in Employes.js to avoid confusion.",
+    "(Already fixed by tester) Confirm `build_budget_excel` function signature restoration in /app/backend/server.py line 1013 is what was intended."
+  ],
+  "critical_code_review_comments": [
+    "server.py:1013 — Orphan function body without `def` signature caused /api/reports/excel to 500. Restored `def build_budget_excel(data, year, dept_label):`. Consider splitting server.py (currently ~1620 lines) into modules (reports, employees, budget, auth) for maintainability.",
+    "server.py EmployeeBase Pydantic model does not include `supervisor` — silently drops the field the frontend sends. Either add it, or stop sending it.",
+    "Rapports.js line 191-197 uses React fragment `<>` with a `key` prop only on the wrapping tr — the top-level `<>` should be `<React.Fragment key={g.key}>` to avoid React 'each child in a list should have a unique key' warning (minor)."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (restored missing `def build_budget_excel` signature at line 1013)",
+    "/app/backend/tests/test_iteration_13.py (new test file, 12 tests, all pass)"
+  ],
+  "success_rate": {"backend": "100% (12/12 pytest)", "frontend": "100% (all critical flows verified)"},
+  "test_credentials": "admin@accslegro.com / admin123",
+  "seed_data_creation": "Temporary test employee 'TEST Supervisor Persist' created via API and immediately deleted. Environment left with 122 employees as required.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Employees 'Add' button label is 'Ajouter' (not 'Nouvel employé'). Budget search by full name with accents (e.g., 'Bouchère') may not match — search by first name only. To open BudgetFicheDialog use edit-line-{n} on any CCQ row. Prime type dropdown is 'combobox' inside dialog; use role=option to select. Checkboxes: first three in dialog are prime_garde, prime_halo, alloc_securite. Hypothèses page testid selectors: hypotheses-page, security-classes-card, csst-max. Rapports testids: rapports-page, tab-{synthese|pnl|classe|custom}, pnl-excel-btn, class-excel-btn, custom-excel-btn, run-custom-btn, export-excel-btn, export-pdf-btn, col-{key}.",
+  "verified_scenarios": {
+    "login_admin": "PASS",
+    "P0_prime_save_fix": "PASS — Save with prime_type=Aucune Prime + prime_garde=true shows 'Budget CA enregistré' (no 'Sélectionnez un type de prime' toast)",
+    "supervisor_autofill": "PASS — dept 810 → 'Chef(fe) d\\'équipe-Électrique'; dept 400 → 'Directeur/trice Finances' (matches DEPARTMENTS_SEED)",
+    "rapports_4_tabs_render": "PASS — synthese/pnl/classe/custom all render without errors",
+    "csst_cap_103000_header": "PASS — Masse par classe header shows 'max assurable 103 000 $'",
+    "csst_cap_computation": "PASS — Backend computes csst = rate*min(salaire_brut, 103000) per line",
+    "custom_report_run": "PASS — run-custom-btn produces custom-result table",
+    "excel_downloads": "PASS — pnl-excel, class-excel, custom-excel all trigger file downloads",
+    "synthese_excel_after_fix": "PASS — /api/reports/excel now returns 200 after restoring build_budget_excel def",
+    "hypotheses_security_classes_card": "PASS — visible with 5 classes",
+    "hypotheses_csst_max_input": "PASS — value 103000"
+  },
+  "rca of the issue": "/api/reports/excel returned 500 — RCA: line 1013 of /app/backend/server.py had orphan function body (wb = openpyxl.Workbook() ... return buf) with the `def build_budget_excel(data, year, dept_label):` signature accidentally deleted. Reproduction: GET /api/reports/excel?year=2026&scenario=ca → 500 'NameError: name build_budget_excel is not defined'. Mitigation: re-inserted the def signature; endpoint now returns 200 and the Excel file downloads correctly."
+}

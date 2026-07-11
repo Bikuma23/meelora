@@ -90,7 +90,6 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
 
   const save = async () => {
     if (locked) { toast.error("Budget verrouillé — seul un administrateur peut modifier."); return; }
-    if (isCCQ && f.prime_garde && f.prime_type === "Aucune Prime") { toast.error("Sélectionnez un type de prime : la Prime de garde est activée"); return; }
     try {
       await api.saveBudgetOverride(line.employee_id, override, { year, scenario: scn });
       toast.success(`${SCEN_LABEL[scn]} enregistré`); onSaved(); await refetch();

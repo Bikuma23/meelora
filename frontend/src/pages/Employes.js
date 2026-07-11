@@ -44,7 +44,7 @@ function EmpForm({ open, onOpenChange, initial, departments, securityClasses = [
       holiday_days: String(initial.holiday_days), prime_type: initial.prime_type, prime_garde: initial.prime_garde,
       prime_halo: initial.prime_halo, alloc_securite: initial.alloc_securite, hire_date: initial.hire_date, birth_date: initial.birth_date,
       active: initial.active !== false, sex_at_birth: initial.sex_at_birth || "", end_date: initial.end_date || "",
-      supervisor: initial.supervisor || "", security_class: initial.security_class || "",
+      supervisor: (departments.find((d) => d.code === initial.department)?.superviseur) || initial.supervisor || "", security_class: initial.security_class || "",
     });
     else setF(empty);
     setErrors({});
@@ -109,10 +109,10 @@ function EmpForm({ open, onOpenChange, initial, departments, securityClasses = [
               <span data-testid="f-age" className="ml-auto font-mono-data text-sm font-700">{age != null ? `${age} ans` : "—"}</span>
             </div>
           </Field>
-          <Field label="Superviseur" testId="f-supervisor"><Input data-testid="f-supervisor" value={f.supervisor} onChange={(e) => set("supervisor", e.target.value)} /></Field>
+          <Field label="Superviseur (du département)" testId="f-supervisor"><Input data-testid="f-supervisor" value={f.supervisor} readOnly placeholder="Sélectionnez un département" className="bg-slate-50 text-slate-600" /></Field>
           <Field label="Titre / Poste" error={errors.title} testId="f-title"><Input data-testid="f-title" value={f.title} onChange={(e) => set("title", e.target.value)} /></Field>
           <Field label="Département" error={errors.department} testId="f-department">
-            <Select value={f.department} onValueChange={(v) => set("department", v)}>
+            <Select value={f.department} onValueChange={(v) => setF((p) => ({ ...p, department: v, supervisor: departments.find((d) => d.code === v)?.superviseur || "" }))}>
               <SelectTrigger data-testid="f-department"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
               <SelectContent className="max-h-64">{departments.map((d) => <SelectItem key={d.code} value={d.code}>{d.code} — {d.description}</SelectItem>)}</SelectContent>
             </Select>

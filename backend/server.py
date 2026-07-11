@@ -1010,6 +1010,7 @@ async def report_pnl_excel(department: Optional[str] = None, year: Optional[int]
                              headers={"Content-Disposition": f"attachment; filename=pnl_{scenario}_{y}.xlsx"})
 
 
+def build_budget_excel(data, year, dept_label):
     wb = openpyxl.Workbook()
     bold = openpyxl.styles.Font(bold=True)
     # Résumé
