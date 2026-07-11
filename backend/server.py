@@ -597,6 +597,7 @@ class EmployeeBase(BaseModel):
     birth_date: str
     end_date: Optional[str] = None
     security_class: Optional[str] = None
+    supervisor: Optional[str] = None
     active: bool = True
     sex_at_birth: Optional[Literal["Masculin", "Féminin", "Autre", "Préfère ne pas répondre"]] = None
 
