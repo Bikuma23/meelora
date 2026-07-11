@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
 import {
-  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck,
+  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
@@ -125,32 +125,38 @@ export default function Layout() {
 function LayoutInner() {
   const { user, logout } = useAuth();
   const [active, setActive] = useState("dashboard");
+  const [mobileOpen, setMobileOpen] = useState(false);
   const page = PAGES[active];
   const Active = page.comp;
+  const go = (k) => { setActive(k); setMobileOpen(false); };
 
   return (
     <div className="flex min-h-screen bg-[#F1F5F9]">
-      <aside className="fixed left-0 top-0 z-30 flex h-screen w-64 flex-col bg-[#0E1526] px-3 py-4">
-        <div className="mb-6 flex items-center gap-2.5 px-2">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#2563EB] to-[#14B8A6]">
-            <DollarSign size={20} className="text-white" strokeWidth={2.4} />
-          </span>
-          <div>
-            <h1 className="text-base font-800 leading-none text-white">Budget Salaires</h1>
-            <p className="text-[11px] font-500 uppercase tracking-widest text-[#14B8A6]">Pro</p>
+      {mobileOpen && <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setMobileOpen(false)} data-testid="sidebar-overlay" />}
+      <aside className={`fixed left-0 top-0 z-40 flex h-screen w-64 flex-col bg-[#0E1526] px-3 py-4 transition-transform duration-200 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        <div className="mb-6 flex items-center justify-between gap-2.5 px-2">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#2563EB] to-[#14B8A6]">
+              <DollarSign size={20} className="text-white" strokeWidth={2.4} />
+            </span>
+            <div>
+              <h1 className="text-base font-800 leading-none text-white">Budget Salaires</h1>
+              <p className="text-[11px] font-500 uppercase tracking-widest text-[#14B8A6]">Pro</p>
+            </div>
           </div>
+          <button className="rounded-lg p-1.5 text-slate-400 hover:bg-white/5 lg:hidden" onClick={() => setMobileOpen(false)} data-testid="sidebar-close-btn"><X size={20} /></button>
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto">
-          {NAV_TOP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={setActive} />)}
+          {NAV_TOP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           <div className="flex items-center gap-2 px-3 pb-1 pt-4">
             <Briefcase size={14} className="text-slate-500" />
             <span className="text-[11px] font-700 uppercase tracking-widest text-slate-500">Masse Salariale</span>
           </div>
-          {NAV_GROUP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={setActive} />)}
+          {NAV_GROUP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           <div className="pt-4">
-            {NAV_BOTTOM.map((i) => <NavItem key={i.key} item={i} active={active} onClick={setActive} />)}
-            {user?.role === "admin" && NAV_ADMIN.map((i) => <NavItem key={i.key} item={i} active={active} onClick={setActive} />)}
+            {NAV_BOTTOM.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
+            {user?.role === "admin" && NAV_ADMIN.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           </div>
         </nav>
 
@@ -171,18 +177,21 @@ function LayoutInner() {
         </div>
       </aside>
 
-      <div className="ml-64 flex-1">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-[#F1F5F9]/90 px-8 py-4 backdrop-blur">
-          <div>
-            <h2 className="text-lg font-800 tracking-tight">{page.title}</h2>
-            <p className="text-xs text-slate-500">{page.sub}</p>
+      <div className="flex-1 lg:ml-64">
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-slate-200 bg-[#F1F5F9]/90 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <button className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-200 lg:hidden" onClick={() => setMobileOpen(true)} data-testid="sidebar-open-btn"><Menu size={22} /></button>
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-800 tracking-tight sm:text-lg">{page.title}</h2>
+              <p className="truncate text-xs text-slate-500">{page.sub}</p>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-          <span className="rounded-full bg-[#2563EB]/10 px-3 py-1 text-xs font-600 text-[#2563EB]">Budget actif</span>
-          <YearControls />
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="hidden rounded-full bg-[#2563EB]/10 px-3 py-1 text-xs font-600 text-[#2563EB] sm:inline-flex">Budget actif</span>
+            <YearControls />
           </div>
         </header>
-        <main className="p-8">
+        <main className="p-4 sm:p-6 lg:p-8">
           <Active />
         </main>
       </div>

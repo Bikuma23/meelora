@@ -225,6 +225,7 @@ export default function Employes() {
   };
 
   const dl = employees.reduce((s, e) => s + e.current_annual_salary, 0);
+  const classMap = Object.fromEntries((securityClasses || []).map((c) => [c.code, c]));
 
   const dlTemplate = async () => {
     try {
@@ -255,11 +256,11 @@ export default function Employes() {
       </div>
 
       <div className="card overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[860px] text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
-              {["#", "Titre / Poste", "Nom", "Département", "Type", "Salaire", "Âge", "Ancienneté", "Actions"].map((h, i) => (
-                <th key={h} className={`px-4 py-3 font-600 ${i >= 5 ? "text-right" : "text-left"}`}>{h}</th>
+              {[["#", "left"], ["Titre / Poste", "left"], ["Nom", "left"], ["Dépt", "left"], ["Type", "left"], ["Classe de sécurité", "left"], ["Salaire", "right"], ["Âge", "right"], ["Ancien.", "right"], ["Actions", "right"]].map(([h, al]) => (
+                <th key={h} className={`px-4 py-3 font-600 ${al === "right" ? "text-right" : "text-left"}`}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -271,6 +272,14 @@ export default function Employes() {
                 <td className="px-4 py-2.5 font-600">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">Inactif</span>}</td>
                 <td className="px-4 py-2.5 text-[13px]">{e.department}</td>
                 <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#2563EB" : "#64748B" }}>{e.is_ccq ? "CCQ" : typeLabel(e.employment_type)}</span></td>
+                <td className="px-4 py-2.5" data-testid={`employee-secclass-${e.employee_number}`}>
+                  {e.security_class ? (
+                    <div className="flex flex-col leading-tight">
+                      <span className="font-mono-data text-[11px] font-700 text-slate-700">{e.security_class}</span>
+                      <span className="text-[11px] text-slate-500">{classMap[e.security_class]?.description || "—"}</span>
+                    </div>
+                  ) : <span className="text-slate-300">—</span>}
+                </td>
                 <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(e.current_annual_salary)}</td>
                 <td className="px-4 py-2.5 text-right font-mono-data">{computeAge(e.birth_date)}</td>
                 <td className="px-4 py-2.5 text-right font-mono-data">{computeSeniority(e.hire_date)} ans</td>
@@ -282,7 +291,7 @@ export default function Employes() {
                 </td>
               </tr>
             ))}
-            {employees.length === 0 && <tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-500">Aucun employé trouvé.</td></tr>}
+            {employees.length === 0 && <tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-500">Aucun employé trouvé.</td></tr>}
           </tbody>
         </table>
       </div>
