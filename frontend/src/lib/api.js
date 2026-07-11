@@ -57,4 +57,9 @@ export const api = {
   downloadReport: (kind, department, year, scenario) => client.get(`/reports/${kind}`, {
     params: { ...(department && department !== "all" ? { department } : {}), ...(year ? { year } : {}), ...(scenario ? { scenario } : {}) }, responseType: "blob",
   }).then((r) => r.data),
+  getPnl: (params) => client.get("/reports/pnl", { params }).then((r) => r.data),
+  getByClass: (params) => client.get("/reports/by-class", { params }).then((r) => r.data),
+  getCustomColumns: () => client.get("/reports/custom-columns").then((r) => r.data),
+  getCustomReport: (params) => client.get("/reports/custom", { params }).then((r) => r.data),
+  downloadReportParams: (kind, params) => client.get(`/reports/${kind}`, { params, responseType: "blob" }).then((r) => r.data),
 };

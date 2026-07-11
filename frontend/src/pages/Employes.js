@@ -20,7 +20,7 @@ const empty = {
   name: "", department: "", title: "", employment_type: "Régulier temps plein", ccq_category: "N/A",
   current_annual_salary: "", vacation_rate_pct: "", sick_personal_days: "", holiday_days: "",
   prime_type: "Aucune Prime", prime_garde: false, prime_halo: false, alloc_securite: false, hire_date: "", birth_date: "",
-  active: true, sex_at_birth: "", end_date: "",
+  active: true, sex_at_birth: "", end_date: "", supervisor: "", security_class: "",
 };
 
 function Field({ label, error, testId, children }) {
@@ -33,7 +33,7 @@ function Field({ label, error, testId, children }) {
   );
 }
 
-function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
+function EmpForm({ open, onOpenChange, initial, departments, securityClasses = [], onSubmit }) {
   const [f, setF] = useState(empty);
   const [errors, setErrors] = useState({});
   useEffect(() => {
@@ -44,6 +44,7 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
       holiday_days: String(initial.holiday_days), prime_type: initial.prime_type, prime_garde: initial.prime_garde,
       prime_halo: initial.prime_halo, alloc_securite: initial.alloc_securite, hire_date: initial.hire_date, birth_date: initial.birth_date,
       active: initial.active !== false, sex_at_birth: initial.sex_at_birth || "", end_date: initial.end_date || "",
+      supervisor: initial.supervisor || "", security_class: initial.security_class || "",
     });
     else setF(empty);
     setErrors({});
@@ -57,7 +58,6 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
     if (!f.department) e.department = REQ;
     if (!f.title.trim()) e.title = REQ;
     if (isCCQ && f.ccq_category === "N/A") e.ccq_category = "Électricien ou Frigoriste";
-    if (isCCQ && f.prime_garde && f.prime_type === "Aucune Prime") e.prime_type = "Type de prime requis (Prime de garde activée)";
     if (f.current_annual_salary === "" || Number(f.current_annual_salary) <= 0) e.current_annual_salary = "Salaire requis (> 0)";
     if (f.vacation_rate_pct === "") e.vacation_rate_pct = REQ;
     if (f.sick_personal_days === "") e.sick_personal_days = REQ;
@@ -74,6 +74,7 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
       prime_garde: isCCQ && f.prime_garde, prime_halo: isCCQ && f.prime_halo, alloc_securite: f.alloc_securite,
       hire_date: f.hire_date, birth_date: f.birth_date,
       active: f.active, sex_at_birth: f.sex_at_birth || null, end_date: f.end_date || null,
+      supervisor: f.supervisor || null, security_class: f.security_class || null,
     });
   };
 
@@ -87,19 +88,28 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
           <DialogDescription className="text-xs">Âge et ancienneté calculés automatiquement. Le sexe à la naissance est facultatif.</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-1 gap-4 py-1 sm:grid-cols-2">
-          <Field label="Sexe à la naissance" testId="f-sex">
-            <Select value={f.sex_at_birth} onValueChange={(v) => set("sex_at_birth", v)}>
-              <SelectTrigger data-testid="f-sex"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
-              <SelectContent>{SEXES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-            </Select>
-          </Field>
+          <Field label="Nom complet" error={errors.name} testId="f-name"><Input data-testid="f-name" value={f.name} onChange={(e) => set("name", e.target.value)} /></Field>
           <Field label="Statut" testId="f-active">
             <label className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 px-3">
               <span className={`text-[11px] font-600 uppercase ${f.active ? "text-emerald-600" : "text-red-500"}`}>{f.active ? "Actif" : "Inactif"}</span>
               <Switch data-testid="f-active" checked={f.active} onCheckedChange={(v) => set("active", v)} />
             </label>
           </Field>
-          <Field label="Nom complet" error={errors.name} testId="f-name"><Input data-testid="f-name" value={f.name} onChange={(e) => set("name", e.target.value)} /></Field>
+          <Field label="Sexe à la naissance" testId="f-sex">
+            <Select value={f.sex_at_birth} onValueChange={(v) => set("sex_at_birth", v)}>
+              <SelectTrigger data-testid="f-sex"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
+              <SelectContent>{SEXES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+          <div className="hidden sm:block" />
+          <Field label="Date de naissance" error={errors.birth_date} testId="f-birth"><Input data-testid="f-birth" type="date" className="font-mono-data" value={f.birth_date} onChange={(e) => set("birth_date", e.target.value)} /></Field>
+          <Field label="Âge (calculé)" testId="f-age-box">
+            <div className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3">
+              <Cake size={15} className="text-[#2563EB]" />
+              <span data-testid="f-age" className="ml-auto font-mono-data text-sm font-700">{age != null ? `${age} ans` : "—"}</span>
+            </div>
+          </Field>
+          <Field label="Superviseur" testId="f-supervisor"><Input data-testid="f-supervisor" value={f.supervisor} onChange={(e) => set("supervisor", e.target.value)} /></Field>
           <Field label="Titre / Poste" error={errors.title} testId="f-title"><Input data-testid="f-title" value={f.title} onChange={(e) => set("title", e.target.value)} /></Field>
           <Field label="Département" error={errors.department} testId="f-department">
             <Select value={f.department} onValueChange={(v) => set("department", v)}>
@@ -111,6 +121,12 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
             <Select value={f.employment_type} onValueChange={(v) => set("employment_type", v)}>
               <SelectTrigger data-testid="f-type"><SelectValue /></SelectTrigger>
               <SelectContent>{TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+          <Field label="Classe de sécurité (CSST)" testId="f-security-class">
+            <Select value={f.security_class || "none"} onValueChange={(v) => set("security_class", v === "none" ? "" : v)}>
+              <SelectTrigger data-testid="f-security-class"><SelectValue placeholder="Aucune" /></SelectTrigger>
+              <SelectContent><SelectItem value="none">Aucune</SelectItem>{securityClasses.map((c) => <SelectItem key={c.code} value={c.code}>{c.code} — {c.description} ({(c.rate * 100).toFixed(2)}%)</SelectItem>)}</SelectContent>
             </Select>
           </Field>
           {isCCQ && (
@@ -142,13 +158,6 @@ function EmpForm({ open, onOpenChange, initial, departments, onSubmit }) {
           </Field>
           <Field label="Date de fin d'emploi (optionnel)" testId="f-end"><Input data-testid="f-end" type="date" className="font-mono-data" value={f.end_date} onChange={(e) => set("end_date", e.target.value)} /></Field>
           <div className="hidden sm:block" />
-          <Field label="Date de naissance" error={errors.birth_date} testId="f-birth"><Input data-testid="f-birth" type="date" className="font-mono-data" value={f.birth_date} onChange={(e) => set("birth_date", e.target.value)} /></Field>
-          <Field label="Âge (calculé)" testId="f-age-box">
-            <div className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3">
-              <Cake size={15} className="text-[#2563EB]" />
-              <span data-testid="f-age" className="ml-auto font-mono-data text-sm font-700">{age != null ? `${age} ans` : "—"}</span>
-            </div>
-          </Field>
         </div>
         <div className="border-t border-slate-200 pt-4">
           <p className="mb-2 text-xs font-700 uppercase tracking-widest text-slate-500">Primes & allocations</p>
@@ -184,10 +193,11 @@ export default function Employes() {
   const [importErrors, setImportErrors] = useState({ open: false, errors: [], fileName: "" });
   const [confirmDel, setConfirmDel] = useState(null);
   const [showInactive, setShowInactive] = useState(false);
+  const [securityClasses, setSecurityClasses] = useState([]);
   const fileRef = useRef();
 
   const load = (q, inc) => api.listEmployees({ ...(q ? { q } : {}), ...((inc ?? showInactive) ? { include_inactive: true } : {}) }).then(setEmployees);
-  useEffect(() => { api.listDepartments().then(setDepartments); load(); }, []);
+  useEffect(() => { api.listDepartments().then(setDepartments); api.getHypotheses().then((h) => setSecurityClasses(h.security_classes || [])).catch(() => {}); load(); }, []);
   useEffect(() => { const t = setTimeout(() => load(query), 250); return () => clearTimeout(t); }, [query, showInactive]);
 
   const submit = async (data) => {
@@ -248,7 +258,7 @@ export default function Employes() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
-              {["#", "Nom", "Département", "Type", "Catégorie", "Salaire", "Âge", "Ancienneté", "Actions"].map((h, i) => (
+              {["#", "Titre / Poste", "Nom", "Département", "Type", "Salaire", "Âge", "Ancienneté", "Actions"].map((h, i) => (
                 <th key={h} className={`px-4 py-3 font-600 ${i >= 5 ? "text-right" : "text-left"}`}>{h}</th>
               ))}
             </tr>
@@ -257,10 +267,10 @@ export default function Employes() {
             {employees.map((e) => (
               <tr key={e.id} className={`border-b border-slate-100 hover:bg-slate-50 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-row-${e.employee_number}`}>
                 <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(e.employee_number).padStart(3, "0")}</td>
-                <td className="px-4 py-2.5 font-600">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">Inactif</span>}<div className="text-[11px] text-slate-500">{e.title}</div></td>
+                <td className="px-4 py-2.5 text-[13px] text-slate-600">{e.title || "—"}</td>
+                <td className="px-4 py-2.5 font-600">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">Inactif</span>}</td>
                 <td className="px-4 py-2.5 text-[13px]">{e.department}</td>
                 <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#2563EB" : "#64748B" }}>{e.is_ccq ? "CCQ" : typeLabel(e.employment_type)}</span></td>
-                <td className="px-4 py-2.5 text-[13px]">{e.ccq_category !== "N/A" ? e.ccq_category : "—"}</td>
                 <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(e.current_annual_salary)}</td>
                 <td className="px-4 py-2.5 text-right font-mono-data">{computeAge(e.birth_date)}</td>
                 <td className="px-4 py-2.5 text-right font-mono-data">{computeSeniority(e.hire_date)} ans</td>
@@ -277,7 +287,7 @@ export default function Employes() {
         </table>
       </div>
 
-      {dialog.open && <EmpForm open={dialog.open} onOpenChange={(v) => setDialog((p) => ({ ...p, open: v }))} initial={dialog.item} departments={departments} onSubmit={submit} />}
+      {dialog.open && <EmpForm open={dialog.open} onOpenChange={(v) => setDialog((p) => ({ ...p, open: v }))} initial={dialog.item} departments={departments} securityClasses={securityClasses} onSubmit={submit} />}
       <ImportErrorsDialog open={importErrors.open} onOpenChange={(v) => setImportErrors((p) => ({ ...p, open: v }))} errors={importErrors.errors} fileName={importErrors.fileName} />
       <AlertDialog open={!!confirmDel} onOpenChange={(v) => !v && setConfirmDel(null)}>
         <AlertDialogContent data-testid="delete-confirm-dialog">

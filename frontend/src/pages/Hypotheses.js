@@ -18,6 +18,9 @@ export default function Hypotheses() {
   const setF = (k, v) => setH((p) => ({ ...p, [k]: v }));
   const setCharge = (i, key, v) => setH((p) => { const c = [...p.charges]; c[i] = { ...c[i], [key]: v }; return { ...p, charges: c }; });
   const setDays = (arr, i, v) => setH((p) => { const a = [...p[arr]]; a[i] = Number(v) || 0; return { ...p, [arr]: a }; });
+  const setClass = (i, key, v) => setH((p) => { const c = [...(p.security_classes || [])]; c[i] = { ...c[i], [key]: v }; return { ...p, security_classes: c }; });
+  const addClass = () => setH((p) => ({ ...p, security_classes: [...(p.security_classes || []), { code: "", description: "", rate: 0 }] }));
+  const removeClass = (i) => setH((p) => ({ ...p, security_classes: (p.security_classes || []).filter((_, j) => j !== i) }));
 
   const save = async () => {
     setSaving(true);
@@ -79,12 +82,32 @@ export default function Hypotheses() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="card p-5">
-          <h3 className="mb-4 flex items-center gap-2 text-sm font-700"><TrendingUp size={16} className="text-[#14B8A6]" /> Augmentation</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-[11px] uppercase text-slate-500">Augmentation Autres (%)</label><Input data-testid="aug-autres" type="number" step="0.01" className="mt-1 font-mono-data" value={+(h.augmentation_autres * 100).toFixed(3)} onChange={(e) => setF("augmentation_autres", Number(e.target.value) / 100)} /></div>
-            <div><label className="text-[11px] uppercase text-slate-500">Augmentation CCQ (%)</label><Input data-testid="aug-ccq" type="number" step="0.01" className="mt-1 font-mono-data" value={+(h.augmentation_ccq * 100).toFixed(3)} onChange={(e) => setF("augmentation_ccq", Number(e.target.value) / 100)} /></div>
+        <div className="card p-5" data-testid="security-classes-card">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="flex items-center gap-2 text-sm font-700"><ShieldCheck size={16} className="text-[#14B8A6]" /> Classe de sécurité CNESST</h3>
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] uppercase text-slate-500">Max. assurable ($)</label>
+              <Input data-testid="csst-max" type="number" className="h-8 w-28 text-right font-mono-data" value={h.csst_max_assurable || 0} onChange={(e) => setF("csst_max_assurable", Number(e.target.value))} />
+            </div>
           </div>
+          <table className="w-full text-sm">
+            <thead><tr className="text-[11px] uppercase tracking-wider text-slate-400">
+              <th className="px-2 py-1.5 text-left font-600">Code</th><th className="px-2 py-1.5 text-left font-600">Description</th>
+              <th className="px-2 py-1.5 text-right font-600">Taux (%)</th><th className="w-8"></th>
+            </tr></thead>
+            <tbody>
+              {(h.security_classes || []).map((c, i) => (
+                <tr key={i} className="border-t border-slate-100" data-testid={`class-row-${i}`}>
+                  <td className="px-2 py-1.5"><Input data-testid={`class-code-${i}`} className="h-8 w-24 font-mono-data" value={c.code} onChange={(e) => setClass(i, "code", e.target.value)} /></td>
+                  <td className="px-2 py-1.5"><Input data-testid={`class-desc-${i}`} className="h-8" value={c.description} onChange={(e) => setClass(i, "description", e.target.value)} /></td>
+                  <td className="px-2 py-1.5 text-right"><Input data-testid={`class-rate-${i}`} type="number" step="0.01" className="ml-auto h-8 w-24 text-right font-mono-data" value={+(c.rate * 100).toFixed(4)} onChange={(e) => setClass(i, "rate", Number(e.target.value) / 100)} /></td>
+                  <td className="px-1 text-center"><button data-testid={`class-del-${i}`} onClick={() => removeClass(i)} className="text-slate-400 hover:text-red-500">✕</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Button data-testid="add-class-btn" variant="outline" size="sm" className="mt-3 gap-1.5" onClick={addClass}>+ Ajouter une classe</Button>
+          <p className="mt-2 text-[11px] text-slate-400">La déduction CSST de chaque employé utilise le taux de sa classe de sécurité, plafonné au maximum assurable.</p>
         </div>
         <div className="card p-5">
           <h3 className="mb-4 flex items-center gap-2 text-sm font-700"><Settings2 size={16} className="text-[#2563EB]" /> Autres paramètres</h3>

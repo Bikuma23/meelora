@@ -153,6 +153,14 @@ DEFAULT_HYPOTHESES = {
     "prime_garde_cout_unitaire": 250, "prime_garde_nb_annuel": 2.08,
     "prime_halo_rate": 0.05, "alloc_securite_montant": 260,
     "augmentation_ccq": 0.0333, "augmentation_autres": 0.035,
+    "csst_max_assurable": 103000,
+    "security_classes": [
+        {"code": "80190", "description": "Installation Eq. Contrôle", "rate": 0.0267},
+        {"code": "80020", "description": "Bureau et Extérieur", "rate": 0.0061},
+        {"code": "90010", "description": "Bureau", "rate": 0.0032},
+        {"code": "80200", "description": "Frigoristes", "rate": 0.0357},
+        {"code": "80170", "description": "Électriciens", "rate": 0.0412},
+    ],
     "working_days_ccq": WD_CCQ, "working_days_std": WD_STD, "pay_weeks": PAY_WEEKS,
 }
 
@@ -240,6 +248,8 @@ def _proration(e, year):
 
 def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
     dept_csst = {d["code"]: d.get("csst", 0) for d in depts}
+    class_rates = {c["code"]: c["rate"] for c in hypo.get("security_classes", [])}
+    csst_ceiling = hypo.get("csst_max_assurable", 103000)
     dept_label = {d["code"]: d["description"] for d in depts}
     charges = {c["code"]: c for c in hypo["charges"]}
     aug_ccq = hypo["augmentation_ccq"]
@@ -297,7 +307,8 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
             ae = _capped(gross, charges["AE"]["rate"], charges["AE"]["ceiling"])
             rqap = _capped(gross, charges["RQAP"]["rate"], charges["RQAP"]["ceiling"])
             fss = _capped(gross, charges["FSS"]["rate"], charges["FSS"]["ceiling"])
-            csst = _capped(gross, dept_csst.get(e["department"], charges["CSST"]["rate"]), charges["CSST"]["ceiling"])
+            csst_rate = class_rates.get(e.get("security_class")) if e.get("security_class") in class_rates else 0
+            csst = _capped(gross, csst_rate, csst_ceiling)
             gov = rrq + ae + rqap + fss
             if ccq:
                 ccq_av = (new_salary + primes_total) * hypo["ccq_rate"]
@@ -323,6 +334,7 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
             "name": e["name"], "title": e.get("title", ""), "department": e["department"],
             "department_label": dept_label.get(e["department"], e["department"]),
             "employment_type": e["employment_type"], "is_ccq": ccq, "overridden": bool(ov),
+            "security_class": e.get("security_class") or "",
             "base_salary": round(base, 2), "augmentation": aug, "new_salary": round(new_salary, 2),
             "taux_horaire": round(taux_horaire, 2), "vacation_rate": vac_rate, "vacation": round(vacation, 2),
             "prime_type": prime_type, "prime_amount": round(prime_amt, 2), "garde": round(garde, 2),
@@ -584,6 +596,7 @@ class EmployeeBase(BaseModel):
     hire_date: str
     birth_date: str
     end_date: Optional[str] = None
+    security_class: Optional[str] = None
     active: bool = True
     sex_at_birth: Optional[Literal["Masculin", "Féminin", "Autre", "Préfère ne pas répondre"]] = None
 
@@ -743,6 +756,15 @@ async def _get_hypo(year):
         _apply_working_days(base, year)
         await db.hypotheses.insert_one(base)
         doc = await db.hypotheses.find_one({"key": _hkey(year)})
+    else:
+        patch = {}
+        if "security_classes" not in doc:
+            patch["security_classes"] = DEFAULT_HYPOTHESES["security_classes"]
+        if "csst_max_assurable" not in doc:
+            patch["csst_max_assurable"] = DEFAULT_HYPOTHESES["csst_max_assurable"]
+        if patch:
+            await db.hypotheses.update_one({"key": _hkey(year)}, {"$set": patch})
+            doc.update(patch)
     return doc
 
 async def _active_year():
@@ -872,7 +894,122 @@ async def _budget_data(department=None, year=None, scenario="ca"):
     data = compute_budget(employees, hypo, depts, year=year, scenario=scenario)
     return data, hypo
 
-def build_budget_excel(data, year, dept_label):
+def _pnl_data(data, depts):
+    """Rapport type P&L : coûts ventilés par mois, regroupés par compte GL (départements)."""
+    gl_map = {d["code"]: (d.get("compte_gl") or "").strip() for d in depts}
+    gl_label = {}
+    for d in depts:
+        gl = (d.get("compte_gl") or "").strip() or "—"
+        gl_label.setdefault(gl, gl)
+    rows = {}
+    for ln in data["lines"]:
+        gl = gl_map.get(ln["department"], "") or "—"
+        r = rows.setdefault(gl, {"gl": gl, "monthly": [0.0] * 12, "total": 0.0})
+        for i in range(12):
+            r["monthly"][i] += ln["monthly"][i]
+        r["total"] += ln["total_budgeted"]
+    out = [{"gl": k, "monthly": [round(x, 2) for x in v["monthly"]], "total": round(v["total"], 2)} for k, v in sorted(rows.items())]
+    totals = {"monthly": [round(sum(r["monthly"][i] for r in out), 2) for i in range(12)], "total": round(sum(r["total"] for r in out), 2)}
+    return {"months": MONTHS, "rows": out, "totals": totals}
+
+def _by_class_data(data, hypo):
+    """Masse salariale par classe de sécurité CSST."""
+    cls = {c["code"]: c for c in hypo.get("security_classes", [])}
+    rows = {}
+    for ln in data["lines"]:
+        code = ln.get("security_class") or "—"
+        r = rows.setdefault(code, {"code": code, "description": cls.get(code, {}).get("description", "Non assignée") if code != "—" else "Non assignée",
+                                    "rate": cls.get(code, {}).get("rate", 0) if code != "—" else 0,
+                                    "count": 0, "salaire_brut": 0.0, "csst": 0.0, "budget": 0.0})
+        r["count"] += 1
+        r["salaire_brut"] += ln["salaire_brut"]
+        r["csst"] += ln["csst"]
+        r["budget"] += ln["total_budgeted"]
+    out = [{**v, "salaire_brut": round(v["salaire_brut"], 2), "csst": round(v["csst"], 2), "budget": round(v["budget"], 2)} for v in rows.values()]
+    out.sort(key=lambda x: -x["budget"])
+    return {"rows": out, "csst_max_assurable": hypo.get("csst_max_assurable", 103000)}
+
+@api.get("/reports/pnl")
+async def report_pnl(department: Optional[str] = None, year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
+    data, hypo = await _budget_data(department, year, scenario)
+    depts = await db.departments.find().to_list(1000)
+    return _pnl_data(data, depts)
+
+@api.get("/reports/by-class")
+async def report_by_class(department: Optional[str] = None, year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
+    data, hypo = await _budget_data(department, year, scenario)
+    return _by_class_data(data, hypo)
+
+CUSTOM_COLS = {
+    "employee_number": "#", "name": "Nom", "title": "Titre", "department": "Département",
+    "employment_type": "Type", "security_class": "Classe séc.", "base_salary": "Salaire base",
+    "augmentation": "Augment.", "new_salary": "Nouveau salaire", "vacation": "Vacances",
+    "primes_total": "Primes", "salaire_brut": "Salaire brut", "avantages": "Avantages",
+    "csst": "CSST", "reer": "REER", "assurance": "Assurance", "total_budgeted": "Coût total",
+}
+
+def _custom_rows(data, columns, group_by, sort_key, sort_dir):
+    lines = data["lines"]
+    cols = [c for c in columns if c in CUSTOM_COLS] or ["employee_number", "name", "department", "salaire_brut", "total_budgeted"]
+    if sort_key in CUSTOM_COLS:
+        lines = sorted(lines, key=lambda l: l.get(sort_key, 0) if not isinstance(l.get(sort_key), str) else l.get(sort_key, ""), reverse=(sort_dir == "desc"))
+    numeric = {"base_salary", "new_salary", "vacation", "primes_total", "salaire_brut", "avantages", "csst", "reer", "assurance", "total_budgeted"}
+    def fmt(l, c):
+        v = l.get(c, "")
+        if c == "augmentation":
+            return f"{(l.get('augmentation') or 0) * 100:.1f}%"
+        return v
+    result = {"columns": [{"key": c, "label": CUSTOM_COLS[c]} for c in cols], "numeric": list(numeric)}
+    if group_by in CUSTOM_COLS:
+        groups = {}
+        for l in lines:
+            g = l.get(group_by, "—")
+            groups.setdefault(g, []).append(l)
+        result["grouped"] = True
+        result["groups"] = [{"key": str(g), "rows": [{c: fmt(l, c) for c in cols} for l in gl],
+                             "subtotals": {c: round(sum(l.get(c, 0) for l in gl), 2) for c in cols if c in numeric}}
+                            for g, gl in sorted(groups.items(), key=lambda kv: str(kv[0]))]
+    else:
+        result["grouped"] = False
+        result["rows"] = [{c: fmt(l, c) for c in cols} for l in lines]
+    result["totals"] = {c: round(sum(l.get(c, 0) for l in lines), 2) for c in cols if c in numeric}
+    return result
+
+@api.get("/reports/custom")
+async def report_custom(columns: str = "", group_by: str = "", sort_key: str = "", sort_dir: str = "asc",
+                        department: Optional[str] = None, employment_type: Optional[str] = None,
+                        year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
+    data, hypo = await _budget_data(department, year, scenario)
+    if employment_type and employment_type != "all":
+        data["lines"] = [l for l in data["lines"] if (("CCQ" if l["is_ccq"] else l["employment_type"]) == employment_type)]
+    cols = [c.strip() for c in columns.split(",") if c.strip()]
+    return _custom_rows(data, cols, group_by, sort_key, sort_dir)
+
+@api.get("/reports/custom-columns")
+async def report_custom_columns(user: dict = Depends(get_current_user)):
+    return {"columns": [{"key": k, "label": v} for k, v in CUSTOM_COLS.items()]}
+
+def _pnl_excel(pnl, year, scenario_label):
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "État des résultats"
+    bold = openpyxl.styles.Font(bold=True)
+    ws.append([f"État des résultats (P&L) — {scenario_label} {year}"]); ws["A1"].font = openpyxl.styles.Font(bold=True, size=14)
+    ws.append([])
+    ws.append(["Compte GL"] + pnl["months"] + ["Total"]); [setattr(c, "font", bold) for c in ws[ws.max_row]]
+    for r in pnl["rows"]:
+        ws.append([r["gl"]] + r["monthly"] + [r["total"]])
+    ws.append(["TOTAL"] + pnl["totals"]["monthly"] + [pnl["totals"]["total"]]); [setattr(c, "font", bold) for c in ws[ws.max_row]]
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0); return buf
+
+@api.get("/reports/pnl-excel")
+async def report_pnl_excel(department: Optional[str] = None, year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
+    data, hypo = await _budget_data(department, year, scenario)
+    depts = await db.departments.find().to_list(1000)
+    y = year or await _active_year()
+    buf = _pnl_excel(_pnl_data(data, depts), y, SCEN_LABEL.get(scenario, scenario))
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename=pnl_{scenario}_{y}.xlsx"})
+
+
     wb = openpyxl.Workbook()
     bold = openpyxl.styles.Font(bold=True)
     # Résumé
@@ -1177,6 +1314,51 @@ async def report_fiches_excel(department: Optional[str] = None, year: Optional[i
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                              headers={"Content-Disposition": f"attachment; filename=fiches_{scenario}_{hypo['year']}.xlsx"})
 
+@api.get("/reports/by-class-excel")
+async def report_by_class_excel(department: Optional[str] = None, year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
+    data, hypo = await _budget_data(department, year, scenario)
+    y = year or await _active_year()
+    bc = _by_class_data(data, hypo)
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Masse par classe"
+    bold = openpyxl.styles.Font(bold=True)
+    ws.append([f"Masse salariale par classe de sécurité — {SCEN_LABEL.get(scenario, scenario)} {y}  (max assurable {bc['csst_max_assurable']} $)"]); ws["A1"].font = openpyxl.styles.Font(bold=True, size=13)
+    ws.append([])
+    ws.append(["Classe", "Description", "Taux %", "Employés", "Salaire brut", "CSST", "Coût total"]); [setattr(c, "font", bold) for c in ws[ws.max_row]]
+    for r in bc["rows"]:
+        ws.append([r["code"], r["description"], round(r["rate"] * 100, 2), r["count"], r["salaire_brut"], r["csst"], r["budget"]])
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename=masse_classe_{scenario}_{y}.xlsx"})
+
+@api.get("/reports/custom-excel")
+async def report_custom_excel(columns: str = "", group_by: str = "", sort_key: str = "", sort_dir: str = "asc",
+                              department: Optional[str] = None, employment_type: Optional[str] = None,
+                              year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
+    data, hypo = await _budget_data(department, year, scenario)
+    y = year or await _active_year()
+    if employment_type and employment_type != "all":
+        data["lines"] = [l for l in data["lines"] if (("CCQ" if l["is_ccq"] else l["employment_type"]) == employment_type)]
+    rep = _custom_rows(data, [c.strip() for c in columns.split(",") if c.strip()], group_by, sort_key, sort_dir)
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Rapport personnalisé"
+    bold = openpyxl.styles.Font(bold=True)
+    hdr = [c["label"] for c in rep["columns"]]
+    ws.append([f"Rapport personnalisé — {SCEN_LABEL.get(scenario, scenario)} {y}"]); ws["A1"].font = openpyxl.styles.Font(bold=True, size=13)
+    ws.append([]); ws.append(hdr); [setattr(c, "font", bold) for c in ws[ws.max_row]]
+    keys = [c["key"] for c in rep["columns"]]
+    if rep["grouped"]:
+        for g in rep["groups"]:
+            ws.append([f"▸ {g['key']}"]); ws[ws.max_row][0].font = bold
+            for row in g["rows"]:
+                ws.append([row.get(k, "") for k in keys])
+            ws.append([("Sous-total" if k == keys[0] else g["subtotals"].get(k, "")) for k in keys]); [setattr(c, "font", bold) for c in ws[ws.max_row]]
+    else:
+        for row in rep["rows"]:
+            ws.append([row.get(k, "") for k in keys])
+    ws.append([("TOTAL" if k == keys[0] else rep["totals"].get(k, "")) for k in keys]); [setattr(c, "font", bold) for c in ws[ws.max_row]]
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename=rapport_perso_{scenario}_{y}.xlsx"})
+
 # ---------------------------------------------------------------------------
 # Excel import / templates
 # ---------------------------------------------------------------------------
@@ -1185,7 +1367,8 @@ EMP_HEADERS = ["Matricule (# — laisser vide pour auto)", "Nom", "Département 
                "Jours maladie", "Jours fériés", "Type prime (Aucune Prime / Prime 8% / Prime 11% / Prime 12%)",
                "Prime garde (Oui/Non)", "Prime HALO (Oui/Non)", "Alloc sécurité (Oui/Non)",
                "Date embauche (AAAA-MM-JJ)", "Date naissance (AAAA-MM-JJ)",
-               "Sexe à la naissance (Masculin / Féminin / Autre / Préfère ne pas répondre)", "Statut (Actif / Inactif)"]
+               "Sexe à la naissance (Masculin / Féminin / Autre / Préfère ne pas répondre)", "Statut (Actif / Inactif)",
+               "Superviseur", "Classe de sécurité CSST (code)"]
 DEP_HEADERS = ["Code", "Description", "Superviseur", "Compte GL", "Groupe P&L", "CSST %"]
 
 def _b(v):
@@ -1216,7 +1399,7 @@ def _xlsx_response(headers, example, sheet, filename):
 @api.get("/employees/template")
 async def emp_template(user: dict = Depends(get_current_user)):
     ex = [101, "Jean Exemple", "400", "Comptable", "Régulier temps plein", "N/A", 80000, 8, 8, 14,
-          "Prime 8%", "Non", "Non", "Non", "2020-01-15", "1985-05-20", "Masculin", "Actif"]
+          "Prime 8%", "Non", "Non", "Non", "2020-01-15", "1985-05-20", "Masculin", "Actif", "Marie Superviseur", "90010"]
     return _xlsx_response(EMP_HEADERS, ex, "Employés", "modele_employes.xlsx")
 
 @api.get("/departments/template")
@@ -1293,6 +1476,8 @@ async def import_employees(file: UploadFile = File(...), user: dict = Depends(ge
                 "prime_garde": _b(_cell(row, 11)), "prime_halo": _b(_cell(row, 12)), "alloc_securite": _b(_cell(row, 13)),
                 "hire_date": _date(_cell(row, 14)), "birth_date": _date(_cell(row, 15)),
                 "sex_at_birth": sex_raw or None, "active": active,
+                "supervisor": str(_cell(row, 18) or "").strip() or None,
+                "security_class": str(_cell(row, 19) or "").strip() or None,
                 "employee_number": num,
             }
             if not doc["department"]:
