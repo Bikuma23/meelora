@@ -175,7 +175,7 @@ export default function SalairesBudget() {
               placeholder="Rechercher (nom, dépt, type, montant…)" value={tableQuery} onChange={(e) => setTableQuery(e.target.value)} />
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
@@ -228,6 +228,40 @@ export default function SalairesBudget() {
               </tr>
             </tfoot>
           </table>
+        </div>
+
+        <div className="divide-y divide-slate-100 md:hidden" data-testid="budget-cards">
+          {sortedLines.map((ln) => (
+            <div key={ln.employee_number} onClick={() => setDetail({ open: true, line: ln })} className="cursor-pointer p-4 active:bg-slate-50" data-testid={`budget-card-${ln.employee_number}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-700">{ln.name}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className="font-mono-data text-[11px] text-slate-400">#{String(ln.employee_number).padStart(3, "0")}</span>
+                    <span className="font-mono-data text-[11px] text-slate-400">· Dépt {ln.department}</span>
+                    <span className="rounded px-1.5 py-0.5 text-[9px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#2563EB" : "#64748B" }}>{ln.is_ccq ? "CCQ" : typeLabel(ln.employment_type)}</span>
+                    {ln.overridden && <span className="rounded bg-[#14B8A61a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">Ajusté</span>}
+                    {ln.prorated && <span className="rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active}m</span>}
+                  </div>
+                </div>
+                <button data-testid={`edit-line-card-${ln.employee_number}`} disabled={!canEdit} onClick={(ev) => { ev.stopPropagation(); setFiche({ open: true, line: ln }); }}
+                  className="shrink-0 rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-[#2563EB] disabled:opacity-30">
+                  {canEdit ? <Pencil size={15} /> : <Lock size={15} />}
+                </button>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px]">
+                {[["Nouveau salaire", ln.new_salary], ["Vacances", ln.vacation], ["Primes", ln.primes_total], ["Avantages", ln.avantages]].map(([l, v]) => (
+                  <div key={l} className="flex justify-between"><span className="text-slate-500">{l}</span><span className="font-mono-data">{fmtCAD(v)}</span></div>
+                ))}
+                <div className="col-span-2 mt-1 flex justify-between border-t border-slate-100 pt-1.5"><span className="font-600 text-slate-600">Salaire brut</span><span className="font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(ln.salaire_brut)}</span></div>
+                <div className="col-span-2 flex justify-between"><span className="font-700">Coût total</span><span className="font-mono-data font-700">{fmtCAD(ln.total_budgeted)}</span></div>
+              </div>
+            </div>
+          ))}
+          <div className="flex items-center justify-between bg-slate-50 px-4 py-3 text-sm font-700" data-testid="budget-cards-total">
+            <span>TOTAL — {sortedLines.length} employé(s)</span>
+            <span className="font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.total_budgeted, 0))}</span>
+          </div>
         </div>
       </div>
 

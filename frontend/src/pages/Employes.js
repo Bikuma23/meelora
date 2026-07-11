@@ -255,45 +255,77 @@ export default function Employes() {
         </div>
       </div>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full min-w-[860px] text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
-              {[["#", "left"], ["Titre / Poste", "left"], ["Nom", "left"], ["Dépt", "left"], ["Type", "left"], ["Classe de sécurité", "left"], ["Salaire", "right"], ["Âge", "right"], ["Ancien.", "right"], ["Actions", "right"]].map(([h, al]) => (
-                <th key={h} className={`px-4 py-3 font-600 ${al === "right" ? "text-right" : "text-left"}`}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {employees.map((e) => (
-              <tr key={e.id} className={`border-b border-slate-100 hover:bg-slate-50 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-row-${e.employee_number}`}>
-                <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(e.employee_number).padStart(3, "0")}</td>
-                <td className="px-4 py-2.5 text-[13px] text-slate-600">{e.title || "—"}</td>
-                <td className="px-4 py-2.5 font-600">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">Inactif</span>}</td>
-                <td className="px-4 py-2.5 text-[13px]">{e.department}</td>
-                <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#2563EB" : "#64748B" }}>{e.is_ccq ? "CCQ" : typeLabel(e.employment_type)}</span></td>
-                <td className="px-4 py-2.5" data-testid={`employee-secclass-${e.employee_number}`}>
-                  {e.security_class ? (
-                    <div className="flex flex-col leading-tight">
-                      <span className="font-mono-data text-[11px] font-700 text-slate-700">{e.security_class}</span>
-                      <span className="text-[11px] text-slate-500">{classMap[e.security_class]?.description || "—"}</span>
-                    </div>
-                  ) : <span className="text-slate-300">—</span>}
-                </td>
-                <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(e.current_annual_salary)}</td>
-                <td className="px-4 py-2.5 text-right font-mono-data">{computeAge(e.birth_date)}</td>
-                <td className="px-4 py-2.5 text-right font-mono-data">{computeSeniority(e.hire_date)} ans</td>
-                <td className="px-4 py-2.5">
-                  <div className="flex justify-end gap-1">
-                    <button data-testid={`edit-employee-${e.employee_number}`} onClick={() => setDialog({ open: true, item: e })} className="p-1.5 text-slate-400 hover:text-[#2563EB]"><Pencil size={15} /></button>
-                    <button data-testid={`delete-employee-${e.employee_number}`} onClick={() => setConfirmDel(e)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
-                  </div>
-                </td>
+      <div className="card">
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full min-w-[860px] text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
+                {[["#", "left"], ["Titre / Poste", "left"], ["Nom", "left"], ["Dépt", "left"], ["Type", "left"], ["Classe de sécurité", "left"], ["Salaire", "right"], ["Âge", "right"], ["Ancien.", "right"], ["Actions", "right"]].map(([h, al]) => (
+                  <th key={h} className={`px-4 py-3 font-600 ${al === "right" ? "text-right" : "text-left"}`}>{h}</th>
+                ))}
               </tr>
-            ))}
-            {employees.length === 0 && <tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-500">Aucun employé trouvé.</td></tr>}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {employees.map((e) => (
+                <tr key={e.id} className={`border-b border-slate-100 hover:bg-slate-50 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-row-${e.employee_number}`}>
+                  <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(e.employee_number).padStart(3, "0")}</td>
+                  <td className="px-4 py-2.5 text-[13px] text-slate-600">{e.title || "—"}</td>
+                  <td className="px-4 py-2.5 font-600">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">Inactif</span>}</td>
+                  <td className="px-4 py-2.5 text-[13px]">{e.department}</td>
+                  <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#2563EB" : "#64748B" }}>{e.is_ccq ? "CCQ" : typeLabel(e.employment_type)}</span></td>
+                  <td className="px-4 py-2.5" data-testid={`employee-secclass-${e.employee_number}`}>
+                    {e.security_class ? (
+                      <div className="flex flex-col leading-tight">
+                        <span className="font-mono-data text-[11px] font-700 text-slate-700">{e.security_class}</span>
+                        <span className="text-[11px] text-slate-500">{classMap[e.security_class]?.description || "—"}</span>
+                      </div>
+                    ) : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(e.current_annual_salary)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono-data">{computeAge(e.birth_date)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono-data">{computeSeniority(e.hire_date)} ans</td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex justify-end gap-1">
+                      <button data-testid={`edit-employee-${e.employee_number}`} onClick={() => setDialog({ open: true, item: e })} className="p-1.5 text-slate-400 hover:text-[#2563EB]"><Pencil size={15} /></button>
+                      <button data-testid={`delete-employee-${e.employee_number}`} onClick={() => setConfirmDel(e)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {employees.length === 0 && <tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-500">Aucun employé trouvé.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="divide-y divide-slate-100 md:hidden" data-testid="employee-cards">
+          {employees.map((e) => (
+            <div key={e.id} className={`p-4 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-card-${e.employee_number}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-700">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">Inactif</span>}</p>
+                  <p className="truncate text-[13px] text-slate-500">{e.title || "—"}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className="font-mono-data text-[11px] text-slate-400">#{String(e.employee_number).padStart(3, "0")}</span>
+                    <span className="font-mono-data text-[11px] text-slate-400">· Dépt {e.department}</span>
+                    <span className="rounded px-1.5 py-0.5 text-[9px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#2563EB" : "#64748B" }}>{e.is_ccq ? "CCQ" : typeLabel(e.employment_type)}</span>
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <button data-testid={`edit-employee-card-${e.employee_number}`} onClick={() => setDialog({ open: true, item: e })} className="rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-[#2563EB]"><Pencil size={15} /></button>
+                  <button data-testid={`delete-employee-card-${e.employee_number}`} onClick={() => setConfirmDel(e)} className="rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px]">
+                <div className="flex justify-between"><span className="text-slate-500">Salaire</span><span className="font-mono-data">{fmtCAD(e.current_annual_salary)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Âge</span><span className="font-mono-data">{computeAge(e.birth_date)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Ancienneté</span><span className="font-mono-data">{computeSeniority(e.hire_date)} ans</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Classe séc.</span><span className="font-mono-data text-right">{e.security_class ? `${e.security_class}` : "—"}</span></div>
+                {e.security_class && classMap[e.security_class]?.description && <div className="col-span-2 text-right text-[11px] text-slate-400">{classMap[e.security_class].description}</div>}
+              </div>
+            </div>
+          ))}
+          {employees.length === 0 && <p className="px-4 py-10 text-center text-sm text-slate-500">Aucun employé trouvé.</p>}
+        </div>
       </div>
 
       {dialog.open && <EmpForm open={dialog.open} onOpenChange={(v) => setDialog((p) => ({ ...p, open: v }))} initial={dialog.item} departments={departments} securityClasses={securityClasses} onSubmit={submit} />}
