@@ -217,6 +217,9 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 ## Historique des départements par version dans le détail employé (2026-06-12)
 - [x] Le détail employé affiche une section **« Département par version »** (Budget CA / Revue 1 / Revue 2) pour l'année courante, lue depuis les overrides `years[year][scenario].department` (défaut = département de la fiche). Une version dont le département diffère de la fiche est mise en évidence (orange). Vérifié.
 
+## Comparatif complet par version dans le détail employé (2026-06-12)
+- [x] La section « Par version » du détail employé affiche pour chaque version (CA / Revue 1 / Revue 2) le **coût total**, le **département** (orange si différent de la fiche) et le **type d'emploi** (avec le % si temps partiel). Les données sont chargées à l'ouverture du détail via `getBudget` pour les 3 scénarios. Vérifié.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

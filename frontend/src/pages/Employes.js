@@ -200,6 +200,7 @@ export default function Employes() {
   const [importErrors, setImportErrors] = useState({ open: false, errors: [], fileName: "" });
   const [confirmDel, setConfirmDel] = useState(null);
   const [detail, setDetail] = useState({ open: false, item: null });
+  const [detailVersions, setDetailVersions] = useState(null);
   const [scenario, setScenario] = useState("ca");
   const [budgetDetail, setBudgetDetail] = useState({ open: false, line: null, employee: null, scenario: "ca" });
   const [showInactive, setShowInactive] = useState(false);
@@ -278,6 +279,14 @@ export default function Employes() {
     const b = await api.getBudget({ year, scenario: scen });
     return (b.lines || []).find((l) => l.employee_number === e.employee_number || l.employee_id === e.id);
   };
+  const openDetail = async (e) => {
+    setDetail({ open: true, item: e });
+    setDetailVersions(null);
+    try {
+      const [ca, revue1, revue2] = await Promise.all([loadBudgetLine(e, "ca"), loadBudgetLine(e, "revue1"), loadBudgetLine(e, "revue2")]);
+      setDetailVersions({ ca, revue1, revue2 });
+    } catch { /* silencieux */ }
+  };
   const viewBudget = async (e) => {
     try {
       const [line, caLine] = await Promise.all([loadBudgetLine(e, scenario), scenario === "ca" ? null : loadBudgetLine(e, "ca")]);
@@ -339,7 +348,7 @@ export default function Employes() {
             </thead>
             <tbody>
               {sortedEmployees.map((e) => (
-                <tr key={e.id} onClick={() => setDetail({ open: true, item: e })} className={`cursor-pointer border-b border-slate-100 hover:bg-slate-50 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-row-${e.employee_number}`}>
+                <tr key={e.id} onClick={() => openDetail(e)} className={`cursor-pointer border-b border-slate-100 hover:bg-slate-50 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-row-${e.employee_number}`}>
                   <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(e.employee_number).padStart(3, "0")}</td>
                   <td className="px-4 py-2.5 text-[13px] text-slate-600">{e.title || "—"}</td>
                   <td className="px-4 py-2.5 font-600">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">Inactif</span>}</td>
@@ -373,7 +382,7 @@ export default function Employes() {
 
         <div className="divide-y divide-slate-100 md:hidden" data-testid="employee-cards">
           {sortedEmployees.map((e) => (
-            <div key={e.id} onClick={() => setDetail({ open: true, item: e })} className={`cursor-pointer p-4 active:bg-slate-50 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-card-${e.employee_number}`}>
+            <div key={e.id} onClick={() => openDetail(e)} className={`cursor-pointer p-4 active:bg-slate-50 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-card-${e.employee_number}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate font-700">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">Inactif</span>}</p>
@@ -405,7 +414,7 @@ export default function Employes() {
       </div>
 
       {dialog.open && <EmpForm open={dialog.open} onOpenChange={(v) => setDialog((p) => ({ ...p, open: v }))} initial={dialog.item} departments={departments} securityClasses={securityClasses} onSubmit={submit} />}
-      <EmployeeDetailDialog open={detail.open} onOpenChange={(v) => setDetail((p) => ({ ...p, open: v }))} employee={detail.item} departments={departments} securityClasses={securityClasses} year={year} canEdit={canEdit} onEdit={(e) => setDialog({ open: true, item: e })} onViewBudget={viewBudget} />
+      <EmployeeDetailDialog open={detail.open} onOpenChange={(v) => setDetail((p) => ({ ...p, open: v }))} employee={detail.item} departments={departments} securityClasses={securityClasses} year={year} versions={detailVersions} canEdit={canEdit} onEdit={(e) => setDialog({ open: true, item: e })} onViewBudget={viewBudget} />
       <BudgetDetailDialog open={budgetDetail.open} onOpenChange={(v) => setBudgetDetail((p) => ({ ...p, open: v }))} line={budgetDetail.line} year={year} scenario={budgetDetail.scenario} canEdit={false} onEdit={() => {}} scenarioOptions={[["ca", "Budget CA"], ["revue1", "Revue 1"], ["revue2", "Revue 2"]]} onScenarioChange={changeBudgetScenario} baselineTotal={budgetDetail.baseline} />
       <ImportErrorsDialog open={importErrors.open} onOpenChange={(v) => setImportErrors((p) => ({ ...p, open: v }))} errors={importErrors.errors} fileName={importErrors.fileName} />
       <AlertDialog open={!!confirmDel} onOpenChange={(v) => !v && setConfirmDel(null)}>

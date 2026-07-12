@@ -24,7 +24,7 @@ function Section({ title, children }) {
   );
 }
 
-export default function EmployeeDetailDialog({ open, onOpenChange, employee, departments = [], securityClasses = [], year, canEdit, onEdit, onViewBudget }) {
+export default function EmployeeDetailDialog({ open, onOpenChange, employee, departments = [], securityClasses = [], year, versions, canEdit, onEdit, onViewBudget }) {
   if (!employee) return null;
   const e = employee;
   const dept = departments.find((d) => d.code === e.department);
@@ -64,11 +64,25 @@ export default function EmployeeDetailDialog({ open, onOpenChange, employee, dep
               <Row label="Description" value={secClass?.description || "—"} />
               {secClass && <Row label="Taux" value={`${(secClass.rate * 100).toFixed(4)} %`} />}
             </Section>
-            <Section title={`Département par version${year ? " — " + year : ""}`}>
+            <Section title={`Par version${year ? " — " + year : ""}`}>
               {[["ca", "Budget CA"], ["revue1", "Revue 1"], ["revue2", "Revue 2"]].map(([sc, lbl]) => {
-                const code = deptFor(sc);
+                const v = versions && versions[sc];
+                const code = (v && v.department) || deptFor(sc);
                 const moved = code !== e.department;
-                return <Row key={sc} label={lbl} value={deptName(code)} accent={moved ? "#B45309" : undefined} />;
+                const etype = (v && v.employment_type) || (yd[sc] && yd[sc].employment_type) || e.employment_type;
+                const rate = v && v.employment_rate != null && v.employment_rate < 1 ? ` (${Math.round(v.employment_rate * 100)}%)` : "";
+                return (
+                  <div key={sc} className="px-3 py-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="font-700 text-slate-700">{lbl}</span>
+                      {v ? <span className="font-mono-data font-700">{fmtCAD(v.total_budgeted)}</span> : <span className="text-[11px] text-slate-400">…</span>}
+                    </div>
+                    <div className="mt-0.5 flex items-center justify-between text-[12px]">
+                      <span style={moved ? { color: "#B45309" } : { color: "#64748B" }}>{deptName(code)}</span>
+                      <span className="text-slate-400">{typeLabel(etype)}{rate}</span>
+                    </div>
+                  </div>
+                );
               })}
             </Section>
           </div>
