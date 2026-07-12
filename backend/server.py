@@ -267,10 +267,20 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
     tot = {"salaire_base": 0, "vacances": 0, "primes": 0, "avantages": 0,
            "csst": 0, "reer": 0, "assurance": 0, "budget_total": 0}
     for e in employees:
-        ccq = e["is_ccq"]
         ydata, ov, base = _emp_scn(e, year, scenario)
+        emp_type = ov.get("employment_type", e["employment_type"]) if not is_actuel else e["employment_type"]
+        ccq = (emp_type == "CCQ")
+        dept_code = ov.get("department", e["department"]) if not is_actuel else e["department"]
+        emp_rate = 1.0
+        if not is_actuel and emp_type == "Régulier temps partiel":
+            try:
+                emp_rate = float(ov.get("employment_rate", 1) or 1)
+            except Exception:
+                emp_rate = 1.0
+            if emp_rate <= 0:
+                emp_rate = 1.0
         aug = 0 if is_actuel else ov.get("augmentation", aug_ccq if ccq else aug_autres)
-        new_salary = base * (1 + aug)
+        new_salary = base * (1 + aug) * emp_rate
         taux_horaire = new_salary / ANNUAL_HOURS
 
         prime_type = ov.get("prime_type", e.get("prime_type", "Aucune Prime"))
@@ -281,19 +291,19 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
             prime_amt = garde = halo = alloc = 0
         elif ccq:
             prime_amt = new_salary * PRIME_PCT.get(prime_type, 0.0)
-            garde = garde_avg if ov.get("prime_garde", e.get("prime_garde")) else 0
+            garde = garde_avg * emp_rate if ov.get("prime_garde", e.get("prime_garde")) else 0
             halo = new_salary * hypo["prime_halo_rate"] if ov.get("prime_halo", e.get("prime_halo")) else 0
-            alloc = hypo["alloc_securite_montant"] if ov.get("alloc_securite", e.get("alloc_securite")) else 0
+            alloc = hypo["alloc_securite_montant"] * emp_rate if ov.get("alloc_securite", e.get("alloc_securite")) else 0
         else:
             # Employés non-CCQ : pas de prime CCQ ni HALO/garde. Boni + Alloc. sécurité + REER/assurance possibles.
             prime_type = "Aucune Prime"
             prime_amt = garde = halo = 0
-            alloc = hypo["alloc_securite_montant"] if ov.get("alloc_securite", e.get("alloc_securite")) else 0
+            alloc = hypo["alloc_securite_montant"] * emp_rate if ov.get("alloc_securite", e.get("alloc_securite")) else 0
             boni_mode = ov.get("boni_mode", "montant")
             if boni_mode == "pct":
                 boni = new_salary * float(ov.get("boni_pct", 0) or 0) / 100
             else:
-                boni = float(ov.get("boni", 0) or 0)
+                boni = float(ov.get("boni", 0) or 0) * emp_rate
         primes_total = prime_amt + garde + halo + alloc + boni
 
         vac_rate = ov.get("vacation_rate", e["vacation_rate"])
@@ -332,9 +342,10 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
         total_budgeted = round(total * factor, 2)
         lines.append({
             "employee_id": str(e.get("_id", "")), "employee_number": e["employee_number"],
-            "name": e["name"], "title": e.get("title", ""), "department": e["department"],
-            "department_label": dept_label.get(e["department"], e["department"]),
-            "employment_type": e["employment_type"], "is_ccq": ccq, "overridden": bool(ov),
+            "name": e["name"], "title": e.get("title", ""), "department": dept_code,
+            "department_label": dept_label.get(dept_code, dept_code),
+            "employment_type": emp_type, "is_ccq": ccq, "overridden": bool(ov),
+            "employment_rate": round(emp_rate, 4),
             "security_class": e.get("security_class") or "",
             "base_salary": round(base, 2), "augmentation": aug, "new_salary": round(new_salary, 2),
             "taux_horaire": round(taux_horaire, 2), "vacation_rate": vac_rate, "vacation": round(vacation, 2),
@@ -896,6 +907,13 @@ async def set_lock(payload: LockPayload, user: dict = Depends(require_admin)):
         "locked_by": user.get("email"), "locked_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
     await log_action(user, "Verrouiller" if payload.locked else "Déverrouiller", "Budget",
                      f"{SCEN_LABEL.get(payload.scenario, payload.scenario)} {payload.year}")
+    if payload.locked:
+        y, sc = int(payload.year), payload.scenario
+        emps = await db.employees.find({f"years.{y}.{sc}.department": {"$exists": True}}).to_list(2000)
+        for emp in emps:
+            newdept = (((emp.get("years") or {}).get(str(y)) or {}).get(sc) or {}).get("department")
+            if newdept and newdept != emp.get("department"):
+                await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"department": newdept}})
     return {"success": True, "locked": payload.locked}
 
 # ---------------------------------------------------------------------------

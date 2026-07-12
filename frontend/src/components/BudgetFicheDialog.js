@@ -13,6 +13,9 @@ import { toast } from "sonner";
 function fromLine(line) {
   return {
     base_salary: String(line.base_salary),
+    department: line.department,
+    employment_type: line.employment_type,
+    employment_rate_pct: String(+(((line.employment_rate ?? 1)) * 100).toFixed(1)),
     augmentation_pct: String(+(line.augmentation * 100).toFixed(3)),
     vacation_rate_pct: String(+(line.vacation_rate * 100).toFixed(2)),
     prime_type: line.prime_type,
@@ -21,6 +24,8 @@ function fromLine(line) {
     reer: String(line.reer || 0), assurance: String(line.assurance || 0),
   };
 }
+
+const EMP_TYPES = ["CCQ", "Régulier temps plein", "Régulier temps partiel", "Stagiaire"];
 
 function Row({ label, value, strong, accent }) {
   return (
@@ -36,14 +41,18 @@ const SCEN_LABEL = Object.fromEntries(SCENARIOS);
 const MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
 
 export default function BudgetFicheDialog({ open, onOpenChange, line, year, scenario = "ca", locks = {}, isAdmin = true, onSaved }) {
-  const isCCQ = line.is_ccq;
   const [scn, setScn] = useState(scenario);
   const [curLine, setCurLine] = useState(line);
   const [f, setF] = useState(() => fromLine(line));
   const [p, setP] = useState(line);
+  const [departments, setDepartments] = useState([]);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const isCCQ = f.employment_type === "CCQ";
+  const isPartTime = f.employment_type === "Régulier temps partiel";
   const revueMode = scn.startsWith("revue");
   const locked = !isAdmin && !!locks[`${year}:${scn}`]?.locked;
+
+  useEffect(() => { api.listDepartments().then(setDepartments).catch(() => {}); }, []);
 
   // Charger les valeurs sauvegardées du scénario sélectionné dans la fiche.
   useEffect(() => {
@@ -64,7 +73,10 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
     const o = {
       augmentation: Number(f.augmentation_pct) / 100,
       vacation_rate: Number(f.vacation_rate_pct) / 100,
+      department: f.department,
+      employment_type: f.employment_type,
     };
+    if (f.employment_type === "Régulier temps partiel") o.employment_rate = (Number(f.employment_rate_pct) || 100) / 100;
     // En Revue, on ne touche jamais au salaire de base (salaire actuel partagé) ni au Budget CA.
     if (!revueMode) o.base_salary = Number(f.base_salary) || 0;
     if (isCCQ) {
@@ -129,6 +141,26 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="space-y-4">
+            <div className="rounded-xl border border-slate-200" data-testid="fiche-emploi-section">
+              <div className="border-b border-slate-200 bg-slate-50 px-3 py-2"><h3 className="text-xs font-700 uppercase tracking-widest">Emploi & imputation</h3></div>
+              <div className="grid grid-cols-2 gap-3 p-3">
+                <div className={isPartTime ? "" : "col-span-2"}><Label className="text-[11px] uppercase text-slate-500">Type d'emploi</Label>
+                  <Select value={f.employment_type} onValueChange={(v) => set("employment_type", v)}>
+                    <SelectTrigger data-testid="fiche-employment-type" className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>{EMP_TYPES.map((x) => <SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent>
+                  </Select></div>
+                {isPartTime && (
+                  <div><Label className="text-[11px] uppercase text-slate-500">Taux d'emploi (%)</Label>
+                    <Input data-testid="fiche-employment-rate" type="number" step="1" min="1" max="100" className="mt-1 font-mono-data" value={f.employment_rate_pct} onChange={(e) => set("employment_rate_pct", e.target.value)} /></div>
+                )}
+                <div className="col-span-2"><Label className="text-[11px] uppercase text-slate-500">Département (cette version)</Label>
+                  <Select value={f.department} onValueChange={(v) => set("department", v)}>
+                    <SelectTrigger data-testid="fiche-department" className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>{departments.map((d) => <SelectItem key={d.code} value={d.code}>{d.code} — {d.description}</SelectItem>)}</SelectContent>
+                  </Select></div>
+              </div>
+              <p className="border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">Le département/type d'emploi sont propres à cette version de budget. Le changement de département n'affecte que l'imputation (les déductions restent selon la classe de sécurité). Au verrouillage, le département de la fiche employé prendra celui de la version verrouillée.</p>
+            </div>
             <div className="rounded-xl border border-slate-200">
               <div className="border-b border-slate-200 bg-slate-50 px-3 py-2"><h3 className="text-xs font-700 uppercase tracking-widest">Salaire</h3></div>
               <div className="grid grid-cols-2 gap-3 p-3">
