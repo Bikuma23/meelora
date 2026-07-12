@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Plus, Pencil, Trash2, Search, Cake, CalendarClock, Upload, Download, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import ImportErrorsDialog from "../components/ImportErrorsDialog";
+import EmployeeDetailDialog from "../components/EmployeeDetailDialog";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "../components/ui/alert-dialog";
 
 const REQ = "Ce champ est obligatoire";
@@ -195,6 +196,7 @@ export default function Employes() {
   const [dialog, setDialog] = useState({ open: false, item: null });
   const [importErrors, setImportErrors] = useState({ open: false, errors: [], fileName: "" });
   const [confirmDel, setConfirmDel] = useState(null);
+  const [detail, setDetail] = useState({ open: false, item: null });
   const [showInactive, setShowInactive] = useState(false);
   const [securityClasses, setSecurityClasses] = useState([]);
   const [sort, setSort] = useState({ key: "employee_number", dir: "asc" });
@@ -308,7 +310,7 @@ export default function Employes() {
             </thead>
             <tbody>
               {sortedEmployees.map((e) => (
-                <tr key={e.id} className={`border-b border-slate-100 hover:bg-slate-50 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-row-${e.employee_number}`}>
+                <tr key={e.id} onClick={() => setDetail({ open: true, item: e })} className={`cursor-pointer border-b border-slate-100 hover:bg-slate-50 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-row-${e.employee_number}`}>
                   <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(e.employee_number).padStart(3, "0")}</td>
                   <td className="px-4 py-2.5 text-[13px] text-slate-600">{e.title || "—"}</td>
                   <td className="px-4 py-2.5 font-600">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">Inactif</span>}</td>
@@ -328,8 +330,8 @@ export default function Employes() {
                   <td className="px-4 py-2.5">
                     {canEdit ? (
                     <div className="flex justify-end gap-1">
-                      <button data-testid={`edit-employee-${e.employee_number}`} onClick={() => setDialog({ open: true, item: e })} className="p-1.5 text-slate-400 hover:text-[#2563EB]"><Pencil size={15} /></button>
-                      <button data-testid={`delete-employee-${e.employee_number}`} onClick={() => setConfirmDel(e)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
+                      <button data-testid={`edit-employee-${e.employee_number}`} onClick={(ev) => { ev.stopPropagation(); setDialog({ open: true, item: e }); }} className="p-1.5 text-slate-400 hover:text-[#2563EB]"><Pencil size={15} /></button>
+                      <button data-testid={`delete-employee-${e.employee_number}`} onClick={(ev) => { ev.stopPropagation(); setConfirmDel(e); }} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
                     </div>
                     ) : <div className="text-right text-slate-300">—</div>}
                   </td>
@@ -342,7 +344,7 @@ export default function Employes() {
 
         <div className="divide-y divide-slate-100 md:hidden" data-testid="employee-cards">
           {sortedEmployees.map((e) => (
-            <div key={e.id} className={`p-4 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-card-${e.employee_number}`}>
+            <div key={e.id} onClick={() => setDetail({ open: true, item: e })} className={`cursor-pointer p-4 active:bg-slate-50 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-card-${e.employee_number}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate font-700">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">Inactif</span>}</p>
@@ -355,8 +357,8 @@ export default function Employes() {
                 </div>
                 {canEdit && (
                 <div className="flex shrink-0 gap-1">
-                  <button data-testid={`edit-employee-card-${e.employee_number}`} onClick={() => setDialog({ open: true, item: e })} className="rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-[#2563EB]"><Pencil size={15} /></button>
-                  <button data-testid={`delete-employee-card-${e.employee_number}`} onClick={() => setConfirmDel(e)} className="rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
+                  <button data-testid={`edit-employee-card-${e.employee_number}`} onClick={(ev) => { ev.stopPropagation(); setDialog({ open: true, item: e }); }} className="rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-[#2563EB]"><Pencil size={15} /></button>
+                  <button data-testid={`delete-employee-card-${e.employee_number}`} onClick={(ev) => { ev.stopPropagation(); setConfirmDel(e); }} className="rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
                 </div>
                 )}
               </div>
@@ -374,6 +376,7 @@ export default function Employes() {
       </div>
 
       {dialog.open && <EmpForm open={dialog.open} onOpenChange={(v) => setDialog((p) => ({ ...p, open: v }))} initial={dialog.item} departments={departments} securityClasses={securityClasses} onSubmit={submit} />}
+      <EmployeeDetailDialog open={detail.open} onOpenChange={(v) => setDetail((p) => ({ ...p, open: v }))} employee={detail.item} departments={departments} securityClasses={securityClasses} canEdit={canEdit} onEdit={(e) => setDialog({ open: true, item: e })} />
       <ImportErrorsDialog open={importErrors.open} onOpenChange={(v) => setImportErrors((p) => ({ ...p, open: v }))} errors={importErrors.errors} fileName={importErrors.fileName} />
       <AlertDialog open={!!confirmDel} onOpenChange={(v) => !v && setConfirmDel(null)}>
         <AlertDialogContent data-testid="delete-confirm-dialog">

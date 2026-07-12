@@ -1603,7 +1603,7 @@ async def import_departments(file: UploadFile = File(...), user: dict = Depends(
     return {"inserted": inserted, "errors": [], "aborted": False}
 
 @api.get("/journal")
-async def get_journal(user: dict = Depends(get_current_user)):
+async def get_journal(user: dict = Depends(require_admin)):
     docs = await db.journal.find().sort("timestamp", -1).limit(300).to_list(300)
     for d in docs:
         d["id"] = str(d.pop("_id"))

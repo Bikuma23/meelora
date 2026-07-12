@@ -162,9 +162,11 @@ function LayoutInner() {
             <span className="text-[11px] font-700 uppercase tracking-widest text-slate-500">Masse Salariale</span>
           </div>
           {NAV_GROUP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
-          <div className="pt-4">
-            {NAV_BOTTOM.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
-          </div>
+          {user?.role === "admin" && (
+            <div className="pt-4">
+              {NAV_BOTTOM.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
+            </div>
+          )}
         </nav>
 
         <div className="mt-3 border-t border-white/10 pt-3">
