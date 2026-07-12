@@ -206,6 +206,9 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 ## Vue « Par département » dans Salaires & Budget (2026-06-12)
 - [x] Bascule **Par employé / Par département** dans la table Salaires & calculs. La vue département agrège par département (nb d'employés + nouveau salaire, vacances, primes, salaire brut total, avantages, coût total), triée par numéro de département croissant, avec ligne de totaux — en table (desktop) et cartes (mobile). Vérifié (17 départements, Budget CA 2026).
 
+## Drill-down par département (2026-06-12)
+- [x] Dans la vue « Par département », chaque ligne est **dépliable** (chevron) pour afficher la liste des employés qui la composent (sous-lignes indentées avec leurs montants) ; cliquer sur un employé ouvre sa fiche budget détaillée. Fonctionne en table (desktop) et cartes (mobile). Vérifié (dépt 020 → 6 employés).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

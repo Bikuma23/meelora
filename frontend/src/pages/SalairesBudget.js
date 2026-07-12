@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { api } from "../lib/api";
 import { useYear } from "../context/YearContext";
 import { useAuth } from "../context/AuthContext";
@@ -8,7 +8,7 @@ import BudgetDetailDialog from "../components/BudgetDetailDialog";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Pencil, Lock, Unlock, ShieldCheck, TrendingUp, ChevronUp, ChevronDown, ChevronsUpDown, Search } from "lucide-react";
+import { Pencil, Lock, Unlock, ShieldCheck, TrendingUp, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, Search } from "lucide-react";
 import { toast } from "sonner";
 
 const SCENARIOS = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
@@ -43,6 +43,8 @@ export default function SalairesBudget() {
   const [sort, setSort] = useState({ key: "employee_number", dir: "asc" });
   const [tableQuery, setTableQuery] = useState("");
   const [viewMode, setViewMode] = useState("employee");
+  const [expandedDepts, setExpandedDepts] = useState(() => new Set());
+  const toggleDept = (code) => setExpandedDepts((s) => { const n = new Set(s); n.has(code) ? n.delete(code) : n.add(code); return n; });
   const [prefsLoaded, setPrefsLoaded] = useState(false);
 
   const toggleSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
@@ -266,8 +268,14 @@ export default function SalairesBudget() {
             </thead>
             <tbody>
               {deptGroups.map((g) => (
-                <tr key={g.department} className="border-b border-slate-100 hover:bg-slate-50" data-testid={`dept-row-${g.department}`}>
-                  <td className="px-4 py-2.5"><span className="font-mono-data text-slate-500">{g.department}</span>{g.label ? <span className="text-slate-700"> — {g.label}</span> : null}</td>
+                <Fragment key={g.department}>
+                <tr onClick={() => toggleDept(g.department)} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" data-testid={`dept-row-${g.department}`}>
+                  <td className="px-4 py-2.5">
+                    <span className="inline-flex items-center gap-1.5">
+                      {expandedDepts.has(g.department) ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
+                      <span className="font-mono-data text-slate-500">{g.department}</span>{g.label ? <span className="text-slate-700"> — {g.label}</span> : null}
+                    </span>
+                  </td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{g.count}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(g.new_salary)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(g.vacation)}</td>
@@ -276,6 +284,19 @@ export default function SalairesBudget() {
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(g.avantages)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data font-700">{fmtCAD(g.total_budgeted)}</td>
                 </tr>
+                {expandedDepts.has(g.department) && filteredLines.filter((l) => l.department === g.department).sort((a, c) => a.employee_number - c.employee_number).map((ln) => (
+                  <tr key={`${g.department}-${ln.employee_number}`} onClick={() => setDetail({ open: true, line: ln })} className="cursor-pointer border-b border-slate-50 bg-slate-50/60 text-[13px] hover:bg-slate-100" data-testid={`dept-emp-${g.department}-${ln.employee_number}`}>
+                    <td className="py-2 pl-11 pr-4 text-slate-600"><span className="font-mono-data text-slate-400">{String(ln.employee_number).padStart(3, "0")}</span> {ln.name}</td>
+                    <td></td>
+                    <td className="px-4 py-2 text-right font-mono-data text-slate-500">{fmtCAD(ln.new_salary)}</td>
+                    <td className="px-4 py-2 text-right font-mono-data text-slate-500">{fmtCAD(ln.vacation)}</td>
+                    <td className="px-4 py-2 text-right font-mono-data text-slate-500">{fmtCAD(ln.primes_total)}</td>
+                    <td className="px-4 py-2 text-right font-mono-data" style={{ color: "#0E9488" }}>{fmtCAD(ln.salaire_brut)}</td>
+                    <td className="px-4 py-2 text-right font-mono-data text-slate-500">{fmtCAD(ln.avantages)}</td>
+                    <td className="px-4 py-2 text-right font-mono-data font-600">{fmtCAD(ln.total_budgeted)}</td>
+                  </tr>
+                ))}
+                </Fragment>
               ))}
             </tbody>
             <tfoot>
@@ -332,18 +353,33 @@ export default function SalairesBudget() {
         {viewMode === "department" && (
         <div className="divide-y divide-slate-100 md:hidden" data-testid="dept-cards">
           {deptGroups.map((g) => (
-            <div key={g.department} className="p-4" data-testid={`dept-card-${g.department}`}>
-              <div className="flex items-center justify-between">
-                <p className="font-700"><span className="font-mono-data text-slate-400">{g.department}</span> {g.label}</p>
-                <span className="text-[11px] text-slate-500">{g.count} empl.</span>
+            <div key={g.department} data-testid={`dept-card-${g.department}`}>
+              <div onClick={() => toggleDept(g.department)} className="cursor-pointer p-4 active:bg-slate-50">
+                <div className="flex items-center justify-between">
+                  <p className="flex items-center gap-1.5 font-700">
+                    {expandedDepts.has(g.department) ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
+                    <span className="font-mono-data text-slate-400">{g.department}</span> {g.label}
+                  </p>
+                  <span className="text-[11px] text-slate-500">{g.count} empl.</span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px]">
+                  {[["Nouveau salaire", g.new_salary], ["Vacances", g.vacation], ["Primes", g.primes_total], ["Avantages", g.avantages]].map(([l, v]) => (
+                    <div key={l} className="flex justify-between"><span className="text-slate-500">{l}</span><span className="font-mono-data">{fmtCAD(v)}</span></div>
+                  ))}
+                  <div className="col-span-2 mt-1 flex justify-between border-t border-slate-100 pt-1.5"><span className="font-600 text-slate-600">Salaire brut</span><span className="font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(g.salaire_brut)}</span></div>
+                  <div className="col-span-2 flex justify-between"><span className="font-700">Coût total</span><span className="font-mono-data font-700">{fmtCAD(g.total_budgeted)}</span></div>
+                </div>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px]">
-                {[["Nouveau salaire", g.new_salary], ["Vacances", g.vacation], ["Primes", g.primes_total], ["Avantages", g.avantages]].map(([l, v]) => (
-                  <div key={l} className="flex justify-between"><span className="text-slate-500">{l}</span><span className="font-mono-data">{fmtCAD(v)}</span></div>
-                ))}
-                <div className="col-span-2 mt-1 flex justify-between border-t border-slate-100 pt-1.5"><span className="font-600 text-slate-600">Salaire brut</span><span className="font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(g.salaire_brut)}</span></div>
-                <div className="col-span-2 flex justify-between"><span className="font-700">Coût total</span><span className="font-mono-data font-700">{fmtCAD(g.total_budgeted)}</span></div>
-              </div>
+              {expandedDepts.has(g.department) && (
+                <div className="divide-y divide-slate-100 bg-slate-50/60">
+                  {filteredLines.filter((l) => l.department === g.department).sort((a, c) => a.employee_number - c.employee_number).map((ln) => (
+                    <div key={`${g.department}-${ln.employee_number}`} onClick={() => setDetail({ open: true, line: ln })} className="flex cursor-pointer items-center justify-between py-2 pl-10 pr-4 text-[13px] active:bg-slate-100" data-testid={`dept-emp-card-${g.department}-${ln.employee_number}`}>
+                      <span className="truncate text-slate-600"><span className="font-mono-data text-slate-400">{String(ln.employee_number).padStart(3, "0")}</span> {ln.name}</span>
+                      <span className="font-mono-data font-600">{fmtCAD(ln.total_budgeted)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
           <div className="flex items-center justify-between bg-slate-50 px-4 py-3 text-sm font-700" data-testid="dept-cards-total">
