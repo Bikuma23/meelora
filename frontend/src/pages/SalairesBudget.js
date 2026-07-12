@@ -42,6 +42,7 @@ export default function SalairesBudget() {
   const [applying, setApplying] = useState(false);
   const [sort, setSort] = useState({ key: "employee_number", dir: "asc" });
   const [tableQuery, setTableQuery] = useState("");
+  const [viewMode, setViewMode] = useState("employee");
   const [prefsLoaded, setPrefsLoaded] = useState(false);
 
   const toggleSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
@@ -100,6 +101,14 @@ export default function SalairesBudget() {
     const cmp = typeof va === "string" ? va.localeCompare(vc, "fr") : (va - vc);
     return sort.dir === "asc" ? cmp : -cmp;
   });
+
+  const deptGroups = Object.values(filteredLines.reduce((acc, l) => {
+    const k = l.department;
+    if (!acc[k]) acc[k] = { department: k, label: l.department_label || "", count: 0, new_salary: 0, vacation: 0, primes_total: 0, salaire_brut: 0, avantages: 0, total_budgeted: 0 };
+    const g = acc[k];
+    g.count++; g.new_salary += l.new_salary; g.vacation += l.vacation; g.primes_total += l.primes_total; g.salaire_brut += l.salaire_brut; g.avantages += l.avantages; g.total_budgeted += l.total_budgeted;
+    return acc;
+  }, {})).sort((a, c) => (parseInt(a.department, 10) || 0) - (parseInt(c.department, 10) || 0));
 
   const cards = [
     ["Salaire de base", b.totals.salaire_base, "#2563EB"],
@@ -169,15 +178,22 @@ export default function SalairesBudget() {
       <div className="card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3.5">
           <div>
-            <h3 className="text-sm font-700">Saisie & calculs par employé — {LABEL[scenario]} {year}</h3>
-            <p className="text-xs text-slate-500">{canEdit ? "Cliquez sur une ligne pour voir le détail, ou « modifier » pour ajuster la fiche." : "Cliquez sur une ligne pour voir le détail. Budget verrouillé — consultation seule."}</p>
+            <h3 className="text-sm font-700">{viewMode === "employee" ? `Saisie & calculs par employé — ${LABEL[scenario]} ${year}` : `Totaux par département — ${LABEL[scenario]} ${year}`}</h3>
+            <p className="text-xs text-slate-500">{viewMode === "department" ? "Coûts agrégés par département (tri par numéro croissant)." : canEdit ? "Cliquez sur une ligne pour voir le détail, ou « modifier » pour ajuster la fiche." : "Cliquez sur une ligne pour voir le détail. Budget verrouillé — consultation seule."}</p>
           </div>
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
-            <Search size={15} className="text-slate-400" />
-            <input data-testid="budget-table-search" className="w-64 bg-transparent text-sm outline-none"
-              placeholder="Rechercher (nom, dépt, type, montant…)" value={tableQuery} onChange={(e) => setTableQuery(e.target.value)} />
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1" data-testid="view-mode-toggle">
+              <button data-testid="view-by-employee" onClick={() => setViewMode("employee")} className={`rounded-md px-3 py-1.5 text-xs font-700 transition-colors ${viewMode === "employee" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Par employé</button>
+              <button data-testid="view-by-department" onClick={() => setViewMode("department")} className={`rounded-md px-3 py-1.5 text-xs font-700 transition-colors ${viewMode === "department" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Par département</button>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+              <Search size={15} className="text-slate-400" />
+              <input data-testid="budget-table-search" className="w-56 bg-transparent text-sm outline-none"
+                placeholder="Rechercher (nom, dépt, type, montant…)" value={tableQuery} onChange={(e) => setTableQuery(e.target.value)} />
+            </div>
           </div>
         </div>
+        {viewMode === "employee" && (
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
@@ -232,7 +248,53 @@ export default function SalairesBudget() {
             </tfoot>
           </table>
         </div>
+        )}
+        {viewMode === "department" && (
+        <div className="hidden overflow-x-auto md:block" data-testid="dept-table">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
+                <th className="px-4 py-3 text-left font-600">Département</th>
+                <th className="px-4 py-3 text-right font-600">Employés</th>
+                <th className="px-4 py-3 text-right font-600">Nouveau salaire</th>
+                <th className="px-4 py-3 text-right font-600">Vacances</th>
+                <th className="px-4 py-3 text-right font-600">Primes</th>
+                <th className="px-4 py-3 text-right font-600">Salaire brut total</th>
+                <th className="px-4 py-3 text-right font-600">Avantages</th>
+                <th className="px-4 py-3 text-right font-600">Coût total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {deptGroups.map((g) => (
+                <tr key={g.department} className="border-b border-slate-100 hover:bg-slate-50" data-testid={`dept-row-${g.department}`}>
+                  <td className="px-4 py-2.5"><span className="font-mono-data text-slate-500">{g.department}</span>{g.label ? <span className="text-slate-700"> — {g.label}</span> : null}</td>
+                  <td className="px-4 py-2.5 text-right font-mono-data">{g.count}</td>
+                  <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(g.new_salary)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(g.vacation)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(g.primes_total)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(g.salaire_brut)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(g.avantages)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono-data font-700">{fmtCAD(g.total_budgeted)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-slate-300 bg-slate-50 text-sm font-700" data-testid="dept-total-row">
+                <td className="px-4 py-3">TOTAL — {deptGroups.length} département(s)</td>
+                <td className="px-4 py-3 text-right font-mono-data">{deptGroups.reduce((s, g) => s + g.count, 0)}</td>
+                <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(deptGroups.reduce((s, g) => s + g.new_salary, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(deptGroups.reduce((s, g) => s + g.vacation, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(deptGroups.reduce((s, g) => s + g.primes_total, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono-data" style={{ color: "#0E9488" }}>{fmtCAD(deptGroups.reduce((s, g) => s + g.salaire_brut, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(deptGroups.reduce((s, g) => s + g.avantages, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(deptGroups.reduce((s, g) => s + g.total_budgeted, 0))}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        )}
 
+        {viewMode === "employee" && (
         <div className="divide-y divide-slate-100 md:hidden" data-testid="budget-cards">
           {sortedLines.map((ln) => (
             <div key={ln.employee_number} onClick={() => setDetail({ open: true, line: ln })} className="cursor-pointer p-4 active:bg-slate-50" data-testid={`budget-card-${ln.employee_number}`}>
@@ -266,6 +328,30 @@ export default function SalairesBudget() {
             <span className="font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.total_budgeted, 0))}</span>
           </div>
         </div>
+        )}
+        {viewMode === "department" && (
+        <div className="divide-y divide-slate-100 md:hidden" data-testid="dept-cards">
+          {deptGroups.map((g) => (
+            <div key={g.department} className="p-4" data-testid={`dept-card-${g.department}`}>
+              <div className="flex items-center justify-between">
+                <p className="font-700"><span className="font-mono-data text-slate-400">{g.department}</span> {g.label}</p>
+                <span className="text-[11px] text-slate-500">{g.count} empl.</span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px]">
+                {[["Nouveau salaire", g.new_salary], ["Vacances", g.vacation], ["Primes", g.primes_total], ["Avantages", g.avantages]].map(([l, v]) => (
+                  <div key={l} className="flex justify-between"><span className="text-slate-500">{l}</span><span className="font-mono-data">{fmtCAD(v)}</span></div>
+                ))}
+                <div className="col-span-2 mt-1 flex justify-between border-t border-slate-100 pt-1.5"><span className="font-600 text-slate-600">Salaire brut</span><span className="font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(g.salaire_brut)}</span></div>
+                <div className="col-span-2 flex justify-between"><span className="font-700">Coût total</span><span className="font-mono-data font-700">{fmtCAD(g.total_budgeted)}</span></div>
+              </div>
+            </div>
+          ))}
+          <div className="flex items-center justify-between bg-slate-50 px-4 py-3 text-sm font-700" data-testid="dept-cards-total">
+            <span>TOTAL — {deptGroups.length} département(s)</span>
+            <span className="font-mono-data">{fmtCAD(deptGroups.reduce((s, g) => s + g.total_budgeted, 0))}</span>
+          </div>
+        </div>
+        )}
       </div>
 
       {fiche.open && fiche.line && (
