@@ -209,6 +209,11 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 ## Drill-down par département (2026-06-12)
 - [x] Dans la vue « Par département », chaque ligne est **dépliable** (chevron) pour afficher la liste des employés qui la composent (sous-lignes indentées avec leurs montants) ; cliquer sur un employé ouvre sa fiche budget détaillée. Fonctionne en table (desktop) et cartes (mobile). Vérifié (dépt 020 → 6 employés).
 
+## Override par scénario : département / type d'emploi / taux d'emploi (2026-06-12)
+- [x] **Fiche Salaires & Budget** : nouvelle section « Emploi & imputation » permettant, **par version de budget** (CA/Revue 1/Revue 2), de changer le **département** (n'affecte que l'imputation — GL/regroupement/superviseur ; déductions inchangées, CSST toujours selon la classe de sécurité) et le **type d'emploi** (liste complète CCQ / Rég. temps plein / Rég. temps partiel / Stagiaire). Si « Régulier temps partiel », un champ **Taux d'emploi (%)** apparaît et proratise salaire + primes + allocations.
+- [x] Les overrides sont **isolés par scénario** (ne touchent pas les autres versions). Au **verrouillage** d'une version, le département par défaut de la fiche employé prend celui de la version verrouillée.
+- [x] Backend : `compute_budget` dérive emp_type/ccq/dept/emp_rate depuis l'override ; `set_lock` propage le département de la version verrouillée vers `employee.department`. Validé testing_agent iteration_17 : backend 8/8, frontend OK, isolation + proratisation + invariance CSST + propagation au verrouillage confirmées. (Note : la base contient 123 employés.)
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
