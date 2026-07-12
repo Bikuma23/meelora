@@ -17,7 +17,7 @@ function Row({ label, value, strong, accent }) {
 
 const SCEN_LABEL = { ca: "Budget CA", revue1: "Revue Budgétaire 1", revue2: "Revue Budgétaire 2" };
 
-export default function BudgetDetailDialog({ open, onOpenChange, line, year, scenario, onEdit, canEdit }) {
+export default function BudgetDetailDialog({ open, onOpenChange, line, year, scenario, onEdit, canEdit, scenarioOptions, onScenarioChange }) {
   const [busy, setBusy] = useState(false);
   if (!line) return null;
   const ccq = line.is_ccq;
@@ -41,6 +41,17 @@ export default function BudgetDetailDialog({ open, onOpenChange, line, year, sce
             {SCEN_LABEL[scenario] || scenario} {year} · {line.employment_type} · {line.department_label}
           </DialogDescription>
         </DialogHeader>
+
+        {scenarioOptions && (
+          <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1" data-testid="detail-scenario-switch">
+            {scenarioOptions.map(([k, lbl]) => (
+              <button key={k} data-testid={`detail-scenario-${k}`} onClick={() => onScenarioChange(k)}
+                className={`flex-1 rounded-md px-3 py-1.5 text-xs font-700 transition-colors ${scenario === k ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="space-y-4">

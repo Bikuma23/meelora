@@ -201,7 +201,7 @@ export default function Employes() {
   const [confirmDel, setConfirmDel] = useState(null);
   const [detail, setDetail] = useState({ open: false, item: null });
   const [scenario, setScenario] = useState("ca");
-  const [budgetDetail, setBudgetDetail] = useState({ open: false, line: null });
+  const [budgetDetail, setBudgetDetail] = useState({ open: false, line: null, employee: null, scenario: "ca" });
   const [showInactive, setShowInactive] = useState(false);
   const [securityClasses, setSecurityClasses] = useState([]);
   const [sort, setSort] = useState({ key: "employee_number", dir: "asc" });
@@ -274,12 +274,24 @@ export default function Employes() {
     } catch { toast.error("Téléchargement du modèle échoué"); }
   };
 
+  const loadBudgetLine = async (e, scen) => {
+    const b = await api.getBudget({ year, scenario: scen });
+    return (b.lines || []).find((l) => l.employee_number === e.employee_number || l.employee_id === e.id);
+  };
   const viewBudget = async (e) => {
     try {
-      const b = await api.getBudget({ year, scenario });
-      const line = (b.lines || []).find((l) => l.employee_number === e.employee_number || l.employee_id === e.id);
-      if (!line) { toast.error(`Aucune fiche budget pour cet employé (${year} · ${scenario}).`); return; }
-      setBudgetDetail({ open: true, line });
+      const line = await loadBudgetLine(e, scenario);
+      if (!line) { toast.error(`Aucune fiche budget pour cet employé (${year}).`); return; }
+      setBudgetDetail({ open: true, line, employee: e, scenario });
+    } catch { toast.error("Chargement du budget échoué"); }
+  };
+  const changeBudgetScenario = async (scen) => {
+    const e = budgetDetail.employee;
+    if (!e) return;
+    try {
+      const line = await loadBudgetLine(e, scen);
+      if (!line) { toast.error(`Aucune fiche pour ce scénario (${year}).`); return; }
+      setBudgetDetail((p) => ({ ...p, line, scenario: scen }));
     } catch { toast.error("Chargement du budget échoué"); }
   };
 
@@ -391,7 +403,7 @@ export default function Employes() {
 
       {dialog.open && <EmpForm open={dialog.open} onOpenChange={(v) => setDialog((p) => ({ ...p, open: v }))} initial={dialog.item} departments={departments} securityClasses={securityClasses} onSubmit={submit} />}
       <EmployeeDetailDialog open={detail.open} onOpenChange={(v) => setDetail((p) => ({ ...p, open: v }))} employee={detail.item} departments={departments} securityClasses={securityClasses} canEdit={canEdit} onEdit={(e) => setDialog({ open: true, item: e })} onViewBudget={viewBudget} />
-      <BudgetDetailDialog open={budgetDetail.open} onOpenChange={(v) => setBudgetDetail((p) => ({ ...p, open: v }))} line={budgetDetail.line} year={year} scenario={scenario} canEdit={false} onEdit={() => {}} />
+      <BudgetDetailDialog open={budgetDetail.open} onOpenChange={(v) => setBudgetDetail((p) => ({ ...p, open: v }))} line={budgetDetail.line} year={year} scenario={budgetDetail.scenario} canEdit={false} onEdit={() => {}} scenarioOptions={[["ca", "Budget CA"], ["revue1", "Revue 1"], ["revue2", "Revue 2"]]} onScenarioChange={changeBudgetScenario} />
       <ImportErrorsDialog open={importErrors.open} onOpenChange={(v) => setImportErrors((p) => ({ ...p, open: v }))} errors={importErrors.errors} fileName={importErrors.fileName} />
       <AlertDialog open={!!confirmDel} onOpenChange={(v) => !v && setConfirmDel(null)}>
         <AlertDialogContent data-testid="delete-confirm-dialog">
