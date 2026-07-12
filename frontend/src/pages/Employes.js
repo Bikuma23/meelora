@@ -280,9 +280,10 @@ export default function Employes() {
   };
   const viewBudget = async (e) => {
     try {
-      const line = await loadBudgetLine(e, scenario);
+      const [line, caLine] = await Promise.all([loadBudgetLine(e, scenario), scenario === "ca" ? null : loadBudgetLine(e, "ca")]);
       if (!line) { toast.error(`Aucune fiche budget pour cet employé (${year}).`); return; }
-      setBudgetDetail({ open: true, line, employee: e, scenario });
+      const baseline = (scenario === "ca" ? line : caLine)?.total_cost ?? null;
+      setBudgetDetail({ open: true, line, employee: e, scenario, baseline });
     } catch { toast.error("Chargement du budget échoué"); }
   };
   const changeBudgetScenario = async (scen) => {
@@ -291,7 +292,9 @@ export default function Employes() {
     try {
       const line = await loadBudgetLine(e, scen);
       if (!line) { toast.error(`Aucune fiche pour ce scénario (${year}).`); return; }
-      setBudgetDetail((p) => ({ ...p, line, scenario: scen }));
+      let baseline = budgetDetail.baseline;
+      if (baseline == null) baseline = scen === "ca" ? line.total_cost : (await loadBudgetLine(e, "ca"))?.total_cost ?? null;
+      setBudgetDetail((p) => ({ ...p, line, scenario: scen, baseline }));
     } catch { toast.error("Chargement du budget échoué"); }
   };
 
@@ -403,7 +406,7 @@ export default function Employes() {
 
       {dialog.open && <EmpForm open={dialog.open} onOpenChange={(v) => setDialog((p) => ({ ...p, open: v }))} initial={dialog.item} departments={departments} securityClasses={securityClasses} onSubmit={submit} />}
       <EmployeeDetailDialog open={detail.open} onOpenChange={(v) => setDetail((p) => ({ ...p, open: v }))} employee={detail.item} departments={departments} securityClasses={securityClasses} canEdit={canEdit} onEdit={(e) => setDialog({ open: true, item: e })} onViewBudget={viewBudget} />
-      <BudgetDetailDialog open={budgetDetail.open} onOpenChange={(v) => setBudgetDetail((p) => ({ ...p, open: v }))} line={budgetDetail.line} year={year} scenario={budgetDetail.scenario} canEdit={false} onEdit={() => {}} scenarioOptions={[["ca", "Budget CA"], ["revue1", "Revue 1"], ["revue2", "Revue 2"]]} onScenarioChange={changeBudgetScenario} />
+      <BudgetDetailDialog open={budgetDetail.open} onOpenChange={(v) => setBudgetDetail((p) => ({ ...p, open: v }))} line={budgetDetail.line} year={year} scenario={budgetDetail.scenario} canEdit={false} onEdit={() => {}} scenarioOptions={[["ca", "Budget CA"], ["revue1", "Revue 1"], ["revue2", "Revue 2"]]} onScenarioChange={changeBudgetScenario} baselineTotal={budgetDetail.baseline} />
       <ImportErrorsDialog open={importErrors.open} onOpenChange={(v) => setImportErrors((p) => ({ ...p, open: v }))} errors={importErrors.errors} fileName={importErrors.fileName} />
       <AlertDialog open={!!confirmDel} onOpenChange={(v) => !v && setConfirmDel(null)}>
         <AlertDialogContent data-testid="delete-confirm-dialog">

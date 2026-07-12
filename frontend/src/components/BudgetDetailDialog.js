@@ -17,7 +17,7 @@ function Row({ label, value, strong, accent }) {
 
 const SCEN_LABEL = { ca: "Budget CA", revue1: "Revue Budgétaire 1", revue2: "Revue Budgétaire 2" };
 
-export default function BudgetDetailDialog({ open, onOpenChange, line, year, scenario, onEdit, canEdit, scenarioOptions, onScenarioChange }) {
+export default function BudgetDetailDialog({ open, onOpenChange, line, year, scenario, onEdit, canEdit, scenarioOptions, onScenarioChange, baselineTotal }) {
   const [busy, setBusy] = useState(false);
   if (!line) return null;
   const ccq = line.is_ccq;
@@ -52,6 +52,17 @@ export default function BudgetDetailDialog({ open, onOpenChange, line, year, sce
             ))}
           </div>
         )}
+        {scenarioOptions && baselineTotal != null && (() => {
+          const diff = line.total_cost - baselineTotal;
+          const pct = baselineTotal ? (diff / baselineTotal * 100).toFixed(1) : "0.0";
+          const c = diff > 0 ? "#DC2626" : diff < 0 ? "#0E9488" : "#64748B";
+          return (
+            <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm" data-testid="detail-ecart">
+              <span className="text-slate-500">Écart vs Budget CA</span>
+              <span className="font-mono-data font-700" style={{ color: c }}>{diff > 0 ? "+" : ""}{fmtCAD(diff)} ({diff > 0 ? "+" : ""}{pct} %)</span>
+            </div>
+          );
+        })()}
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="space-y-4">
