@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { useYear } from "../context/YearContext";
 import { fmtCAD, computeAge, computeSeniority } from "../lib/format";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -12,6 +13,7 @@ import { Plus, Pencil, Trash2, Search, Cake, CalendarClock, Upload, Download, Ch
 import { toast } from "sonner";
 import ImportErrorsDialog from "../components/ImportErrorsDialog";
 import EmployeeDetailDialog from "../components/EmployeeDetailDialog";
+import BudgetDetailDialog from "../components/BudgetDetailDialog";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "../components/ui/alert-dialog";
 
 const REQ = "Ce champ est obligatoire";
@@ -189,6 +191,7 @@ function EmpForm({ open, onOpenChange, initial, departments, securityClasses = [
 
 export default function Employes() {
   const { user } = useAuth();
+  const { year } = useYear();
   const canEdit = ["admin", "editor"].includes(user?.role);
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -197,6 +200,8 @@ export default function Employes() {
   const [importErrors, setImportErrors] = useState({ open: false, errors: [], fileName: "" });
   const [confirmDel, setConfirmDel] = useState(null);
   const [detail, setDetail] = useState({ open: false, item: null });
+  const [scenario, setScenario] = useState("ca");
+  const [budgetDetail, setBudgetDetail] = useState({ open: false, line: null });
   const [showInactive, setShowInactive] = useState(false);
   const [securityClasses, setSecurityClasses] = useState([]);
   const [sort, setSort] = useState({ key: "employee_number", dir: "asc" });
@@ -208,7 +213,7 @@ export default function Employes() {
   useEffect(() => { api.listDepartments().then(setDepartments); api.getHypotheses().then((h) => setSecurityClasses(h.security_classes || [])).catch(() => {}); load(); }, []);
   useEffect(() => { const t = setTimeout(() => load(query), 250); return () => clearTimeout(t); }, [query, showInactive]);
   useEffect(() => {
-    api.getPreferences().then((p) => { if (p?.employees_sort?.key) setSort(p.employees_sort); }).catch(() => {}).finally(() => setPrefsLoaded(true));
+    api.getPreferences().then((p) => { if (p?.employees_sort?.key) setSort(p.employees_sort); if (p?.budget_scenario) setScenario(p.budget_scenario); }).catch(() => {}).finally(() => setPrefsLoaded(true));
   }, []);
   useEffect(() => {
     if (prefsLoaded) api.updatePreferences({ employees_sort: sort }).catch(() => {});
@@ -267,6 +272,15 @@ export default function Employes() {
       const a = document.createElement("a"); a.href = url; a.download = "modele_employes.xlsx"; a.click();
       URL.revokeObjectURL(url);
     } catch { toast.error("Téléchargement du modèle échoué"); }
+  };
+
+  const viewBudget = async (e) => {
+    try {
+      const b = await api.getBudget({ year, scenario });
+      const line = (b.lines || []).find((l) => l.employee_number === e.employee_number || l.employee_id === e.id);
+      if (!line) { toast.error(`Aucune fiche budget pour cet employé (${year} · ${scenario}).`); return; }
+      setBudgetDetail({ open: true, line });
+    } catch { toast.error("Chargement du budget échoué"); }
   };
 
   return (
@@ -376,7 +390,8 @@ export default function Employes() {
       </div>
 
       {dialog.open && <EmpForm open={dialog.open} onOpenChange={(v) => setDialog((p) => ({ ...p, open: v }))} initial={dialog.item} departments={departments} securityClasses={securityClasses} onSubmit={submit} />}
-      <EmployeeDetailDialog open={detail.open} onOpenChange={(v) => setDetail((p) => ({ ...p, open: v }))} employee={detail.item} departments={departments} securityClasses={securityClasses} canEdit={canEdit} onEdit={(e) => setDialog({ open: true, item: e })} />
+      <EmployeeDetailDialog open={detail.open} onOpenChange={(v) => setDetail((p) => ({ ...p, open: v }))} employee={detail.item} departments={departments} securityClasses={securityClasses} canEdit={canEdit} onEdit={(e) => setDialog({ open: true, item: e })} onViewBudget={viewBudget} />
+      <BudgetDetailDialog open={budgetDetail.open} onOpenChange={(v) => setBudgetDetail((p) => ({ ...p, open: v }))} line={budgetDetail.line} year={year} scenario={scenario} canEdit={false} onEdit={() => {}} />
       <ImportErrorsDialog open={importErrors.open} onOpenChange={(v) => setImportErrors((p) => ({ ...p, open: v }))} errors={importErrors.errors} fileName={importErrors.fileName} />
       <AlertDialog open={!!confirmDel} onOpenChange={(v) => !v && setConfirmDel(null)}>
         <AlertDialogContent data-testid="delete-confirm-dialog">

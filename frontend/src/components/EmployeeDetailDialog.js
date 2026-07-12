@@ -1,6 +1,6 @@
 import { fmtCAD, computeAge, computeSeniority } from "../lib/format";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
-import { Pencil } from "lucide-react";
+import { Pencil, TrendingUp } from "lucide-react";
 import { Button } from "../components/ui/button";
 
 const typeLabel = (t) => ({ "Régulier temps plein": "Rég. Temps Plein", "Régulier temps partiel": "Rég. Temps Partiel" }[t] || t);
@@ -24,7 +24,7 @@ function Section({ title, children }) {
   );
 }
 
-export default function EmployeeDetailDialog({ open, onOpenChange, employee, departments = [], securityClasses = [], canEdit, onEdit }) {
+export default function EmployeeDetailDialog({ open, onOpenChange, employee, departments = [], securityClasses = [], canEdit, onEdit, onViewBudget }) {
   if (!employee) return null;
   const e = employee;
   const dept = departments.find((d) => d.code === e.department);
@@ -85,10 +85,19 @@ export default function EmployeeDetailDialog({ open, onOpenChange, employee, dep
           </div>
         </div>
 
-        {canEdit && (
-          <Button data-testid="employee-detail-edit-btn" onClick={() => { onOpenChange(false); onEdit(e); }} className="gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90">
-            <Pencil size={15} /> Modifier cet employé
-          </Button>
+        {(onViewBudget || canEdit) && (
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {onViewBudget && (
+              <Button data-testid="employee-detail-budget-btn" variant="outline" onClick={() => { onOpenChange(false); onViewBudget(e); }} className="flex-1 gap-1.5">
+                <TrendingUp size={15} /> Voir le budget
+              </Button>
+            )}
+            {canEdit && (
+              <Button data-testid="employee-detail-edit-btn" onClick={() => { onOpenChange(false); onEdit(e); }} className="flex-1 gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90">
+                <Pencil size={15} /> Modifier cet employé
+              </Button>
+            )}
+          </div>
         )}
       </DialogContent>
     </Dialog>
