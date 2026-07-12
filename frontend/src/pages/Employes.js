@@ -405,7 +405,7 @@ export default function Employes() {
       </div>
 
       {dialog.open && <EmpForm open={dialog.open} onOpenChange={(v) => setDialog((p) => ({ ...p, open: v }))} initial={dialog.item} departments={departments} securityClasses={securityClasses} onSubmit={submit} />}
-      <EmployeeDetailDialog open={detail.open} onOpenChange={(v) => setDetail((p) => ({ ...p, open: v }))} employee={detail.item} departments={departments} securityClasses={securityClasses} canEdit={canEdit} onEdit={(e) => setDialog({ open: true, item: e })} onViewBudget={viewBudget} />
+      <EmployeeDetailDialog open={detail.open} onOpenChange={(v) => setDetail((p) => ({ ...p, open: v }))} employee={detail.item} departments={departments} securityClasses={securityClasses} year={year} canEdit={canEdit} onEdit={(e) => setDialog({ open: true, item: e })} onViewBudget={viewBudget} />
       <BudgetDetailDialog open={budgetDetail.open} onOpenChange={(v) => setBudgetDetail((p) => ({ ...p, open: v }))} line={budgetDetail.line} year={year} scenario={budgetDetail.scenario} canEdit={false} onEdit={() => {}} scenarioOptions={[["ca", "Budget CA"], ["revue1", "Revue 1"], ["revue2", "Revue 2"]]} onScenarioChange={changeBudgetScenario} baselineTotal={budgetDetail.baseline} />
       <ImportErrorsDialog open={importErrors.open} onOpenChange={(v) => setImportErrors((p) => ({ ...p, open: v }))} errors={importErrors.errors} fileName={importErrors.fileName} />
       <AlertDialog open={!!confirmDel} onOpenChange={(v) => !v && setConfirmDel(null)}>

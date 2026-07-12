@@ -214,6 +214,9 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 - [x] Les overrides sont **isolés par scénario** (ne touchent pas les autres versions). Au **verrouillage** d'une version, le département par défaut de la fiche employé prend celui de la version verrouillée.
 - [x] Backend : `compute_budget` dérive emp_type/ccq/dept/emp_rate depuis l'override ; `set_lock` propage le département de la version verrouillée vers `employee.department`. Validé testing_agent iteration_17 : backend 8/8, frontend OK, isolation + proratisation + invariance CSST + propagation au verrouillage confirmées. (Note : la base contient 123 employés.)
 
+## Historique des départements par version dans le détail employé (2026-06-12)
+- [x] Le détail employé affiche une section **« Département par version »** (Budget CA / Revue 1 / Revue 2) pour l'année courante, lue depuis les overrides `years[year][scenario].department` (défaut = département de la fiche). Une version dont le département diffère de la fiche est mise en évidence (orange). Vérifié.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

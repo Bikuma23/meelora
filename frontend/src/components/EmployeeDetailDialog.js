@@ -24,12 +24,15 @@ function Section({ title, children }) {
   );
 }
 
-export default function EmployeeDetailDialog({ open, onOpenChange, employee, departments = [], securityClasses = [], canEdit, onEdit, onViewBudget }) {
+export default function EmployeeDetailDialog({ open, onOpenChange, employee, departments = [], securityClasses = [], year, canEdit, onEdit, onViewBudget }) {
   if (!employee) return null;
   const e = employee;
   const dept = departments.find((d) => d.code === e.department);
   const secClass = (securityClasses || []).find((c) => c.code === e.security_class);
   const yesNo = (b) => (b ? "Oui" : "Non");
+  const yd = (e.years || {})[String(year)] || {};
+  const deptFor = (sc) => (yd[sc] && yd[sc].department) || e.department;
+  const deptName = (code) => { const d = departments.find((x) => x.code === code); return d ? `${code} — ${d.description}` : code; };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -60,6 +63,13 @@ export default function EmployeeDetailDialog({ open, onOpenChange, employee, dep
               <Row label="Code" value={e.security_class || "—"} />
               <Row label="Description" value={secClass?.description || "—"} />
               {secClass && <Row label="Taux" value={`${(secClass.rate * 100).toFixed(4)} %`} />}
+            </Section>
+            <Section title={`Département par version${year ? " — " + year : ""}`}>
+              {[["ca", "Budget CA"], ["revue1", "Revue 1"], ["revue2", "Revue 2"]].map(([sc, lbl]) => {
+                const code = deptFor(sc);
+                const moved = code !== e.department;
+                return <Row key={sc} label={lbl} value={deptName(code)} accent={moved ? "#B45309" : undefined} />;
+              })}
             </Section>
           </div>
 
