@@ -266,7 +266,11 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] Vérifié testing_agent iteration_23 : frontend 100 %.
 - [x] **Graphique « Réel vs Budget » (Dashboard)** : barres groupées (Revenus, Dépenses, Bénéfice net) × (Réel, Budget CA, Budget Rév-1) du mois, via `GET /api/acct/summary`. Vérifié testing_agent iteration_24 (backend + frontend 100 %).
 - [x] **P&L tronqué** : suppression de l'annexe du bas à partir de « POUR TABLEAU Comité gestion » (r567+) via `stop_at`. Écran + export Excel concernés. Vérifié via curl (s'arrête à r563, Bénéfice net conservé).
-- [ ] **Reporté (phases suivantes)** : export PDF (en-tête pro à définir) ; logique Flux de trésorerie ; contenu Rapports d'audit (modèle à venir) ; ligne d'annexe quote-part partenariat (opérateur `%`).
+
+### Comptabilité — Flux de trésorerie + nettoyage P&L (2026-06-14)
+- [x] **P&L — retrait des lignes de contrôle internes** : suppression des lignes « Bénéfice Net (Perte Nette) - Selon BV détaillée » (r558) et « Contrôle (doit être égal à zéro) » (r559) via nouveau param `exclude` de `build_report` (exclusion ciblée par libellé, sans interrompre le rapport). « BÉNÉFICE NET (PERTE NETTE) » et « Q-P DES RÉSULTATS » conservés. Écran + export Excel. Vérifié (487 lignes vs 489).
+- [x] **Flux de trésorerie (méthode indirecte)** : nouveau module `GET /api/acct/cashflow` + `/api/acct/cashflow/excel`. Compare deux périodes chargées (Ouverture → Clôture). Variation = solde de clôture (col. `i`) − solde d'ouverture. 3 sections : Exploitation (Bénéfice net + Amortissement + variation du fonds de roulement), Investissement, Financement ; Variation nette + Encaisse ouverture/clôture. Bénéfice net = Actif−Passif−Avoir(clôture) − idem(ouverture). Classification par section du Bilan (`_bilan_groups`, `_cf_category`), signe par préfixe de compte (1=actif, 2/3=passif/avoir). **Réconciliation garantie** (encaisse clôture = ouverture + variation nette, écart 0,00). Front : `CashflowView` (2 sélecteurs de période, badge « Réconcilié », export Excel). Note : pour un flux « depuis le début de l'exercice », choisir comme ouverture la BV de fin d'exercice précédent. Vérifié testing_agent iteration_25 (frontend 100 %, écart=0,00).
+- [ ] **Reporté (phases suivantes)** : export PDF (en-tête pro à définir) ; contenu Rapports d'audit (modèle à venir) ; ligne d'annexe quote-part partenariat (opérateur `%`).
 
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
