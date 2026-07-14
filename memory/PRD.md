@@ -246,6 +246,19 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 - [x] **Employés** : colonne **Vac. %** ajoutée ; cellules éditables **Salaire ($)** et **Vac. (%)** via `updateEmployee` (corps complet `empToBody`). Rôles admin/éditeur (verrou géré côté backend 403). Augmentation N/A ici (donnée de scénario).
 - [x] Vérifié testing_agent iteration_21 (admin 100% : édition + recalcul du coût total + non-ouverture du détail + préservation des overrides ; valeurs restaurées, 123 employés intacts). Gating rôles/verrou validé par inspection de code.
 
+## Module Comptabilité — Phase 1 (2026-06-14)
+Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des résultats à partir d'une balance de vérification (BV .xlsx). Réutilise auth/rôles existants.
+- [x] **Moteur de calcul fiable** (`/app/backend/accounting.py`, `ReportEngine`) : reproduit le graphe de formules du modèle Excel (VLOOKUP par n° de compte + SUM de plages + arithmétique de section + réfs inter-feuilles). **Validé à 100 % des lignes critiques** contre les valeurs Excel en cache (Bilan 473/473 dont équilibre Actif=Passif ; P&L col mois + col à date 493/493). Robuste à l'ordre des comptes (indexé par n° de compte).
+- [x] **Navigation** : Comptabilité ▸ Dashboard · Balance de vérification · Bilan · États des résultats · Flux de trésorerie *(à venir)* · Rapports d'audit *(à venir)*.
+- [x] **Import du modèle** (admin) : `POST /api/acct/template` extrait le mapping (489 comptes).
+- [x] **Upload BV mensuel** : `POST /api/acct/bv?year=&month=` (permis aux utilisateurs standard via WRITE_ALLOW_ALL), parsing (A=n°, B=nom, C=mouvement, I=cumulatif), **validation d'équilibre** (écart bilan ~0), **détection des nouveaux comptes** (dialogue), remplacement complet tant que non verrouillé.
+- [x] **Verrouillage mensuel** (admin, `require_admin`, tracé) : bloque tout nouvel upload (403) ; déverrouillage admin.
+- [x] **Rapports** : Bilan (cumulatif fin de mois), P&L (mouvement du mois + cumulatif à date), bandeau « Données provisoires » si non verrouillé, négatifs en rouge/parenthèses.
+- [x] **Export Excel formaté** (`/api/acct/report/excel`) : en-têtes gras, totaux surlignés, format monétaire, négatifs entre parenthèses.
+- [x] **Storage** : collections Mongo `acct_template`, `acct_periods`, `acct_bv`.
+- [x] Vérifié testing_agent iteration_22 : backend 9/9, frontend 100 %. Période 2026-06 laissée déverrouillée.
+- [ ] **Reporté (phases suivantes)** : écran de validation/correction du mapping ; catégorisation détaillée des nouveaux comptes (intégration dans les sous-totaux) ; export PDF (en-tête pro à définir) ; logique Flux de trésorerie ; contenu Rapports d'audit (modèle à venir) ; ligne d'annexe quote-part partenariat (opérateur `%`).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
