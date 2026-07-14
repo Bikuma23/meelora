@@ -240,6 +240,12 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 - [x] **Export Excel** en un clic (`GET /api/reports/scenario-compare-excel`) avec formats monétaires et pourcentages. Endpoint données `GET /api/reports/scenario-compare`.
 - [x] Backend `_scenario_compare_data` (réutilise `compute_budget` par scénario, agrège `by_department`). Vérifié testing_agent iteration_20 (frontend 100%, 17 lignes + TOTAL, export OK, filtres OK).
 
+## Édition rapide par double-clic (2026-06-14)
+- [x] Composant réutilisable `EditableCell` (double-clic → input, Entrée/blur = enregistrer, Échap = annuler, `stopPropagation` pour ne pas ouvrir le détail).
+- [x] **Salaires & Budget** (vue par employé) : colonnes ajoutées **Augm. %** et **Vac. %** ; cellules éditables **Nouveau salaire ($)**, **Augm. (%)**, **Vac. (%)**. Sauvegarde via `saveBudgetOverride` en **fusionnant l'override existant** (`lineToOverride`) pour ne rien écraser. Respecte scénario actif + verrou + rôles (`canEdit = admin || (editor && !locked)`).
+- [x] **Employés** : colonne **Vac. %** ajoutée ; cellules éditables **Salaire ($)** et **Vac. (%)** via `updateEmployee` (corps complet `empToBody`). Rôles admin/éditeur (verrou géré côté backend 403). Augmentation N/A ici (donnée de scénario).
+- [x] Vérifié testing_agent iteration_21 (admin 100% : édition + recalcul du coût total + non-ouverture du détail + préservation des overrides ; valeurs restaurées, 123 employés intacts). Gating rôles/verrou validé par inspection de code.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
