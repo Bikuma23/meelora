@@ -79,4 +79,6 @@ export const api = {
   acctLock: (params) => client.post("/acct/period/lock", {}, { params }).then((r) => r.data),
   acctReport: (params) => client.get("/acct/report", { params }).then((r) => r.data),
   acctReportExcel: (params) => client.get("/acct/report/excel", { params, responseType: "blob" }).then((r) => r.data),
+  acctAccounts: () => client.get("/acct/accounts").then((r) => r.data),
+  acctAccountMap: (assignments, params) => client.post("/acct/account-map", { assignments }, { params }).then((r) => r.data),
 };

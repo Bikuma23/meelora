@@ -14,8 +14,10 @@ XREF_RE = re.compile(r"'([^']+)'!([A-Z]+)(\d+)")
 SUM_RE = re.compile(r"SUM\(([^)]*)\)")
 CELLREF_RE = re.compile(r"(?<![A-Za-z0-9_])([A-Z]{1,3})(\d+)(?![A-Za-z0-9_(])")
 
-# VLOOKUP index -> champ BV : 3 = colonne C (mouvement du mois REEL), 9 = colonne I (cumulatif REEL)
-IDX_FIELD = {3: "mov", 9: "cum"}
+# VLOOKUP index -> champ BV. BV cols: C=3 réel mois, D=4 budget rév2, E=5 budget rév1, F=6 budget CA,
+# G=7 réel année préc., I=9 réel cumulatif, J=10 rév2 cum, K=11 rév1 cum, L=12 CA cum, M=13 préc. cum.
+IDX_FIELD = {3: "c", 4: "d", 5: "e", 6: "f", 7: "g", 9: "i", 10: "j", 11: "k", 12: "l", 13: "m"}
+BV_VALUE_COLS = {"C": "c", "D": "d", "E": "e", "F": "f", "G": "g", "I": "i", "J": "j", "K": "k", "L": "l", "M": "m"}
 
 
 def col_letter_to_idx(letter):
@@ -81,7 +83,8 @@ class ReportEngine:
             rec = bv.get(acct)
             if not rec:
                 return 0.0
-            return float(rec.get(IDX_FIELD.get(idx, ""), 0.0)) if idx in IDX_FIELD else 0.0
+            f = IDX_FIELD.get(idx)
+            return float(rec.get(f, 0.0)) if f else 0.0
 
         def comp(sheet, col, row, depth=0):
             key = (sheet, col, row)
@@ -95,8 +98,8 @@ class ReportEngine:
                 return 0.0
             cell = (sd["rows"].get(row) or {}).get(col)
             # Feuille BV : cellule feuille (compte présent) -> valeur BV par compte
-            if sheet == "BV Détaillée" and row in sd["acct"] and col in ("C", "I"):
-                v = bvval(sd["acct"][row], 3 if col == "C" else 9)
+            if sheet == "BV Détaillée" and row in sd["acct"] and col in BV_VALUE_COLS:
+                v = bvval(sd["acct"][row], next(i for i, f in IDX_FIELD.items() if f == BV_VALUE_COLS[col]))
                 memo[key] = v
                 return v
             if cell is None:
@@ -161,8 +164,21 @@ class ReportEngine:
                 accs.update(sd["acct"].values())
         return accs
 
-    def build_report(self, bv, sheet, value_cols, account_col, label_col):
-        """Génère les lignes du rapport. value_cols: dict {clé: colonne}. Retourne liste de lignes."""
+    def account_names(self):
+        names = {}
+        for name, lbl_col in (("Bilan Détaillé", "C"), ("Resultats internes", "D")):
+            sd = self.sheets.get(name)
+            if not sd:
+                continue
+            for r, acct in sd["acct"].items():
+                lbl = (sd["rows"].get(r) or {}).get(lbl_col)
+                if acct is not None and isinstance(lbl, str) and acct not in names:
+                    names[acct] = lbl.strip()
+        return names
+
+    def build_report(self, bv, sheet, value_cols, account_col, label_col, stop_after=None):
+        """Génère les lignes du rapport. value_cols: dict {clé: colonne}. stop_after: liste de préfixes
+        de libellé (minuscule) après lesquels arrêter (ex. le bilan s'arrête à « Diff »)."""
         comp = self.compute_all(bv)
         sd = self.sheets[sheet]
         ai = account_col
@@ -174,7 +190,6 @@ class ReportEngine:
                 continue
             acct = sd["acct"].get(r)
             label = cells.get(label_col)
-            # ligne d'en-tête de section : libellé dans la colonne compte, pas de compte numérique
             if label is None and acct is None:
                 label = cells.get(ai)
             if isinstance(label, (int, float)):
@@ -187,17 +202,16 @@ class ReportEngine:
                 if abs(v) > 0.005:
                     has_val = True
             is_data = acct is not None
-            # type de ligne
             first_col = value_cols[list(value_cols)[0]]
             raw = cells.get(first_col)
             is_formula = isinstance(raw, str) and raw.startswith("=")
             kind = "data" if is_data else ("total" if is_formula else "header")
+            lbl_str = (label or "").strip() if isinstance(label, str) else label
             if label is None and not has_val:
                 continue
-            out.append({
-                "row": r, "account": acct, "label": (label or "").strip() if isinstance(label, str) else label,
-                "kind": kind, "values": values,
-            })
+            out.append({"row": r, "account": acct, "label": lbl_str, "kind": kind, "values": values})
+            if stop_after and isinstance(lbl_str, str) and any(lbl_str.lower().startswith(s) for s in stop_after):
+                break
         return out
 
 
@@ -212,7 +226,11 @@ if __name__ == "__main__":
     for r in range(3, ws.max_row + 1):
         a = ws.cell(r, 1).value
         if isinstance(a, (int, float)) and float(a).is_integer():
-            bv[int(a)] = {"mov": float(ws.cell(r, 3).value or 0), "cum": float(ws.cell(r, 9).value or 0)}
+            bv[int(a)] = {"c": float(ws.cell(r, 3).value or 0), "d": float(ws.cell(r, 4).value or 0),
+                          "e": float(ws.cell(r, 5).value or 0), "f": float(ws.cell(r, 6).value or 0),
+                          "g": float(ws.cell(r, 7).value or 0), "i": float(ws.cell(r, 9).value or 0),
+                          "j": float(ws.cell(r, 10).value or 0), "k": float(ws.cell(r, 11).value or 0),
+                          "l": float(ws.cell(r, 12).value or 0), "m": float(ws.cell(r, 13).value or 0)}
     comp = eng.compute_all(bv)
 
     def validate(sheet, tgt_col, label_col, acc_col, crit_max):

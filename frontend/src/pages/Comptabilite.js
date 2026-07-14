@@ -103,8 +103,10 @@ export function AcctBV() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [newAcct, setNewAcct] = useState({ open: false, list: [] });
+  const [accts, setAccts] = useState([]);
+  const [assign, setAssign] = useState({});
   const loadTmpl = useCallback(() => api.acctGetTemplate().then(setTmpl).catch(() => {}), []);
-  useEffect(() => { loadTmpl(); }, [loadTmpl]);
+  useEffect(() => { loadTmpl(); api.acctAccounts().then(setAccts).catch(() => {}); }, [loadTmpl]);
 
   const onTemplate = async (e) => {
     const f = e.target.files?.[0]; e.target.value = "";
@@ -120,7 +122,7 @@ export function AcctBV() {
     try {
       const r = await api.acctUploadBV(f, { year, month });
       setResult(r);
-      if (r.new_accounts?.length) setNewAcct({ open: true, list: r.new_accounts });
+      if (r.new_accounts?.length) { setAssign({}); setNewAcct({ open: true, list: r.new_accounts }); }
       if (r.balanced === false) toast.warning(`BV chargée mais déséquilibre (écart ${money(r.diff)})`);
       else toast.success(`BV ${MONTHS[month - 1]} ${year} chargée${r.balanced ? " — balancée" : ""}`);
       reload();
@@ -130,6 +132,16 @@ export function AcctBV() {
     try { await api.acctLock({ year: p.year, month: p.month, locked: !p.locked }); toast.success(!p.locked ? "Mois verrouillé" : "Mois déverrouillé"); reload(); }
     catch (err) { toast.error(err.response?.data?.detail || "Action impossible"); }
   };
+  const saveAssignments = async () => {
+    const clean = {};
+    for (const [k, v] of Object.entries(assign)) if (v) clean[k] = v;
+    try {
+      await api.acctAccountMap(clean, { year, month });
+      toast.success(`${Object.keys(clean).length} compte(s) affecté(s)`);
+      setNewAcct({ open: false, list: [] }); setAssign({}); reload();
+    } catch (err) { toast.error(err.response?.data?.detail || "Enregistrement impossible"); }
+  };
+  const allAssigned = newAcct.list.length > 0 && newAcct.list.every((a) => assign[a.account]);
 
   return (
     <div className="space-y-5" data-testid="acct-bv-page">
@@ -211,20 +223,29 @@ export function AcctBV() {
         </div>
       </div>
 
-      <Dialog open={newAcct.open} onOpenChange={(v) => setNewAcct((s) => ({ ...s, open: v }))}>
-        <DialogContent data-testid="acct-newacct-dialog">
+      <Dialog open={newAcct.open} onOpenChange={() => { /* bloquant : fermeture via bouton uniquement */ }}>
+        <DialogContent data-testid="acct-newacct-dialog" className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Nouveaux comptes détectés</DialogTitle>
-            <DialogDescription>Ces comptes sont présents dans la BV mais absents du modèle. Ils apparaîtront dans les rapports une fois catégorisés (catégorisation détaillée à venir dans une prochaine phase).</DialogDescription>
+            <DialogTitle>Affectation requise — nouveaux comptes détectés</DialogTitle>
+            <DialogDescription>Ces comptes sont présents dans la BV mais absents du modèle. Affectez chacun à un compte existant du rapport (son montant y sera regroupé). L'affectation est mémorisée pour les prochains uploads.</DialogDescription>
           </DialogHeader>
-          <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-200 text-sm" data-testid="acct-newacct-list">
+          <datalist id="acct-target-list">
+            {accts.map((a) => <option key={a.account} value={`${a.account} — ${a.name}`} />)}
+          </datalist>
+          <div className="max-h-80 space-y-2 overflow-y-auto" data-testid="acct-newacct-list">
             {newAcct.list.map((a) => (
-              <div key={a.account} className="flex items-center justify-between border-b border-slate-100 px-3 py-2 last:border-0">
-                <span className="font-mono-data text-slate-500">{a.account}</span><span className="flex-1 px-3 text-slate-700">{a.name}</span>
+              <div key={a.account} className="grid grid-cols-2 items-center gap-3 rounded-lg border border-slate-200 p-2">
+                <div className="text-sm"><span className="font-mono-data text-slate-500">{a.account}</span> <span className="text-slate-700">{a.name}</span></div>
+                <input list="acct-target-list" data-testid={`acct-assign-${a.account}`} placeholder="Regrouper avec le compte…"
+                  className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-[#2563EB]"
+                  onChange={(e) => { const m = e.target.value.match(/^(\d+)/); setAssign((s) => ({ ...s, [a.account]: m ? Number(m[1]) : "" })); }} />
               </div>
             ))}
           </div>
-          <DialogFooter><Button data-testid="acct-newacct-ok" onClick={() => setNewAcct({ open: false, list: [] })}>Compris</Button></DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" data-testid="acct-newacct-skip" onClick={() => { setNewAcct({ open: false, list: [] }); toast.warning("Comptes non affectés — rapports incomplets jusqu'à l'affectation."); }}>Plus tard</Button>
+            <Button data-testid="acct-newacct-save" disabled={!allAssigned} onClick={saveAssignments}>Enregistrer les affectations</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -237,6 +258,7 @@ function ReportView({ type, title }) {
   const [period, setPeriod] = useState("");
   const [rep, setRep] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [hideZero, setHideZero] = useState(false);
   useEffect(() => { if (!period && periods.length) setPeriod(periods[0].id); }, [periods, period]);
   useEffect(() => {
     if (!period) return;
@@ -254,12 +276,24 @@ function ReportView({ type, title }) {
       toast.success("Export téléchargé");
     } catch (e) { toast.error(e.response?.data?.detail || "Export impossible"); }
   };
-  const colLabel = { mois: rep ? `${rep.month_label} ${rep.year}` : "Mois", cumulatif: "Cumulatif" };
+  const colLabel = (k) => ({
+    reel: rep ? `Réel ${rep.month_label}` : "Réel", cumulatif: "Réel à date",
+    bud_rev2: "Budget Rév-2", ecart_rev2: "Écart Rév-2", bud_rev1: "Budget Rév-1",
+    ecart_rev1: "Écart Rév-1", bud_ca: "Budget CA", ecart_ca: "Écart CA", mois: rep ? `${rep.month_label} ${rep.year}` : "Mois",
+  }[k] || k);
+  const isEcart = (k) => k.startsWith("ecart");
+  const visibleLines = rep ? rep.lines.filter((ln) => !(hideZero && ln.kind === "data" && rep.value_cols.every((k) => Math.abs(ln.values[k] || 0) < 0.005))) : [];
 
   return (
     <div className="space-y-4" data-testid={`acct-report-${type}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <PeriodPicker periods={periods} value={period} onChange={setPeriod} />
+        <div className="flex items-center gap-4">
+          <PeriodPicker periods={periods} value={period} onChange={setPeriod} />
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600" data-testid="acct-hidezero-label">
+            <input type="checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} data-testid="acct-hidezero-toggle" className="h-4 w-4 rounded border-slate-300" />
+            Masquer les comptes à solde zéro
+          </label>
+        </div>
         <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-export-excel" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
       </div>
       {rep && !rep.locked && (
@@ -276,18 +310,18 @@ function ReportView({ type, title }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
-                <th className="px-5 py-2.5 text-left font-600">Compte</th>
-                <th className="px-5 py-2.5 text-left font-600">Description</th>
-                {rep.value_cols.map((k) => <th key={k} className="px-5 py-2.5 text-right font-600">{colLabel[k] || k}</th>)}
+                <th className="px-4 py-2.5 text-left font-600">Compte</th>
+                <th className="px-4 py-2.5 text-left font-600">Description</th>
+                {rep.value_cols.map((k) => <th key={k} className={`px-4 py-2.5 text-right font-600 ${isEcart(k) ? "text-slate-500" : ""}`}>{colLabel(k)}</th>)}
               </tr></thead>
               <tbody className="font-mono-data">
-                {rep.lines.map((ln) => (
+                {visibleLines.map((ln) => (
                   <tr key={ln.row} data-testid={`acct-line-${ln.row}`}
                     className={`border-b border-slate-50 ${ln.kind === "total" ? "bg-slate-50 font-700" : ln.kind === "header" ? "font-700 text-slate-800" : ""}`}>
-                    <td className="px-5 py-1.5 text-left text-slate-400">{ln.account || ""}</td>
-                    <td className={`px-5 py-1.5 text-left ${ln.kind === "data" ? "font-sans text-slate-600" : "font-sans"}`}>{ln.label}</td>
+                    <td className="px-4 py-1.5 text-left text-slate-400">{ln.account || ""}</td>
+                    <td className={`px-4 py-1.5 text-left ${ln.kind === "data" ? "font-sans text-slate-600" : "font-sans"}`}>{ln.label}</td>
                     {rep.value_cols.map((k) => (
-                      <td key={k} className="px-5 py-1.5 text-right" style={{ color: ln.values[k] < 0 ? "#DC2626" : undefined }}>{ln.kind === "header" ? "" : money(ln.values[k])}</td>
+                      <td key={k} className={`px-4 py-1.5 text-right ${isEcart(k) ? "italic" : ""}`} style={{ color: ln.values[k] < 0 ? "#DC2626" : (isEcart(k) ? "#64748B" : undefined) }}>{ln.kind === "header" ? "" : money(ln.values[k])}</td>
                     ))}
                   </tr>
                 ))}

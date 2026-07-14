@@ -1,0 +1,52 @@
+{
+  "summary": "Frontend testing for Comptabilité improvements (points 2, 3, 4) and non-regression. All 4 requested scenarios PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "point_2_bilan_no_pnl_accounts": {
+      "status": "PASS",
+      "bilan_rows": 141,
+      "last_row_label": "Diff",
+      "pnl_accounts_found_starting_with_4_5_6": 0,
+      "total_actif": "19 756 123,01",
+      "total_passif_capitaux": "19 756 123,01",
+      "actif_equals_passif": true
+    },
+    "point_3_hide_zero_toggle": {
+      "status": "PASS",
+      "bilan_rows_before": 141,
+      "bilan_rows_after_hidezero_on": 105,
+      "rows_reduced_by": 36,
+      "restored_after_uncheck": true
+    },
+    "point_4_pnl_budget_columns": {
+      "status": "PASS",
+      "headers": ["COMPTE","DESCRIPTION","RÉEL JUIN","BUDGET RÉV-2","ÉCART RÉV-2","BUDGET RÉV-1","ÉCART RÉV-1","BUDGET CA","ÉCART CA","RÉEL À DATE"],
+      "total_revenus_row": {"reel_juin":"1 939 012,15","budget_rev2":"0,00","ecart_rev2":"1 939 012,15","budget_rev1":"1 978 000,00","ecart_rev1":"(38 987,85)","budget_ca":"1 886 541,00","ecart_ca":"52 471,15","reel_a_date":"10 782 099,30"},
+      "expected_values_match": true,
+      "export_excel_button_present": true,
+      "negatives_in_red_parentheses": true
+    },
+    "non_regression": {
+      "dashboard_loads_without_errors": true,
+      "bv_page_loads_and_lists_juin_2026": true
+    }
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Comptabilite.js is a single large page component (ReportView + toggles). If it grows further, consider splitting ReportView into its own module (currently manageable).",
+    "The 'Masquer les comptes à solde zéro' logic correctly filters only ln.kind==='data' lines (keeps totals/headers). Well implemented."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "admin@accslegro.com / admin123 (from request)",
+  "seed_data_creation": "None. Used pre-existing Juin 2026 BV.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bilan now stops at 'Diff' line (141 lines, no P&L accounts). P&L has 8 value columns including budgets and écarts. hide-zero toggle reduces data rows (141->105 on Bilan) and restores on uncheck. All flows verified via Playwright on the public URL."
+}

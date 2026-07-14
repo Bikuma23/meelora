@@ -1794,8 +1794,12 @@ async def root():
 # Module Comptabilité (BV -> Bilan / États des résultats)
 # ---------------------------------------------------------------------------
 MONTHS_FR = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
-BILAN_CFG = {"sheet": "Bilan Détaillé", "value_cols": {"cumulatif": "I"}, "account_col": "B", "label_col": "C"}
-PNL_CFG = {"sheet": "Resultats internes", "value_cols": {"mois": "E", "cumulatif": "Q"}, "account_col": "C", "label_col": "D"}
+BILAN_CFG = {"sheet": "Bilan Détaillé", "value_cols": {"cumulatif": "I"}, "account_col": "B", "label_col": "C",
+             "stop_after": ["diff", "différence", "difference", "contrôle", "controle"]}
+PNL_CFG = {"sheet": "Resultats internes", "account_col": "C", "label_col": "D", "stop_after": None,
+           "value_cols": {"reel": "E", "bud_rev2": "F", "ecart_rev2": "G", "bud_rev1": "I", "ecart_rev1": "J",
+                          "bud_ca": "L", "ecart_ca": "M", "cumulatif": "Q"}}
+BV_FIELD_COLS = {"c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "i": 9, "j": 10, "k": 11, "l": 12, "m": 13}
 
 def _pkey(year, month):
     return f"{int(year):04d}-{int(month):02d}"
@@ -1814,17 +1818,33 @@ def _parse_bv_xlsx(content):
         a = ws.cell(r, 1).value
         if not isinstance(a, (int, float)) or not float(a).is_integer():
             continue
-        mov = ws.cell(r, 3).value
-        cum = ws.cell(r, 9).value
-        accounts.append({
-            "account": int(a), "name": str(ws.cell(r, 2).value or "").strip(),
-            "mov": float(mov) if isinstance(mov, (int, float)) else 0.0,
-            "cum": float(cum) if isinstance(cum, (int, float)) else 0.0,
-        })
+        rec = {"account": int(a), "name": str(ws.cell(r, 2).value or "").strip()}
+        for field, col in BV_FIELD_COLS.items():
+            v = ws.cell(r, col).value
+            rec[field] = float(v) if isinstance(v, (int, float)) else 0.0
+        accounts.append(rec)
     return accounts
 
-def _bv_dict(accounts):
-    return {a["account"]: {"mov": a["mov"], "cum": a["cum"]} for a in accounts}
+def _bv_dict(accounts, amap=None):
+    bv = {a["account"]: {f: a.get(f, 0.0) for f in BV_FIELD_COLS} for a in accounts}
+    # Affectation des nouveaux comptes : fusionne leurs montants dans le compte-cible mémorisé.
+    if amap:
+        for src, tgt in amap.items():
+            src = int(src); tgt = int(tgt)
+            if src in bv:
+                dest = bv.setdefault(tgt, {f: 0.0 for f in BV_FIELD_COLS})
+                for f in BV_FIELD_COLS:
+                    dest[f] = dest.get(f, 0.0) + bv[src].get(f, 0.0)
+    return bv
+
+async def _account_map():
+    doc = await db.acct_account_map.find_one({"_id": "current"})
+    return {k: v for k, v in (doc.get("map", {}) if doc else {}).items()}
+
+def _unassigned(accounts, tmpl_accts, amap):
+    return [{"account": a["account"], "name": a["name"]} for a in accounts
+            if a["account"] not in tmpl_accts and str(a["account"]) not in amap
+            and any(abs(a.get(f, 0.0)) > 0.005 for f in BV_FIELD_COLS)]
 
 @api.post("/acct/template")
 async def acct_upload_template(file: UploadFile = File(...), user: dict = Depends(require_admin)):
@@ -1836,8 +1856,10 @@ async def acct_upload_template(file: UploadFile = File(...), user: dict = Depend
     if "Bilan Détaillé" not in eng.sheets or "Resultats internes" not in eng.sheets:
         raise HTTPException(status_code=400, detail="Le modèle doit contenir les feuilles « Bilan Détaillé » et « Resultats internes »")
     accts = sorted(a for a in eng.template_accounts() if a is not None)
+    names = eng.account_names()
     await db.acct_template.replace_one({"_id": "current"}, {
         "_id": "current", "engine": eng.to_dict(), "accounts": accts,
+        "account_names": {str(k): v for k, v in names.items()},
         "imported_at": datetime.now(timezone.utc).isoformat(), "imported_by": user["email"],
     }, upsert=True)
     await log_action(user, "Créer", "Comptabilité", f"Import modèle — {len(accts)} comptes mappés")
@@ -1865,15 +1887,16 @@ async def acct_upload_bv(year: int, month: int, file: UploadFile = File(...), us
     if not accounts:
         raise HTTPException(status_code=400, detail="Aucun compte détecté dans la BV (colonne A = n° de compte, B = nom, C = mouvement, I = cumulatif)")
     eng = await _load_engine()
-    balanced = None; diff = None; net_control = None; new_accounts = []
+    balanced = None; diff = None; net_control = None; unassigned = []
     if eng:
-        bv = _bv_dict(accounts)
+        amap = await _account_map()
+        bv = _bv_dict(accounts, amap)
         comp = eng.compute_all(bv)
         diff = round(comp("Bilan Détaillé", "I", 174), 2)   # TOTAL PASSIF+CAPITAUX − TOTAL ACTIF
         net_control = round(comp("Resultats internes", "E", 559), 2)  # doit être ~0
         balanced = abs(diff) < 1.0
         tmpl_accts = set(eng.template_accounts())
-        new_accounts = [{"account": a["account"], "name": a["name"]} for a in accounts if a["account"] not in tmpl_accts and (abs(a["mov"]) > 0.005 or abs(a["cum"]) > 0.005)]
+        unassigned = _unassigned(accounts, tmpl_accts, amap)
     await db.acct_bv.replace_one({"_id": pk}, {
         "_id": pk, "year": int(year), "month": int(month), "accounts": accounts,
         "uploaded_at": datetime.now(timezone.utc).isoformat(), "uploaded_by": user["email"],
@@ -1882,12 +1905,12 @@ async def acct_upload_bv(year: int, month: int, file: UploadFile = File(...), us
         "_id": pk, "year": int(year), "month": int(month),
         "last_upload_at": datetime.now(timezone.utc).isoformat(), "last_upload_by": user["email"],
         "balanced": balanced, "diff": diff, "net_control": net_control,
-        "new_accounts": new_accounts, "account_count": len(accounts),
+        "new_accounts": unassigned, "account_count": len(accounts),
     }, "$setOnInsert": {"locked": False, "lock_history": []}}, upsert=True)
     await log_action(user, "Créer", "Comptabilité", f"Upload BV {pk} — {len(accounts)} comptes")
     return {"success": True, "period": pk, "account_count": len(accounts),
-            "balanced": balanced, "diff": diff, "net_control": net_control, "new_accounts": new_accounts,
-            "template_imported": eng is not None}
+            "balanced": balanced, "diff": diff, "net_control": net_control, "new_accounts": unassigned,
+            "requires_assignment": len(unassigned) > 0, "template_imported": eng is not None}
 
 @api.get("/acct/periods")
 async def acct_periods(user: dict = Depends(get_current_user)):
@@ -1907,6 +1930,42 @@ async def acct_lock(year: int, month: int, locked: bool = True, user: dict = Dep
     await log_action(user, "Modifier", "Comptabilité", f"{'Verrouillage' if locked else 'Déverrouillage'} mois {pk}")
     return {"success": True, "locked": locked}
 
+@api.get("/acct/accounts")
+async def acct_accounts(user: dict = Depends(get_current_user)):
+    doc = await db.acct_template.find_one({"_id": "current"})
+    if not doc:
+        return []
+    names = doc.get("account_names", {})
+    return [{"account": a, "name": names.get(str(a), "")} for a in doc.get("accounts", [])]
+
+class AccountAssign(BaseModel):
+    assignments: dict  # {new_account: target_account}
+
+@api.post("/acct/account-map")
+async def acct_account_map(payload: AccountAssign, year: Optional[int] = None, month: Optional[int] = None, user: dict = Depends(get_current_user)):
+    doc = await db.acct_account_map.find_one({"_id": "current"})
+    amap = dict(doc.get("map", {})) if doc else {}
+    for k, v in payload.assignments.items():
+        if v is None or v == "":
+            amap.pop(str(k), None)
+        else:
+            amap[str(int(k))] = int(v)
+    await db.acct_account_map.replace_one({"_id": "current"}, {"_id": "current", "map": amap}, upsert=True)
+    await log_action(user, "Modifier", "Comptabilité", f"Affectation de {len(payload.assignments)} compte(s)")
+    # Recalcule le statut de la période courante si fournie (pour lever le blocage)
+    if year and month:
+        pk = _pkey(year, month)
+        bvdoc = await db.acct_bv.find_one({"_id": pk})
+        eng = await _load_engine()
+        if bvdoc and eng:
+            bv = _bv_dict(bvdoc["accounts"], amap)
+            comp = eng.compute_all(bv)
+            diff = round(comp("Bilan Détaillé", "I", 174), 2)
+            tmpl = set(eng.template_accounts())
+            unassigned = _unassigned(bvdoc["accounts"], tmpl, amap)
+            await db.acct_periods.update_one({"_id": pk}, {"$set": {"balanced": abs(diff) < 1.0, "diff": diff, "new_accounts": unassigned}})
+    return {"success": True, "count": len(amap)}
+
 async def _acct_report(year, month, kind):
     eng = await _load_engine()
     if not eng:
@@ -1916,9 +1975,10 @@ async def _acct_report(year, month, kind):
     if not bvdoc:
         raise HTTPException(status_code=404, detail=f"Aucune BV uploadée pour {MONTHS_FR[month-1]} {year}")
     period = await db.acct_periods.find_one({"_id": pk})
-    bv = _bv_dict(bvdoc["accounts"])
+    amap = await _account_map()
+    bv = _bv_dict(bvdoc["accounts"], amap)
     cfg = BILAN_CFG if kind == "bilan" else PNL_CFG
-    lines = eng.build_report(bv, cfg["sheet"], cfg["value_cols"], cfg["account_col"], cfg["label_col"])
+    lines = eng.build_report(bv, cfg["sheet"], cfg["value_cols"], cfg["account_col"], cfg["label_col"], cfg.get("stop_after"))
     return {"period": pk, "year": int(year), "month": int(month), "month_label": MONTHS_FR[month-1],
             "kind": kind, "value_cols": list(cfg["value_cols"].keys()),
             "locked": bool(period and period.get("locked")),
@@ -1999,7 +2059,7 @@ async def acct_report_excel(type: str, year: int, month: int, user: dict = Depen
 
 app.include_router(api)
 
-WRITE_ALLOW_ALL = {"/api/auth/login", "/api/auth/logout", "/api/me/preferences", "/api/acct/bv"}
+WRITE_ALLOW_ALL = {"/api/auth/login", "/api/auth/logout", "/api/me/preferences", "/api/acct/bv", "/api/acct/account-map"}
 
 def _is_admin_only_path(path: str) -> bool:
     return (path.startswith("/api/users")
