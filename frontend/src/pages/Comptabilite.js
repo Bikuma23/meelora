@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
-  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info,
+  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus,
 } from "lucide-react";
 
 const MONTHS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -324,7 +324,7 @@ function ReportView({ type, title }) {
   const [rep, setRep] = useState(null);
   const [loading, setLoading] = useState(false);
   const [hideZero, setHideZero] = useState(false);
-  const [blockView, setBlockView] = useState("both");
+  const [hiddenGroups, setHiddenGroups] = useState({});
   useEffect(() => { if (!period && periods.length) setPeriod(periods[0].id); }, [periods, period]);
   useEffect(() => {
     if (!period) return;
@@ -351,12 +351,14 @@ function ReportView({ type, title }) {
     mois: rep ? `${rep.month_label} ${rep.year}` : "Mois",
   }[k] || k);
   const isEcart = (k) => k.startsWith("ecart");
-  const groups = rep?.col_groups || null;
-  const monthKeys = groups ? groups[0].keys : [];
-  const visibleGroups = !groups ? null : (blockView === "both" ? groups : blockView === "mois" ? [groups[0]] : [groups[1]]);
-  const visibleCols = !rep ? [] : (!groups || blockView === "both" ? rep.value_cols
-    : blockView === "mois" ? rep.value_cols.filter((k) => monthKeys.includes(k))
-    : rep.value_cols.filter((k) => !monthKeys.includes(k)));
+  const toggleGroups = rep?.col_toggle_groups || null;
+  const hiddenKeys = new Set(
+    (toggleGroups || []).filter((g) => hiddenGroups[g.id]).flatMap((g) => g.keys)
+  );
+  const visibleCols = !rep ? [] : rep.value_cols.filter((k) => !hiddenKeys.has(k));
+  const visibleGroups = !rep?.col_groups ? null : rep.col_groups
+    .map((g) => ({ ...g, keys: g.keys.filter((k) => !hiddenKeys.has(k)) }))
+    .filter((g) => g.keys.length > 0);
   const showSep = (k) => k === "cumulatif" && visibleGroups && visibleGroups.length > 1;
   const visibleLines = rep ? rep.lines.filter((ln) => !(hideZero && ln.kind === "data" && visibleCols.every((k) => Math.abs(ln.values[k] || 0) < 0.005))) : [];
 
@@ -369,17 +371,19 @@ function ReportView({ type, title }) {
             <input type="checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} data-testid="acct-hidezero-toggle" className="h-4 w-4 rounded border-slate-300" />
             Masquer les comptes à solde zéro
           </label>
-          {rep?.col_groups && (
-            <div className="flex items-center gap-2" data-testid="acct-blockview">
+          {rep?.col_toggle_groups && (
+            <div className="flex flex-wrap items-center gap-2" data-testid="acct-colgroups">
               <span className="text-sm text-slate-500">Colonnes :</span>
-              <Select value={blockView} onValueChange={setBlockView}>
-                <SelectTrigger data-testid="acct-blockview-select" className="h-9 w-36"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="both" data-testid="acct-blockview-both">Les deux</SelectItem>
-                  <SelectItem value="mois" data-testid="acct-blockview-mois">Mois</SelectItem>
-                  <SelectItem value="cumulatif" data-testid="acct-blockview-cumulatif">Cumulatif</SelectItem>
-                </SelectContent>
-              </Select>
+              {rep.col_toggle_groups.map((g) => {
+                const hidden = !!hiddenGroups[g.id];
+                return (
+                  <button key={g.id} type="button" data-testid={`acct-colgroup-${g.id}`}
+                    onClick={() => setHiddenGroups((s) => ({ ...s, [g.id]: !s[g.id] }))}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-600 transition-colors ${hidden ? "border-slate-200 bg-white text-slate-400" : "border-[#2563EB]/30 bg-[#2563EB]/10 text-[#2563EB]"}`}>
+                    {hidden ? <Plus size={13} /> : <Minus size={13} />} {g.label}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

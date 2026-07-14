@@ -1856,6 +1856,12 @@ PNL_CFG = {"sheet": "Resultats internes", "account_col": "C", "label_col": "D", 
            "col_groups": [
                {"label": "Mois", "keys": ["reel", "bud_rev2", "ecart_rev2", "bud_rev1", "ecart_rev1", "bud_ca", "ecart_ca", "reel_prec"]},
                {"label": "Cumulatif (exercice à date)", "keys": ["cumulatif", "bud_rev2_cum", "ecart_rev2_cum", "bud_rev1_cum", "ecart_rev1_cum", "bud_ca_cum", "ecart_ca_cum", "prec_cum"]},
+           ],
+           "col_toggle_groups": [
+               {"id": "rev2", "label": "Budget Rév-2", "keys": ["bud_rev2", "ecart_rev2", "bud_rev2_cum", "ecart_rev2_cum"]},
+               {"id": "rev1", "label": "Budget Rév-1", "keys": ["bud_rev1", "ecart_rev1", "bud_rev1_cum", "ecart_rev1_cum"]},
+               {"id": "ca", "label": "Budget CA", "keys": ["bud_ca", "ecart_ca", "bud_ca_cum", "ecart_ca_cum"]},
+               {"id": "prec", "label": "Année précédente", "keys": ["reel_prec", "prec_cum"]},
            ]}
 BV_FIELD_COLS = {"c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "i": 9, "j": 10, "k": 11, "l": 12, "m": 13}
 
@@ -2039,6 +2045,7 @@ async def _acct_report(year, month, kind):
     lines = eng.build_report(bv, cfg["sheet"], cfg["value_cols"], cfg["account_col"], cfg["label_col"], cfg.get("stop_after"), cfg.get("stop_at"), cfg.get("exclude"))
     return {"period": pk, "year": int(year), "month": int(month), "month_label": MONTHS_FR[month-1],
             "kind": kind, "value_cols": list(cfg["value_cols"].keys()), "col_groups": cfg.get("col_groups"),
+            "col_toggle_groups": cfg.get("col_toggle_groups"),
             "locked": bool(period and period.get("locked")),
             "balanced": period.get("balanced") if period else None,
             "lines": lines}
