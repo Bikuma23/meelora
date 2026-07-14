@@ -176,9 +176,9 @@ class ReportEngine:
                     names[acct] = lbl.strip()
         return names
 
-    def build_report(self, bv, sheet, value_cols, account_col, label_col, stop_after=None):
-        """Génère les lignes du rapport. value_cols: dict {clé: colonne}. stop_after: liste de préfixes
-        de libellé (minuscule) après lesquels arrêter (ex. le bilan s'arrête à « Diff »)."""
+    def build_report(self, bv, sheet, value_cols, account_col, label_col, stop_after=None, stop_at=None):
+        """stop_after: préfixes de libellé après lesquels arrêter (inclus). stop_at: préfixes de libellé
+        à partir desquels arrêter (exclu — la ligne et tout ce qui suit sont retirés)."""
         comp = self.compute_all(bv)
         sd = self.sheets[sheet]
         ai = account_col
@@ -207,6 +207,8 @@ class ReportEngine:
             is_formula = isinstance(raw, str) and raw.startswith("=")
             kind = "data" if is_data else ("total" if is_formula else "header")
             lbl_str = (label or "").strip() if isinstance(label, str) else label
+            if stop_at and isinstance(lbl_str, str) and any(lbl_str.lower().startswith(s) for s in stop_at):
+                break
             if label is None and not has_val:
                 continue
             out.append({"row": r, "account": acct, "label": lbl_str, "kind": kind, "values": values})

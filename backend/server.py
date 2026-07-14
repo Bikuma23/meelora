@@ -1824,6 +1824,7 @@ MONTHS_FR = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "
 BILAN_CFG = {"sheet": "Bilan Détaillé", "value_cols": {"cumulatif": "I"}, "account_col": "B", "label_col": "C",
              "stop_after": ["diff", "différence", "difference", "contrôle", "controle"]}
 PNL_CFG = {"sheet": "Resultats internes", "account_col": "C", "label_col": "D", "stop_after": None,
+           "stop_at": ["pour tableau"],
            "value_cols": {"reel": "E", "bud_rev2": "F", "ecart_rev2": "G", "bud_rev1": "I", "ecart_rev1": "J",
                           "bud_ca": "L", "ecart_ca": "M", "cumulatif": "Q"}}
 BV_FIELD_COLS = {"c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "i": 9, "j": 10, "k": 11, "l": 12, "m": 13}
@@ -2005,7 +2006,7 @@ async def _acct_report(year, month, kind):
     amap = await _account_map()
     bv = _bv_dict(bvdoc["accounts"], amap)
     cfg = BILAN_CFG if kind == "bilan" else PNL_CFG
-    lines = eng.build_report(bv, cfg["sheet"], cfg["value_cols"], cfg["account_col"], cfg["label_col"], cfg.get("stop_after"))
+    lines = eng.build_report(bv, cfg["sheet"], cfg["value_cols"], cfg["account_col"], cfg["label_col"], cfg.get("stop_after"), cfg.get("stop_at"))
     return {"period": pk, "year": int(year), "month": int(month), "month_label": MONTHS_FR[month-1],
             "kind": kind, "value_cols": list(cfg["value_cols"].keys()),
             "locked": bool(period and period.get("locked")),

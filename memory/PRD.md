@@ -265,6 +265,7 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Colonnes budgets + écarts au P&L** : Réel mois, Budget Rév-2/Écart, Budget Rév-1/Écart, Budget CA/Écart, Réel à date (VLOOKUP idx 3-13, champs BV C-M). Négatifs en rouge/parenthèses.
 - [x] Vérifié testing_agent iteration_23 : frontend 100 %.
 - [x] **Graphique « Réel vs Budget » (Dashboard)** : barres groupées (Revenus, Dépenses, Bénéfice net) × (Réel, Budget CA, Budget Rév-1) du mois, via `GET /api/acct/summary`. Vérifié testing_agent iteration_24 (backend + frontend 100 %).
+- [x] **P&L tronqué** : suppression de l'annexe du bas à partir de « POUR TABLEAU Comité gestion » (r567+) via `stop_at`. Écran + export Excel concernés. Vérifié via curl (s'arrête à r563, Bénéfice net conservé).
 - [ ] **Reporté (phases suivantes)** : export PDF (en-tête pro à définir) ; logique Flux de trésorerie ; contenu Rapports d'audit (modèle à venir) ; ligne d'annexe quote-part partenariat (opérateur `%`).
 
 ## Backlog restant
