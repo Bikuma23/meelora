@@ -5,7 +5,7 @@ import { Button } from "../components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { toast } from "sonner";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
   Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info,
 } from "lucide-react";
@@ -48,7 +48,8 @@ export function AcctDashboard() {
   const { periods } = usePeriods();
   const [period, setPeriod] = useState("");
   const [summary, setSummary] = useState(null);
-  useEffect(() => { api.acctDashboard().then(setD).catch(() => {}); }, []);
+  const [trend, setTrend] = useState([]);
+  useEffect(() => { api.acctDashboard().then(setD).catch(() => {}); api.acctTrend().then(setTrend).catch(() => {}); }, []);
   useEffect(() => { if (!period && periods.length) setPeriod(periods[0].id); }, [periods, period]);
   useEffect(() => {
     if (!period) { setSummary(null); return; }
@@ -61,6 +62,9 @@ export function AcctDashboard() {
   const chartData = summary?.categories?.map((c) => ({
     name: c.label, "Réel": c.values.reel, "Budget CA": c.values.bud_ca, "Budget Rév-1": c.values.bud_rev1,
   })) || [];
+  const trendData = trend.map((t) => ({
+    name: `${t.month_label.slice(0, 3)} ${t.year}`, "Bénéfice net (mois)": t.benefice_mois, "Bénéfice net (cumulatif)": t.benefice_cumulatif,
+  }));
   return (
     <div className="space-y-5" data-testid="acct-dashboard">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -124,6 +128,26 @@ export function AcctDashboard() {
                 <Bar dataKey="Budget CA" fill="#0E9488" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Budget Rév-1" fill="#F59E0B" radius={[4, 4, 0, 0]} />
               </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {trendData.length > 1 && (
+        <div className="card p-5" data-testid="acct-dashboard-trend">
+          <h3 className="mb-1 text-sm font-700">Évolution du bénéfice net</h3>
+          <p className="mb-4 text-xs text-slate-400">Trajectoire sur les mois chargés — mensuel et cumulatif (exercice à date).</p>
+          <div style={{ width: "100%", height: 300 }}>
+            <ResponsiveContainer>
+              <LineChart data={trendData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={70} />
+                <Tooltip formatter={(v) => money(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="Bénéfice net (mois)" stroke="#2563EB" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="Bénéfice net (cumulatif)" stroke="#0E9488" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -319,8 +343,11 @@ function ReportView({ type, title }) {
   };
   const colLabel = (k) => ({
     reel: rep ? `Réel ${rep.month_label}` : "Réel", cumulatif: "Réel à date",
-    bud_rev2: "Budget Rév-2", ecart_rev2: "Écart Rév-2", bud_rev1: "Budget Rév-1",
-    ecart_rev1: "Écart Rév-1", bud_ca: "Budget CA", ecart_ca: "Écart CA", mois: rep ? `${rep.month_label} ${rep.year}` : "Mois",
+    bud_rev2: "Bud. Rév-2", ecart_rev2: "Écart Rév-2", bud_rev1: "Bud. Rév-1",
+    ecart_rev1: "Écart Rév-1", bud_ca: "Bud. CA", ecart_ca: "Écart CA", reel_prec: "Réel an. préc.",
+    bud_rev2_cum: "Bud. Rév-2", ecart_rev2_cum: "Écart Rév-2", bud_rev1_cum: "Bud. Rév-1",
+    ecart_rev1_cum: "Écart Rév-1", bud_ca_cum: "Bud. CA", ecart_ca_cum: "Écart CA", prec_cum: "Cumul. an. préc.",
+    mois: rep ? `${rep.month_label} ${rep.year}` : "Mois",
   }[k] || k);
   const isEcart = (k) => k.startsWith("ecart");
   const visibleLines = rep ? rep.lines.filter((ln) => !(hideZero && ln.kind === "data" && rep.value_cols.every((k) => Math.abs(ln.values[k] || 0) < 0.005))) : [];
@@ -350,10 +377,19 @@ function ReportView({ type, title }) {
         {loading ? <p className="px-5 py-8 text-sm text-slate-500">Chargement…</p> : !rep ? <p className="px-5 py-8 text-sm text-slate-400">Sélectionnez une période avec une BV chargée.</p> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
+              <thead>
+                {rep.col_groups && (
+                  <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500">
+                    <th className="px-4 py-1.5" colSpan={2}></th>
+                    {rep.col_groups.map((g, gi) => (
+                      <th key={g.label} colSpan={g.keys.length} className={`px-4 py-1.5 text-center font-700 text-slate-600 ${gi > 0 ? "border-l-2 border-slate-200" : ""}`}>{g.label}</th>
+                    ))}
+                  </tr>
+                )}
+                <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
                 <th className="px-4 py-2.5 text-left font-600">Compte</th>
                 <th className="px-4 py-2.5 text-left font-600">Description</th>
-                {rep.value_cols.map((k) => <th key={k} className={`px-4 py-2.5 text-right font-600 ${isEcart(k) ? "text-slate-500" : ""}`}>{colLabel(k)}</th>)}
+                {rep.value_cols.map((k, i) => <th key={k} className={`px-4 py-2.5 text-right font-600 ${isEcart(k) ? "text-slate-500" : ""} ${k === "cumulatif" && rep.col_groups ? "border-l-2 border-slate-200" : ""}`}>{colLabel(k)}</th>)}
               </tr></thead>
               <tbody className="font-mono-data">
                 {visibleLines.map((ln) => (
@@ -362,7 +398,7 @@ function ReportView({ type, title }) {
                     <td className="px-4 py-1.5 text-left text-slate-400">{ln.account || ""}</td>
                     <td className={`px-4 py-1.5 text-left ${ln.kind === "data" ? "font-sans text-slate-600" : "font-sans"}`}>{ln.label}</td>
                     {rep.value_cols.map((k) => (
-                      <td key={k} className={`px-4 py-1.5 text-right ${isEcart(k) ? "italic" : ""}`} style={{ color: ln.values[k] < 0 ? "#DC2626" : (isEcart(k) ? "#64748B" : undefined) }}>{ln.kind === "header" ? "" : money(ln.values[k])}</td>
+                      <td key={k} className={`px-4 py-1.5 text-right ${isEcart(k) ? "italic" : ""} ${k === "cumulatif" && rep.col_groups ? "border-l-2 border-slate-200" : ""}`} style={{ color: ln.values[k] < 0 ? "#DC2626" : (isEcart(k) ? "#64748B" : undefined) }}>{ln.kind === "header" ? "" : money(ln.values[k])}</td>
                     ))}
                   </tr>
                 ))}

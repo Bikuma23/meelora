@@ -84,4 +84,5 @@ export const api = {
   acctSummary: (params) => client.get("/acct/summary", { params }).then((r) => r.data),
   acctCashflow: (params) => client.get("/acct/cashflow", { params }).then((r) => r.data),
   acctCashflowExcel: (params) => client.get("/acct/cashflow/excel", { params, responseType: "blob" }).then((r) => r.data),
+  acctTrend: () => client.get("/acct/trend").then((r) => r.data),
 };

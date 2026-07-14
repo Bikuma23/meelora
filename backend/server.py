@@ -1813,6 +1813,28 @@ async def acct_summary(year: int, month: int, user: dict = Depends(get_current_u
     return {"period": rep["period"], "month_label": rep["month_label"], "year": rep["year"],
             "locked": rep["locked"], "categories": cats}
 
+@api.get("/acct/trend")
+async def acct_trend(user: dict = Depends(get_current_user)):
+    periods = await db.acct_periods.find().sort("_id", 1).to_list(500)
+    out = []
+    for p in periods:
+        bv = await db.acct_bv.find_one({"_id": p["_id"]})
+        if not bv:
+            continue
+        try:
+            rep = await _acct_report(p["year"], p["month"], "pnl")
+        except Exception:
+            continue
+        net_m = net_c = None
+        for ln in rep["lines"]:
+            n = _acct_norm(ln["label"])
+            if n.startswith("BENEFICE NET") and "PERTE" in n and "SELON" not in n:
+                net_m = ln["values"].get("reel"); net_c = ln["values"].get("cumulatif"); break
+        out.append({"period": p["_id"], "year": p["year"], "month": p["month"],
+                    "month_label": MONTHS_FR[p["month"]-1],
+                    "benefice_mois": net_m, "benefice_cumulatif": net_c})
+    return out
+
 @api.get("/")
 async def root():
     return {"message": "API Budget Salaires Pro"}
@@ -1826,8 +1848,15 @@ BILAN_CFG = {"sheet": "Bilan Détaillé", "value_cols": {"cumulatif": "I"}, "acc
 PNL_CFG = {"sheet": "Resultats internes", "account_col": "C", "label_col": "D", "stop_after": None,
            "stop_at": ["pour tableau"],
            "exclude": ["bénéfice net (perte nette) - selon", "contrôle"],
-           "value_cols": {"reel": "E", "bud_rev2": "F", "ecart_rev2": "G", "bud_rev1": "I", "ecart_rev1": "J",
-                          "bud_ca": "L", "ecart_ca": "M", "cumulatif": "Q"}}
+           "value_cols": {
+               "reel": "E", "bud_rev2": "F", "ecart_rev2": "G", "bud_rev1": "I", "ecart_rev1": "J",
+               "bud_ca": "L", "ecart_ca": "M", "reel_prec": "O",
+               "cumulatif": "Q", "bud_rev2_cum": "R", "ecart_rev2_cum": "S", "bud_rev1_cum": "U",
+               "ecart_rev1_cum": "V", "bud_ca_cum": "X", "ecart_ca_cum": "Y", "prec_cum": "AA"},
+           "col_groups": [
+               {"label": "Mois", "keys": ["reel", "bud_rev2", "ecart_rev2", "bud_rev1", "ecart_rev1", "bud_ca", "ecart_ca", "reel_prec"]},
+               {"label": "Cumulatif (exercice à date)", "keys": ["cumulatif", "bud_rev2_cum", "ecart_rev2_cum", "bud_rev1_cum", "ecart_rev1_cum", "bud_ca_cum", "ecart_ca_cum", "prec_cum"]},
+           ]}
 BV_FIELD_COLS = {"c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "i": 9, "j": 10, "k": 11, "l": 12, "m": 13}
 
 def _pkey(year, month):
@@ -2009,7 +2038,7 @@ async def _acct_report(year, month, kind):
     cfg = BILAN_CFG if kind == "bilan" else PNL_CFG
     lines = eng.build_report(bv, cfg["sheet"], cfg["value_cols"], cfg["account_col"], cfg["label_col"], cfg.get("stop_after"), cfg.get("stop_at"), cfg.get("exclude"))
     return {"period": pk, "year": int(year), "month": int(month), "month_label": MONTHS_FR[month-1],
-            "kind": kind, "value_cols": list(cfg["value_cols"].keys()),
+            "kind": kind, "value_cols": list(cfg["value_cols"].keys()), "col_groups": cfg.get("col_groups"),
             "locked": bool(period and period.get("locked")),
             "balanced": period.get("balanced") if period else None,
             "lines": lines}
@@ -2045,7 +2074,17 @@ def _acct_excel(rep):
     bold = Font(bold=True); title_f = Font(bold=True, size=14)
     fill = PatternFill("solid", fgColor="E2E8F0")
     cols = rep["value_cols"]
-    col_labels = {"mois": f"{rep['month_label']} {rep['year']}", "cumulatif": "Cumulatif"}
+    col_labels = {
+        "mois": f"{rep['month_label']} {rep['year']}", "cumulatif": "Réel à date (cum.)",
+        "reel": f"Réel {rep['month_label']}", "bud_rev2": "Bud. Rév-2 (mois)", "ecart_rev2": "Écart Rév-2 (mois)",
+        "bud_rev1": "Bud. Rév-1 (mois)", "ecart_rev1": "Écart Rév-1 (mois)", "bud_ca": "Bud. CA (mois)",
+        "ecart_ca": "Écart CA (mois)", "reel_prec": "Réel an. préc. (mois)",
+        "bud_rev2_cum": "Bud. Rév-2 (cum.)", "ecart_rev2_cum": "Écart Rév-2 (cum.)",
+        "bud_rev1_cum": "Bud. Rév-1 (cum.)", "ecart_rev1_cum": "Écart Rév-1 (cum.)",
+        "bud_ca_cum": "Bud. CA (cum.)", "ecart_ca_cum": "Écart CA (cum.)", "prec_cum": "Cumul. an. préc.",
+    }
+    if rep["kind"] == "bilan":
+        col_labels["cumulatif"] = "Cumulatif"
     ws.append([("BILAN" if rep["kind"] == "bilan" else "ÉTAT DES RÉSULTATS") + f" — {rep['month_label']} {rep['year']}"])
     ws["A1"].font = title_f
     if not rep["locked"]:
