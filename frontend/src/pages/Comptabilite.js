@@ -5,7 +5,7 @@ import { Button } from "../components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { toast } from "sonner";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
 import {
   Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info,
 } from "lucide-react";
@@ -45,13 +45,19 @@ function PeriodPicker({ periods, value, onChange }) {
 // ---------- Dashboard ----------
 export function AcctDashboard() {
   const [d, setD] = useState(null);
+  const { periods } = usePeriods();
+  const [period, setPeriod] = useState("");
   const [summary, setSummary] = useState(null);
   useEffect(() => { api.acctDashboard().then(setD).catch(() => {}); }, []);
+  useEffect(() => { if (!period && periods.length) setPeriod(periods[0].id); }, [periods, period]);
   useEffect(() => {
-    if (d?.latest) api.acctSummary({ year: d.latest.year, month: d.latest.month }).then(setSummary).catch(() => {});
-  }, [d]);
+    if (!period) { setSummary(null); return; }
+    const [y, m] = period.split("-").map(Number);
+    api.acctSummary({ year: y, month: m }).then(setSummary).catch(() => setSummary(null));
+  }, [period]);
   if (!d) return <p className="text-sm text-slate-500">Chargement…</p>;
-  const L = d.latest;
+  const sel = periods.find((p) => p.id === period);
+  const newCount = Array.isArray(sel?.new_accounts) ? sel.new_accounts.length : (sel?.new_accounts ?? 0);
   const chartData = summary?.categories?.map((c) => ({
     name: c.label, "Réel": c.values.reel, "Budget CA": c.values.bud_ca, "Budget Rév-1": c.values.bud_rev1,
   })) || [];
@@ -70,31 +76,38 @@ export function AcctDashboard() {
         </div>
         <div className="card p-5">
           <div className="mb-1 flex items-center gap-2 text-slate-500"><Clock size={16} /><span className="text-xs font-600 uppercase tracking-wider">Dernier mois</span></div>
-          <p className="text-2xl font-800">{L ? `${MONTHS[L.month - 1]} ${L.year}` : "—"}</p>
-          <p className="text-xs text-slate-400">{L?.last_upload_by ? `par ${L.last_upload_by}` : "aucun upload"}</p>
+          <p className="text-2xl font-800">{d.latest ? `${MONTHS[d.latest.month - 1]} ${d.latest.year}` : "—"}</p>
+          <p className="text-xs text-slate-400">{d.latest?.last_upload_by ? `par ${d.latest.last_upload_by}` : "aucun upload"}</p>
         </div>
       </div>
-      {L && (
+
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm font-600 text-slate-500">Période affichée :</span>
+        <PeriodPicker periods={periods} value={period} onChange={setPeriod} />
+      </div>
+
+      {sel ? (
         <div className="card p-5" data-testid="acct-dashboard-latest">
-          <h3 className="mb-4 text-sm font-700">Statut — {MONTHS[L.month - 1]} {L.year}</h3>
+          <h3 className="mb-4 text-sm font-700">Statut — {MONTHS[sel.month - 1]} {sel.year}</h3>
           <div className="grid gap-4 sm:grid-cols-3">
-            <div className={`rounded-xl border p-4 ${L.locked ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"}`}>
-              <div className="flex items-center gap-2">{L.locked ? <Lock size={16} className="text-red-600" /> : <Unlock size={16} className="text-amber-600" />}
-                <span className="text-sm font-700">{L.locked ? "Verrouillé" : "Non verrouillé"}</span></div>
-              <p className="mt-1 text-xs text-slate-500">{L.locked ? "Données finales" : "Données provisoires"}</p>
+            <div className={`rounded-xl border p-4 ${sel.locked ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"}`}>
+              <div className="flex items-center gap-2">{sel.locked ? <Lock size={16} className="text-red-600" /> : <Unlock size={16} className="text-amber-600" />}
+                <span className="text-sm font-700">{sel.locked ? "Verrouillé" : "Non verrouillé"}</span></div>
+              <p className="mt-1 text-xs text-slate-500">{sel.locked ? "Données finales" : "Données provisoires"}</p>
             </div>
-            <div className={`rounded-xl border p-4 ${L.balanced ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"}`}>
-              <div className="flex items-center gap-2">{L.balanced ? <CheckCircle2 size={16} className="text-emerald-600" /> : <AlertTriangle size={16} className="text-red-600" />}
-                <span className="text-sm font-700">{L.balanced ? "Balancé" : "Déséquilibre"}</span></div>
-              <p className="mt-1 text-xs text-slate-500">Écart bilan : {money(L.diff)}</p>
+            <div className={`rounded-xl border p-4 ${sel.balanced ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"}`}>
+              <div className="flex items-center gap-2">{sel.balanced ? <CheckCircle2 size={16} className="text-emerald-600" /> : <AlertTriangle size={16} className="text-red-600" />}
+                <span className="text-sm font-700">{sel.balanced ? "Balancé" : "Déséquilibre"}</span></div>
+              <p className="mt-1 text-xs text-slate-500">Écart bilan : {money(sel.diff)}</p>
             </div>
             <div className="rounded-xl border border-slate-200 p-4">
-              <div className="flex items-center gap-2"><Info size={16} className="text-slate-500" /><span className="text-sm font-700">{L.new_accounts} nouveau(x) compte(s)</span></div>
-              <p className="mt-1 text-xs text-slate-500">non affecté(s) au dernier upload</p>
+              <div className="flex items-center gap-2"><Info size={16} className="text-slate-500" /><span className="text-sm font-700">{newCount} nouveau(x) compte(s)</span></div>
+              <p className="mt-1 text-xs text-slate-500">non affecté(s) à cet upload</p>
             </div>
           </div>
         </div>
-      )}
+      ) : <p className="text-sm text-slate-400">Aucune période — uploadez une balance de vérification.</p>}
+
       {chartData.length > 0 && (
         <div className="card p-5" data-testid="acct-dashboard-chart">
           <h3 className="mb-1 text-sm font-700">Réel vs Budget — {summary.month_label} {summary.year}</h3>
@@ -412,6 +425,18 @@ function CashflowView() {
     } catch (e) { toast.error(e.response?.data?.detail || "Export impossible"); }
   };
 
+  const waterfall = rep ? (() => {
+    let run = rep.encaisse_ouverture;
+    const steps = [{ name: "Ouverture", range: [0, run], fill: "#64748B", delta: run }];
+    [["Exploitation", rep.exploitation_total], ["Investissement", rep.investissement_total], ["Financement", rep.financement_total]].forEach(([name, delta]) => {
+      const start = run, end = run + delta;
+      steps.push({ name, range: [Math.min(start, end), Math.max(start, end)], fill: delta >= 0 ? "#0E9488" : "#DC2626", delta });
+      run = end;
+    });
+    steps.push({ name: "Clôture", range: [0, run], fill: "#2563EB", delta: run });
+    return steps;
+  })() : [];
+
   const Row = ({ label, value, kind, indent }) => (
     <tr className={`border-b border-slate-50 ${kind === "section" ? "bg-slate-100 font-800 text-slate-800" : kind === "subtotal" ? "bg-slate-50 font-700" : kind === "net" ? "border-t-2 border-slate-300 font-800" : ""}`}>
       <td className={`px-4 py-2 text-left ${indent ? "pl-9 font-sans text-slate-600" : "font-sans"}`}>{label}</td>
@@ -439,6 +464,26 @@ function CashflowView() {
       <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs text-sky-800" data-testid="acct-cashflow-hint">
         <Info size={15} className="mt-0.5 shrink-0" /> Méthode indirecte. Pour un flux « depuis le début de l'exercice », choisissez comme ouverture la BV de fin d'exercice précédent. Les variations = solde de clôture − solde d'ouverture.
       </div>
+      {rep && (
+        <div className="card p-5" data-testid="acct-cashflow-waterfall">
+          <h3 className="mb-1 text-sm font-700">De l'encaisse d'ouverture à la clôture</h3>
+          <p className="mb-4 text-xs text-slate-400">Contribution de chaque activité à la variation de l'encaisse (cascade).</p>
+          <div style={{ width: "100%", height: 300 }}>
+            <ResponsiveContainer>
+              <BarChart data={waterfall} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={70} />
+                <Tooltip cursor={{ fill: "#F1F5F9" }} contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                  formatter={(v, n, p) => [money(p.payload.delta), "Montant"]} />
+                <Bar dataKey="range" radius={[4, 4, 0, 0]}>
+                  {waterfall.map((s, i) => <Cell key={i} fill={s.fill} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
       {rep && !rep.locked && (
         <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-600 text-amber-700">
           <AlertTriangle size={16} /> Données provisoires — le mois de clôture n'est pas verrouillé.

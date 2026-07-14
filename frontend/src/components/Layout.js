@@ -229,7 +229,7 @@ function LayoutInner() {
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            <span className="hidden rounded-full bg-[#2563EB]/10 px-3 py-1 text-xs font-600 text-[#2563EB] sm:inline-flex">Budget actif</span>
+            {!active.startsWith("acct_") && <span className="hidden rounded-full bg-[#2563EB]/10 px-3 py-1 text-xs font-600 text-[#2563EB] sm:inline-flex">Budget actif</span>}
             <YearControls />
           </div>
         </header>
