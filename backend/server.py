@@ -981,28 +981,28 @@ async def set_lock(payload: LockPayload, user: dict = Depends(require_admin)):
                 await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"department": newdept}})
     return {"success": True, "locked": payload.locked}
 
-def _has_year_entry(e, year):
-    yd = (e.get("years") or {}).get(str(int(year)))
-    return bool(yd)
+def _has_scenario_entry(e, year, scenario):
+    yd = (e.get("years") or {}).get(str(int(year))) or {}
+    return bool(yd.get(scenario))
 
 @api.get("/budget/no-entry")
-async def budget_no_entry(year: Optional[int] = None, user: dict = Depends(get_current_user)):
-    """Employés actifs sans aucun budget saisi pour l'année (candidats à l'inactivation)."""
+async def budget_no_entry(year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
+    """Employés actifs sans budget saisi (aucun override) pour l'année + scénario donnés."""
     year = year or await _active_year()
     emps = await db.employees.find(_active_q()).sort("employee_number", 1).to_list(2000)
     out = [{"id": str(e["_id"]), "employee_number": e["employee_number"], "name": e["name"],
-            "department": e.get("department", "")} for e in emps if not _has_year_entry(e, year)]
-    return {"year": year, "employees": out, "count": len(out)}
+            "department": e.get("department", "")} for e in emps if not _has_scenario_entry(e, year, scenario)]
+    return {"year": year, "scenario": scenario, "employees": out, "count": len(out)}
 
 @api.post("/budget/inactivate-no-entry")
-async def inactivate_no_entry(year: Optional[int] = None, user: dict = Depends(get_current_user)):
-    """Inactive tous les employés actifs sans budget saisi pour l'année donnée."""
+async def inactivate_no_entry(year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
+    """Inactive tous les employés actifs sans budget saisi pour l'année + scénario donnés."""
     year = year or await _active_year()
     emps = await db.employees.find(_active_q()).to_list(2000)
-    ids = [e["_id"] for e in emps if not _has_year_entry(e, year)]
+    ids = [e["_id"] for e in emps if not _has_scenario_entry(e, year, scenario)]
     for _id in ids:
         await db.employees.update_one({"_id": _id}, {"$set": {"active": False}})
-    await log_action(user, "Modifier", "Employé", f"Inactivation auto — {len(ids)} employé(s) sans budget {year}")
+    await log_action(user, "Modifier", "Employé", f"Inactivation auto — {len(ids)} employé(s) sans budget {SCEN_LABEL.get(scenario, scenario)} {year}")
     return {"success": True, "inactivated": len(ids)}
 
 # ---------------------------------------------------------------------------

@@ -139,12 +139,12 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
     if (locked) { toast.error("Budget verrouillé — seul un administrateur peut modifier."); return; }
     try {
       await api.saveBudgetOverride(line.employee_id, override, { year, scenario: scn });
-      toast.success(`${SCEN_LABEL[scn]} enregistré`); onSaved(); await refetch();
+      toast.success(`${SCEN_LABEL[scn]} enregistré`); await refetch(); onSaved(scn);
     } catch (e) { toast.error(e.response?.data?.detail || "Enregistrement impossible"); }
   };
   const reset = async () => {
     if (locked) { toast.error("Budget verrouillé — seul un administrateur peut modifier."); return; }
-    try { await api.saveBudgetOverride(line.employee_id, {}, { year, scenario: scn }); toast.success("Ligne réinitialisée"); onSaved(); await refetch(); }
+    try { await api.saveBudgetOverride(line.employee_id, {}, { year, scenario: scn }); toast.success("Ligne réinitialisée"); await refetch(); onSaved(); }
     catch (e) { toast.error(e.response?.data?.detail || "Action impossible"); }
   };
 

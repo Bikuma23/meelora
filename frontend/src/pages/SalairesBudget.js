@@ -38,7 +38,7 @@ export default function SalairesBudget() {
   const [locks, setLocks] = useState({});
   const [fiche, setFiche] = useState({ open: false, line: null });
   const [detail, setDetail] = useState({ open: false, line: null, scenario: "ca", baseline: null });
-  const [noEntry, setNoEntry] = useState({ open: false, list: [], busy: false });
+  const [noEntry, setNoEntry] = useState({ open: false, list: [], busy: false, scenario: "ca" });
   const [augCcq, setAugCcq] = useState("");
   const [augStd, setAugStd] = useState("");
   const [applying, setApplying] = useState(false);
@@ -115,16 +115,25 @@ export default function SalairesBudget() {
 
   const openNoEntry = async () => {
     try {
-      const r = await api.getBudgetNoEntry({ year });
-      setNoEntry({ open: true, list: r.employees || [], busy: false });
+      const r = await api.getBudgetNoEntry({ year, scenario });
+      setNoEntry({ open: true, list: r.employees || [], busy: false, scenario });
     } catch { toast.error("Chargement impossible"); }
+  };
+  // Déclenché automatiquement après l'enregistrement d'une fiche (savedScn = scénario enregistré).
+  const afterFicheSave = async (savedScn) => {
+    await load();
+    if (!savedScn) return;
+    try {
+      const r = await api.getBudgetNoEntry({ year, scenario: savedScn });
+      if (r.count > 0) setNoEntry({ open: true, list: r.employees || [], busy: false, scenario: savedScn });
+    } catch { /* silencieux */ }
   };
   const confirmInactivate = async () => {
     setNoEntry((p) => ({ ...p, busy: true }));
     try {
-      const r = await api.inactivateNoEntry({ year });
+      const r = await api.inactivateNoEntry({ year, scenario: noEntry.scenario });
       toast.success(`${r.inactivated} employé(s) inactivé(s)`);
-      setNoEntry({ open: false, list: [], busy: false });
+      setNoEntry({ open: false, list: [], busy: false, scenario: noEntry.scenario });
       load();
     } catch (e) { toast.error(e.response?.data?.detail || "Action impossible"); setNoEntry((p) => ({ ...p, busy: false })); }
   };
@@ -435,7 +444,7 @@ export default function SalairesBudget() {
       </div>
 
       {fiche.open && fiche.line && (
-        <BudgetFicheDialog open={fiche.open} onOpenChange={(v) => setFiche((p) => ({ ...p, open: v }))} line={fiche.line} year={year} scenario={scenario} locks={locks} isAdmin={isAdmin} onSaved={load} />
+        <BudgetFicheDialog open={fiche.open} onOpenChange={(v) => setFiche((p) => ({ ...p, open: v }))} line={fiche.line} year={year} scenario={scenario} locks={locks} isAdmin={isAdmin} onSaved={afterFicheSave} />
       )}
       {detail.open && detail.line && (
         <BudgetDetailDialog open={detail.open} onOpenChange={(v) => setDetail((p) => ({ ...p, open: v }))} line={detail.line} year={year} scenario={detail.scenario}
@@ -445,11 +454,11 @@ export default function SalairesBudget() {
       <AlertDialog open={noEntry.open} onOpenChange={(v) => !v && setNoEntry((p) => ({ ...p, open: false }))}>
         <AlertDialogContent data-testid="noentry-dialog">
           <AlertDialogHeader>
-            <AlertDialogTitle>Inactiver les employés sans budget {year} ?</AlertDialogTitle>
+            <AlertDialogTitle>Inactiver les employés sans budget — {LABEL[noEntry.scenario] || noEntry.scenario} {year} ?</AlertDialogTitle>
             <AlertDialogDescription>
               {noEntry.list.length === 0
-                ? "Tous les employés actifs ont un budget saisi pour cette année. Aucune action nécessaire."
-                : `${noEntry.list.length} employé(s) actif(s) n'ont aucun budget saisi pour ${year} et seront marqués « Inactif ». Ils seront exclus des calculs. Cette action est réversible via la fiche employé.`}
+                ? `Tous les employés actifs ont un budget saisi pour ${LABEL[noEntry.scenario] || noEntry.scenario} ${year}. Aucune action nécessaire.`
+                : `${noEntry.list.length} employé(s) actif(s) n'ont aucun budget saisi pour ${LABEL[noEntry.scenario] || noEntry.scenario} ${year} et seront marqués « Inactif ». Ils seront exclus des calculs. Cette action est réversible via la fiche employé.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {noEntry.list.length > 0 && (
