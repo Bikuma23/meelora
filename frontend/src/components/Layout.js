@@ -20,7 +20,7 @@ import Journal from "../pages/Journal";
 import UsersPage from "../pages/Users";
 import Preferences from "../pages/Preferences";
 import { applyTheme } from "../lib/theme";
-import { AcctDashboard, AcctBV, AcctBilan, AcctBilanSommaire, AcctPnl, AcctPnlSommaire, AcctCashflow, AcctAudit } from "../pages/Comptabilite";
+import { AcctDashboard, AcctBV, AcctBilan, AcctPnl, AcctCashflow, AcctAudit } from "../pages/Comptabilite";
 import { Calculator, Landmark, ClipboardList, Wallet, FileBarChart } from "lucide-react";
 
 const PAGES = {
@@ -35,10 +35,8 @@ const PAGES = {
   preferences: { title: "Mon profil", sub: "Préférences & apparence", comp: Preferences },
   acct_dashboard: { title: "Comptabilité — Tableau de bord", sub: "Vue d'ensemble du mois", comp: AcctDashboard },
   acct_bv: { title: "Balance de vérification", sub: "Upload & gestion mensuelle", comp: AcctBV },
-  acct_bilan: { title: "Bilan détaillé", sub: "Bilan à la fin du mois", comp: AcctBilan },
-  acct_bilan_sommaire: { title: "Bilan sommaire", sub: "Vue synthétique du bilan", comp: AcctBilanSommaire },
+  acct_bilan: { title: "Bilan", sub: "État de situation financière", comp: AcctBilan },
   acct_pnl: { title: "État des résultats", sub: "P&L du mois", comp: AcctPnl },
-  acct_pnl_sommaire: { title: "Résultat sommaire", sub: "P&L synthétique", comp: AcctPnlSommaire },
   acct_cashflow: { title: "Flux de trésorerie", sub: "Méthode indirecte", comp: AcctCashflow },
   acct_audit: { title: "Rapports d'audit", sub: "À venir", comp: AcctAudit },
 };
@@ -46,10 +44,8 @@ const PAGES = {
 const NAV_ACCT = [
   { key: "acct_dashboard", label: "Tableau de bord", sub: "Vue d'ensemble", icon: LayoutDashboard },
   { key: "acct_bv", label: "Balance de vérification", sub: "Upload mensuel", icon: ClipboardList },
-  { key: "acct_bilan", label: "Bilan détaillé", sub: "État de situation", icon: Landmark },
-  { key: "acct_bilan_sommaire", label: "Bilan sommaire", sub: "Synthèse", icon: Landmark },
-  { key: "acct_pnl", label: "États des résultats", sub: "P&L détaillé", icon: FileBarChart },
-  { key: "acct_pnl_sommaire", label: "Résultat sommaire", sub: "P&L synthèse", icon: FileBarChart },
+  { key: "acct_bilan", label: "Bilan", sub: "État de situation", icon: Landmark },
+  { key: "acct_pnl", label: "États des résultats", sub: "P&L", icon: FileBarChart },
   { key: "acct_cashflow", label: "Flux de trésorerie", sub: "Méthode indirecte", icon: Wallet },
   { key: "acct_audit", label: "Rapports d'audit", sub: "À venir", icon: FileText },
 ];

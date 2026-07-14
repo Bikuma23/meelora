@@ -476,10 +476,38 @@ function ReportView({ type, title }) {
   );
 }
 
-export function AcctBilan() { return <ReportView type="bilan" title="Bilan détaillé" />; }
-export function AcctPnl() { return <ReportView type="pnl" title="État des résultats" />; }
-export function AcctPnlSommaire() { return <ReportView type="pnl_sommaire" title="Résultat sommaire" />; }
-export function AcctBilanSommaire() { return <BilanSommaireView />; }
+function ViewToggle({ value, onChange, options }) {
+  return (
+    <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm" data-testid="acct-view-toggle">
+      {options.map((o) => (
+        <button key={o.value} data-testid={`acct-view-${o.value}`} onClick={() => onChange(o.value)}
+          className={`rounded-lg px-4 py-1.5 text-sm font-600 transition-colors ${value === o.value ? "bg-[#063044] text-white" : "text-slate-500 hover:text-slate-900"}`}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function AcctBilan() {
+  const [v, setV] = useState("detaille");
+  return (
+    <div className="space-y-4">
+      <ViewToggle value={v} onChange={setV} options={[{ value: "detaille", label: "Bilan détaillé" }, { value: "sommaire", label: "Bilan sommaire" }]} />
+      {v === "detaille" ? <ReportView type="bilan" title="Bilan détaillé" /> : <BilanSommaireView />}
+    </div>
+  );
+}
+
+export function AcctPnl() {
+  const [v, setV] = useState("detaille");
+  return (
+    <div className="space-y-4">
+      <ViewToggle value={v} onChange={setV} options={[{ value: "detaille", label: "État détaillé" }, { value: "sommaire", label: "Résultat sommaire" }]} />
+      {v === "detaille" ? <ReportView type="pnl" title="État des résultats" /> : <ReportView type="pnl_sommaire" title="Résultat sommaire" />}
+    </div>
+  );
+}
 
 function BilanSommaireView() {
   const { periods } = usePeriods();
