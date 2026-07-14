@@ -235,6 +235,11 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 - [x] **P8 — Ligne GL Boni au P&L** : le boni + ses charges sociales marginales (RRQ+AE+RQAP+FSS+CSST, respectant les plafonds) sont extraits vers le compte GL Boni du département et **déduits** du GL de salaire principal. Totaux P&L inchangés. Ligne expose `boni_gl`.
 - [x] Tests : testing_agent iteration_18 — backend 13/13, frontend 8/8. Environnement laissé intact (overrides remis à {}, gl_boni restauré, 123 employés).
 
+## Rapport comparatif des scénarios (2026-06-14)
+- [x] **Onglet « Comparatif scénarios »** (Rapports) : tableau par département comparant Budget CA · Revue 1 · Revue 2 avec **écarts $ et %** (R1 vs CA, R2 vs CA), lignes colorées (hausse rouge / baisse verte), ligne TOTAL. Filtrable par année + département.
+- [x] **Export Excel** en un clic (`GET /api/reports/scenario-compare-excel`) avec formats monétaires et pourcentages. Endpoint données `GET /api/reports/scenario-compare`.
+- [x] Backend `_scenario_compare_data` (réutilise `compute_budget` par scénario, agrège `by_department`). Vérifié testing_agent iteration_20 (frontend 100%, 17 lignes + TOTAL, export OK, filtres OK).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
