@@ -1075,6 +1075,66 @@ async def report_by_class(department: Optional[str] = None, year: Optional[int] 
     data, hypo = await _budget_data(department, year, scenario)
     return _by_class_data(data, hypo)
 
+async def _scenario_compare_data(year, department):
+    year = year or await _active_year()
+    hypo = await _get_hypo(year)
+    depts = await db.departments.find().to_list(1000)
+    query = {"department": department} if department and department != "all" else {}
+    employees = await db.employees.find(_active_q(query)).sort("employee_number", 1).to_list(2000)
+    scen = {sc: compute_budget(employees, hypo, depts, year=year, scenario=sc) for sc in BUDGET_SCENARIOS}
+    dep_rows = {}
+    for sc in BUDGET_SCENARIOS:
+        for bd in scen[sc]["by_department"]:
+            r = dep_rows.setdefault(bd["department"], {"department": bd["department"], "label": bd["label"], "ca": 0.0, "revue1": 0.0, "revue2": 0.0})
+            r[sc] = bd["budget"]
+            r["label"] = r["label"] or bd["label"]
+    def _ecart(r):
+        r["ecart_r1"] = round(r["revue1"] - r["ca"], 2)
+        r["ecart_r1_pct"] = round((r["revue1"] - r["ca"]) / r["ca"] * 100, 1) if r["ca"] else 0.0
+        r["ecart_r2"] = round(r["revue2"] - r["ca"], 2)
+        r["ecart_r2_pct"] = round((r["revue2"] - r["ca"]) / r["ca"] * 100, 1) if r["ca"] else 0.0
+        for k in ("ca", "revue1", "revue2"):
+            r[k] = round(r[k], 2)
+        return r
+    rows = [_ecart(r) for r in sorted(dep_rows.values(), key=lambda x: (int(x["department"]) if str(x["department"]).isdigit() else 0))]
+    tot = {"department": "", "label": "TOTAL", "ca": scen["ca"]["totals"]["budget_total"],
+           "revue1": scen["revue1"]["totals"]["budget_total"], "revue2": scen["revue2"]["totals"]["budget_total"]}
+    tot = _ecart(tot)
+    return {"year": int(year), "rows": rows, "totals": tot}
+
+@api.get("/reports/scenario-compare")
+async def report_scenario_compare(department: Optional[str] = None, year: Optional[int] = None, user: dict = Depends(get_current_user)):
+    return await _scenario_compare_data(year, department)
+
+def _scenario_compare_excel(cmp, year):
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Comparatif scénarios"
+    bold = openpyxl.styles.Font(bold=True)
+    ws.append([f"Comparatif des scénarios — {year}"]); ws["A1"].font = openpyxl.styles.Font(bold=True, size=14)
+    ws.append([])
+    ws.append(["Département", "Budget CA", "Revue 1", "Écart R1 ($)", "Écart R1 (%)", "Revue 2", "Écart R2 ($)", "Écart R2 (%)"])
+    [setattr(c, "font", bold) for c in ws[ws.max_row]]
+    for r in cmp["rows"]:
+        lbl = f"{r['department']} — {r['label']}" if r["department"] else r["label"]
+        ws.append([lbl, r["ca"], r["revue1"], r["ecart_r1"], r["ecart_r1_pct"] / 100, r["revue2"], r["ecart_r2"], r["ecart_r2_pct"] / 100])
+    t = cmp["totals"]
+    ws.append(["TOTAL", t["ca"], t["revue1"], t["ecart_r1"], t["ecart_r1_pct"] / 100, t["revue2"], t["ecart_r2"], t["ecart_r2_pct"] / 100])
+    [setattr(c, "font", bold) for c in ws[ws.max_row]]
+    for col in ("B", "C", "D", "F", "G"):
+        for cell in ws[col]:
+            cell.number_format = '#,##0.00'
+    for col in ("E", "H"):
+        for cell in ws[col]:
+            cell.number_format = '0.0%'
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0); return buf
+
+@api.get("/reports/scenario-compare-excel")
+async def report_scenario_compare_excel(department: Optional[str] = None, year: Optional[int] = None, user: dict = Depends(get_current_user)):
+    y = year or await _active_year()
+    cmp = await _scenario_compare_data(y, department)
+    buf = _scenario_compare_excel(cmp, y)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename=comparatif_scenarios_{y}.xlsx"})
+
 CUSTOM_COLS = {
     "employee_number": "#", "name": "Nom", "title": "Titre", "department": "Département",
     "employment_type": "Type", "security_class": "Classe séc.", "base_salary": "Salaire base",

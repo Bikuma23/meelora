@@ -61,6 +61,7 @@ export const api = {
   }).then((r) => r.data),
   getPnl: (params) => client.get("/reports/pnl", { params }).then((r) => r.data),
   getByClass: (params) => client.get("/reports/by-class", { params }).then((r) => r.data),
+  getScenarioCompare: (params) => client.get("/reports/scenario-compare", { params }).then((r) => r.data),
   getCustomColumns: () => client.get("/reports/custom-columns").then((r) => r.data),
   getCustomReport: (params) => client.get("/reports/custom", { params }).then((r) => r.data),
   getPreferences: () => client.get("/me/preferences").then((r) => r.data),

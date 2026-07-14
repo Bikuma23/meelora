@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { fmtCAD } from "../lib/format";
 import { Button } from "../components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { FileSpreadsheet, FileText, Filter, BarChart3, Layers, Table2, LayoutDashboard, Save } from "lucide-react";
+import { FileSpreadsheet, FileText, Filter, BarChart3, Layers, Table2, LayoutDashboard, Save, GitCompareArrows } from "lucide-react";
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell, CartesianGrid } from "recharts";
 
@@ -15,7 +15,7 @@ const VENTIL = [
 ];
 const SCEN = [["actuel", "Salaires actuels"], ["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 const TYPES = ["all", "CCQ", "Régulier temps plein", "Régulier temps partiel", "Stagiaire"];
-const TABS = [["synthese", "Synthèse", LayoutDashboard], ["pnl", "État des résultats (P&L)", BarChart3], ["classe", "Masse par classe", Layers], ["custom", "Constructeur personnalisé", Table2]];
+const TABS = [["synthese", "Synthèse", LayoutDashboard], ["pnl", "État des résultats (P&L)", BarChart3], ["classe", "Masse par classe", Layers], ["compare", "Comparatif scénarios", GitCompareArrows], ["custom", "Constructeur personnalisé", Table2]];
 const COLORS = ["#2563EB", "#14B8A6", "#F59E0B", "#EC4899", "#8B5CF6", "#EF4444", "#0EA5E9"];
 const fmtK = (v) => `${Math.round(v / 1000)}k`;
 
@@ -30,6 +30,7 @@ export default function Rapports() {
   const [data, setData] = useState(null);
   const [pnl, setPnl] = useState(null);
   const [byClass, setByClass] = useState(null);
+  const [compare, setCompare] = useState(null);
   const [busy, setBusy] = useState("");
   const [allCols, setAllCols] = useState([]);
   const [cols, setCols] = useState(["employee_number", "name", "department", "salaire_brut", "total_budgeted"]);
@@ -43,7 +44,7 @@ export default function Rapports() {
 
   useEffect(() => { api.listDepartments().then(setDepartments); api.getCustomColumns().then((r) => setAllCols(r.columns)); api.listReportTemplates().then(setTemplates).catch(() => {}); }, []);
   useEffect(() => { setData(null); api.getBudget(params).then(setData); }, [params]);
-  useEffect(() => { if (tab === "pnl") { setPnl(null); api.getPnl(params).then(setPnl); } if (tab === "classe") { setByClass(null); api.getByClass(params).then(setByClass); } }, [tab, params]);
+  useEffect(() => { if (tab === "pnl") { setPnl(null); api.getPnl(params).then(setPnl); } if (tab === "classe") { setByClass(null); api.getByClass(params).then(setByClass); } if (tab === "compare") { setCompare(null); api.getScenarioCompare({ year, ...(dept !== "all" ? { department: dept } : {}) }).then(setCompare); } }, [tab, params]);
 
   const dl = async (kind, name, extra) => {
     setBusy(kind);
@@ -180,6 +181,51 @@ export default function Rapports() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "compare" && (
+        <div className="card p-5" data-testid="compare-report">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-700">Comparatif des scénarios — Budget CA · Revue 1 · Revue 2 ({scopeLabel})</h3>
+            <Button data-testid="compare-excel-btn" size="sm" disabled={busy} onClick={() => dl("scenario-compare-excel", "comparatif", {})} className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
+          </div>
+          {!compare ? <p className="text-sm text-slate-500">Chargement…</p> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
+                    <th className="px-3 py-2 text-left font-600">Département</th>
+                    <th className="px-3 py-2 text-right font-600">Budget CA</th>
+                    <th className="px-3 py-2 text-right font-600">Revue 1</th>
+                    <th className="px-3 py-2 text-right font-600">Écart R1</th>
+                    <th className="px-3 py-2 text-right font-600">Revue 2</th>
+                    <th className="px-3 py-2 text-right font-600">Écart R2</th>
+                  </tr>
+                </thead>
+                <tbody className="font-mono-data">
+                  {compare.rows.map((r) => (
+                    <tr key={r.department} className="border-b border-slate-100 hover:bg-slate-50" data-testid={`compare-row-${r.department}`}>
+                      <td className="px-3 py-1.5 text-left"><span className="text-slate-400">{r.department}</span> <span className="text-slate-700">{r.label}</span></td>
+                      <td className="px-3 py-1.5 text-right">{fmtCAD(r.ca)}</td>
+                      <td className="px-3 py-1.5 text-right">{fmtCAD(r.revue1)}</td>
+                      <td className="px-3 py-1.5 text-right" style={{ color: r.ecart_r1 > 0 ? "#DC2626" : r.ecart_r1 < 0 ? "#0E9488" : "#94A3B8" }}>{r.ecart_r1 > 0 ? "+" : ""}{fmtCAD(r.ecart_r1)}<span className="ml-1 text-[10px] opacity-70">({r.ecart_r1_pct > 0 ? "+" : ""}{r.ecart_r1_pct}%)</span></td>
+                      <td className="px-3 py-1.5 text-right">{fmtCAD(r.revue2)}</td>
+                      <td className="px-3 py-1.5 text-right" style={{ color: r.ecart_r2 > 0 ? "#DC2626" : r.ecart_r2 < 0 ? "#0E9488" : "#94A3B8" }}>{r.ecart_r2 > 0 ? "+" : ""}{fmtCAD(r.ecart_r2)}<span className="ml-1 text-[10px] opacity-70">({r.ecart_r2_pct > 0 ? "+" : ""}{r.ecart_r2_pct}%)</span></td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-slate-300 bg-slate-50 font-700" data-testid="compare-total-row">
+                    <td className="px-3 py-2 text-left">TOTAL</td>
+                    <td className="px-3 py-2 text-right">{fmtCAD(compare.totals.ca)}</td>
+                    <td className="px-3 py-2 text-right">{fmtCAD(compare.totals.revue1)}</td>
+                    <td className="px-3 py-2 text-right" style={{ color: compare.totals.ecart_r1 > 0 ? "#DC2626" : "#0E9488" }}>{compare.totals.ecart_r1 > 0 ? "+" : ""}{fmtCAD(compare.totals.ecart_r1)} ({compare.totals.ecart_r1_pct > 0 ? "+" : ""}{compare.totals.ecart_r1_pct}%)</td>
+                    <td className="px-3 py-2 text-right">{fmtCAD(compare.totals.revue2)}</td>
+                    <td className="px-3 py-2 text-right" style={{ color: compare.totals.ecart_r2 > 0 ? "#DC2626" : "#0E9488" }}>{compare.totals.ecart_r2 > 0 ? "+" : ""}{fmtCAD(compare.totals.ecart_r2)} ({compare.totals.ecart_r2_pct > 0 ? "+" : ""}{compare.totals.ecart_r2_pct}%)</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           )}
         </div>
