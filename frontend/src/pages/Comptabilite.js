@@ -324,6 +324,7 @@ function ReportView({ type, title }) {
   const [rep, setRep] = useState(null);
   const [loading, setLoading] = useState(false);
   const [hideZero, setHideZero] = useState(false);
+  const [blockView, setBlockView] = useState("both");
   useEffect(() => { if (!period && periods.length) setPeriod(periods[0].id); }, [periods, period]);
   useEffect(() => {
     if (!period) return;
@@ -350,7 +351,14 @@ function ReportView({ type, title }) {
     mois: rep ? `${rep.month_label} ${rep.year}` : "Mois",
   }[k] || k);
   const isEcart = (k) => k.startsWith("ecart");
-  const visibleLines = rep ? rep.lines.filter((ln) => !(hideZero && ln.kind === "data" && rep.value_cols.every((k) => Math.abs(ln.values[k] || 0) < 0.005))) : [];
+  const groups = rep?.col_groups || null;
+  const monthKeys = groups ? groups[0].keys : [];
+  const visibleGroups = !groups ? null : (blockView === "both" ? groups : blockView === "mois" ? [groups[0]] : [groups[1]]);
+  const visibleCols = !rep ? [] : (!groups || blockView === "both" ? rep.value_cols
+    : blockView === "mois" ? rep.value_cols.filter((k) => monthKeys.includes(k))
+    : rep.value_cols.filter((k) => !monthKeys.includes(k)));
+  const showSep = (k) => k === "cumulatif" && visibleGroups && visibleGroups.length > 1;
+  const visibleLines = rep ? rep.lines.filter((ln) => !(hideZero && ln.kind === "data" && visibleCols.every((k) => Math.abs(ln.values[k] || 0) < 0.005))) : [];
 
   return (
     <div className="space-y-4" data-testid={`acct-report-${type}`}>
@@ -361,6 +369,19 @@ function ReportView({ type, title }) {
             <input type="checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} data-testid="acct-hidezero-toggle" className="h-4 w-4 rounded border-slate-300" />
             Masquer les comptes à solde zéro
           </label>
+          {rep?.col_groups && (
+            <div className="flex items-center gap-2" data-testid="acct-blockview">
+              <span className="text-sm text-slate-500">Colonnes :</span>
+              <Select value={blockView} onValueChange={setBlockView}>
+                <SelectTrigger data-testid="acct-blockview-select" className="h-9 w-36"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="both" data-testid="acct-blockview-both">Les deux</SelectItem>
+                  <SelectItem value="mois" data-testid="acct-blockview-mois">Mois</SelectItem>
+                  <SelectItem value="cumulatif" data-testid="acct-blockview-cumulatif">Cumulatif</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
         <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-export-excel" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
       </div>
@@ -378,10 +399,10 @@ function ReportView({ type, title }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                {rep.col_groups && (
+                {visibleGroups && (
                   <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500">
                     <th className="px-4 py-1.5" colSpan={2}></th>
-                    {rep.col_groups.map((g, gi) => (
+                    {visibleGroups.map((g, gi) => (
                       <th key={g.label} colSpan={g.keys.length} className={`px-4 py-1.5 text-center font-700 text-slate-600 ${gi > 0 ? "border-l-2 border-slate-200" : ""}`}>{g.label}</th>
                     ))}
                   </tr>
@@ -389,7 +410,7 @@ function ReportView({ type, title }) {
                 <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
                 <th className="px-4 py-2.5 text-left font-600">Compte</th>
                 <th className="px-4 py-2.5 text-left font-600">Description</th>
-                {rep.value_cols.map((k, i) => <th key={k} className={`px-4 py-2.5 text-right font-600 ${isEcart(k) ? "text-slate-500" : ""} ${k === "cumulatif" && rep.col_groups ? "border-l-2 border-slate-200" : ""}`}>{colLabel(k)}</th>)}
+                {visibleCols.map((k) => <th key={k} className={`px-4 py-2.5 text-right font-600 ${isEcart(k) ? "text-slate-500" : ""} ${showSep(k) ? "border-l-2 border-slate-200" : ""}`}>{colLabel(k)}</th>)}
               </tr></thead>
               <tbody className="font-mono-data">
                 {visibleLines.map((ln) => (
@@ -397,8 +418,8 @@ function ReportView({ type, title }) {
                     className={`border-b border-slate-50 ${ln.kind === "total" ? "bg-slate-50 font-700" : ln.kind === "header" ? "font-700 text-slate-800" : ""}`}>
                     <td className="px-4 py-1.5 text-left text-slate-400">{ln.account || ""}</td>
                     <td className={`px-4 py-1.5 text-left ${ln.kind === "data" ? "font-sans text-slate-600" : "font-sans"}`}>{ln.label}</td>
-                    {rep.value_cols.map((k) => (
-                      <td key={k} className={`px-4 py-1.5 text-right ${isEcart(k) ? "italic" : ""} ${k === "cumulatif" && rep.col_groups ? "border-l-2 border-slate-200" : ""}`} style={{ color: ln.values[k] < 0 ? "#DC2626" : (isEcart(k) ? "#64748B" : undefined) }}>{ln.kind === "header" ? "" : money(ln.values[k])}</td>
+                    {visibleCols.map((k) => (
+                      <td key={k} className={`px-4 py-1.5 text-right ${isEcart(k) ? "italic" : ""} ${showSep(k) ? "border-l-2 border-slate-200" : ""}`} style={{ color: ln.values[k] < 0 ? "#DC2626" : (isEcart(k) ? "#64748B" : undefined) }}>{ln.kind === "header" ? "" : money(ln.values[k])}</td>
                     ))}
                   </tr>
                 ))}
