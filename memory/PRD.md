@@ -257,7 +257,14 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Export Excel formaté** (`/api/acct/report/excel`) : en-têtes gras, totaux surlignés, format monétaire, négatifs entre parenthèses.
 - [x] **Storage** : collections Mongo `acct_template`, `acct_periods`, `acct_bv`.
 - [x] Vérifié testing_agent iteration_22 : backend 9/9, frontend 100 %. Période 2026-06 laissée déverrouillée.
-- [ ] **Reporté (phases suivantes)** : écran de validation/correction du mapping ; catégorisation détaillée des nouveaux comptes (intégration dans les sous-totaux) ; export PDF (en-tête pro à définir) ; logique Flux de trésorerie ; contenu Rapports d'audit (modèle à venir) ; ligne d'annexe quote-part partenariat (opérateur `%`).
+
+### Améliorations Comptabilité (2026-06-14)
+- [x] **Affectation bloquante & mémorisée des nouveaux comptes** : à l'upload, tout compte absent du modèle doit être affecté à un compte existant (regroupement) avant finalisation ; l'affectation est mémorisée (`acct_account_map`) et appliquée aux uploads suivants. Fusion des montants dans le compte-cible (totaux corrects automatiquement). Endpoints `GET /api/acct/accounts`, `POST /api/acct/account-map`. Vérifié via curl (détection → affectation → mémorisation).
+- [x] **Bilan sans comptes de résultat** : le rapport Bilan s'arrête à la ligne « Diff » (troncature `stop_after`), excluant les comptes P&L présents plus bas dans la feuille.
+- [x] **Masquer les comptes à solde zéro** : bascule dans les rapports (`acct-hidezero-toggle`) qui filtre les lignes de données à solde nul.
+- [x] **Colonnes budgets + écarts au P&L** : Réel mois, Budget Rév-2/Écart, Budget Rév-1/Écart, Budget CA/Écart, Réel à date (VLOOKUP idx 3-13, champs BV C-M). Négatifs en rouge/parenthèses.
+- [x] Vérifié testing_agent iteration_23 : frontend 100 %.
+- [ ] **Reporté (phases suivantes)** : export PDF (en-tête pro à définir) ; logique Flux de trésorerie ; contenu Rapports d'audit (modèle à venir) ; ligne d'annexe quote-part partenariat (opérateur `%`).
 
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
