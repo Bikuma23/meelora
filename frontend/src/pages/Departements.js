@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import ImportErrorsDialog from "../components/ImportErrorsDialog";
 
 const PL_GROUPS = ["Projets", "Services", "Ventes", "Marketing", "RH", "Administration", "Informatique", "Opération Commun (FGF)"];
-const empty = { code: "", description: "", superviseur: "", compte_gl: "", groupe_pl: "Services" };
+const empty = { code: "", description: "", superviseur: "", compte_gl: "", groupe_pl: "Services", gl_boni: "" };
 
 function DeptForm({ open, onOpenChange, initial, onSubmit }) {
   const [f, setF] = useState(empty);
@@ -29,7 +29,7 @@ function DeptForm({ open, onOpenChange, initial, onSubmit }) {
     if (Object.keys(e).length) { toast.error("Champs obligatoires manquants"); return; }
     onSubmit({
       code: f.code.trim(), description: f.description.trim(), superviseur: f.superviseur.trim(),
-      compte_gl: f.compte_gl.trim(), groupe_pl: f.groupe_pl, csst: initial?.csst ?? 0,
+      compte_gl: f.compte_gl.trim(), groupe_pl: f.groupe_pl, gl_boni: (f.gl_boni || "").trim(), csst: initial?.csst ?? 0,
     });
   };
 
@@ -62,6 +62,11 @@ function DeptForm({ open, onOpenChange, initial, onSubmit }) {
                 <SelectContent>{PL_GROUPS.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+          </div>
+          <div>
+            <Label className="text-xs">Compte GL Boni <span className="text-slate-400">(optionnel)</span></Label>
+            <Input data-testid="dept-gl_boni" className="mt-1 font-mono-data" placeholder="Ex. 5006099" value={f.gl_boni} onChange={(e) => set("gl_boni", e.target.value)} />
+            <p className="mt-1 text-[11px] text-slate-400">Compte vers lequel le boni et ses charges sociales sont extraits dans l'état des résultats (P&L).</p>
           </div>
         </div>
         <DialogFooter>
@@ -151,6 +156,7 @@ export default function Departements() {
               <th className="px-4 py-3 text-left font-600">Description</th>
               <th className="px-4 py-3 text-left font-600">Superviseur</th>
               <th className="px-4 py-3 text-left font-600">Compte GL</th>
+              <th className="px-4 py-3 text-left font-600">GL Boni</th>
               <th className="px-4 py-3 text-left font-600">Groupe P&L</th>
               <th className="px-4 py-3 text-right font-600">Actions</th>
             </tr>
@@ -162,6 +168,7 @@ export default function Departements() {
                 <td className="px-4 py-3 font-600">{d.description}</td>
                 <td className="px-4 py-3 text-slate-600">{d.superviseur}</td>
                 <td className="px-4 py-3 font-mono-data text-slate-500">{d.compte_gl}</td>
+                <td className="px-4 py-3 font-mono-data text-slate-500">{d.gl_boni || "—"}</td>
                 <td className="px-4 py-3 text-slate-600">{d.groupe_pl}</td>
                 <td className="px-4 py-3">
                   {canEdit ? (

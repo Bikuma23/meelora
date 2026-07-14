@@ -18,12 +18,16 @@ function fromLine(line) {
     employment_rate_pct: String(+(((line.employment_rate ?? 1)) * 100).toFixed(1)),
     augmentation_pct: String(+(line.augmentation * 100).toFixed(3)),
     vacation_rate_pct: String(+(line.vacation_rate * 100).toFixed(2)),
+    salary_change_date: line.salary_change_date || "",
     prime_type: line.prime_type,
     prime_garde: line.garde > 0, prime_halo: line.halo > 0, alloc_securite: line.alloc > 0,
     boni: String(line.boni || 0), boni_mode: line.boni_mode || "montant", boni_pct: String(line.boni_pct || 0),
+    tedy: String(line.tedy || 0), telus: String(line.telus || 0),
     reer: String(line.reer || 0), assurance: String(line.assurance || 0),
   };
 }
+
+const MANUAL_KEYS = ["new_salary", "vacation", "prime_amount", "garde", "halo", "alloc", "boni", "rrq", "ae", "rqap", "fss", "ccq_avantages", "csst", "reer", "assurance"];
 
 const EMP_TYPES = ["CCQ", "Régulier temps plein", "Régulier temps partiel", "Stagiaire"];
 
@@ -36,6 +40,20 @@ function Row({ label, value, strong, accent }) {
   );
 }
 
+function CalcRow({ label, mkey, value, editable, manual, setManualField, strong, accent, testId }) {
+  if (editable) {
+    const cur = manual[mkey] !== undefined ? manual[mkey] : String(+(value || 0).toFixed(2));
+    return (
+      <div className="flex items-center justify-between gap-3 px-3 py-1.5 text-sm">
+        <span className={strong ? "text-xs font-700 uppercase tracking-wide" : "text-slate-500"}>{label}</span>
+        <input data-testid={testId} type="number" step="0.01" value={cur} onChange={(e) => setManualField(mkey, e.target.value)}
+          className="w-32 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-right font-mono-data text-sm outline-none focus:border-amber-500" />
+      </div>
+    );
+  }
+  return <Row label={label} value={fmtCAD(value)} strong={strong} accent={accent} />;
+}
+
 const SCENARIOS = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 const SCEN_LABEL = Object.fromEntries(SCENARIOS);
 const MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
@@ -46,10 +64,14 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
   const [f, setF] = useState(() => fromLine(line));
   const [p, setP] = useState(line);
   const [departments, setDepartments] = useState([]);
+  const [manualOn, setManualOn] = useState(false);
+  const [manual, setManual] = useState({});
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const setManualField = (k, v) => setManual((x) => { const n = { ...x }; if (v === "" || v == null) delete n[k]; else n[k] = v; return n; });
   const isCCQ = f.employment_type === "CCQ";
   const isPartTime = f.employment_type === "Régulier temps partiel";
   const revueMode = scn.startsWith("revue");
+  const manualAllowed = scn === "ca" || scn === "revue1";
   const locked = !isAdmin && !!locks[`${year}:${scn}`]?.locked;
 
   useEffect(() => { api.listDepartments().then(setDepartments).catch(() => {}); }, []);
@@ -67,7 +89,13 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
     // eslint-disable-next-line
   }, [scn]);
 
-  useEffect(() => { setF(fromLine(curLine)); setP(curLine); }, [curLine]);
+  useEffect(() => {
+    setF(fromLine(curLine));
+    setP(curLine);
+    const m = curLine.manual || {};
+    setManual(m);
+    setManualOn(Object.keys(m).length > 0);
+  }, [curLine]);
 
   const override = useMemo(() => {
     const o = {
@@ -76,6 +104,7 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
       department: f.department,
       employment_type: f.employment_type,
     };
+    if (f.salary_change_date) o.salary_change_date = f.salary_change_date;
     if (f.employment_type === "Régulier temps partiel") o.employment_rate = (Number(f.employment_rate_pct) || 100) / 100;
     // En Revue, on ne touche jamais au salaire de base (salaire actuel partagé) ni au Budget CA.
     if (!revueMode) o.base_salary = Number(f.base_salary) || 0;
@@ -87,9 +116,15 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
       o.boni_mode = f.boni_mode;
       if (f.boni_mode === "pct") o.boni_pct = Number(f.boni_pct) || 0;
       else o.boni = Number(f.boni) || 0;
+      o.tedy = Number(f.tedy) || 0; o.telus = Number(f.telus) || 0;
+    }
+    if (manualAllowed && manualOn) {
+      const m = {};
+      for (const k of MANUAL_KEYS) if (manual[k] !== undefined && manual[k] !== "") m[k] = Number(manual[k]);
+      o.manual = m;
     }
     return o;
-  }, [f, isCCQ, revueMode]);
+  }, [f, isCCQ, revueMode, manualAllowed, manualOn, manual]);
 
   useEffect(() => {
     const t = setTimeout(() => { api.budgetPreview(line.employee_id, override, { year, scenario: scn }).then(setP).catch(() => {}); }, 200);
@@ -170,6 +205,9 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
                   <Input data-testid="fiche-augmentation" type="number" step="0.1" className="mt-1 font-mono-data" value={f.augmentation_pct} onChange={(e) => set("augmentation_pct", e.target.value)} /></div>
                 <div><Label className="text-[11px] uppercase text-slate-500">Taux vacances (%)</Label>
                   <Input data-testid="fiche-vacation" type="number" step="0.1" className="mt-1 font-mono-data" value={f.vacation_rate_pct} onChange={(e) => set("vacation_rate_pct", e.target.value)} /></div>
+                <div className="col-span-2"><Label className="text-[11px] uppercase text-slate-500">Date de changement de salaire (optionnel)</Label>
+                  <Input data-testid="fiche-salary-change-date" type="date" className="mt-1 font-mono-data" value={f.salary_change_date} onChange={(e) => set("salary_change_date", e.target.value)} />
+                  <p className="mt-1 text-[10px] text-slate-400">Avant cette date, le salaire actuel de base s'applique ; le nouveau salaire s'applique à partir de cette date (proratisé sur l'année).</p></div>
                 {isCCQ && (
                   <div><Label className="text-[11px] uppercase text-slate-500">Type de prime</Label>
                     <Select value={f.prime_type} onValueChange={(v) => set("prime_type", v)}>
@@ -210,6 +248,11 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
                   <label className="mt-3 flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 sm:w-1/3">
                     <span className="text-[11px] font-500">Alloc. sécurité</span><Switch data-testid="fiche-alloc_securite" checked={f.alloc_securite} onCheckedChange={(v) => set("alloc_securite", v)} />
                   </label>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div><Label className="text-[11px] uppercase text-slate-500">Prime Tedy ($)</Label><Input data-testid="fiche-tedy" type="number" className="mt-1 font-mono-data" value={f.tedy} onChange={(e) => set("tedy", e.target.value)} /></div>
+                    <div><Label className="text-[11px] uppercase text-slate-500">Prime Telus ($)</Label><Input data-testid="fiche-telus" type="number" className="mt-1 font-mono-data" value={f.telus} onChange={(e) => set("telus", e.target.value)} /></div>
+                  </div>
+                  <p className="mt-2 text-[10px] text-slate-400">Tedy et Telus : montants fixes inclus uniquement dans les bases RRQ / FSS / RQAP / CSST.</p>
                 </div>
               )}
               {!isCCQ && <p className="border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">Employé non-CCQ : primes CCQ (garde, HALO) non applicables. BONI, REER, assurance collective et Alloc. sécurité s'appliquent.</p>}
@@ -219,29 +262,41 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
 
           <div className="space-y-4">
             <div className="rounded-xl border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-3 py-2"><h3 className="text-xs font-700 uppercase tracking-widest">Calcul automatique</h3></div>
+              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2">
+                <h3 className="text-xs font-700 uppercase tracking-widest">Calcul automatique</h3>
+                {manualAllowed && (
+                  <label className="flex items-center gap-2" data-testid="fiche-manual-toggle-label">
+                    <span className={`text-[10px] font-700 uppercase ${manualOn ? "text-amber-600" : "text-slate-400"}`}>Saisie manuelle</span>
+                    <Switch data-testid="fiche-manual-toggle" checked={manualOn} onCheckedChange={setManualOn} />
+                  </label>
+                )}
+              </div>
               <div className="divide-y divide-slate-100">
-                <Row label="Nouveau salaire" value={fmtCAD(p.new_salary)} strong accent="#2563EB" />
+                <CalcRow label="Nouveau salaire" mkey="new_salary" value={p.new_salary} editable={manualOn} manual={manual} setManualField={setManualField} strong accent="#2563EB" testId="manual-new_salary" />
                 <Row label="Taux horaire (réf. 2080 h)" value={`${p.taux_horaire} $/h`} />
-                <Row label="Vacances" value={fmtCAD(p.vacation)} />
-                {isCCQ && <Row label={`Prime (${p.prime_type})`} value={fmtCAD(p.prime_amount)} />}
-                {isCCQ && <Row label="Prime de garde" value={fmtCAD(p.garde)} />}
-                {isCCQ && <Row label="Prime HALO" value={fmtCAD(p.halo)} />}
-                {isCCQ && <Row label="Alloc. sécurité" value={fmtCAD(p.alloc)} />}
-                {!isCCQ && <Row label="Boni" value={fmtCAD(p.boni)} />}
-                {!isCCQ && <Row label="Alloc. sécurité" value={fmtCAD(p.alloc)} />}
+                <CalcRow label="Vacances" mkey="vacation" value={p.vacation} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-vacation" />
+                {isCCQ && <CalcRow label={`Prime (${p.prime_type})`} mkey="prime_amount" value={p.prime_amount} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-prime_amount" />}
+                {isCCQ && <CalcRow label="Prime de garde" mkey="garde" value={p.garde} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-garde" />}
+                {isCCQ && <CalcRow label="Prime HALO" mkey="halo" value={p.halo} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-halo" />}
+                {isCCQ && <CalcRow label="Alloc. sécurité" mkey="alloc" value={p.alloc} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-alloc" />}
+                {!isCCQ && <CalcRow label="Boni" mkey="boni" value={p.boni} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-boni" />}
+                {!isCCQ && <Row label="Prime Tedy" value={fmtCAD(p.tedy)} />}
+                {!isCCQ && <Row label="Prime Telus" value={fmtCAD(p.telus)} />}
+                {!isCCQ && <CalcRow label="Alloc. sécurité" mkey="alloc" value={p.alloc} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-alloc" />}
                 <Row label="Salaire brut total" value={fmtCAD(p.new_salary + p.vacation + p.primes_total)} strong accent="#0E9488" />
               </div>
             </div>
             <div className="rounded-xl border border-slate-200">
               <div className="border-b border-slate-200 bg-slate-50 px-3 py-2"><h3 className="text-xs font-700 uppercase tracking-widest">Cotisations & avantages (max. assurables)</h3></div>
               <div className="divide-y divide-slate-100">
-                <Row label="RRQ" value={fmtCAD(p.rrq)} /><Row label="AE" value={fmtCAD(p.ae)} />
-                <Row label="RQAP" value={fmtCAD(p.rqap)} /><Row label="FSS" value={fmtCAD(p.fss)} />
-                {isCCQ && <Row label="Avantages CCQ (32.33%)" value={fmtCAD(p.ccq_avantages)} accent="#2563EB" />}
-                <Row label="CSST" value={fmtCAD(p.csst)} />
-                {!isCCQ && <Row label="RPDB / REER" value={fmtCAD(p.reer)} />}
-                {!isCCQ && <Row label="Assu. collectives" value={fmtCAD(p.assurance)} />}
+                <CalcRow label="RRQ" mkey="rrq" value={p.rrq} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-rrq" />
+                <CalcRow label="AE" mkey="ae" value={p.ae} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-ae" />
+                <CalcRow label="RQAP" mkey="rqap" value={p.rqap} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-rqap" />
+                <CalcRow label="FSS" mkey="fss" value={p.fss} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-fss" />
+                {isCCQ && <CalcRow label="Avantages CCQ (32.33%)" mkey="ccq_avantages" value={p.ccq_avantages} editable={manualOn} manual={manual} setManualField={setManualField} accent="#2563EB" testId="manual-ccq_avantages" />}
+                <CalcRow label="CSST" mkey="csst" value={p.csst} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-csst" />
+                {!isCCQ && <CalcRow label="RPDB / REER" mkey="reer" value={p.reer} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-reer" />}
+                {!isCCQ && <CalcRow label="Assu. collectives" mkey="assurance" value={p.assurance} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-assurance" />}
               </div>
             </div>
             <div className="rounded-xl bg-[#0E1526] px-4 py-3">

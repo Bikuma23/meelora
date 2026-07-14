@@ -42,6 +42,8 @@ export const api = {
 
   getLocks: (params) => client.get("/budget/locks", { params }).then((r) => r.data),
   setLock: (d) => client.post("/budget/lock", d).then((r) => r.data),
+  getBudgetNoEntry: (params) => client.get("/budget/no-entry", { params }).then((r) => r.data),
+  inactivateNoEntry: (params) => client.post("/budget/inactivate-no-entry", {}, { params }).then((r) => r.data),
 
   listUsers: () => client.get("/users").then((r) => r.data),
   createUser: (d) => client.post("/users", d).then((r) => r.data),

@@ -73,6 +73,7 @@ export default function BudgetDetailDialog({ open, onOpenChange, line, year, sce
                 <Row label="Augmentation" value={`${(line.augmentation * 100).toFixed(2)} %`} />
                 <Row label="Nouveau salaire" value={fmtCAD(line.new_salary)} strong accent="#2563EB" />
                 <Row label="Taux horaire (réf. 2080 h)" value={`${line.taux_horaire} $/h`} />
+                {line.salary_change_date && <Row label="Changement de salaire" value={new Date(line.salary_change_date).toLocaleDateString("fr-CA")} accent="#B45309" />}
                 <Row label="Vacances" value={fmtCAD(line.vacation)} />
               </div>
             </div>
@@ -84,6 +85,8 @@ export default function BudgetDetailDialog({ open, onOpenChange, line, year, sce
                 {ccq && <Row label="Prime HALO" value={fmtCAD(line.halo)} />}
                 {ccq && <Row label="Alloc. sécurité" value={fmtCAD(line.alloc)} />}
                 {!ccq && <Row label="Boni" value={fmtCAD(line.boni)} />}
+                {!ccq && line.tedy > 0 && <Row label="Prime Tedy" value={fmtCAD(line.tedy)} />}
+                {!ccq && line.telus > 0 && <Row label="Prime Telus" value={fmtCAD(line.telus)} />}
                 {!ccq && <Row label="Alloc. sécurité" value={fmtCAD(line.alloc)} />}
                 <Row label="Total primes & boni" value={fmtCAD(line.primes_total)} strong accent="#F59E0B" />
                 <Row label="Salaire brut total" value={fmtCAD(line.new_salary + line.vacation + line.primes_total)} strong accent="#0E9488" />

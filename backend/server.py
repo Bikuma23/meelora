@@ -247,6 +247,25 @@ def _proration(e, year):
         frac[m - 1] = 0.0 if active <= 0 else (1.0 if active >= dim else round(active / dim, 6))
     return frac, sum(frac) / 12
 
+def _salary_change_weight(year, change_date):
+    """Fraction (0..1) de l'année à partir de la date de changement de salaire (jours civils)."""
+    try:
+        p = str(change_date)[:10].split("-")
+        cy, cm, cd = int(p[0]), int(p[1]), int(p[2])
+    except Exception:
+        return None
+    y = int(year)
+    if cy < y:
+        return 1.0
+    if cy > y:
+        return 0.0
+    start = datetime(y, 1, 1)
+    end = datetime(y, 12, 31)
+    change = datetime(y, cm, cd)
+    total = (end - start).days + 1
+    after = max(0, min(total, (end - change).days + 1))
+    return round(after / total, 6)
+
 def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
     dept_csst = {d["code"]: d.get("csst", 0) for d in depts}
     class_rates = {c["code"]: c["rate"] for c in hypo.get("security_classes", [])}
@@ -268,6 +287,15 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
            "csst": 0, "reer": 0, "assurance": 0, "budget_total": 0}
     for e in employees:
         ydata, ov, base = _emp_scn(e, year, scenario)
+        manual = ov.get("manual", {}) if not is_actuel else {}
+        def mval(key, computed):
+            v = manual.get(key)
+            if v is None or v == "":
+                return computed
+            try:
+                return float(v)
+            except Exception:
+                return computed
         emp_type = ov.get("employment_type", e["employment_type"]) if not is_actuel else e["employment_type"]
         ccq = (emp_type == "CCQ")
         dept_code = ov.get("department", e["department"]) if not is_actuel else e["department"]
@@ -281,57 +309,82 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
                 emp_rate = 1.0
         aug = 0 if is_actuel else ov.get("augmentation", aug_ccq if ccq else aug_autres)
         new_salary = base * (1 + aug) * emp_rate
+        # Proration selon la date de changement de salaire (portion avant = salaire de base actuel, non proratisé).
+        new_salary_rate = new_salary
+        scd = None if is_actuel else ov.get("salary_change_date")
+        if scd:
+            w = _salary_change_weight(year, scd)
+            if w is not None:
+                new_salary = base * emp_rate * (1 - w) + new_salary_rate * w
+        new_salary = mval("new_salary", new_salary)
         taux_horaire = new_salary / ANNUAL_HOURS
 
         prime_type = ov.get("prime_type", e.get("prime_type", "Aucune Prime"))
-        boni = 0
+        boni = tedy = telus = 0
         if is_actuel:
             # Salaires actuels : uniquement le salaire de base, sans prime ni charge.
             prime_type = "Aucune Prime"
             prime_amt = garde = halo = alloc = 0
         elif ccq:
-            prime_amt = new_salary * PRIME_PCT.get(prime_type, 0.0)
-            garde = garde_avg * emp_rate if ov.get("prime_garde", e.get("prime_garde")) else 0
-            halo = new_salary * hypo["prime_halo_rate"] if ov.get("prime_halo", e.get("prime_halo")) else 0
-            alloc = hypo["alloc_securite_montant"] * emp_rate if ov.get("alloc_securite", e.get("alloc_securite")) else 0
+            prime_amt = mval("prime_amount", new_salary * PRIME_PCT.get(prime_type, 0.0))
+            garde = mval("garde", garde_avg * emp_rate if ov.get("prime_garde", e.get("prime_garde")) else 0)
+            halo = mval("halo", new_salary * hypo["prime_halo_rate"] if ov.get("prime_halo", e.get("prime_halo")) else 0)
+            alloc = mval("alloc", hypo["alloc_securite_montant"] * emp_rate if ov.get("alloc_securite", e.get("alloc_securite")) else 0)
         else:
             # Employés non-CCQ : pas de prime CCQ ni HALO/garde. Boni + Alloc. sécurité + REER/assurance possibles.
             prime_type = "Aucune Prime"
             prime_amt = garde = halo = 0
-            alloc = hypo["alloc_securite_montant"] * emp_rate if ov.get("alloc_securite", e.get("alloc_securite")) else 0
+            alloc = mval("alloc", hypo["alloc_securite_montant"] * emp_rate if ov.get("alloc_securite", e.get("alloc_securite")) else 0)
             boni_mode = ov.get("boni_mode", "montant")
             if boni_mode == "pct":
                 boni = new_salary * float(ov.get("boni_pct", 0) or 0) / 100
             else:
                 boni = float(ov.get("boni", 0) or 0) * emp_rate
-        primes_total = prime_amt + garde + halo + alloc + boni
+            boni = mval("boni", boni)
+            # Primes Tedy / Telus (non-CCQ, montants fixes $) : incluses uniquement dans les bases RRQ/FSS/RQAP/CSST.
+            tedy = mval("tedy", float(ov.get("tedy", 0) or 0) * emp_rate)
+            telus = mval("telus", float(ov.get("telus", 0) or 0) * emp_rate)
+        primes_core = prime_amt + garde + halo + alloc + boni
+        primes_total = primes_core + tedy + telus
 
         vac_rate = ov.get("vacation_rate", e["vacation_rate"])
-        vacation = 0 if is_actuel else vac_rate * (new_salary + primes_total)
+        vacation = 0 if is_actuel else mval("vacation", vac_rate * (new_salary + primes_core))
 
+        boni_gl = 0.0
         if is_actuel:
             rrq = ae = rqap = fss = csst = gov = ccq_av = avantages = reer = assurance = 0
             total = new_salary
         else:
-            gross = new_salary + vacation + primes_total
-            rrq = _capped(gross, charges["RRQ"]["rate"], charges["RRQ"]["ceiling"], charges["RRQ"]["exemption"])
-            ae = _capped(gross, charges["AE"]["rate"], charges["AE"]["ceiling"])
-            rqap = _capped(gross, charges["RQAP"]["rate"], charges["RQAP"]["ceiling"])
-            fss = _capped(gross, charges["FSS"]["rate"], charges["FSS"]["ceiling"])
+            gross_core = new_salary + vacation + primes_core
+            gross_ext = gross_core + tedy + telus
+            rrq = mval("rrq", _capped(gross_ext, charges["RRQ"]["rate"], charges["RRQ"]["ceiling"], charges["RRQ"]["exemption"]))
+            ae = mval("ae", _capped(gross_core, charges["AE"]["rate"], charges["AE"]["ceiling"]))
+            rqap = mval("rqap", _capped(gross_ext, charges["RQAP"]["rate"], charges["RQAP"]["ceiling"]))
+            fss = mval("fss", _capped(gross_ext, charges["FSS"]["rate"], charges["FSS"]["ceiling"]))
             csst_rate = class_rates.get(e.get("security_class")) if e.get("security_class") in class_rates else 0
-            csst = _capped(gross, csst_rate, csst_ceiling)
+            csst = mval("csst", _capped(gross_ext, csst_rate, csst_ceiling))
             gov = rrq + ae + rqap + fss
             if ccq:
-                ccq_av = (new_salary + primes_total) * hypo["ccq_rate"]
+                ccq_av = mval("ccq_avantages", (new_salary + primes_core) * hypo["ccq_rate"])
                 avantages = gov + ccq_av
                 reer = 0
                 assurance = 0
             else:
                 ccq_av = 0
                 avantages = gov
-                reer = float(ov.get("reer", new_salary * hypo["reer_rate"]))
-                assurance = float(ov.get("assurance", hypo["assurance_annuelle"]))
+                reer = mval("reer", float(ov.get("reer", new_salary * hypo["reer_rate"])))
+                assurance = mval("assurance", float(ov.get("assurance", hypo["assurance_annuelle"])))
             total = new_salary + vacation + primes_total + avantages + csst + reer + assurance
+            # GL Boni : boni + charges sociales marginales (RRQ+AE+RQAP+FSS+CSST) attribuables au boni.
+            if not ccq and boni > 0:
+                base_wo = gross_ext - boni
+                core_wo = gross_core - boni
+                d_rrq = _capped(gross_ext, charges["RRQ"]["rate"], charges["RRQ"]["ceiling"], charges["RRQ"]["exemption"]) - _capped(base_wo, charges["RRQ"]["rate"], charges["RRQ"]["ceiling"], charges["RRQ"]["exemption"])
+                d_ae = _capped(gross_core, charges["AE"]["rate"], charges["AE"]["ceiling"]) - _capped(core_wo, charges["AE"]["rate"], charges["AE"]["ceiling"])
+                d_rqap = _capped(gross_ext, charges["RQAP"]["rate"], charges["RQAP"]["ceiling"]) - _capped(base_wo, charges["RQAP"]["rate"], charges["RQAP"]["ceiling"])
+                d_fss = _capped(gross_ext, charges["FSS"]["rate"], charges["FSS"]["ceiling"]) - _capped(base_wo, charges["FSS"]["rate"], charges["FSS"]["ceiling"])
+                d_csst = _capped(gross_ext, csst_rate, csst_ceiling) - _capped(base_wo, csst_rate, csst_ceiling)
+                boni_gl = boni + d_rrq + d_ae + d_rqap + d_fss + d_csst
         frac, factor = _proration(e, year)
         months_active = sum(1 for x in frac if x > 0)
         hire_month = next((i + 1 for i, x in enumerate(frac) if x > 0), 0)
@@ -348,13 +401,16 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
             "employment_rate": round(emp_rate, 4),
             "security_class": e.get("security_class") or "",
             "base_salary": round(base, 2), "augmentation": aug, "new_salary": round(new_salary, 2),
+            "new_salary_rate": round(new_salary_rate, 2), "salary_change_date": scd or "",
             "taux_horaire": round(taux_horaire, 2), "vacation_rate": vac_rate, "vacation": round(vacation, 2),
             "prime_type": prime_type, "prime_amount": round(prime_amt, 2), "garde": round(garde, 2),
             "halo": round(halo, 2), "alloc": round(alloc, 2),
-            "boni": round(boni, 2), "primes_total": round(primes_total, 2),
+            "boni": round(boni, 2), "tedy": round(tedy, 2), "telus": round(telus, 2),
+            "primes_total": round(primes_total, 2),
             "salaire_brut": round(new_salary + vacation + primes_total, 2),
             "boni_mode": (ov.get("boni_mode", "montant") if not ccq else "montant"),
             "boni_pct": float(ov.get("boni_pct", 0) or 0),
+            "boni_gl": round(boni_gl * factor, 2), "manual": manual,
             "rrq": round(rrq, 2), "ae": round(ae, 2), "rqap": round(rqap, 2), "fss": round(fss, 2),
             "ccq_avantages": round(ccq_av, 2), "avantages": round(avantages, 2), "csst": round(csst, 2),
             "reer": round(reer, 2), "assurance": round(assurance, 2), "total_cost": round(total, 2),
@@ -565,6 +621,7 @@ class Department(BaseModel):
     superviseur: str
     compte_gl: str
     groupe_pl: str
+    gl_boni: str = ""
     csst: float = 0.0
 
 @api.get("/departments")
@@ -776,6 +833,12 @@ async def _year_locked(year):
 async def _any_locked():
     return await db.locks.find_one({"locked": True}) is not None
 
+async def _all_scenarios_locked(year):
+    for sc in BUDGET_SCENARIOS:
+        if not await _is_locked(year, sc):
+            return False
+    return True
+
 def _hkey(year):
     return f"y{int(year)}"
 
@@ -819,6 +882,8 @@ async def create_year(payload: YearCreate, user: dict = Depends(get_current_user
     ny = int(payload.year)
     if await db.hypotheses.find_one({"key": _hkey(ny)}):
         raise HTTPException(status_code=400, detail="Cette année existe déjà")
+    if not await _all_scenarios_locked(payload.source_year):
+        raise HTTPException(status_code=400, detail=f"Impossible de créer l'année {ny} : les 3 scénarios de {payload.source_year} (Budget CA, Revue Budgétaire 1 et 2) doivent tous être verrouillés avant le report du budget.")
     src = await _get_hypo(payload.source_year)
     newh = {k: v for k, v in src.items() if k != "_id"}
     newh["key"] = _hkey(ny); newh["year"] = ny
@@ -916,6 +981,30 @@ async def set_lock(payload: LockPayload, user: dict = Depends(require_admin)):
                 await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"department": newdept}})
     return {"success": True, "locked": payload.locked}
 
+def _has_year_entry(e, year):
+    yd = (e.get("years") or {}).get(str(int(year)))
+    return bool(yd)
+
+@api.get("/budget/no-entry")
+async def budget_no_entry(year: Optional[int] = None, user: dict = Depends(get_current_user)):
+    """Employés actifs sans aucun budget saisi pour l'année (candidats à l'inactivation)."""
+    year = year or await _active_year()
+    emps = await db.employees.find(_active_q()).sort("employee_number", 1).to_list(2000)
+    out = [{"id": str(e["_id"]), "employee_number": e["employee_number"], "name": e["name"],
+            "department": e.get("department", "")} for e in emps if not _has_year_entry(e, year)]
+    return {"year": year, "employees": out, "count": len(out)}
+
+@api.post("/budget/inactivate-no-entry")
+async def inactivate_no_entry(year: Optional[int] = None, user: dict = Depends(get_current_user)):
+    """Inactive tous les employés actifs sans budget saisi pour l'année donnée."""
+    year = year or await _active_year()
+    emps = await db.employees.find(_active_q()).to_list(2000)
+    ids = [e["_id"] for e in emps if not _has_year_entry(e, year)]
+    for _id in ids:
+        await db.employees.update_one({"_id": _id}, {"$set": {"active": False}})
+    await log_action(user, "Modifier", "Employé", f"Inactivation auto — {len(ids)} employé(s) sans budget {year}")
+    return {"success": True, "inactivated": len(ids)}
+
 # ---------------------------------------------------------------------------
 # Reports (Excel / PDF)
 # ---------------------------------------------------------------------------
@@ -932,19 +1021,28 @@ async def _budget_data(department=None, year=None, scenario="ca"):
     return data, hypo
 
 def _pnl_data(data, depts):
-    """Rapport type P&L : coûts ventilés par mois, regroupés par compte GL (départements)."""
+    """Rapport type P&L : coûts ventilés par mois, regroupés par compte GL (départements).
+    Le boni (+ charges sociales associées) des employés est extrait vers le compte « GL Boni »
+    du département et déduit du compte GL de salaire principal."""
     gl_map = {d["code"]: (d.get("compte_gl") or "").strip() for d in depts}
-    gl_label = {}
-    for d in depts:
-        gl = (d.get("compte_gl") or "").strip() or "—"
-        gl_label.setdefault(gl, gl)
+    boni_gl_map = {d["code"]: (d.get("gl_boni") or "").strip() for d in depts}
     rows = {}
     for ln in data["lines"]:
         gl = gl_map.get(ln["department"], "") or "—"
+        boni_acct = boni_gl_map.get(ln["department"], "")
+        bgl = ln.get("boni_gl", 0) or 0
+        tb = ln["total_budgeted"] or 1
+        split = bool(boni_acct) and bgl > 0
+        boni_monthly = [ln["monthly"][i] * bgl / tb if split else 0.0 for i in range(12)]
         r = rows.setdefault(gl, {"gl": gl, "monthly": [0.0] * 12, "total": 0.0})
         for i in range(12):
-            r["monthly"][i] += ln["monthly"][i]
-        r["total"] += ln["total_budgeted"]
+            r["monthly"][i] += ln["monthly"][i] - boni_monthly[i]
+        r["total"] += ln["total_budgeted"] - (bgl if split else 0)
+        if split:
+            rb = rows.setdefault(boni_acct, {"gl": boni_acct, "monthly": [0.0] * 12, "total": 0.0})
+            for i in range(12):
+                rb["monthly"][i] += boni_monthly[i]
+            rb["total"] += bgl
     out = [{"gl": k, "monthly": [round(x, 2) for x in v["monthly"]], "total": round(v["total"], 2)} for k, v in sorted(rows.items())]
     totals = {"monthly": [round(sum(r["monthly"][i] for r in out), 2) for i in range(12)], "total": round(sum(r["total"] for r in out), 2)}
     return {"months": MONTHS, "rows": out, "totals": totals}

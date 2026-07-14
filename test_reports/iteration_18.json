@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 18 — Full regression of the 8-point feature update (year-lock gate, salary-change-date proration, manual entry override, no-entry inactivation, unified detail dialog, Tedy/Telus primes, dept gl_boni, P&L GL Boni split). Backend pytest 13/13 PASS. Frontend Playwright verified all 8 UI flows. Environment left pristine (all overrides reset, dept gl_boni restored, employee count still 123).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration_18.py",
+    "/app/test_reports/pytest/iteration_18.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py POINT 8 pnl split (_pnl_data ~L1023): flake surfaced when the TestDeptGlBoni test ran in parallel and touched departments[0] concurrently with TestPnlGlBoniSplit — passed 100% sequentially, only intermittent under xdist. Consider adding a serial marker or picking non-overlapping departments in pnl fixtures.",
+    "server.py PUT /api/departments/{dep_id} uses ObjectId, GET returns id string — consistent, but there is no PATCH-style partial update; tests must always resend the full Department body (same DX concern noted in iteration 17 for /employees).",
+    "BudgetDetailDialog (line 60): 'Écart vs Budget CA' line shows '0.00 $ (0.0 %)' when comparing scenario 'ca' against itself — this is by design but a small UX polish (hide or gray out for scenario==ca) could help.",
+    "Departments dialog and NoEntry AlertDialog throw a11y warning: 'Missing Description or aria-describedby={undefined} for DialogContent'. Radix expects <DialogDescription> — currently only a title is provided. Non-blocking but visible in console.",
+    "MANUAL_KEYS in BudgetFicheDialog.js excludes 'tedy'/'telus' — this is CORRECT per spec (manual override is a separate concept from tedy/telus), just confirming no bug."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration_18.py (NEW — 13 tests covering all 8 points)"],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100% (8/8 points verified)"},
+  "test_credentials": "admin@accslegro.com/admin123, editor1@accslegro.com/editor123, user1@accslegro.com/user123 — all working.",
+  "seed_data_creation": "None persisted. Every override reset to {} in try/finally. Department[0].gl_boni and the target dept for P&L split were both restored to their original values (verified with a final GET). Employee count check re-verified: 123 active.",
+  "verified_scenarios": {
+    "P1_year_lock_gate_backend": "PASS — POST /api/years for 2099 (source 2026) returns 400 with 'les 3 scénarios de 2026 ... doivent tous être verrouillés' message. 2099 not created.",
+    "P1_year_lock_gate_frontend": "PASS — 'Nouvelle année' dialog + Créer l'année button triggered 400 and toast: 'Impossible de créer l'année 2099 : les 3 scénarios de 2026 (Budget CA, Revue Budgétaire 1 et 2) doivent tous être verrouillés avant le report du budget.'",
+    "P2_salary_change_date": "PASS — mid-year (2026-07-01): new_salary = base*(1-w)+rate*w with w=184/365 ≈ 0.5041 (verified within $2 tolerance). Jan-1: new_salary == new_salary_rate (w=1). Next-year date: new_salary == base (w=0). new_salary_rate field is exposed on the line.",
+    "P3_manual_override": "PASS — manual dict overrides new_salary=80000 and vacation=6000 exactly; total_cost stays the SUM of components (within $0.5). manual-toggle visible in ca & revue1, HIDDEN in revue2. Editable input manual-new_salary rendered when toggle ON.",
+    "P4_noentry": "PASS — GET /api/budget/no-entry?year=2026 returns {count:0, employees:[]}. POST /api/budget/inactivate-no-entry with count==0 returns 200/{inactivated:0}. Dialog displays 'Aucune action nécessaire' message (confirm button correctly hidden when count==0).",
+    "P5_unified_detail_dialog": "PASS — clicking a budget-row-* opens budget-detail-dialog with scenario switcher (detail-scenario-ca / revue1 / revue2) and 'Écart vs Budget CA' line (detail-ecart present).",
+    "P6_tedy_telus": "PASS — non-CCQ: override {tedy:1000, telus:500} increases primes_total by exactly 1500, vacation UNCHANGED, ae UNCHANGED, fss/rrq/rqap/csst INCREASED (present in their bases). CCQ: tedy/telus fields hidden in the fiche; passing them via override yields tedy=0/telus=0/primes_total unchanged (compute_budget guards).",
+    "P7_dept_gl_boni": "PASS — PUT /api/departments/{id} persists gl_boni field; GET returns it. UI shows 'GL Boni' table column + dept-gl_boni Input in the create/edit dialog.",
+    "P8_pnl_boni_split": "PASS — set gl_boni='9990001' on a non-CCQ employee's dept + boni override of 5000 → GET /api/reports/pnl shows a new '9990001' row with total>0, main GL row is reduced (verified by comparison with a no-split baseline), and totals remain unchanged (within $50).",
+    "regression_employee_count": "PASS (123 active employees)."
+  },
+  "context_for_next_testing_agent": "Backend BASE URL from /app/frontend/.env. IMPORTANT: run test_iteration_18.py serially (pytest -o addopts='') to avoid xdist flake between TestDeptGlBoni and TestPnlGlBoniSplit (both touch departments[0]). All prior iteration tests still valid. The app is a SPA (no react-router); use [data-testid=nav-budget/departements/rapports] to navigate. Scenario switch in fiche: [data-testid=fiche-scenario-ca/revue1/revue2]. Manual toggle only visible in ca & revue1. Tedy/Telus fields hidden for CCQ employees. When count of no-entry is 0, 'noentry-confirm' button is intentionally hidden and the dialog shows 'Aucune action nécessaire'.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true
+}

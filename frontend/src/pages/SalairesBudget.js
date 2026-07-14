@@ -8,8 +8,9 @@ import BudgetDetailDialog from "../components/BudgetDetailDialog";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Pencil, Lock, Unlock, ShieldCheck, TrendingUp, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, Search } from "lucide-react";
+import { Pencil, Lock, Unlock, ShieldCheck, TrendingUp, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, Search, UserX } from "lucide-react";
 import { toast } from "sonner";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "../components/ui/alert-dialog";
 
 const SCENARIOS = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 const LABEL = Object.fromEntries(SCENARIOS);
@@ -36,7 +37,8 @@ export default function SalairesBudget() {
   const [b, setB] = useState(null);
   const [locks, setLocks] = useState({});
   const [fiche, setFiche] = useState({ open: false, line: null });
-  const [detail, setDetail] = useState({ open: false, line: null });
+  const [detail, setDetail] = useState({ open: false, line: null, scenario: "ca", baseline: null });
+  const [noEntry, setNoEntry] = useState({ open: false, list: [], busy: false });
   const [augCcq, setAugCcq] = useState("");
   const [augStd, setAugStd] = useState("");
   const [applying, setApplying] = useState(false);
@@ -90,6 +92,43 @@ export default function SalairesBudget() {
     } catch (e) { toast.error(e.response?.data?.detail || "Action impossible"); }
   };
 
+  const openDetail = async (ln) => {
+    const baseline = scenario === "ca" ? ln.total_cost : null;
+    setDetail({ open: true, line: ln, scenario, baseline });
+    if (baseline == null) {
+      try {
+        const d = await api.getBudget({ year, scenario: "ca" });
+        const cl = d.lines.find((x) => x.employee_id === ln.employee_id);
+        setDetail((p) => ({ ...p, baseline: cl?.total_cost ?? null }));
+      } catch { /* silencieux */ }
+    }
+  };
+  const changeDetailScenario = async (scen) => {
+    const emp_id = detail.line?.employee_id;
+    if (!emp_id) return;
+    try {
+      const d = await api.getBudget({ year, scenario: scen });
+      const l = d.lines.find((x) => x.employee_id === emp_id);
+      if (l) setDetail((p) => ({ ...p, line: l, scenario: scen }));
+    } catch { toast.error("Chargement du scénario échoué"); }
+  };
+
+  const openNoEntry = async () => {
+    try {
+      const r = await api.getBudgetNoEntry({ year });
+      setNoEntry({ open: true, list: r.employees || [], busy: false });
+    } catch { toast.error("Chargement impossible"); }
+  };
+  const confirmInactivate = async () => {
+    setNoEntry((p) => ({ ...p, busy: true }));
+    try {
+      const r = await api.inactivateNoEntry({ year });
+      toast.success(`${r.inactivated} employé(s) inactivé(s)`);
+      setNoEntry({ open: false, list: [], busy: false });
+      load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Action impossible"); setNoEntry((p) => ({ ...p, busy: false })); }
+  };
+
   const q = tableQuery.trim().toLowerCase();
   const filteredLines = !q ? b.lines : b.lines.filter((l) => {
     const hay = [String(l.employee_number).padStart(3, "0"), l.name, l.department, l.title,
@@ -141,6 +180,11 @@ export default function SalairesBudget() {
             <Button variant="outline" size="sm" onClick={toggleLock} data-testid="lock-toggle-btn"
               className={`gap-1.5 ${locked ? "border-red-200 text-red-600 hover:bg-red-50" : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"}`}>
               {locked ? <><Unlock size={14} /> Déverrouiller</> : <><ShieldCheck size={14} /> Verrouiller le budget</>}
+            </Button>
+          )}
+          {canEdit && (
+            <Button variant="outline" size="sm" onClick={openNoEntry} data-testid="inactivate-noentry-btn" className="gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50">
+              <UserX size={14} /> Inactiver sans budget
             </Button>
           )}
         </div>
@@ -216,7 +260,7 @@ export default function SalairesBudget() {
             </thead>
             <tbody>
               {sortedLines.map((ln) => (
-                <tr key={ln.employee_number} onClick={() => setDetail({ open: true, line: ln })} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" data-testid={`budget-row-${ln.employee_number}`}>
+                <tr key={ln.employee_number} onClick={() => openDetail(ln)} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" data-testid={`budget-row-${ln.employee_number}`}>
                   <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(ln.employee_number).padStart(3, "0")}</td>
                   <td className="px-4 py-2.5 font-600">{ln.name}{ln.overridden && <span className="ml-2 rounded bg-[#14B8A61a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">Ajusté</span>}{ln.prorated && <span className="ml-2 rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active} mois</span>}</td>
                   <td className="px-4 py-2.5 font-mono-data text-slate-500">{ln.department}</td>
@@ -285,7 +329,7 @@ export default function SalairesBudget() {
                   <td className="px-4 py-2.5 text-right font-mono-data font-700">{fmtCAD(g.total_budgeted)}</td>
                 </tr>
                 {expandedDepts.has(g.department) && filteredLines.filter((l) => l.department === g.department).sort((a, c) => a.employee_number - c.employee_number).map((ln) => (
-                  <tr key={`${g.department}-${ln.employee_number}`} onClick={() => setDetail({ open: true, line: ln })} className="cursor-pointer border-b border-slate-50 bg-slate-50/60 text-[13px] hover:bg-slate-100" data-testid={`dept-emp-${g.department}-${ln.employee_number}`}>
+                  <tr key={`${g.department}-${ln.employee_number}`} onClick={() => openDetail(ln)} className="cursor-pointer border-b border-slate-50 bg-slate-50/60 text-[13px] hover:bg-slate-100" data-testid={`dept-emp-${g.department}-${ln.employee_number}`}>
                     <td className="py-2 pl-11 pr-4 text-slate-600"><span className="font-mono-data text-slate-400">{String(ln.employee_number).padStart(3, "0")}</span> {ln.name}</td>
                     <td></td>
                     <td className="px-4 py-2 text-right font-mono-data text-slate-500">{fmtCAD(ln.new_salary)}</td>
@@ -318,7 +362,7 @@ export default function SalairesBudget() {
         {viewMode === "employee" && (
         <div className="divide-y divide-slate-100 md:hidden" data-testid="budget-cards">
           {sortedLines.map((ln) => (
-            <div key={ln.employee_number} onClick={() => setDetail({ open: true, line: ln })} className="cursor-pointer p-4 active:bg-slate-50" data-testid={`budget-card-${ln.employee_number}`}>
+            <div key={ln.employee_number} onClick={() => openDetail(ln)} className="cursor-pointer p-4 active:bg-slate-50" data-testid={`budget-card-${ln.employee_number}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate font-700">{ln.name}</p>
@@ -373,7 +417,7 @@ export default function SalairesBudget() {
               {expandedDepts.has(g.department) && (
                 <div className="divide-y divide-slate-100 bg-slate-50/60">
                   {filteredLines.filter((l) => l.department === g.department).sort((a, c) => a.employee_number - c.employee_number).map((ln) => (
-                    <div key={`${g.department}-${ln.employee_number}`} onClick={() => setDetail({ open: true, line: ln })} className="flex cursor-pointer items-center justify-between py-2 pl-10 pr-4 text-[13px] active:bg-slate-100" data-testid={`dept-emp-card-${g.department}-${ln.employee_number}`}>
+                    <div key={`${g.department}-${ln.employee_number}`} onClick={() => openDetail(ln)} className="flex cursor-pointer items-center justify-between py-2 pl-10 pr-4 text-[13px] active:bg-slate-100" data-testid={`dept-emp-card-${g.department}-${ln.employee_number}`}>
                       <span className="truncate text-slate-600"><span className="font-mono-data text-slate-400">{String(ln.employee_number).padStart(3, "0")}</span> {ln.name}</span>
                       <span className="font-mono-data font-600">{fmtCAD(ln.total_budgeted)}</span>
                     </div>
@@ -394,9 +438,40 @@ export default function SalairesBudget() {
         <BudgetFicheDialog open={fiche.open} onOpenChange={(v) => setFiche((p) => ({ ...p, open: v }))} line={fiche.line} year={year} scenario={scenario} locks={locks} isAdmin={isAdmin} onSaved={load} />
       )}
       {detail.open && detail.line && (
-        <BudgetDetailDialog open={detail.open} onOpenChange={(v) => setDetail((p) => ({ ...p, open: v }))} line={detail.line} year={year} scenario={scenario}
-          canEdit={canEdit} onEdit={(ln) => setFiche({ open: true, line: ln })} />
+        <BudgetDetailDialog open={detail.open} onOpenChange={(v) => setDetail((p) => ({ ...p, open: v }))} line={detail.line} year={year} scenario={detail.scenario}
+          canEdit={canEdit} onEdit={(ln) => setFiche({ open: true, line: ln })}
+          scenarioOptions={[["ca", "Budget CA"], ["revue1", "Revue 1"], ["revue2", "Revue 2"]]} onScenarioChange={changeDetailScenario} baselineTotal={detail.baseline} />
       )}
+      <AlertDialog open={noEntry.open} onOpenChange={(v) => !v && setNoEntry((p) => ({ ...p, open: false }))}>
+        <AlertDialogContent data-testid="noentry-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Inactiver les employés sans budget {year} ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {noEntry.list.length === 0
+                ? "Tous les employés actifs ont un budget saisi pour cette année. Aucune action nécessaire."
+                : `${noEntry.list.length} employé(s) actif(s) n'ont aucun budget saisi pour ${year} et seront marqués « Inactif ». Ils seront exclus des calculs. Cette action est réversible via la fiche employé.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {noEntry.list.length > 0 && (
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 text-sm" data-testid="noentry-list">
+              {noEntry.list.map((e) => (
+                <div key={e.id} className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 last:border-0">
+                  <span><span className="font-mono-data text-slate-400">#{String(e.employee_number).padStart(3, "0")}</span> {e.name}</span>
+                  <span className="font-mono-data text-slate-400">Dépt {e.department}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="noentry-cancel">Annuler</AlertDialogCancel>
+            {noEntry.list.length > 0 && (
+              <AlertDialogAction data-testid="noentry-confirm" disabled={noEntry.busy} className="bg-amber-600 hover:bg-amber-700" onClick={(ev) => { ev.preventDefault(); confirmInactivate(); }}>
+                {noEntry.busy ? "Traitement…" : "Inactiver"}
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
