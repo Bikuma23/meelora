@@ -1,0 +1,30 @@
+{
+  "summary": "Frontend testing of the new DOUBLE-CLICK quick-edit feature on Salaires & Budget and Employés tables. All admin flows PASSED end-to-end: qedit-salary, qedit-aug, qedit-vac (SalairesBudget) and qedit-emp-salary, qedit-emp-vac (Employés) all showed input on dblclick, saved on Enter with 'Modifié' toast, updated the displayed value, and correctly re-triggered budget recompute (Coût total changed then restored to original). Row detail dialog does NOT open on double-click (stopPropagation working). Original values were fully restored after each test so 123 employees + budgets remain intact.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/login", "issue": "Seeded test accounts editor1@accslegro.com and user1@accslegro.com return 401 'Courriel ou mot de passe invalide' — only admin@accslegro.com/admin123 works. This blocked role-based read-only verification (user1) and editor+lock verification (editor1)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Seed / (re)create editor1@accslegro.com (editor123) and user1@accslegro.com (user123) so role-based tests (locked scenario 403, read-only spans) can be verified. Currently only admin login succeeds."
+  ],
+  "critical_code_review_comments": [
+    "EditableCell: when canEdit=false, the span is rendered WITHOUT data-testid — good for read-only role but makes it impossible to assert 'input does NOT open on dblclick' via testId; consider always rendering the testId (span or input wrapper) to help future regression tests.",
+    "SalairesBudget.quickSave uses lineToOverride which reconstructs the full override from the current computed line. This preserves department/type/primes/manual as expected, but any field NOT present on the budget line (edge case) would be silently dropped — worth an explicit unit test on backend side."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100% (admin flows); role-based flows not executable due to seed data"},
+  "test_credentials": "admin@accslegro.com/admin123 OK. editor1/user1 return 401 — needs re-seed.",
+  "seed_data_creation": "None. All quick-edits were reverted; 123 employees preserved; no scenario locked/unlocked.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Quick-edit feature works. testIds: qedit-salary-{num}, qedit-aug-{num}, qedit-vac-{num} on SalairesBudget rows; qedit-emp-salary-{num}, qedit-emp-vac-{num} on Employés rows; each with -input suffix when in edit mode. Only admin@accslegro.com/admin123 currently authenticates — other role accounts (editor1, user1) return 401 and need to be re-seeded before role-matrix testing.",
+  "rca of the issue": "editor1/user1 401: likely seed_admin only re-hashes admin password (or these users were never inserted / were deleted). Recommend adding an idempotent user-seed step for editor/user demo accounts."
+}

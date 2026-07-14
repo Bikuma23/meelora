@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import ImportErrorsDialog from "../components/ImportErrorsDialog";
 import EmployeeDetailDialog from "../components/EmployeeDetailDialog";
 import BudgetDetailDialog from "../components/BudgetDetailDialog";
+import { EditableCell } from "../components/EditableCell";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "../components/ui/alert-dialog";
 
 const REQ = "Ce champ est obligatoire";
@@ -228,6 +229,20 @@ export default function Employes() {
     } catch { toast.error("Erreur lors de l'enregistrement"); }
   };
   const del = async (e) => { await api.deleteEmployee(e.id); toast.success("Employé supprimé"); load(query); };
+  const empToBody = (e) => ({
+    name: e.name, department: e.department, title: e.title || "", employment_type: e.employment_type,
+    ccq_category: e.ccq_category, current_annual_salary: e.current_annual_salary,
+    vacation_rate: e.vacation_rate, sick_personal_days: e.sick_personal_days, holiday_days: e.holiday_days,
+    is_ccq: e.is_ccq, prime_type: e.prime_type, prime_garde: e.prime_garde, prime_halo: e.prime_halo,
+    alloc_securite: e.alloc_securite, hire_date: e.hire_date, birth_date: e.birth_date,
+    active: e.active !== false, sex_at_birth: e.sex_at_birth || null, end_date: e.end_date || null,
+    supervisor: e.supervisor || null, security_class: e.security_class || null,
+  });
+  const quickSaveEmp = async (e, patch) => {
+    if (!canEdit) return;
+    try { await api.updateEmployee(e.id, { ...empToBody(e), ...patch }); toast.success("Modifié"); load(query); }
+    catch (err) { toast.error(err.response?.data?.detail || "Enregistrement impossible"); }
+  };
   const onImport = async (ev) => {
     const file = ev.target.files?.[0];
     if (!file) return;
@@ -263,7 +278,7 @@ export default function Employes() {
   const HEAD = [
     ["#", "left", "employee_number"], ["Titre / Poste", "left", "title"], ["Nom", "left", "name"],
     ["Dépt", "left", "department"], ["Type", "left", "employment_type"], ["Classe de sécurité", "left", "security_class"],
-    ["Salaire", "right", "current_annual_salary"], ["Âge", "right", "age"], ["Ancien.", "right", "seniority"], ["Actions", "right", null],
+    ["Salaire", "right", "current_annual_salary"], ["Vac. %", "right", "vacation_rate"], ["Âge", "right", "age"], ["Ancien.", "right", "seniority"], ["Actions", "right", null],
   ];
 
   const dlTemplate = async () => {
@@ -362,7 +377,8 @@ export default function Employes() {
                       </div>
                     ) : <span className="text-slate-300">—</span>}
                   </td>
-                  <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(e.current_annual_salary)}</td>
+                  <td className="px-4 py-2.5 text-right"><EditableCell canEdit={canEdit} value={e.current_annual_salary} display={fmtCAD(e.current_annual_salary)} step="1" testId={`qedit-emp-salary-${e.employee_number}`} onSave={(v) => quickSaveEmp(e, { current_annual_salary: v })} /></td>
+                  <td className="px-4 py-2.5 text-right"><EditableCell canEdit={canEdit} value={+(e.vacation_rate * 100).toFixed(3)} display={`${(e.vacation_rate * 100).toFixed(2)} %`} step="0.1" testId={`qedit-emp-vac-${e.employee_number}`} onSave={(v) => quickSaveEmp(e, { vacation_rate: v / 100 })} /></td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{computeAge(e.birth_date)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{computeSeniority(e.hire_date)} ans</td>
                   <td className="px-4 py-2.5">
@@ -375,7 +391,7 @@ export default function Employes() {
                   </td>
                 </tr>
               ))}
-              {employees.length === 0 && <tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-500">Aucun employé trouvé.</td></tr>}
+              {employees.length === 0 && <tr><td colSpan={11} className="px-4 py-10 text-center text-sm text-slate-500">Aucun employé trouvé.</td></tr>}
             </tbody>
           </table>
         </div>

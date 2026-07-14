@@ -11,6 +11,7 @@ import { Label } from "../components/ui/label";
 import { Pencil, Lock, Unlock, ShieldCheck, TrendingUp, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, Search, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "../components/ui/alert-dialog";
+import { EditableCell } from "../components/EditableCell";
 
 const SCENARIOS = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 const LABEL = Object.fromEntries(SCENARIOS);
@@ -22,12 +23,29 @@ const COLS = [
   { key: "department", label: "Dépt", align: "left" },
   { key: "employment_type", label: "Type", align: "left" },
   { key: "new_salary", label: "Nouveau salaire", align: "right" },
+  { key: "augmentation", label: "Augm. %", align: "right" },
   { key: "vacation", label: "Vacances", align: "right" },
+  { key: "vacation_rate", label: "Vac. %", align: "right" },
   { key: "primes_total", label: "Primes", align: "right" },
   { key: "salaire_brut", label: "Salaire brut total", align: "right" },
   { key: "avantages", label: "Avantages", align: "right" },
   { key: "total_budgeted", label: "Coût total", align: "right" },
 ];
+
+function lineToOverride(ln, revueMode) {
+  const o = { augmentation: ln.augmentation, vacation_rate: ln.vacation_rate, department: ln.department, employment_type: ln.employment_type };
+  if (ln.salary_change_date) o.salary_change_date = ln.salary_change_date;
+  if (ln.employment_type === "Régulier temps partiel") o.employment_rate = ln.employment_rate ?? 1;
+  if (!revueMode) o.base_salary = ln.base_salary;
+  if (ln.is_ccq) { o.prime_type = ln.prime_type; o.prime_garde = ln.garde > 0; o.prime_halo = ln.halo > 0; o.alloc_securite = ln.alloc > 0; }
+  else {
+    o.alloc_securite = ln.alloc > 0; o.reer = ln.reer; o.assurance = ln.assurance; o.boni_mode = ln.boni_mode;
+    if (ln.boni_mode === "pct") o.boni_pct = ln.boni_pct; else o.boni = ln.boni;
+    o.tedy = ln.tedy; o.telus = ln.telus;
+  }
+  if (ln.manual && Object.keys(ln.manual).length) o.manual = ln.manual;
+  return o;
+}
 
 export default function SalairesBudget() {
   const { year } = useYear();
@@ -102,6 +120,13 @@ export default function SalairesBudget() {
         setDetail((p) => ({ ...p, baseline: cl?.total_cost ?? null }));
       } catch { /* silencieux */ }
     }
+  };
+  const quickSave = async (ln, patch) => {
+    if (!canEdit) return;
+    const o = lineToOverride(ln, scenario.startsWith("revue"));
+    Object.assign(o, patch);
+    try { await api.saveBudgetOverride(ln.employee_id, o, { year, scenario }); toast.success("Modifié"); load(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Enregistrement impossible"); }
   };
   const changeDetailScenario = async (scen) => {
     const emp_id = detail.line?.employee_id;
@@ -234,7 +259,7 @@ export default function SalairesBudget() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3.5">
           <div>
             <h3 className="text-sm font-700">{viewMode === "employee" ? `Saisie & calculs par employé — ${LABEL[scenario]} ${year}` : `Totaux par département — ${LABEL[scenario]} ${year}`}</h3>
-            <p className="text-xs text-slate-500">{viewMode === "department" ? "Coûts agrégés par département (tri par numéro croissant)." : canEdit ? "Cliquez sur une ligne pour voir le détail, ou « modifier » pour ajuster la fiche." : "Cliquez sur une ligne pour voir le détail. Budget verrouillé — consultation seule."}</p>
+            <p className="text-xs text-slate-500">{viewMode === "department" ? "Coûts agrégés par département (tri par numéro croissant)." : canEdit ? "Double-cliquez sur Nouveau salaire, Augm. % ou Vac. % pour une édition rapide, ou « modifier » pour la fiche complète." : "Cliquez sur une ligne pour voir le détail. Budget verrouillé — consultation seule."}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1" data-testid="view-mode-toggle">
@@ -274,8 +299,10 @@ export default function SalairesBudget() {
                   <td className="px-4 py-2.5 font-600">{ln.name}{ln.overridden && <span className="ml-2 rounded bg-[#14B8A61a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">Ajusté</span>}{ln.prorated && <span className="ml-2 rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active} mois</span>}</td>
                   <td className="px-4 py-2.5 font-mono-data text-slate-500">{ln.department}</td>
                   <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#2563EB" : "#64748B" }}>{ln.is_ccq ? "CCQ" : typeLabel(ln.employment_type)}</span></td>
-                  <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.new_salary)}</td>
+                  <td className="px-4 py-2.5 text-right"><EditableCell canEdit={canEdit} value={ln.new_salary} display={fmtCAD(ln.new_salary)} step="1" testId={`qedit-salary-${ln.employee_number}`} onSave={(v) => quickSave(ln, { augmentation: (ln.base_salary * (ln.employment_rate || 1)) ? v / (ln.base_salary * (ln.employment_rate || 1)) - 1 : 0 })} /></td>
+                  <td className="px-4 py-2.5 text-right"><EditableCell canEdit={canEdit} value={+(ln.augmentation * 100).toFixed(3)} display={`${(ln.augmentation * 100).toFixed(2)} %`} step="0.1" testId={`qedit-aug-${ln.employee_number}`} onSave={(v) => quickSave(ln, { augmentation: v / 100 })} /></td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.vacation)}</td>
+                  <td className="px-4 py-2.5 text-right"><EditableCell canEdit={canEdit} value={+(ln.vacation_rate * 100).toFixed(3)} display={`${(ln.vacation_rate * 100).toFixed(2)} %`} step="0.1" testId={`qedit-vac-${ln.employee_number}`} onSave={(v) => quickSave(ln, { vacation_rate: v / 100 })} /></td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.primes_total)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(ln.salaire_brut)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.avantages)}</td>
@@ -293,7 +320,9 @@ export default function SalairesBudget() {
               <tr className="border-t-2 border-slate-300 bg-slate-50 text-sm font-700" data-testid="budget-total-row">
                 <td className="px-4 py-3" colSpan={4}>TOTAL — {sortedLines.length} employé(s)</td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.new_salary, 0))}</td>
+                <td className="px-4 py-3"></td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.vacation, 0))}</td>
+                <td className="px-4 py-3"></td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.primes_total, 0))}</td>
                 <td className="px-4 py-3 text-right font-mono-data" style={{ color: "#0E9488" }}>{fmtCAD(sortedLines.reduce((s, l) => s + l.salaire_brut, 0))}</td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.avantages, 0))}</td>
