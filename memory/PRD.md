@@ -220,6 +220,9 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 ## Comparatif complet par version dans le détail employé (2026-06-12)
 - [x] La section « Par version » du détail employé affiche pour chaque version (CA / Revue 1 / Revue 2) le **coût total**, le **département** (orange si différent de la fiche) et le **type d'emploi** (avec le % si temps partiel). Les données sont chargées à l'ouverture du détail via `getBudget` pour les 3 scénarios. Vérifié.
 
+## Montants avec deux décimales (2026-06-12)
+- [x] Tous les montants monétaires s'affichent désormais avec **deux décimales** (via `fmtCAD`, `minimumFractionDigits: 2`) partout dans l'app (tableaux, fiches, dashboard, détails). Vérifié.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

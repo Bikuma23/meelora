@@ -2,7 +2,8 @@ export const fmtCAD = (v) =>
   new Intl.NumberFormat("fr-CA", {
     style: "currency",
     currency: "CAD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(v || 0);
 
 export const fmtPct = (v) => `${((v || 0) * 100).toFixed(2)} %`;
