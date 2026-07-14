@@ -52,7 +52,7 @@ export default function BudgetDetailDialog({ open, onOpenChange, line, year, sce
             ))}
           </div>
         )}
-        {scenarioOptions && baselineTotal != null && (() => {
+        {scenarioOptions && baselineTotal != null && scenario !== "ca" && (() => {
           const diff = line.total_cost - baselineTotal;
           const pct = baselineTotal ? (diff / baselineTotal * 100).toFixed(1) : "0.0";
           const c = diff > 0 ? "#DC2626" : diff < 0 ? "#0E9488" : "#64748B";

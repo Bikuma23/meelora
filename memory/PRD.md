@@ -223,6 +223,17 @@ Application web de budgétisation de la masse salariale (Québec, convention CCQ
 ## Montants avec deux décimales (2026-06-12)
 - [x] Tous les montants monétaires s'affichent désormais avec **deux décimales** (via `fmtCAD`, `minimumFractionDigits: 2`) partout dans l'app (tableaux, fiches, dashboard, détails). Vérifié.
 
+## Mise à jour majeure — 8 points (2026-06-14)
+- [x] **P1 — Cycle budgétaire verrouillé** : impossible de créer une nouvelle année tant que les 3 scénarios (Budget CA, Revue 1, Revue 2) de l'année source ne sont pas tous verrouillés. Backend `_all_scenarios_locked` + garde dans `POST /api/years` (400 + message FR clair, surfacé en toast dans Layout).
+- [x] **P2 — Date de changement de salaire + proratisation** : champ `salary_change_date` par employé ET par scénario (fiche `data-testid=fiche-salary-change-date`). Avant la date = salaire de base actuel (taux plein non proratisé), après = nouveau salaire ; mélange pondéré par jours civils (`_salary_change_weight`). Ligne expose `new_salary` (mélangé) et `new_salary_rate` (taux plein post-changement).
+- [x] **P3 — Saisie manuelle** (scénarios Budget CA & Revue 1 uniquement) : bascule `fiche-manual-toggle` rend les lignes de calcul éditables (`manual-new_salary`, `manual-vacation`, `manual-rrq`, `manual-csst`…). Chaque composant peut être écrasé ; le **coût total reste la somme** (non éditable). Stocké dans `override.manual`.
+- [x] **P4 — Auto-inactivation sans budget** : bouton `inactivate-noentry-btn` (admin/éditeur) → dialogue `noentry-dialog` listant les employés actifs sans budget saisi pour l'année, confirmation `noentry-confirm`. Endpoints `GET /api/budget/no-entry` + `POST /api/budget/inactivate-no-entry`.
+- [x] **P5 — Unification du détail employé** : la fiche budget ouverte depuis « Salaires & Budget » (clic ligne) utilise le même `BudgetDetailDialog` que « Employé › Voir le budget », avec sélecteur de scénario + ligne « Écart vs Budget CA » (masquée si scénario = CA).
+- [x] **P6 — Primes Tedy & Telus** (non-CCQ uniquement, cachées pour CCQ) : montants fixes $ (`fiche-tedy`, `fiche-telus`) inclus **uniquement** dans les bases RRQ/FSS/RQAP/CSST (exclus de l'AE, des vacances et des avantages CCQ). Ajoutés au coût total et à `primes_total`.
+- [x] **P7 — Compte « GL Boni » par département** : champ `dept-gl_boni` + colonne dans le tableau Départements (`Department.gl_boni`).
+- [x] **P8 — Ligne GL Boni au P&L** : le boni + ses charges sociales marginales (RRQ+AE+RQAP+FSS+CSST, respectant les plafonds) sont extraits vers le compte GL Boni du département et **déduits** du GL de salaire principal. Totaux P&L inchangés. Ligne expose `boni_gl`.
+- [x] Tests : testing_agent iteration_18 — backend 13/13, frontend 8/8. Environnement laissé intact (overrides remis à {}, gl_boni restauré, 123 employés).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
