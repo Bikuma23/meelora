@@ -1,100 +1,159 @@
 {
-  "project_context": {
-    "app_type": "SaaS Financial/Budgeting Dashboard",
-    "industry": "Technical/Construction (Quebec CCQ)",
-    "language": "French",
-    "core_task": "Calculate complex payroll projections (masse salariale) with multi-scenario comparison."
+  "theme_strategy": {
+    "mode": "light",
+    "description": "Thème clair professionnel et analytique, inspiré des normes comptables de haute précision. Palette axée sur un fond neutre très clair, avec une hiérarchie visuelle marquée par des tons 'Teal foncé' (Sarcelle) profond et des accents contrastants 'Corail/Rose'. Évite les bleus SaaS génériques au profit d'une esthétique plus éditoriale et institutionnelle."
   },
-  "design_system": {
-    "theme": "Light mode",
-    "archetype": "Swiss Brutalist & High Density Data",
-    "emotional_tone": "Precise, authoritative, industrial, clear.",
-    "typography": {
-      "headings": {
-        "family": "Cabinet Grotesk, sans-serif",
-        "description": "Raw, industrial, wide architecture.",
-        "usage": "Mainly for KPIs and high-level headers (tracking-tight, uppercase for section headers)."
-      },
-      "body": {
-        "family": "IBM Plex Sans, sans-serif",
-        "description": "Sterile, highly legible for SaaS reading."
-      },
-      "data": {
-        "family": "IBM Plex Mono, monospace",
-        "description": "Used exclusively for numerical data, KPIs, and table cells for exact alignment."
-      },
-      "imports": "@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap'); /* For Cabinet Grotesk, use local assets or fallback to a standard wide sans like Space Grotesk/Syncopate if unavailable, but aim for architectural wide font */"
+  "typography": {
+    "font_families": {
+      "heading": "Cabinet Grotesk, sans-serif",
+      "body": "IBM Plex Sans, sans-serif",
+      "mono": "JetBrains Mono, monospace"
     },
-    "colors": {
-      "background": "#F4F4F5",
+    "hierarchy": {
+      "h1": "text-4xl lg:text-5xl font-black tracking-tight text-slate-900",
+      "h2": "text-2xl lg:text-3xl font-bold tracking-tight text-slate-900",
+      "h3": "text-xl font-semibold tracking-tight text-slate-800",
+      "kpi_value": "text-3xl font-bold tracking-tight text-slate-900",
+      "body": "text-sm text-slate-600 leading-relaxed",
+      "small_label": "text-xs font-medium uppercase tracking-[0.15em] text-slate-500",
+      "table_header": "text-xs font-semibold uppercase tracking-wider text-slate-500",
+      "table_cell": "text-sm text-slate-700 font-medium tabular-nums"
+    },
+    "guidelines": "Ne jamais utiliser 'Inter'. Utiliser IBM Plex Sans pour tous les tableaux de bord et données chiffrées (excellente lisibilité des chiffres grâce aux tabular-nums). Cabinet Grotesk est réservé aux titres de page et grands KPI."
+  },
+  "colors": {
+    "backgrounds": {
+      "app_bg": "#F4F6F8",
       "surface": "#FFFFFF",
-      "border": "#D4D4D8",
-      "text_main": "#09090B",
-      "text_muted": "#52525B",
-      "brand_primary": "#0055FF",
-      "accent_growth": "#00C781",
-      "accent_restriction": "#FF4500",
-      "chart_ccq_elec": "#0055FF",
-      "chart_ccq_frig": "#FF4500",
-      "chart_standard": "#09090B"
+      "sidebar_bg": "#FFFFFF"
     },
-    "surfaces_and_borders": {
-      "style": "Grid Borders (Technical Look). Minimal radii (rounded-none or max rounded-sm).",
-      "shadows": "None. Rely on 1px solid borders to establish hierarchy.",
-      "glassmorphism": "Avoid in this specific app to maintain clinical financial precision."
+    "brand": {
+      "primary_dark_teal": "#0F292F",
+      "primary_teal": "#1A3B42",
+      "accent_coral": "#FA7268",
+      "accent_pink": "#F4978E"
+    },
+    "status": {
+      "positive": "#10B981",
+      "positive_bg": "#D1FAE5",
+      "negative": "#EF4444",
+      "negative_bg": "#FEE2E2",
+      "warning": "#F59E0B",
+      "info": "#3B82F6"
+    },
+    "neutrals": {
+      "text_main": "#0F172A",
+      "text_muted": "#64748B",
+      "border": "#E2E8F0",
+      "border_light": "#F1F5F9"
+    },
+    "guidelines": "Le Sarcelle foncé (Teal) sert à structurer (barre latérale, titres, boutons primaires) et le Corail attire l'attention sur les actions spécifiques ou la data saillante. L'interdiction stricte du #1B93A4 (Teal standard) est respectée en utilisant des tons beaucoup plus sombres et profonds (#0F292F)."
+  },
+  "visual_enhancers": {
+    "shadows": {
+      "card": "shadow-[0_2px_12px_rgba(15,23,42,0.04)]",
+      "card_hover": "shadow-[0_8px_24px_rgba(15,23,42,0.08)]",
+      "dropdown": "shadow-[0_12px_32px_rgba(15,23,42,0.12)]"
+    },
+    "borders": {
+      "radius": "rounded-xl",
+      "style": "border border-slate-200"
+    },
+    "surfaces": {
+      "glass": "backdrop-blur-xl bg-white/80 border-b border-slate-200",
+      "metric_card": "bg-white rounded-xl border border-slate-200 shadow-[0_2px_12px_rgba(15,23,42,0.04)] p-5"
     }
   },
-  "layout_architecture": {
-    "structure": "Split-pane Dashboard. Left-hand Control Panel (w-96) + Right-hand Canvas (flex-1). h-screen overflow-hidden flex flex-row bg-[#F4F4F5].",
-    "left_panel": {
-      "type": "Control Center",
-      "style": "bg-white border-r border-[#D4D4D8] overflow-y-auto",
-      "content": "Scenario selector tabs at top (Budget Initial, Scénario Croissance, Scénario Restrictif). Accordions or stacked sections for employee categories (Électriciens CCQ, Frigoristes CCQ, Employés Standard). Dense sliders for augmentation %, hours, headcount."
-    },
-    "right_canvas": {
-      "type": "Visualization Canvas",
-      "style": "flex-1 p-6 overflow-y-auto space-y-6",
-      "content": "Top row: 3 Massive KPI Cards (Total Masse Salariale, Total Cotisations CCQ, Solde de Trésorerie Restant). Middle: Stacked Bar Chart. Bottom: Dense data table for Employee CRUD."
-    },
-    "spacing": "Dense internally within components (gap-4, p-4), generous between macro-sections (gap-8)."
+  "grids_and_layouts": {
+    "dashboard_shell": "flex h-screen overflow-hidden bg-[#F4F6F8]",
+    "sidebar": "w-20 lg:w-64 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col",
+    "main_content": "flex-1 overflow-y-auto overflow-x-hidden flex flex-col",
+    "right_panel": "w-80 flex-shrink-0 bg-white border-l border-slate-200 p-5 hidden xl:block",
+    "kpi_grid": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6",
+    "bento_grid": "grid grid-cols-1 lg:grid-cols-12 gap-6",
+    "guidelines": "Adopter un agencement très aéré (beaucoup de padding). Utiliser un layout en 3 colonnes pour le dashboard: Sidebar (G) | Contenu Principal (C) | Smart Insights (D). Le contenu principal contient toujours un Header sticky."
   },
-  "component_guidelines": {
-    "tabs": "Blocky, segmented controls. Active state gets dark background (#09090B) with white text, inactive gets grey (#F4F4F5).",
-    "sliders": "Sharp square thumbs. Distinct track colors matching the employee category (Blue for Elec, Orange for Frig, Black for Std).",
-    "kpi_cards": "Bordered (#D4D4D8), white background. Values must be massive (text-4xl or 5xl) using IBM Plex Mono font. Label on top, value below.",
-    "chart": "Recharts Stacked Bar. Monthly breakdown. Tooltips must have squared corners and 1px borders. No soft shadows.",
-    "table": "Dense layout, uppercase headers (tracking-wider, text-xs), right-aligned Mono numbers. 1px borders.",
-    "buttons": "Square edges. Primary actions in #0055FF, hover: opacity-90."
+  "components": {
+    "kpi_cards": {
+      "structure": "Titre (haut gauche) | Icône (haut droite) -> Grand Chiffre -> Ligne de sparkline Recharts (hauteur 40px, pas d'axe) -> Flèche de tendance (vert/rouge) + texte '% par rapport au budget/réel'.",
+      "sparkline": "Utiliser un composant LineChart Recharts ultra-minimaliste. Ligne Teal/Corail en fonction du type de donnée."
+    },
+    "semi_circular_gauges": {
+      "library": "recharts",
+      "implementation": "PieChart avec startAngle={180} et endAngle={0}, innerRadius={60%}, outerRadius={80%}. Centrer le pourcentage en texte absolu dans le conteneur."
+    },
+    "large_financial_tables": {
+      "layout": "w-full text-left border-collapse",
+      "wrapper": "overflow-x-auto border border-slate-200 rounded-lg bg-white shadow-sm",
+      "header": "bg-slate-50 sticky top-0 z-20 border-b border-slate-200 text-xs font-semibold uppercase text-slate-500",
+      "first_column": "sticky left-0 bg-white z-10 border-r border-slate-200 font-medium text-slate-900 shadow-[2px_0_5px_rgba(0,0,0,0.02)]",
+      "cells": "px-4 py-2 text-sm tabular-nums text-right whitespace-nowrap",
+      "zebra": "even:bg-slate-50/50 hover:bg-slate-50 transition-colors"
+    },
+    "combined_charts": {
+      "library": "recharts",
+      "implementation": "ComposedChart combinant Bar (Revenu/Budget) et Line (Marge nette). Radius sur les barres `radius={[4, 4, 0, 0]}`. Legend et Tooltip customisés avec fond opaque."
+    },
+    "toggles_and_filters": {
+      "style": "bg-slate-100 p-1 rounded-lg inline-flex",
+      "active_state": "bg-white shadow-sm rounded-md font-medium text-slate-900",
+      "inactive_state": "text-slate-500 hover:text-slate-700"
+    }
   },
   "motion": {
-    "strategy": "Instantaneous feel. Use 150ms ease-out transitions for interactions.",
-    "sliders": "Chart and KPIs must update in real-time as the slider moves. Avoid debounce if possible to maintain a fluid, zero page-reload feel."
+    "buttons": "transition-all duration-200 ease-in-out hover:-translate-y-[1px] hover:shadow-md active:translate-y-0",
+    "table_rows": "transition-colors duration-150 ease-in-out",
+    "charts": "Recharts animations par défaut activées, mais avec une durée modérée (500ms).",
+    "guidelines": "Aucune animation 'transition-all' globale sur le corps. Cibler précisément les éléments interactifs. Utiliser Framer Motion pour les ouvertures de modales (scale-up léger + fade)."
   },
-  "assets": {
-    "icons": "lucide-react. Use sharp, linear icons.",
-    "images": [
+  "accessibility": {
+    "contrast": "Garantir un contraste WCAG AA (mini 4.5:1) pour les textes. Les textes gris clairs doivent utiliser au moins text-slate-500 sur fond blanc.",
+    "focus": "Tous les éléments interactifs doivent avoir focus-visible:ring-2 focus-visible:ring-primary_dark_teal focus-visible:ring-offset-2",
+    "testing": "CRITIQUE: Ajouter l'attribut `data-testid` sur TOUS les boutons, liens, champs de formulaire, onglets et éléments de tableau. Ex: `data-testid='btn-export-excel'`, `data-testid='tab-scenario-budget'`.",
+    "aria": "Utiliser aria-label pour les sparklines et les jauges qui n'ont pas de texte explicite."
+  },
+  "media_and_icons": {
+    "icons": {
+      "library": "@phosphor-icons/react",
+      "weight": "duotone ou regular",
+      "usage": "Icônes de taille 20px (w-5 h-5) dans la barre latérale, taille 24px (w-6 h-6) pour les cartes KPI."
+    }
+  },
+  "image_urls": {
+    "user_avatars": [
       {
-        "url": "https://images.pexels.com/photos/16029834/pexels-photo-16029834.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-        "category": "user_avatar",
-        "description": "Professional avatar for header or bottom of sidebar"
+        "url": "https://images.pexels.com/photos/20157010/pexels-photo-20157010.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Avatar professionnel homme, pour le profil administrateur",
+        "category": "auth_and_profile"
+      },
+      {
+        "url": "https://images.pexels.com/photos/14230741/pexels-photo-14230741.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Avatar professionnel homme asiatique, pour la liste des utilisateurs",
+        "category": "users_list"
       }
     ]
   },
   "instructions_to_main_agent": [
-    "Write code in .js files, NOT .tsx (use standard React JSX).",
-    "Use standard Tailwind CSS classes. Add custom fonts via Google Fonts import in index.css.",
-    "Build a unified React state object to hold base scenarios ('Budget Initial', 'Scénario Croissance', 'Scénario Restrictif') and let the sliders override them dynamically.",
-    "Use Recharts (`recharts` package) for the interactive stacked bar chart showing monthly salary cost breakdown.",
-    "Strictly separate standard employees from CCQ union employees in data structure and visualization colors.",
-    "All UI text, labels, and dummy data MUST be strictly in French.",
-    "Implement real-time updates: as sliders (augmentation salaire %, heures supplémentaires, nouveaux recrutements) are dragged, the chart and KPIs immediately re-render.",
-    "Include CRUD functionality (Add/Edit/Delete buttons) in the employee table at the bottom of the right canvas."
+    "NE PAS UTILISER DE COMPOSANTS DE TYPE CARTE SHADCN PAR DEFAUT S'ILS SONT TROP ÉPAIS. Refaire une carte avec div pure (bg-white rounded-xl border border-slate-200 shadow-sm) pour un look financier premium.",
+    "La navigation latérale (Sidebar) doit être fine, avec un fond blanc. Active item : fond Teal foncé très léger (ex: bg-[#0F292F]/5) et texte Teal foncé (#0F292F) avec une bordure gauche pleine (border-l-4).",
+    "Pour le tableau d'État des résultats (P&L) à 16 colonnes, utiliser IMPÉRATIVEMENT un wrappper natif avec `overflow-x-auto`. La première colonne (Comptes) doit rester visible au scroll horizontal (`sticky left-0 bg-white z-10`).",
+    "Les tableaux Bilan/Comptabilité nécessitent `tabular-nums` pour que les chiffres soient parfaitement alignés verticalement.",
+    "Remplacer tout arrière-plan transparent dans le Header par une classe 'backdrop-blur-xl bg-white/80' avec un 'border-b border-slate-200' pour garantir la lisibilité.",
+    "Intégrer les sparklines dans les cartes KPI avec Recharts `<LineChart>`. Cacher les axes et la grille. Couleur de la ligne : dynamique (vert pour positif, rouge pour négatif).",
+    "Utiliser `data-testid` kebab-case pour tous les éléments d'interface afin de garantir la robustesse des tests. Ex: `data-testid='kpi-revenue-card'`."
   ],
   "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
-    "You MUST NOT apply universal transition (e.g., transition: all). Add explicit transitions to specific elements.",
-    "You MUST NOT center align the app container (.App { text-align: left; } not center).",
-    "NEVER use placeholder text for logos or images; use provided URLs.",
-    "NEVER use generic AI emojis for icons. Use lucide-react.",
-    "All interactive elements (buttons, sliders, tabs) MUST include `data-testid` attributes."
+    "You tend to converge toward generic, 'on distribution' outputs. Avoid the 'AI slop' aesthetic. Make creative, distinctive frontends.",
+    "Do not use dark colors as gradients. Solid dark colors look good.",
+    "Do not make generic centered layouts. Left-align text, labels, and forms. Center only specific elements where optical balance demands it.",
+    "Create depth through layered design elements with subtle borders and shadows.",
+    "Never apply universal transitions (e.g., `transition: all`). Target specific properties (`transition-colors`, `transition-transform`).",
+    "DO NOT center align the app container. Do not add `.App { text-align: center; }` in CSS.",
+    "Always use modern button styles (rounded-lg or pill, sharp interaction animations, crisp colors).",
+    "NEVER use AI assistant Emoji characters (🤖🧠💡🎯) for icons. Use Phosphor Icons.",
+    "Every interaction needs micro-animations (hover states, focus rings). Static is dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap, especially in finance.",
+    "Missing categories for images must use real URLs provided, NEVER placeholder text or fake dummyimage.com URLs.",
+    "Ensure Sonner toasts are used for all notifications."
   ]
 }
