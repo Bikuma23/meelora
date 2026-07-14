@@ -186,8 +186,8 @@ export default function SalairesBudget() {
   }, {})).sort((a, c) => (parseInt(a.department, 10) || 0) - (parseInt(c.department, 10) || 0));
 
   const cards = [
-    ["Salaire de base", b.totals.salaire_base, "#2563EB"],
-    ["Vacances", b.totals.vacances, "#14B8A6"],
+    ["Salaire de base", b.totals.salaire_base, "#063044"],
+    ["Vacances", b.totals.vacances, "#F8A942"],
     ["Primes & Boni", b.totals.primes, "#F59E0B"],
     ["Avantages soc.", b.totals.avantages, "#8B5CF6"],
     ["Budget total", b.totals.budget_total, null],
@@ -226,7 +226,7 @@ export default function SalairesBudget() {
 
       <div className="card flex flex-wrap items-end gap-4 p-4" data-testid="global-aug-panel">
         <div className="flex items-center gap-2 self-center pr-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#2563EB1a] text-[#2563EB]"><TrendingUp size={16} /></span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0630441a] text-[#063044]"><TrendingUp size={16} /></span>
           <div>
             <p className="text-sm font-700 leading-tight">Augmentation globale</p>
             <p className="text-[11px] text-slate-500">Appliquée à tous — {LABEL[scenario]} {year}</p>
@@ -240,7 +240,7 @@ export default function SalairesBudget() {
           <Label className="text-[11px] uppercase text-slate-500">Standard (%)</Label>
           <Input data-testid="global-aug-std" type="number" step="0.1" disabled={!canEdit} className="mt-1 font-mono-data" value={augStd} onChange={(e) => setAugStd(e.target.value)} />
         </div>
-        <Button data-testid="global-aug-apply" onClick={applyAug} disabled={!canEdit || applying} className="gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90">
+        <Button data-testid="global-aug-apply" onClick={applyAug} disabled={!canEdit || applying} className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90">
           <TrendingUp size={15} /> {applying ? "Application…" : "Appliquer à tous"}
         </Button>
         <p className="w-full text-[11px] text-slate-400 sm:w-auto sm:flex-1 sm:text-right">Écrase l'augmentation de chaque employé pour ce scénario. Vous pourrez ensuite ajuster individuellement via la fiche.</p>
@@ -284,7 +284,7 @@ export default function SalairesBudget() {
                     <span className={`inline-flex items-center gap-1 ${col.align === "right" ? "flex-row-reverse" : ""}`}>
                       {col.label}
                       {sort.key === col.key
-                        ? (sort.dir === "asc" ? <ChevronUp size={13} className="text-[#2563EB]" /> : <ChevronDown size={13} className="text-[#2563EB]" />)
+                        ? (sort.dir === "asc" ? <ChevronUp size={13} className="text-[#063044]" /> : <ChevronDown size={13} className="text-[#063044]" />)
                         : <ChevronsUpDown size={12} className="opacity-40" />}
                     </span>
                   </th>
@@ -296,9 +296,9 @@ export default function SalairesBudget() {
               {sortedLines.map((ln) => (
                 <tr key={ln.employee_number} onClick={() => openDetail(ln)} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" data-testid={`budget-row-${ln.employee_number}`}>
                   <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(ln.employee_number).padStart(3, "0")}</td>
-                  <td className="px-4 py-2.5 font-600">{ln.name}{ln.overridden && <span className="ml-2 rounded bg-[#14B8A61a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">Ajusté</span>}{ln.prorated && <span className="ml-2 rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active} mois</span>}</td>
+                  <td className="px-4 py-2.5 font-600">{ln.name}{ln.overridden && <span className="ml-2 rounded bg-[#F8A9421a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">Ajusté</span>}{ln.prorated && <span className="ml-2 rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active} mois</span>}</td>
                   <td className="px-4 py-2.5 font-mono-data text-slate-500">{ln.department}</td>
-                  <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#2563EB" : "#64748B" }}>{ln.is_ccq ? "CCQ" : typeLabel(ln.employment_type)}</span></td>
+                  <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#063044" : "#64748B" }}>{ln.is_ccq ? "CCQ" : typeLabel(ln.employment_type)}</span></td>
                   <td className="px-4 py-2.5 text-right"><EditableCell canEdit={canEdit} value={ln.new_salary} display={fmtCAD(ln.new_salary)} step="1" testId={`qedit-salary-${ln.employee_number}`} onSave={(v) => quickSave(ln, { augmentation: (ln.base_salary * (ln.employment_rate || 1)) ? v / (ln.base_salary * (ln.employment_rate || 1)) - 1 : 0 })} /></td>
                   <td className="px-4 py-2.5 text-right"><EditableCell canEdit={canEdit} value={+(ln.augmentation * 100).toFixed(3)} display={`${(ln.augmentation * 100).toFixed(2)} %`} step="0.1" testId={`qedit-aug-${ln.employee_number}`} onSave={(v) => quickSave(ln, { augmentation: v / 100 })} /></td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.vacation)}</td>
@@ -309,7 +309,7 @@ export default function SalairesBudget() {
                   <td className="px-4 py-2.5 text-right font-mono-data font-700">{fmtCAD(ln.total_budgeted)}</td>
                   <td className="px-4 py-2.5 text-right">
                     <button data-testid={`edit-line-${ln.employee_number}`} disabled={!canEdit} onClick={(ev) => { ev.stopPropagation(); setFiche({ open: true, line: ln }); }}
-                      className="p-1.5 text-slate-400 hover:text-[#2563EB] disabled:cursor-not-allowed disabled:opacity-30">
+                      className="p-1.5 text-slate-400 hover:text-[#063044] disabled:cursor-not-allowed disabled:opacity-30">
                       {canEdit ? <Pencil size={15} /> : <Lock size={15} />}
                     </button>
                   </td>
@@ -407,13 +407,13 @@ export default function SalairesBudget() {
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     <span className="font-mono-data text-[11px] text-slate-400">#{String(ln.employee_number).padStart(3, "0")}</span>
                     <span className="font-mono-data text-[11px] text-slate-400">· Dépt {ln.department}</span>
-                    <span className="rounded px-1.5 py-0.5 text-[9px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#2563EB" : "#64748B" }}>{ln.is_ccq ? "CCQ" : typeLabel(ln.employment_type)}</span>
-                    {ln.overridden && <span className="rounded bg-[#14B8A61a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">Ajusté</span>}
+                    <span className="rounded px-1.5 py-0.5 text-[9px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#063044" : "#64748B" }}>{ln.is_ccq ? "CCQ" : typeLabel(ln.employment_type)}</span>
+                    {ln.overridden && <span className="rounded bg-[#F8A9421a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">Ajusté</span>}
                     {ln.prorated && <span className="rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active}m</span>}
                   </div>
                 </div>
                 <button data-testid={`edit-line-card-${ln.employee_number}`} disabled={!canEdit} onClick={(ev) => { ev.stopPropagation(); setFiche({ open: true, line: ln }); }}
-                  className="shrink-0 rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-[#2563EB] disabled:opacity-30">
+                  className="shrink-0 rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-[#063044] disabled:opacity-30">
                   {canEdit ? <Pencil size={15} /> : <Lock size={15} />}
                 </button>
               </div>

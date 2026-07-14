@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
-  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus,
+  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3,
 } from "lucide-react";
 
 const MONTHS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -43,6 +43,42 @@ function PeriodPicker({ periods, value, onChange }) {
 }
 
 // ---------- Dashboard ----------
+function Sparkline({ data, color }) {
+  const d = (data || []).map((v, i) => ({ i, v }));
+  if (d.length < 2) return <div style={{ height: 36 }} className="mt-3" />;
+  return (
+    <div style={{ height: 36 }} className="mt-3" aria-hidden>
+      <ResponsiveContainer width="100%" height={36}>
+        <LineChart data={d} margin={{ top: 4, right: 2, left: 2, bottom: 0 }}>
+          <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function KpiCard({ label, value, series, idx, positiveIsGood = true, icon: Icon, testid }) {
+  const prev = idx > 0 ? series[idx - 1] : null;
+  const cur = idx >= 0 ? series[idx] : (series.length ? series[series.length - 1] : value);
+  const delta = prev != null && prev !== 0 ? ((cur - prev) / Math.abs(prev)) * 100 : null;
+  const up = delta != null && delta >= 0;
+  const good = delta == null ? true : (up === positiveIsGood);
+  return (
+    <div className="card card-hover p-5" data-testid={testid}>
+      <div className="flex items-start justify-between">
+        <span className="text-xs font-600 uppercase tracking-[0.12em] text-slate-500">{label}</span>
+        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#063044]/[0.06] text-[#063044]"><Icon size={18} /></span>
+      </div>
+      <p className="font-display mt-3 text-3xl font-800 tracking-tight text-slate-900">{money(value)}</p>
+      <div className="mt-1 flex items-center gap-1.5 text-xs font-600" style={{ color: delta == null ? "#94A3B8" : (good ? "#10B981" : "#EF4444") }}>
+        {delta != null && (up ? <TrendingUp size={14} /> : <TrendingDown size={14} />)}
+        {delta != null ? `${up ? "+" : ""}${delta.toFixed(1)}% vs période préc.` : "Aucune donnée antérieure"}
+      </div>
+      <Sparkline data={series.slice(0, (idx >= 0 ? idx : series.length - 1) + 1)} color={good ? "#063044" : "#F8A942"} />
+    </div>
+  );
+}
+
 export function AcctDashboard() {
   const [d, setD] = useState(null);
   const { periods } = usePeriods();
@@ -65,30 +101,34 @@ export function AcctDashboard() {
   const trendData = trend.map((t) => ({
     name: `${t.month_label.slice(0, 3)} ${t.year}`, "Bénéfice net (mois)": t.benefice_mois, "Bénéfice net (cumulatif)": t.benefice_cumulatif,
   }));
+  const selIdx = trend.findIndex((t) => t.period === period);
+  const idx = selIdx >= 0 ? selIdx : trend.length - 1;
+  const cur = idx >= 0 ? trend[idx] : null;
+  const revSeries = trend.map((t) => t.revenus_cumulatif ?? 0);
+  const cogsSeries = trend.map((t) => t.cogs_cumulatif ?? 0);
+  const baiiaSeries = trend.map((t) => t.baiia_cumulatif ?? 0);
+  const benSeries = trend.map((t) => t.benefice_cumulatif ?? 0);
   return (
-    <div className="space-y-5" data-testid="acct-dashboard">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="card p-5">
-          <div className="mb-1 flex items-center gap-2 text-slate-500"><FileSpreadsheet size={16} /><span className="text-xs font-600 uppercase tracking-wider">Modèle</span></div>
-          <p className="text-2xl font-800">{d.template_imported ? `${d.template_accounts} comptes` : "Non importé"}</p>
-          <p className="text-xs text-slate-400">{d.template_imported ? "Mapping actif" : "Un admin doit importer le modèle"}</p>
+    <div className="space-y-6" data-testid="acct-dashboard">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-600 text-slate-500">Période affichée :</span>
+          <PeriodPicker periods={periods} value={period} onChange={setPeriod} />
         </div>
-        <div className="card p-5">
-          <div className="mb-1 flex items-center gap-2 text-slate-500"><Layers size={16} /><span className="text-xs font-600 uppercase tracking-wider">Périodes</span></div>
-          <p className="text-2xl font-800">{d.period_count}</p>
-          <p className="text-xs text-slate-400">mois avec données</p>
-        </div>
-        <div className="card p-5">
-          <div className="mb-1 flex items-center gap-2 text-slate-500"><Clock size={16} /><span className="text-xs font-600 uppercase tracking-wider">Dernier mois</span></div>
-          <p className="text-2xl font-800">{d.latest ? `${MONTHS[d.latest.month - 1]} ${d.latest.year}` : "—"}</p>
-          <p className="text-xs text-slate-400">{d.latest?.last_upload_by ? `par ${d.latest.last_upload_by}` : "aucun upload"}</p>
+        <div className="flex items-center gap-4 text-xs text-slate-400">
+          <span className="inline-flex items-center gap-1.5"><FileSpreadsheet size={13} /> {d.template_imported ? `${d.template_accounts} comptes` : "Modèle non importé"}</span>
+          <span className="inline-flex items-center gap-1.5"><Layers size={13} /> {d.period_count} périodes</span>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm font-600 text-slate-500">Période affichée :</span>
-        <PeriodPicker periods={periods} value={period} onChange={setPeriod} />
-      </div>
+      {cur && (
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4" data-testid="acct-kpi-grid">
+          <KpiCard label="Revenus (cumulatif)" value={cur.revenus_cumulatif} series={revSeries} idx={idx} positiveIsGood icon={Wallet} testid="kpi-revenus" />
+          <KpiCard label="COGS (cumulatif)" value={cur.cogs_cumulatif} series={cogsSeries} idx={idx} positiveIsGood={false} icon={Receipt} testid="kpi-cogs" />
+          <KpiCard label="BAIIA (cumulatif)" value={cur.baiia_cumulatif} series={baiiaSeries} idx={idx} positiveIsGood icon={BarChart3} testid="kpi-baiia" />
+          <KpiCard label="Bénéfice net (cumulatif)" value={cur.benefice_cumulatif} series={benSeries} idx={idx} positiveIsGood icon={PiggyBank} testid="kpi-benefice" />
+        </div>
+      )}
 
       {sel ? (
         <div className="card p-5" data-testid="acct-dashboard-latest">
@@ -124,9 +164,9 @@ export function AcctDashboard() {
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={70} />
                 <Tooltip formatter={(v) => money(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Réel" fill="#2563EB" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Budget CA" fill="#0E9488" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Budget Rév-1" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Réel" fill="#063044" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Budget CA" fill="#F8A942" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Budget Rév-1" fill="#CBD5E1" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -145,8 +185,8 @@ export function AcctDashboard() {
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={70} />
                 <Tooltip formatter={(v) => money(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="Bénéfice net (mois)" stroke="#2563EB" strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="Bénéfice net (cumulatif)" stroke="#0E9488" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="Bénéfice net (mois)" stroke="#063044" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="Bénéfice net (cumulatif)" stroke="#F8A942" strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -238,7 +278,7 @@ export function AcctBV() {
           </div>
           <label className="inline-flex">
             <input type="file" accept=".xlsx" className="hidden" onChange={onBV} disabled={busy} data-testid="acct-bv-input" />
-            <span className={`inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2 text-sm font-600 text-white hover:bg-[#2563EB]/90 ${busy ? "opacity-60" : ""}`}><Upload size={15} /> {busy ? "Traitement…" : "Uploader la BV (.xlsx)"}</span>
+            <span className={`inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#063044] px-4 py-2 text-sm font-600 text-white hover:bg-[#063044]/90 ${busy ? "opacity-60" : ""}`}><Upload size={15} /> {busy ? "Traitement…" : "Uploader la BV (.xlsx)"}</span>
           </label>
         </div>
         {result && (
@@ -302,7 +342,7 @@ export function AcctBV() {
               <div key={a.account} className="grid grid-cols-2 items-center gap-3 rounded-lg border border-slate-200 p-2">
                 <div className="text-sm"><span className="font-mono-data text-slate-500">{a.account}</span> <span className="text-slate-700">{a.name}</span></div>
                 <input list="acct-target-list" data-testid={`acct-assign-${a.account}`} placeholder="Regrouper avec le compte…"
-                  className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-[#2563EB]"
+                  className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-[#063044]"
                   onChange={(e) => { const m = e.target.value.match(/^(\d+)/); setAssign((s) => ({ ...s, [a.account]: m ? Number(m[1]) : "" })); }} />
               </div>
             ))}
@@ -379,7 +419,7 @@ function ReportView({ type, title }) {
                 return (
                   <button key={g.id} type="button" data-testid={`acct-colgroup-${g.id}`}
                     onClick={() => setHiddenGroups((s) => ({ ...s, [g.id]: !s[g.id] }))}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-600 transition-colors ${hidden ? "border-slate-200 bg-white text-slate-400" : "border-[#2563EB]/30 bg-[#2563EB]/10 text-[#2563EB]"}`}>
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-600 transition-colors ${hidden ? "border-slate-200 bg-white text-slate-400" : "border-[#063044]/30 bg-[#063044]/10 text-[#063044]"}`}>
                     {hidden ? <Plus size={13} /> : <Minus size={13} />} {g.label}
                   </button>
                 );
@@ -400,21 +440,21 @@ function ReportView({ type, title }) {
           {rep && <span className={`inline-flex items-center gap-1 text-xs font-600 ${rep.balanced ? "text-emerald-600" : "text-red-600"}`}>{rep.balanced ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}{rep.balanced ? "Balancé" : "Déséquilibre"}</span>}
         </div>
         {loading ? <p className="px-5 py-8 text-sm text-slate-500">Chargement…</p> : !rep ? <p className="px-5 py-8 text-sm text-slate-400">Sélectionnez une période avec une BV chargée.</p> : (
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[calc(100vh-230px)]">
             <table className="w-full text-sm">
               <thead>
                 {visibleGroups && (
-                  <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500">
-                    <th className="px-4 py-1.5" colSpan={2}></th>
+                  <tr className="sticky top-0 z-20 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500">
+                    <th className="bg-white px-4 py-1.5" colSpan={2}></th>
                     {visibleGroups.map((g, gi) => (
-                      <th key={g.label} colSpan={g.keys.length} className={`px-4 py-1.5 text-center font-700 text-slate-600 ${gi > 0 ? "border-l-2 border-slate-200" : ""}`}>{g.label}</th>
+                      <th key={g.label} colSpan={g.keys.length} className={`bg-white px-4 py-1.5 text-center font-700 text-slate-600 ${gi > 0 ? "border-l-2 border-slate-200" : ""}`}>{g.label}</th>
                     ))}
                   </tr>
                 )}
-                <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
-                <th className="px-4 py-2.5 text-left font-600">Compte</th>
-                <th className="px-4 py-2.5 text-left font-600">Description</th>
-                {visibleCols.map((k) => <th key={k} className={`px-4 py-2.5 text-right font-600 ${isEcart(k) ? "text-slate-500" : ""} ${showSep(k) ? "border-l-2 border-slate-200" : ""}`}>{colLabel(k)}</th>)}
+                <tr className={`sticky z-20 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400 ${visibleGroups ? "top-[30px]" : "top-0"}`}>
+                <th className="bg-white px-4 py-2.5 text-left font-600">Compte</th>
+                <th className="bg-white px-4 py-2.5 text-left font-600">Description</th>
+                {visibleCols.map((k) => <th key={k} className={`bg-white px-4 py-2.5 text-right font-600 ${isEcart(k) ? "text-slate-500" : ""} ${showSep(k) ? "border-l-2 border-slate-200" : ""}`}>{colLabel(k)}</th>)}
               </tr></thead>
               <tbody className="font-mono-data">
                 {visibleLines.map((ln) => (
@@ -494,7 +534,7 @@ function CashflowView() {
       steps.push({ name, range: [Math.min(start, end), Math.max(start, end)], fill: delta >= 0 ? "#0E9488" : "#DC2626", delta });
       run = end;
     });
-    steps.push({ name: "Clôture", range: [0, run], fill: "#2563EB", delta: run });
+    steps.push({ name: "Clôture", range: [0, run], fill: "#063044", delta: run });
     return steps;
   })() : [];
 

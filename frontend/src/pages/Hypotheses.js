@@ -52,13 +52,13 @@ export default function Hypotheses() {
     <div className="space-y-5" data-testid="hypotheses-page">
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">Paramètres pour <b className="text-slate-800">{h.year}</b> — alimentent tous les calculs budgétaires</p>
-        {isAdmin && <Button data-testid="save-hypotheses-btn" onClick={save} disabled={saving} className="gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90"><Save size={16} /> {saving ? "Enregistrement…" : "Enregistrer"}</Button>}
+        {isAdmin && <Button data-testid="save-hypotheses-btn" onClick={save} disabled={saving} className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90"><Save size={16} /> {saving ? "Enregistrement…" : "Enregistrer"}</Button>}
       </div>
 
       <fieldset disabled={!isAdmin} className="m-0 min-w-0 space-y-5 border-0 p-0">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <DayGrid arr="working_days_ccq" tint="#F59E0B" icon={HardHat} title={`Jours ouvrables CCQ — ${h.year}`} />
-        <DayGrid arr="working_days_std" tint="#2563EB" icon={Briefcase} title={`Jours ouvrables (standard) — ${h.year}`} />
+        <DayGrid arr="working_days_std" tint="#063044" icon={Briefcase} title={`Jours ouvrables (standard) — ${h.year}`} />
       </div>
 
       <div className="card p-5" data-testid="charges-card">
@@ -88,7 +88,7 @@ export default function Hypotheses() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="card p-5" data-testid="security-classes-card">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="flex items-center gap-2 text-sm font-700"><ShieldCheck size={16} className="text-[#14B8A6]" /> Classe de sécurité CNESST</h3>
+            <h3 className="flex items-center gap-2 text-sm font-700"><ShieldCheck size={16} className="text-[#F8A942]" /> Classe de sécurité CNESST</h3>
             <div className="flex items-center gap-2">
               <label className="text-[11px] uppercase text-slate-500">Max. assurable ($)</label>
               <Input data-testid="csst-max" type="number" className="h-8 w-28 text-right font-mono-data" value={h.csst_max_assurable || 0} onChange={(e) => setF("csst_max_assurable", Number(e.target.value))} />
@@ -114,7 +114,7 @@ export default function Hypotheses() {
           <p className="mt-2 text-[11px] text-slate-400">La déduction CSST de chaque employé utilise le taux de sa classe de sécurité, plafonné au maximum assurable.</p>
         </div>
         <div className="card p-5">
-          <h3 className="mb-4 flex items-center gap-2 text-sm font-700"><Settings2 size={16} className="text-[#2563EB]" /> Autres paramètres</h3>
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-700"><Settings2 size={16} className="text-[#063044]" /> Autres paramètres</h3>
           <div className="grid grid-cols-2 gap-3">
             {[
               ["ccq_rate", "Avantages CCQ (%)", true], ["prime_halo_rate", "Prime HALO (%)", true],

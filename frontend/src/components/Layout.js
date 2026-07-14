@@ -69,16 +69,17 @@ function NavItem({ item, active, onClick }) {
     <button
       data-testid={`nav-${item.key}`}
       onClick={() => onClick(item.key)}
-      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors duration-150 ${
-        on ? "bg-white/10 text-white" : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+      className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors duration-150 ${
+        on ? "bg-[#063044]/[0.06] text-[#063044]" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
       }`}
     >
-      <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${on ? "bg-[#14B8A6] text-white" : "bg-white/5"}`}>
+      {on && <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[#063044]" />}
+      <span className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${on ? "bg-[#063044] text-white" : "bg-slate-100 text-slate-400 group-hover:bg-slate-200 group-hover:text-slate-600"}`}>
         <Icon size={16} strokeWidth={2.2} />
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-sm font-600">{item.label}</span>
-        <span className="block truncate text-[11px] text-slate-500">{item.sub}</span>
+        <span className={`block truncate text-sm ${on ? "font-700" : "font-600"}`}>{item.label}</span>
+        <span className={`block truncate text-[11px] ${on ? "text-[#063044]/55" : "text-slate-400"}`}>{item.sub}</span>
       </span>
     </button>
   );
@@ -102,7 +103,7 @@ function YearControls() {
   };
   return (
     <div className="flex items-center gap-2">
-      <CalendarRange size={15} className="text-[#2563EB]" />
+      <CalendarRange size={15} className="text-[#063044]" />
       <Select value={String(year)} onValueChange={(v) => selectYear(v)}>
         <SelectTrigger className="h-8 w-24" data-testid="header-year-select"><SelectValue /></SelectTrigger>
         <SelectContent>{years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
@@ -131,7 +132,7 @@ function YearControls() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
-            <Button data-testid="ny-create-btn" className="bg-[#2563EB] hover:bg-[#2563EB]/90" onClick={create}>Créer l'année</Button>
+            <Button data-testid="ny-create-btn" className="bg-[#063044] hover:bg-[#063044]/90" onClick={create}>Créer l'année</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -148,40 +149,40 @@ function LayoutInner() {
   const [active, setActive] = useState("dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [avatarColor, setAvatarColor] = useState("#14B8A6");
+  const [avatarColor, setAvatarColor] = useState("#F8A942");
   const page = PAGES[active];
   const Active = page.comp;
   const go = (k) => { setActive(k); setMobileOpen(false); };
-  const roleMeta = { admin: { label: "Admin", c: "#2563EB", t: "#93B4FF" }, editor: { label: "Éditeur", c: "#0E9488", t: "#5EEAD4" }, user: { label: "Utilisateur", c: "#64748B", t: "#94A3B8" } }[user?.role] || { label: "Utilisateur", c: "#64748B", t: "#94A3B8" };
+  const roleMeta = { admin: { label: "Admin", c: "#063044", t: "#93B4FF" }, editor: { label: "Éditeur", c: "#0E9488", t: "#5EEAD4" }, user: { label: "Utilisateur", c: "#64748B", t: "#94A3B8" } }[user?.role] || { label: "Utilisateur", c: "#64748B", t: "#94A3B8" };
   useEffect(() => { api.getPreferences().then((p) => { applyTheme(p?.theme); if (p?.avatar_color) setAvatarColor(p.avatar_color); }).catch(() => {}); }, []);
 
   return (
-    <div className="flex min-h-screen bg-[#F1F5F9]">
+    <div className="flex min-h-screen bg-[#F4F6F8]">
       {mobileOpen && <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setMobileOpen(false)} data-testid="sidebar-overlay" />}
-      <aside className={`fixed left-0 top-0 z-40 flex h-screen w-64 flex-col bg-[#0E1526] px-3 py-4 transition-transform duration-200 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      <aside className={`fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-slate-200 bg-white px-3 py-4 transition-transform duration-200 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="mb-6 flex items-center justify-between gap-2.5 px-2">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#2563EB] to-[#14B8A6]">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#063044]">
               <DollarSign size={20} className="text-white" strokeWidth={2.4} />
             </span>
             <div>
-              <h1 className="text-base font-800 leading-none text-white">Budget Salaires</h1>
-              <p className="text-[11px] font-500 uppercase tracking-widest text-[#14B8A6]">Pro</p>
+              <h1 className="font-display text-base font-800 leading-none text-slate-900">Budget Salaires</h1>
+              <p className="text-[11px] font-600 uppercase tracking-widest text-[#F8A942]">Pro</p>
             </div>
           </div>
-          <button className="rounded-lg p-1.5 text-slate-400 hover:bg-white/5 lg:hidden" onClick={() => setMobileOpen(false)} data-testid="sidebar-close-btn"><X size={20} /></button>
+          <button className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:hidden" onClick={() => setMobileOpen(false)} data-testid="sidebar-close-btn"><X size={20} /></button>
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto">
           {NAV_TOP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           <div className="flex items-center gap-2 px-3 pb-1 pt-4">
-            <Briefcase size={14} className="text-slate-500" />
-            <span className="text-[11px] font-700 uppercase tracking-widest text-slate-500">Masse Salariale</span>
+            <Briefcase size={13} className="text-slate-400" />
+            <span className="text-[11px] font-700 uppercase tracking-widest text-slate-400">Masse Salariale</span>
           </div>
           {NAV_GROUP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           <div className="flex items-center gap-2 px-3 pb-1 pt-4">
-            <Calculator size={14} className="text-slate-500" />
-            <span className="text-[11px] font-700 uppercase tracking-widest text-slate-500">Comptabilité</span>
+            <Calculator size={13} className="text-slate-400" />
+            <span className="text-[11px] font-700 uppercase tracking-widest text-slate-400">Comptabilité</span>
           </div>
           {NAV_ACCT.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           {user?.role === "admin" && (
@@ -191,28 +192,28 @@ function LayoutInner() {
           )}
         </nav>
 
-        <div className="mt-3 border-t border-white/10 pt-3">
+        <div className="mt-3 border-t border-slate-200 pt-3">
           {userMenuOpen && (
             <div className="mb-2 space-y-1" data-testid="user-submenu">
               <NavItem item={{ key: "preferences", label: "Mon profil", sub: "Préférences & apparence", icon: UserCog }} active={active} onClick={(k) => { go(k); setUserMenuOpen(false); }} />
               {user?.role === "admin" && <NavItem item={{ key: "utilisateurs", label: "Utilisateurs", sub: "Comptes & accès", icon: ShieldCheck }} active={active} onClick={(k) => { go(k); setUserMenuOpen(false); }} />}
               <button data-testid="logout-btn" onClick={logout}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-600 text-slate-400 transition-colors hover:bg-white/5 hover:text-red-300">
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-600 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600">
                 <LogOut size={16} /> Déconnexion
               </button>
             </div>
           )}
           <button data-testid="user-menu-toggle" onClick={() => setUserMenuOpen((o) => !o)}
-            className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-white/5">
+            className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-slate-100">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-700 text-white" style={{ backgroundColor: avatarColor }}>
               {(user?.name || "U").charAt(0)}
             </span>
             <div className="min-w-0 flex-1 text-left">
               <div className="flex items-center gap-1.5">
-                <p className="truncate text-sm font-600 text-white">{user?.name}</p>
-                <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-700 uppercase" style={{ backgroundColor: roleMeta.c + "33", color: roleMeta.t }}>{roleMeta.label}</span>
+                <p className="truncate text-sm font-600 text-slate-900">{user?.name}</p>
+                <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-700 uppercase" style={{ backgroundColor: roleMeta.c + "1A", color: roleMeta.c }}>{roleMeta.label}</span>
               </div>
-              <p className="truncate text-[11px] text-slate-500">{user?.email}</p>
+              <p className="truncate text-[11px] text-slate-400">{user?.email}</p>
             </div>
             {userMenuOpen ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronUp size={16} className="text-slate-400" />}
           </button>
@@ -220,16 +221,16 @@ function LayoutInner() {
       </aside>
 
       <div className="flex-1 lg:ml-64">
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-slate-200 bg-[#F1F5F9]/90 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/80 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-2.5">
-            <button className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-200 lg:hidden" onClick={() => setMobileOpen(true)} data-testid="sidebar-open-btn"><Menu size={22} /></button>
+            <button className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden" onClick={() => setMobileOpen(true)} data-testid="sidebar-open-btn"><Menu size={22} /></button>
             <div className="min-w-0">
-              <h2 className="truncate text-base font-800 tracking-tight sm:text-lg">{page.title}</h2>
+              <h2 className="font-display truncate text-lg font-800 tracking-tight text-slate-900 sm:text-xl">{page.title}</h2>
               <p className="truncate text-xs text-slate-500">{page.sub}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            {!active.startsWith("acct_") && <span className="hidden rounded-full bg-[#2563EB]/10 px-3 py-1 text-xs font-600 text-[#2563EB] sm:inline-flex">Budget actif</span>}
+            {!active.startsWith("acct_") && <span className="hidden rounded-full bg-[#063044]/10 px-3 py-1 text-xs font-600 text-[#063044] sm:inline-flex">Budget actif</span>}
             <YearControls />
           </div>
         </header>

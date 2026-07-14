@@ -176,15 +176,17 @@ class ReportEngine:
                     names[acct] = lbl.strip()
         return names
 
-    def build_report(self, bv, sheet, value_cols, account_col, label_col, stop_after=None, stop_at=None, exclude=None):
+    def build_report(self, bv, sheet, value_cols, account_col, label_col, stop_after=None, stop_at=None, exclude=None, exclude_range=None):
         """stop_after: préfixes de libellé après lesquels arrêter (inclus). stop_at: préfixes de libellé
         à partir desquels arrêter (exclu — la ligne et tout ce qui suit sont retirés).
-        exclude: préfixes de libellé de lignes individuelles à retirer (sans interrompre le rapport)."""
+        exclude: préfixes de libellé de lignes individuelles à retirer (sans interrompre le rapport).
+        exclude_range: liste de (préfixe_début, préfixe_fin) — retire toutes les lignes du début à la fin (inclus)."""
         comp = self.compute_all(bv)
         sd = self.sheets[sheet]
         ai = account_col
         out = []
         max_row = max(sd["rows"].keys())
+        skip_end = None
         for r in range(1, max_row + 1):
             cells = sd["rows"].get(r)
             if not cells:
@@ -212,6 +214,17 @@ class ReportEngine:
                 break
             if exclude and isinstance(lbl_str, str) and any(lbl_str.lower().startswith(s) for s in exclude):
                 continue
+            if exclude_range is not None and isinstance(lbl_str, str):
+                low = lbl_str.lower()
+                if skip_end is None:
+                    m = next((e for (s, e) in exclude_range if low.startswith(s)), None)
+                    if m is not None:
+                        skip_end = m
+                        continue
+                else:
+                    if low.startswith(skip_end):
+                        skip_end = None
+                    continue
             if label is None and not has_val:
                 continue
             out.append({"row": r, "account": acct, "label": lbl_str, "kind": kind, "values": values})

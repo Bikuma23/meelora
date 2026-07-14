@@ -1825,14 +1825,25 @@ async def acct_trend(user: dict = Depends(get_current_user)):
             rep = await _acct_report(p["year"], p["month"], "pnl")
         except Exception:
             continue
-        net_m = net_c = None
+        net_m = net_c = rev_m = rev_c = cogs_c = baiia_c = None
         for ln in rep["lines"]:
             n = _acct_norm(ln["label"])
+            if rev_c is None and n == "TOTAL DES REVENUS":
+                rev_m = ln["values"].get("reel"); rev_c = ln["values"].get("cumulatif")
+            if cogs_c is None and n.startswith("TOTAL") and "COUT DES MARCHANDISES VENDUES" in n:
+                cogs_c = ln["values"].get("cumulatif")
+            if baiia_c is None and "BAIIA" in n:
+                baiia_c = ln["values"].get("cumulatif")
             if n.startswith("BENEFICE NET") and "PERTE" in n and "SELON" not in n:
-                net_m = ln["values"].get("reel"); net_c = ln["values"].get("cumulatif"); break
+                net_m = ln["values"].get("reel"); net_c = ln["values"].get("cumulatif")
+        dep_m = round((rev_m or 0) - (net_m or 0), 2) if rev_m is not None and net_m is not None else None
+        dep_c = round((rev_c or 0) - (net_c or 0), 2) if rev_c is not None and net_c is not None else None
         out.append({"period": p["_id"], "year": p["year"], "month": p["month"],
                     "month_label": MONTHS_FR[p["month"]-1],
-                    "benefice_mois": net_m, "benefice_cumulatif": net_c})
+                    "benefice_mois": net_m, "benefice_cumulatif": net_c,
+                    "revenus_mois": rev_m, "revenus_cumulatif": rev_c,
+                    "depenses_mois": dep_m, "depenses_cumulatif": dep_c,
+                    "cogs_cumulatif": cogs_c, "baiia_cumulatif": baiia_c})
     return out
 
 @api.get("/")
@@ -1848,6 +1859,7 @@ BILAN_CFG = {"sheet": "Bilan Détaillé", "value_cols": {"cumulatif": "I"}, "acc
 PNL_CFG = {"sheet": "Resultats internes", "account_col": "C", "label_col": "D", "stop_after": None,
            "stop_at": ["pour tableau"],
            "exclude": ["bénéfice net (perte nette) - selon", "contrôle"],
+           "exclude_range": [("gestion demande", "marge brute - gd %")],
            "value_cols": {
                "reel": "E", "bud_rev2": "F", "ecart_rev2": "G", "bud_rev1": "I", "ecart_rev1": "J",
                "bud_ca": "L", "ecart_ca": "M", "reel_prec": "O",
@@ -2042,7 +2054,7 @@ async def _acct_report(year, month, kind):
     amap = await _account_map()
     bv = _bv_dict(bvdoc["accounts"], amap)
     cfg = BILAN_CFG if kind == "bilan" else PNL_CFG
-    lines = eng.build_report(bv, cfg["sheet"], cfg["value_cols"], cfg["account_col"], cfg["label_col"], cfg.get("stop_after"), cfg.get("stop_at"), cfg.get("exclude"))
+    lines = eng.build_report(bv, cfg["sheet"], cfg["value_cols"], cfg["account_col"], cfg["label_col"], cfg.get("stop_after"), cfg.get("stop_at"), cfg.get("exclude"), cfg.get("exclude_range"))
     return {"period": pk, "year": int(year), "month": int(month), "month_label": MONTHS_FR[month-1],
             "kind": kind, "value_cols": list(cfg["value_cols"].keys()), "col_groups": cfg.get("col_groups"),
             "col_toggle_groups": cfg.get("col_toggle_groups"),

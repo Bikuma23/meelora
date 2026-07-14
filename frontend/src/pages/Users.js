@@ -53,7 +53,7 @@ function UserForm({ open, onOpenChange, initial, onSubmit }) {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-          <Button data-testid="user-save-btn" className="bg-[#2563EB] hover:bg-[#2563EB]/90" onClick={submit}>Enregistrer</Button>
+          <Button data-testid="user-save-btn" className="bg-[#063044] hover:bg-[#063044]/90" onClick={submit}>Enregistrer</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -80,7 +80,7 @@ export default function Users() {
     <div className="space-y-4" data-testid="users-page">
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500"><b className="text-slate-800">{users.length}</b> compte(s) — l'admin gère les accès. Les utilisateurs ne peuvent pas modifier un budget verrouillé.</p>
-        <Button data-testid="add-user-btn" className="gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90" onClick={() => setDialog({ open: true, item: null })}><Plus size={16} /> Ajouter</Button>
+        <Button data-testid="add-user-btn" className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90" onClick={() => setDialog({ open: true, item: null })}><Plus size={16} /> Ajouter</Button>
       </div>
       <div className="card overflow-x-auto">
         <table className="w-full text-sm">
@@ -96,13 +96,13 @@ export default function Users() {
                 <td className="px-4 py-2.5 font-600">{u.name}{u.id === user?.id && <span className="ml-2 text-[10px] text-slate-400">(vous)</span>}</td>
                 <td className="px-4 py-2.5 font-mono-data text-[13px] text-slate-600">{u.email}</td>
                 <td className="px-4 py-2.5">
-                  <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-700 uppercase ${u.role === "admin" ? "bg-[#2563EB] text-white" : u.role === "editor" ? "bg-[#0E9488] text-white" : "bg-slate-200 text-slate-600"}`}>
+                  <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-700 uppercase ${u.role === "admin" ? "bg-[#063044] text-white" : u.role === "editor" ? "bg-[#0E9488] text-white" : "bg-slate-200 text-slate-600"}`}>
                     {u.role === "admin" ? <ShieldCheck size={11} /> : <UserIcon size={11} />}{ROLE_LABEL[u.role]}
                   </span>
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex justify-end gap-1">
-                    <button data-testid={`edit-user-${u.email}`} onClick={() => setDialog({ open: true, item: u })} className="p-1.5 text-slate-400 hover:text-[#2563EB]"><Pencil size={15} /></button>
+                    <button data-testid={`edit-user-${u.email}`} onClick={() => setDialog({ open: true, item: u })} className="p-1.5 text-slate-400 hover:text-[#063044]"><Pencil size={15} /></button>
                     <button data-testid={`delete-user-${u.email}`} onClick={() => del(u)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
                   </div>
                 </td>

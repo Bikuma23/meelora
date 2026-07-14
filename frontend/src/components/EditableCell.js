@@ -22,7 +22,7 @@ export function EditableCell({ value, display, canEdit, onSave, step = "0.01", t
       <input ref={ref} data-testid={testId ? `${testId}-input` : undefined} type="number" step={step} value={val}
         onChange={(e) => setVal(e.target.value)} onBlur={commit} onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } if (e.key === "Escape") setEditing(false); }}
-        className="w-24 rounded border border-[#2563EB] bg-blue-50 px-1.5 py-0.5 text-right font-mono-data text-sm outline-none" />
+        className="w-24 rounded border border-[#063044] bg-blue-50 px-1.5 py-0.5 text-right font-mono-data text-sm outline-none" />
     );
   }
   return (

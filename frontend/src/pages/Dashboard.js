@@ -8,7 +8,7 @@ import {
 } from "recharts";
 import { Users, DollarSign, Wallet, TrendingUp, Calendar, PieChart as PieIcon, BarChart3, Layers, Scale } from "lucide-react";
 
-const TEAL = "#14B8A6", NAVY = "#0E1526", ORANGE = "#F59E0B", BLUE = "#2563EB", VIOLET = "#8B5CF6";
+const TEAL = "#F8A942", NAVY = "#0E1526", ORANGE = "#F59E0B", BLUE = "#063044", VIOLET = "#8B5CF6";
 const TYPE_COLORS = { "CCQ": BLUE, "Régulier temps plein": TEAL, "Stagiaire": ORANGE };
 const SEX_CATS = ["Masculin", "Féminin", "Autre", "Non spécifié"];
 const SEX_COLORS = { "Masculin": BLUE, "Féminin": "#EC4899", "Autre": TEAL, "Non spécifié": "#94A3B8" };
@@ -105,7 +105,7 @@ function Comparatif({ cmp }) {
   const dCA = cmp.actuel.masse ? ((cmp.ca.masse - cmp.actuel.masse) / cmp.actuel.masse) * 100 : 0;
   return (
     <div className="card p-6" data-testid="comparatif-card">
-      <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><Scale size={16} className="text-[#2563EB]" /> Comparatif des masses salariales — {cmp.year}</h3>
+      <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><Scale size={16} className="text-[#063044]" /> Comparatif des masses salariales — {cmp.year}</h3>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <div className="grid grid-cols-2 gap-3">
           {rows.map(([lbl, val, c, sub]) => (
@@ -130,7 +130,7 @@ function Comparatif({ cmp }) {
               <Bar dataKey="Revue 2" fill={ORANGE} radius={[3, 3, 0, 0]} maxBarSize={26} />
             </BarChart>
           </ResponsiveContainer>
-          <p className="mt-2 text-[11px] text-slate-500">Budget CA vs Salaires actuels : <b className="text-[#2563EB]">{dCA >= 0 ? "+" : ""}{dCA.toFixed(1)}%</b></p>
+          <p className="mt-2 text-[11px] text-slate-500">Budget CA vs Salaires actuels : <b className="text-[#063044]">{dCA >= 0 ? "+" : ""}{dCA.toFixed(1)}%</b></p>
         </div>
       </div>
     </div>
@@ -141,7 +141,7 @@ function Evolution({ evo }) {
   const data = evo.years.map((y) => ({ year: String(y.year), "Salaires actuels": y.actuel, "Budget CA": y.ca, "Revue 1": y.revue1, "Revue 2": y.revue2 }));
   return (
     <div className="card p-6" data-testid="evolution-card">
-      <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><TrendingUp size={16} className="text-[#14B8A6]" /> Évolution pluriannuelle de la masse salariale</h3>
+      <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><TrendingUp size={16} className="text-[#F8A942]" /> Évolution pluriannuelle de la masse salariale</h3>
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={data} margin={{ left: 4, right: 8 }} barGap={3}>
           <CartesianGrid stroke="#EEF2F7" vertical={false} />
@@ -160,7 +160,7 @@ function Evolution({ evo }) {
 
 function EmployeesKpi({ k }) {
   const sx = k.sex_counts || {};
-  const typeRows = [["CCQ", k.ccq_count, "#2563EB"], ["Non-CCQ", k.non_ccq_count, "#64748B"], ["Stagiaire", k.stagiaire_count, "#F59E0B"]];
+  const typeRows = [["CCQ", k.ccq_count, "#063044"], ["Non-CCQ", k.non_ccq_count, "#64748B"], ["Stagiaire", k.stagiaire_count, "#F59E0B"]];
   const sexRows = [["Masculin", sx.Masculin], ["Féminin", sx.Féminin], ["Autre", sx.Autre], ["Non spéc.", sx["Non spécifié"]]];
   return (
     <div className="card p-5" data-testid="kpi-employes">
@@ -269,7 +269,7 @@ function DashboardBody({ b }) {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="card p-6 lg:col-span-2" data-testid="chart-departments">
-          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><BarChart3 size={16} className="text-[#2563EB]" /> Budget par département</h3>
+          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><BarChart3 size={16} className="text-[#063044]" /> Budget par département</h3>
           <ResponsiveContainer width="100%" height={Math.max(240, b.by_department.length * 46)}>
             <BarChart data={b.by_department} layout="vertical" margin={{ left: 8, right: 16 }} barGap={2}>
               <CartesianGrid stroke="#EEF2F7" horizontal={false} />
@@ -287,7 +287,7 @@ function DashboardBody({ b }) {
         </div>
 
         <div className="card p-6" data-testid="chart-types">
-          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><PieIcon size={16} className="text-[#2563EB]" /> Types d'emploi</h3>
+          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><PieIcon size={16} className="text-[#063044]" /> Types d'emploi</h3>
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie data={b.by_type} dataKey="total" nameKey="type" cx="50%" cy="50%" innerRadius={58} outerRadius={92} paddingAngle={2} isAnimationActive={false}>
@@ -311,7 +311,7 @@ function DashboardBody({ b }) {
 
       <div className="card p-6" data-testid="chart-monthly">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-sm font-700"><Calendar size={16} className="text-[#2563EB]" /> Ventilation mensuelle — paie hebdomadaire réelle</h3>
+          <h3 className="flex items-center gap-2 text-sm font-700"><Calendar size={16} className="text-[#063044]" /> Ventilation mensuelle — paie hebdomadaire réelle</h3>
           <span className="font-mono-data text-xs text-slate-500">Total avec charges : <b className="text-slate-800">{fmtCAD(b.totals.budget_total)}</b></span>
         </div>
         <div className="mb-4 overflow-x-auto">
@@ -357,7 +357,7 @@ function DashboardBody({ b }) {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="card p-6" data-testid="decomposition">
-          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><Layers size={16} className="text-[#2563EB]" /> Décomposition du budget</h3>
+          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><Layers size={16} className="text-[#063044]" /> Décomposition du budget</h3>
           <div className="space-y-3.5">
             {b.decomposition.map((d) => (
               <div key={d.label}>
@@ -374,7 +374,7 @@ function DashboardBody({ b }) {
         </div>
 
         <div className="card p-6" data-testid="top5">
-          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><TrendingUp size={16} className="text-[#2563EB]" /> Top 5 — Budget le plus élevé</h3>
+          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><TrendingUp size={16} className="text-[#063044]" /> Top 5 — Budget le plus élevé</h3>
           <div className="space-y-3">
             {b.top5.map((t) => (
               <div key={t.rank} className="flex items-center gap-3">

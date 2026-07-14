@@ -11,7 +11,7 @@ const EMP_SORT = { employee_number: "#", title: "Titre", name: "Nom", department
 const BUD_SORT = { employee_number: "#", name: "Nom", department: "Dépt", employment_type: "Type", new_salary: "Nouveau salaire", vacation: "Vacances", primes_total: "Primes", salaire_brut: "Salaire brut total", avantages: "Avantages", total_budgeted: "Coût total" };
 const DIR = { asc: "croissant", desc: "décroissant" };
 const DEFAULTS = { theme: "light", default_year: null, budget_scenario: "ca", employees_sort: { key: "employee_number", dir: "asc" }, budget_sort: { key: "employee_number", dir: "asc" } };
-const AVATAR_COLORS = ["#14B8A6", "#2563EB", "#8B5CF6", "#F59E0B", "#EC4899", "#EF4444", "#0EA5E9", "#64748B"];
+const AVATAR_COLORS = ["#F8A942", "#063044", "#8B5CF6", "#F59E0B", "#EC4899", "#EF4444", "#0EA5E9", "#64748B"];
 
 const sortLabel = (map, s) => s?.key ? `${map[s.key] || s.key} · ${DIR[s.dir] || s.dir}` : "—";
 
@@ -42,7 +42,7 @@ export default function Preferences() {
 
   if (!prefs) return <p className="font-mono-data text-sm text-slate-500">Chargement…</p>;
   const theme = prefs.theme === "dark" ? "dark" : "light";
-  const avatarColor = prefs.avatar_color || "#14B8A6";
+  const avatarColor = prefs.avatar_color || "#F8A942";
 
   return (
     <div className="max-w-3xl space-y-5" data-testid="preferences-page">
@@ -51,7 +51,7 @@ export default function Preferences() {
         <div>
           <div className="flex items-center gap-2">
             <p className="font-700">{user?.name}</p>
-            <span className="rounded-full px-2 py-0.5 text-[10px] font-700 uppercase" style={{ backgroundColor: (user?.role === "admin" ? "#2563EB" : user?.role === "editor" ? "#0E9488" : "#64748B") + "22", color: user?.role === "admin" ? "#2563EB" : user?.role === "editor" ? "#0E9488" : "#64748B" }} data-testid="profile-role-badge">{user?.role === "admin" ? "Administrateur" : user?.role === "editor" ? "Éditeur" : "Utilisateur"}</span>
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-700 uppercase" style={{ backgroundColor: (user?.role === "admin" ? "#063044" : user?.role === "editor" ? "#0E9488" : "#64748B") + "22", color: user?.role === "admin" ? "#063044" : user?.role === "editor" ? "#0E9488" : "#64748B" }} data-testid="profile-role-badge">{user?.role === "admin" ? "Administrateur" : user?.role === "editor" ? "Éditeur" : "Utilisateur"}</span>
           </div>
           <p className="text-xs text-slate-500">{user?.email}</p>
         </div>
@@ -87,7 +87,7 @@ export default function Preferences() {
 
       <div className="card p-5" data-testid="prefs-summary-card">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-sm font-700"><SlidersHorizontal size={16} className="text-[#2563EB]" /> Mes réglages enregistrés</h3>
+          <h3 className="flex items-center gap-2 text-sm font-700"><SlidersHorizontal size={16} className="text-[#063044]" /> Mes réglages enregistrés</h3>
           <Button data-testid="reset-prefs-btn" variant="outline" size="sm" className="gap-1.5" onClick={reset}><RotateCcw size={14} /> Réinitialiser</Button>
         </div>
         <div className="divide-y divide-slate-100">

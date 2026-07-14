@@ -3,8 +3,8 @@ import { api } from "../lib/api";
 import { ScrollText, Plus, Pencil, Trash2 } from "lucide-react";
 
 const ACTION_STYLE = {
-  "Créer": { bg: "#14B8A61a", color: "#0E9488", icon: Plus },
-  "Modifier": { bg: "#2563EB1a", color: "#2563EB", icon: Pencil },
+  "Créer": { bg: "#F8A9421a", color: "#0E9488", icon: Plus },
+  "Modifier": { bg: "#0630441a", color: "#063044", icon: Pencil },
   "Supprimer": { bg: "#EF44441a", color: "#EF4444", icon: Trash2 },
 };
 

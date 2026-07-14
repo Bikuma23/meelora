@@ -89,7 +89,7 @@ export default function EmployeeDetailDialog({ open, onOpenChange, employee, dep
 
           <div className="space-y-4">
             <Section title="Rémunération">
-              <Row label="Salaire annuel actuel" value={fmtCAD(e.current_annual_salary)} accent="#2563EB" />
+              <Row label="Salaire annuel actuel" value={fmtCAD(e.current_annual_salary)} accent="#063044" />
               <Row label="Taux de vacances" value={`${(e.vacation_rate * 100).toFixed(2)} %`} />
               <Row label="Jours maladie / personnels" value={e.sick_personal_days} />
               <Row label="Jours fériés" value={e.holiday_days} />
@@ -117,7 +117,7 @@ export default function EmployeeDetailDialog({ open, onOpenChange, employee, dep
               </Button>
             )}
             {canEdit && (
-              <Button data-testid="employee-detail-edit-btn" onClick={() => { onOpenChange(false); onEdit(e); }} className="flex-1 gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90">
+              <Button data-testid="employee-detail-edit-btn" onClick={() => { onOpenChange(false); onEdit(e); }} className="flex-1 gap-1.5 bg-[#063044] hover:bg-[#063044]/90">
                 <Pencil size={15} /> Modifier cet employé
               </Button>
             )}

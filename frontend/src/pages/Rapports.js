@@ -16,7 +16,7 @@ const VENTIL = [
 const SCEN = [["actuel", "Salaires actuels"], ["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 const TYPES = ["all", "CCQ", "Régulier temps plein", "Régulier temps partiel", "Stagiaire"];
 const TABS = [["synthese", "Synthèse", LayoutDashboard], ["pnl", "État des résultats (P&L)", BarChart3], ["classe", "Masse par classe", Layers], ["compare", "Comparatif scénarios", GitCompareArrows], ["custom", "Constructeur personnalisé", Table2]];
-const COLORS = ["#2563EB", "#14B8A6", "#F59E0B", "#EC4899", "#8B5CF6", "#EF4444", "#0EA5E9"];
+const COLORS = ["#063044", "#F8A942", "#F59E0B", "#EC4899", "#8B5CF6", "#EF4444", "#0EA5E9"];
 const fmtK = (v) => `${Math.round(v / 1000)}k`;
 
 export default function Rapports() {
@@ -98,7 +98,7 @@ export default function Rapports() {
       <div className="flex flex-wrap gap-2" data-testid="report-tabs">
         {TABS.map(([k, l, Icon]) => (
           <button key={k} data-testid={`tab-${k}`} onClick={() => setTab(k)}
-            className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-600 transition-colors ${tab === k ? "bg-[#2563EB] text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
+            className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-600 transition-colors ${tab === k ? "bg-[#063044] text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
             <Icon size={15} /> {l}
           </button>
         ))}
@@ -142,7 +142,7 @@ export default function Rapports() {
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={pnl.months.map((m, i) => ({ mois: m, total: pnl.totals.monthly[i] }))}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="mois" tick={{ fontSize: 11 }} /><YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v) => fmtCAD(v)} /><Bar dataKey="total" fill="#2563EB" radius={[4, 4, 0, 0]} />
+                  <Tooltip formatter={(v) => fmtCAD(v)} /><Bar dataKey="total" fill="#063044" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
               <div className="mt-4 overflow-x-auto">
@@ -249,7 +249,7 @@ export default function Rapports() {
             )}
             <div className="mt-3 flex items-end gap-2">
               <input data-testid="template-name" value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder={isAdmin ? "Nom du modèle (ex. Masse par département)" : "Enregistrement réservé aux administrateurs"} disabled={!isAdmin}
-                className="h-9 flex-1 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[#2563EB] disabled:bg-slate-50 disabled:text-slate-400" />
+                className="h-9 flex-1 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[#063044] disabled:bg-slate-50 disabled:text-slate-400" />
               <Button data-testid="save-template-btn" onClick={saveTemplate} disabled={!isAdmin} className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Save size={15} /> Enregistrer le modèle</Button>
             </div>
           </div>
@@ -259,7 +259,7 @@ export default function Rapports() {
             <div className="mt-2 flex flex-wrap gap-2">
               {allCols.map((c) => (
                 <button key={c.key} data-testid={`col-${c.key}`} onClick={() => toggleCol(c.key)}
-                  className={`rounded-full border px-3 py-1 text-xs font-600 ${cols.includes(c.key) ? "border-[#2563EB] bg-[#2563EB]/10 text-[#2563EB]" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>{c.label}</button>
+                  className={`rounded-full border px-3 py-1 text-xs font-600 ${cols.includes(c.key) ? "border-[#063044] bg-[#063044]/10 text-[#063044]" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>{c.label}</button>
               ))}
             </div>
             <div className="mt-4 flex flex-wrap items-end gap-3">
@@ -269,7 +269,7 @@ export default function Rapports() {
               <div><label className="text-[11px] uppercase text-slate-500">Regrouper par</label>
                 <Select value={groupBy || "none"} onValueChange={(v) => setGroupBy(v === "none" ? "" : v)}><SelectTrigger className="mt-1 w-48" data-testid="custom-group"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="none">Aucun regroupement</SelectItem><SelectItem value="department">Département</SelectItem><SelectItem value="employment_type">Type</SelectItem><SelectItem value="security_class">Classe de sécurité</SelectItem></SelectContent></Select></div>
-              <Button data-testid="run-custom-btn" onClick={runCustom} className="gap-2 bg-[#2563EB] hover:bg-[#2563EB]/90"><Table2 size={15} /> Générer</Button>
+              <Button data-testid="run-custom-btn" onClick={runCustom} className="gap-2 bg-[#063044] hover:bg-[#063044]/90"><Table2 size={15} /> Générer</Button>
               <Button data-testid="custom-excel-btn" variant="outline" disabled={busy} onClick={() => dl("custom-excel", "rapport_perso", { columns: cols.join(","), employment_type: empType, group_by: groupBy })} className="gap-2"><FileSpreadsheet size={15} /> Excel</Button>
             </div>
           </div>

@@ -283,6 +283,14 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] Vérifié testing_agent iteration_26 (frontend 100 %) : en-têtes groupées, colonnes an. préc. non nulles (compte 4004010 : Réel an. préc. 111 527,96 · Cumul. an. préc. 363 507,30), exports Excel OK, tendance + sélecteur période + cascade + badge masqué confirmés.
 - [x] **Masquage des colonnes P&L par regroupement** (style Excel) : chips repliables +/− (`acct-colgroup-{id}`) pour masquer/afficher chaque groupe de colonnes — « Budget Rév-2 », « Budget Rév-1 », « Budget CA », « Année précédente » (masque les variantes mois + cumulatif). Réel et Réel à date toujours visibles. En-têtes groupées Mois/Cumulatif et séparateur recalculés dynamiquement. Export Excel reste complet (toutes colonnes). Uniquement pour le P&L (`col_toggle_groups`). Remplace l'ancien sélecteur Mois/Cumulatif (retiré). Vérifié visuellement.
 
+### Refonte design pro + ajustements dashboard/P&L (2026-06-14)
+- [x] **Refonte design professionnelle** (inspirée d'un dashboard financier) : polices IBM Plex Sans + Cabinet Grotesk (titres) + JetBrains Mono (données) ; sidebar blanche avec actif teal + barre d'accent ; header glass sticky ; page de connexion split-screen (panneau marque + formulaire) ; cartes KPI premium avec sparklines + flèches de tendance ; `design_guidelines.json` généré par l'agent design.
+- [x] **Palette de marque** : prédominant **#063044**, accent **#F8A942** (swap global depuis teal/corail). Graphiques recolorés (Réel=#063044, Budget CA=#F8A942).
+- [x] **Dashboard KPI** : cartes Revenus / **COGS** (ligne « TOTAL - COÛT DES MARCHANDISES VENDUES » cumulatif) / **BAIIA** (ligne « BÉNÉFICE AVANT INTÉRÊTS… (BAIIA) » cumulatif) / Bénéfice net — toutes en cumulatif, via `/api/acct/trend` étendu (cogs_cumulatif, baiia_cumulatif).
+- [x] **P&L** : suppression de la section GESTION DEMANDE (de « GESTION DEMANDE » à « Marge Brute - GD % ») via nouveau param `exclude_range` de `build_report`.
+- [x] **En-têtes figées** (item 8) : header d'app déjà sticky ; en-têtes des tables Bilan/P&L figées (thead sticky dans conteneur `overflow-auto max-h`).
+- [ ] **À FAIRE — Bilan sommaire, Résultat sommaire & formatage exact Excel (items 2/3/4)** : le fichier « Etats Financiers Juin 2026.xlsx » contient les feuilles « Bilan Sommaire » et « Resultats sommaires » (formules référençant les feuilles détaillées de CE fichier). Nécessite : importer ces 2 feuilles dans le moteur + ré-importer ce fichier comme modèle actif (numérotation de lignes cohérente), nouveaux endpoints + onglets front (Bilan sommaire / Résultat sommaire), formatage visuel fidèle au modèle Excel.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

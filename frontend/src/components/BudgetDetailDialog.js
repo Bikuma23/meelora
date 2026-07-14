@@ -71,7 +71,7 @@ export default function BudgetDetailDialog({ open, onOpenChange, line, year, sce
               <div className="divide-y divide-slate-100">
                 <Row label="Salaire de base (actuel)" value={fmtCAD(line.base_salary)} />
                 <Row label="Augmentation" value={`${(line.augmentation * 100).toFixed(2)} %`} />
-                <Row label="Nouveau salaire" value={fmtCAD(line.new_salary)} strong accent="#2563EB" />
+                <Row label="Nouveau salaire" value={fmtCAD(line.new_salary)} strong accent="#063044" />
                 <Row label="Taux horaire (réf. 2080 h)" value={`${line.taux_horaire} $/h`} />
                 {line.salary_change_date && <Row label="Changement de salaire" value={new Date(line.salary_change_date).toLocaleDateString("fr-CA")} accent="#B45309" />}
                 <Row label="Vacances" value={fmtCAD(line.vacation)} />
@@ -100,7 +100,7 @@ export default function BudgetDetailDialog({ open, onOpenChange, line, year, sce
               <div className="divide-y divide-slate-100">
                 <Row label="RRQ" value={fmtCAD(line.rrq)} /><Row label="AE" value={fmtCAD(line.ae)} />
                 <Row label="RQAP" value={fmtCAD(line.rqap)} /><Row label="FSS" value={fmtCAD(line.fss)} />
-                {ccq && <Row label="Avantages CCQ (32.33%)" value={fmtCAD(line.ccq_avantages)} accent="#2563EB" />}
+                {ccq && <Row label="Avantages CCQ (32.33%)" value={fmtCAD(line.ccq_avantages)} accent="#063044" />}
                 <Row label="CSST" value={fmtCAD(line.csst)} />
                 {!ccq && <Row label="RPDB / REER" value={fmtCAD(line.reer)} />}
                 {!ccq && <Row label="Assu. collectives" value={fmtCAD(line.assurance)} />}
@@ -109,14 +109,14 @@ export default function BudgetDetailDialog({ open, onOpenChange, line, year, sce
             </div>
             <div className="flex items-center justify-between rounded-xl bg-[#0E1526] px-4 py-3">
               <span className="text-xs font-700 uppercase tracking-widest text-white">Masse salariale totale</span>
-              <span className="font-mono-data text-lg font-700 text-[#14B8A6]" data-testid="detail-total">{fmtCAD(line.total_cost)}</span>
+              <span className="font-mono-data text-lg font-700 text-[#F8A942]" data-testid="detail-total">{fmtCAD(line.total_cost)}</span>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button data-testid="detail-pdf-btn" variant="outline" onClick={exportPdf} disabled={busy} className="flex-1 gap-1.5">
                 <FileDown size={15} /> {busy ? "Génération…" : "Exporter en PDF"}
               </Button>
               {canEdit && (
-                <Button data-testid="detail-edit-btn" onClick={() => { onOpenChange(false); onEdit(line); }} className="flex-1 gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90">
+                <Button data-testid="detail-edit-btn" onClick={() => { onOpenChange(false); onEdit(line); }} className="flex-1 gap-1.5 bg-[#063044] hover:bg-[#063044]/90">
                   <Pencil size={15} /> Modifier cette fiche
                 </Button>
               )}

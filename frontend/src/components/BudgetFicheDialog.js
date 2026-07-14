@@ -256,7 +256,7 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
                 </div>
               )}
               {!isCCQ && <p className="border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">Employé non-CCQ : primes CCQ (garde, HALO) non applicables. BONI, REER, assurance collective et Alloc. sécurité s'appliquent.</p>}
-              {isCCQ && <p className="border-t border-slate-200 px-3 py-2 text-[11px] text-[#2563EB]">Employé CCQ : RPDB, BONI et Assu. collectives non applicables. Avantages CCQ appliqués.</p>}
+              {isCCQ && <p className="border-t border-slate-200 px-3 py-2 text-[11px] text-[#063044]">Employé CCQ : RPDB, BONI et Assu. collectives non applicables. Avantages CCQ appliqués.</p>}
             </div>
           </div>
 
@@ -272,7 +272,7 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
                 )}
               </div>
               <div className="divide-y divide-slate-100">
-                <CalcRow label="Nouveau salaire" mkey="new_salary" value={p.new_salary} editable={manualOn} manual={manual} setManualField={setManualField} strong accent="#2563EB" testId="manual-new_salary" />
+                <CalcRow label="Nouveau salaire" mkey="new_salary" value={p.new_salary} editable={manualOn} manual={manual} setManualField={setManualField} strong accent="#063044" testId="manual-new_salary" />
                 <Row label="Taux horaire (réf. 2080 h)" value={`${p.taux_horaire} $/h`} />
                 <CalcRow label="Vacances" mkey="vacation" value={p.vacation} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-vacation" />
                 {isCCQ && <CalcRow label={`Prime (${p.prime_type})`} mkey="prime_amount" value={p.prime_amount} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-prime_amount" />}
@@ -293,7 +293,7 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
                 <CalcRow label="AE" mkey="ae" value={p.ae} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-ae" />
                 <CalcRow label="RQAP" mkey="rqap" value={p.rqap} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-rqap" />
                 <CalcRow label="FSS" mkey="fss" value={p.fss} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-fss" />
-                {isCCQ && <CalcRow label="Avantages CCQ (32.33%)" mkey="ccq_avantages" value={p.ccq_avantages} editable={manualOn} manual={manual} setManualField={setManualField} accent="#2563EB" testId="manual-ccq_avantages" />}
+                {isCCQ && <CalcRow label="Avantages CCQ (32.33%)" mkey="ccq_avantages" value={p.ccq_avantages} editable={manualOn} manual={manual} setManualField={setManualField} accent="#063044" testId="manual-ccq_avantages" />}
                 <CalcRow label="CSST" mkey="csst" value={p.csst} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-csst" />
                 {!isCCQ && <CalcRow label="RPDB / REER" mkey="reer" value={p.reer} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-reer" />}
                 {!isCCQ && <CalcRow label="Assu. collectives" mkey="assurance" value={p.assurance} editable={manualOn} manual={manual} setManualField={setManualField} testId="manual-assurance" />}
@@ -306,7 +306,7 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
               </div>
               <div className="mt-1 flex items-center justify-between">
                 <span className="text-xs font-700 uppercase tracking-widest text-white">Total budgété{p.prorated ? ` · pro-rata ${p.months_active} mois` : ""}</span>
-                <span className="font-mono-data text-lg font-700 text-[#14B8A6]" data-testid="fiche-total">{fmtCAD(p.total_budgeted)}</span>
+                <span className="font-mono-data text-lg font-700 text-[#F8A942]" data-testid="fiche-total">{fmtCAD(p.total_budgeted)}</span>
               </div>
             </div>
           </div>
@@ -342,7 +342,7 @@ export default function BudgetFicheDialog({ open, onOpenChange, line, year, scen
           <Button variant="outline" data-testid="fiche-reset-btn" onClick={reset} disabled={locked} className="gap-1.5"><RotateCcw size={15} /> Réinitialiser</Button>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Fermer</Button>
-            <Button data-testid="fiche-save-btn" onClick={save} disabled={locked} className="gap-1.5 bg-[#2563EB] hover:bg-[#2563EB]/90"><Save size={15} /> Enregistrer</Button>
+            <Button data-testid="fiche-save-btn" onClick={save} disabled={locked} className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90"><Save size={15} /> Enregistrer</Button>
           </div>
         </DialogFooter>
       </DialogContent>
