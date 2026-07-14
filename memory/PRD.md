@@ -277,6 +277,11 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Graphique en cascade (waterfall)** sur la page Flux de trésorerie : Ouverture → Exploitation → Investissement → Financement → Clôture, barres flottantes via `dataKey="range"` ([bas, haut]) + `Cell` (vert=positif, rouge=négatif, gris=ouverture, bleu=clôture). Tooltip affiche le montant réel de chaque étape.
 - [x] **Sélecteur mois/année au Tableau de bord Comptabilité** : `PeriodPicker` (« Période affichée ») pilote la carte Statut (verrou/balance/nouveaux comptes) et le graphique Réel vs Budget ; re-fetch `GET /api/acct/summary` par période. KPI globaux (modèle, nb périodes, dernier mois) inchangés. Vérifié visuellement (bascule Juin↔Mai met à jour Statut + graphique).
 
+### Comptabilité — P&L complet (Excel fidèle) + tendance (2026-06-14)
+- [x] **P&L : colonnes conformes au modèle Excel** — 16 colonnes en 2 blocs avec en-têtes groupées « Mois » et « Cumulatif (exercice à date) ». Mois : Réel · Bud Rév-2/Écart · Bud Rév-1/Écart · Bud CA/Écart · **Réel an. préc.** (col O, idx BV 7). Cumulatif : Réel à date · **Bud Rév-2/Écart cum.** (R/S) · **Bud Rév-1/Écart cum.** (U/V) · **Bud CA/Écart cum.** (X/Y) · **Cumul. an. préc.** (col AA, idx BV 13). Clés rétro-compatibles (reel, bud_ca, bud_rev1, cumulatif conservées pour `acct_summary`). Séparateur visuel entre les 2 blocs (front + en-têtes groupées). Export Excel = 18 colonnes libellées. `col_groups` renvoyé par `_acct_report`.
+- [x] **Graphique de tendance « Évolution du bénéfice net »** (Tableau de bord Comptabilité) : 2 courbes (mensuel + cumulatif) sur tous les mois chargés, via nouvel endpoint `GET /api/acct/trend` (bénéfice net par période). Affiché si ≥2 mois.
+- [x] Vérifié testing_agent iteration_26 (frontend 100 %) : en-têtes groupées, colonnes an. préc. non nulles (compte 4004010 : Réel an. préc. 111 527,96 · Cumul. an. préc. 363 507,30), exports Excel OK, tendance + sélecteur période + cascade + badge masqué confirmés.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
