@@ -176,9 +176,10 @@ class ReportEngine:
                     names[acct] = lbl.strip()
         return names
 
-    def build_report(self, bv, sheet, value_cols, account_col, label_col, stop_after=None, stop_at=None):
+    def build_report(self, bv, sheet, value_cols, account_col, label_col, stop_after=None, stop_at=None, exclude=None):
         """stop_after: préfixes de libellé après lesquels arrêter (inclus). stop_at: préfixes de libellé
-        à partir desquels arrêter (exclu — la ligne et tout ce qui suit sont retirés)."""
+        à partir desquels arrêter (exclu — la ligne et tout ce qui suit sont retirés).
+        exclude: préfixes de libellé de lignes individuelles à retirer (sans interrompre le rapport)."""
         comp = self.compute_all(bv)
         sd = self.sheets[sheet]
         ai = account_col
@@ -209,6 +210,8 @@ class ReportEngine:
             lbl_str = (label or "").strip() if isinstance(label, str) else label
             if stop_at and isinstance(lbl_str, str) and any(lbl_str.lower().startswith(s) for s in stop_at):
                 break
+            if exclude and isinstance(lbl_str, str) and any(lbl_str.lower().startswith(s) for s in exclude):
+                continue
             if label is None and not has_val:
                 continue
             out.append({"row": r, "account": acct, "label": lbl_str, "kind": kind, "values": values})

@@ -375,5 +375,110 @@ export function AcctComingSoon({ label }) {
   );
 }
 
-export function AcctCashflow() { return <AcctComingSoon label="Flux de trésorerie" />; }
+export function AcctCashflow() { return <CashflowView />; }
 export function AcctAudit() { return <AcctComingSoon label="Rapports d'audit" />; }
+
+// ---------- Flux de trésorerie (méthode indirecte) ----------
+function CashflowView() {
+  const { periods } = usePeriods();
+  const [closeP, setCloseP] = useState("");
+  const [openP, setOpenP] = useState("");
+  const [rep, setRep] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!periods.length) return;
+    if (!closeP) setCloseP(periods[0].id);
+    if (!openP) setOpenP((periods[1] || periods[0]).id);
+  }, [periods, closeP, openP]);
+
+  useEffect(() => {
+    if (!openP || !closeP || openP === closeP) { setRep(null); return; }
+    const [oy, om] = openP.split("-").map(Number);
+    const [cy, cm] = closeP.split("-").map(Number);
+    setLoading(true); setRep(null);
+    api.acctCashflow({ open_year: oy, open_month: om, close_year: cy, close_month: cm })
+      .then(setRep).catch((e) => toast.error(e.response?.data?.detail || "Flux indisponible")).finally(() => setLoading(false));
+  }, [openP, closeP]);
+
+  const exportExcel = async () => {
+    const [oy, om] = openP.split("-").map(Number);
+    const [cy, cm] = closeP.split("-").map(Number);
+    try {
+      const blob = await api.acctCashflowExcel({ open_year: oy, open_month: om, close_year: cy, close_month: cm });
+      const url = URL.createObjectURL(blob); const a = document.createElement("a");
+      a.href = url; a.download = `flux_tresorerie_${openP}_${closeP}.xlsx`; a.click(); URL.revokeObjectURL(url);
+      toast.success("Export téléchargé");
+    } catch (e) { toast.error(e.response?.data?.detail || "Export impossible"); }
+  };
+
+  const Row = ({ label, value, kind, indent }) => (
+    <tr className={`border-b border-slate-50 ${kind === "section" ? "bg-slate-100 font-800 text-slate-800" : kind === "subtotal" ? "bg-slate-50 font-700" : kind === "net" ? "border-t-2 border-slate-300 font-800" : ""}`}>
+      <td className={`px-4 py-2 text-left ${indent ? "pl-9 font-sans text-slate-600" : "font-sans"}`}>{label}</td>
+      <td className="px-4 py-2 text-right font-mono-data" style={{ color: value != null && value < 0 ? "#DC2626" : undefined }}>
+        {value == null ? "" : money(value)}
+      </td>
+    </tr>
+  );
+
+  return (
+    <div className="space-y-4" data-testid="acct-cashflow">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <label className="block text-xs font-600 text-slate-500">Ouverture (solde de départ)</label>
+            <div className="mt-1"><PeriodPicker periods={periods} value={openP} onChange={setOpenP} /></div>
+          </div>
+          <div>
+            <label className="block text-xs font-600 text-slate-500">Clôture (période courante)</label>
+            <div className="mt-1"><PeriodPicker periods={periods} value={closeP} onChange={setCloseP} /></div>
+          </div>
+        </div>
+        <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-cashflow-export" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
+      </div>
+      <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs text-sky-800" data-testid="acct-cashflow-hint">
+        <Info size={15} className="mt-0.5 shrink-0" /> Méthode indirecte. Pour un flux « depuis le début de l'exercice », choisissez comme ouverture la BV de fin d'exercice précédent. Les variations = solde de clôture − solde d'ouverture.
+      </div>
+      {rep && !rep.locked && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-600 text-amber-700">
+          <AlertTriangle size={16} /> Données provisoires — le mois de clôture n'est pas verrouillé.
+        </div>
+      )}
+      <div className="card overflow-hidden">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+          <h3 className="text-sm font-700">État des flux de trésorerie{rep ? ` — du ${rep.open_label} au ${rep.close_label}` : ""}</h3>
+          {rep && <span className={`inline-flex items-center gap-1 text-xs font-600 ${rep.balanced ? "text-emerald-600" : "text-red-600"}`} data-testid="acct-cashflow-reconcile">{rep.balanced ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}{rep.balanced ? "Réconcilié" : `Écart ${money(rep.ecart)}`}</span>}
+        </div>
+        {loading ? <p className="px-5 py-8 text-sm text-slate-500">Chargement…</p> : !rep ? <p className="px-5 py-8 text-sm text-slate-400">Sélectionnez deux périodes différentes avec des BV chargées.</p> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
+                <th className="px-4 py-2.5 text-left font-600">Poste</th>
+                <th className="px-4 py-2.5 text-right font-600">Montant</th>
+              </tr></thead>
+              <tbody>
+                <Row label="ACTIVITÉS D'EXPLOITATION" kind="section" />
+                <Row label="Bénéfice net (perte nette)" value={rep.benefice_net} indent />
+                {Math.abs(rep.amortissement) >= 0.005 && <Row label="Amortissement" value={rep.amortissement} indent />}
+                {rep.fdr.length > 0 && <Row label="Variation des éléments hors caisse du fonds de roulement :" />}
+                {rep.fdr.map((l, i) => <Row key={`f${i}`} label={l.label} value={l.value} indent />)}
+                <Row label="Flux liés aux activités d'exploitation" value={rep.exploitation_total} kind="subtotal" />
+                <Row label="ACTIVITÉS D'INVESTISSEMENT" kind="section" />
+                {rep.investissement.map((l, i) => <Row key={`i${i}`} label={l.label} value={l.value} indent />)}
+                {rep.investissement.length === 0 && <Row label="Aucune activité d'investissement" indent />}
+                <Row label="Flux liés aux activités d'investissement" value={rep.investissement_total} kind="subtotal" />
+                <Row label="ACTIVITÉS DE FINANCEMENT" kind="section" />
+                {rep.financement.map((l, i) => <Row key={`n${i}`} label={l.label} value={l.value} indent />)}
+                {rep.financement.length === 0 && <Row label="Aucune activité de financement" indent />}
+                <Row label="Flux liés aux activités de financement" value={rep.financement_total} kind="subtotal" />
+                <Row label="VARIATION NETTE DE LA TRÉSORERIE" value={rep.variation_nette} kind="net" />
+                <Row label="Encaisse à l'ouverture" value={rep.encaisse_ouverture} indent />
+                <Row label="Encaisse à la clôture" value={rep.encaisse_cloture} kind="subtotal" />
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

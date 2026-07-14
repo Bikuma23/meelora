@@ -37,7 +37,7 @@ const PAGES = {
   acct_bv: { title: "Balance de vérification", sub: "Upload & gestion mensuelle", comp: AcctBV },
   acct_bilan: { title: "Bilan", sub: "Bilan à la fin du mois", comp: AcctBilan },
   acct_pnl: { title: "État des résultats", sub: "P&L du mois", comp: AcctPnl },
-  acct_cashflow: { title: "Flux de trésorerie", sub: "À venir", comp: AcctCashflow },
+  acct_cashflow: { title: "Flux de trésorerie", sub: "Méthode indirecte", comp: AcctCashflow },
   acct_audit: { title: "Rapports d'audit", sub: "À venir", comp: AcctAudit },
 };
 
@@ -46,7 +46,7 @@ const NAV_ACCT = [
   { key: "acct_bv", label: "Balance de vérification", sub: "Upload mensuel", icon: ClipboardList },
   { key: "acct_bilan", label: "Bilan", sub: "État de situation", icon: Landmark },
   { key: "acct_pnl", label: "États des résultats", sub: "P&L", icon: FileBarChart },
-  { key: "acct_cashflow", label: "Flux de trésorerie", sub: "À venir", icon: Wallet },
+  { key: "acct_cashflow", label: "Flux de trésorerie", sub: "Méthode indirecte", icon: Wallet },
   { key: "acct_audit", label: "Rapports d'audit", sub: "À venir", icon: FileText },
 ];
 

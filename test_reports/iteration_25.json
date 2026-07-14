@@ -1,0 +1,39 @@
+{
+  "summary": "Frontend-only validation of Comptabilité changes: (1) P&L 'États des résultats' no longer shows the two internal control rows, (2) new 'Flux de trésorerie' (indirect method) page renders correctly with reconciliation. Both Excel exports download successfully.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verifications": {
+    "pnl_page": {
+      "period_selected": "Juin 2026",
+      "row_beneNet_selon_BV_detaillee_present": false,
+      "row_controle_present": false,
+      "row_BENEFICE_NET_PERTE_NETTE_present": true,
+      "rows_QP_DES_RESULTATS_present": true,
+      "excel_download_filename": "resultats_2026-06.xlsx",
+      "balance_badge": "Balancé"
+    },
+    "cashflow_page": {
+      "testid_container_found": "acct-cashflow",
+      "sections_present": ["ACTIVITÉS D'EXPLOITATION", "ACTIVITÉS D'INVESTISSEMENT", "ACTIVITÉS DE FINANCEMENT"],
+      "key_lines_present": ["Bénéfice net (perte nette)", "Amortissement", "VARIATION NETTE DE LA TRÉSORERIE", "Encaisse à l'ouverture", "Encaisse à la clôture"],
+      "reconcile_badge": "Réconcilié",
+      "excel_download_filename": "flux_tresorerie_2026-05_2026-06.xlsx",
+      "reconciliation_math": "1 716 290,47 + (-1 141 862,66) = 574 427,81 (matches Encaisse à la clôture) ✓",
+      "edge_same_period": "No crash observed when interacting with combos; page continued to render with Réconcilié badge. No explicit error toast was shown, but this is non-crash behavior per acceptance criteria."
+    }
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100%"},
+  "test_credentials": "admin@accslegro.com / admin123",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Only 2026-05 and 2026-06 have BV data. Cashflow default loads with Mai/Juin. Sidebar navigation via visible labels works. Excel downloads confirmed for both P&L and Cashflow."
+}

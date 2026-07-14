@@ -1825,6 +1825,7 @@ BILAN_CFG = {"sheet": "Bilan Détaillé", "value_cols": {"cumulatif": "I"}, "acc
              "stop_after": ["diff", "différence", "difference", "contrôle", "controle"]}
 PNL_CFG = {"sheet": "Resultats internes", "account_col": "C", "label_col": "D", "stop_after": None,
            "stop_at": ["pour tableau"],
+           "exclude": ["bénéfice net (perte nette) - selon", "contrôle"],
            "value_cols": {"reel": "E", "bud_rev2": "F", "ecart_rev2": "G", "bud_rev1": "I", "ecart_rev1": "J",
                           "bud_ca": "L", "ecart_ca": "M", "cumulatif": "Q"}}
 BV_FIELD_COLS = {"c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "i": 9, "j": 10, "k": 11, "l": 12, "m": 13}
@@ -2006,7 +2007,7 @@ async def _acct_report(year, month, kind):
     amap = await _account_map()
     bv = _bv_dict(bvdoc["accounts"], amap)
     cfg = BILAN_CFG if kind == "bilan" else PNL_CFG
-    lines = eng.build_report(bv, cfg["sheet"], cfg["value_cols"], cfg["account_col"], cfg["label_col"], cfg.get("stop_after"), cfg.get("stop_at"))
+    lines = eng.build_report(bv, cfg["sheet"], cfg["value_cols"], cfg["account_col"], cfg["label_col"], cfg.get("stop_after"), cfg.get("stop_at"), cfg.get("exclude"))
     return {"period": pk, "year": int(year), "month": int(month), "month_label": MONTHS_FR[month-1],
             "kind": kind, "value_cols": list(cfg["value_cols"].keys()),
             "locked": bool(period and period.get("locked")),
@@ -2082,6 +2083,186 @@ async def acct_report_excel(type: str, year: int, month: int, user: dict = Depen
     rep = await _acct_report(year, month, type)
     buf = _acct_excel(rep)
     fname = f"{'bilan' if type=='bilan' else 'resultats'}_{_pkey(year, month)}.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename={fname}"})
+
+# ---------------------------------------------------------------------------
+# Flux de trésorerie (méthode indirecte) — variation entre deux périodes
+# ---------------------------------------------------------------------------
+def _cf_category(group_label):
+    """Retourne (section, sous-groupe) pour une section du Bilan."""
+    g = (group_label or "").lower()
+    if g.startswith("encaisse"):
+        return ("cash", None)
+    if "amortissement" in g and "cumul" in g:
+        return ("exploitation", "amortissement")
+    if "actifs incorporel" in g or g.startswith("immobilisation"):
+        return ("investissement", None)
+    if ("marge de cr" in g or "long terme" in g or "capital action" in g
+            or "non répartis" in g or "non-répartis" in g or "non repartis" in g
+            or "distribution" in g or g.startswith("avoir")):
+        return ("financement", None)
+    return ("exploitation", "fdr")  # fonds de roulement (par défaut)
+
+def _bilan_groups(eng):
+    """Ordonne les comptes du Bilan par section (libellé du total de fin de groupe)."""
+    sd = eng.sheets["Bilan Détaillé"]
+    groups, pending = [], []
+    for r in sorted(sd["rows"].keys()):
+        if r > 173:
+            break
+        acct = sd["acct"].get(r)
+        cells = sd["rows"][r]
+        label = cells.get("C")
+        lbl = str(label).strip() if isinstance(label, str) else ""
+        if acct is not None:
+            pending.append(acct)
+        else:
+            raw = cells.get("I")
+            if isinstance(raw, str) and raw.startswith("=") and lbl and pending:
+                groups.append({"label": lbl, "accounts": pending})
+                pending = []
+    return groups
+
+async def _cashflow_data(open_year, open_month, close_year, close_month):
+    eng = await _load_engine()
+    if not eng:
+        raise HTTPException(status_code=400, detail="Aucun modèle importé. Un administrateur doit d'abord importer le modèle Excel.")
+    open_pk, close_pk = _pkey(open_year, open_month), _pkey(close_year, close_month)
+    if open_pk == close_pk:
+        raise HTTPException(status_code=400, detail="Les périodes d'ouverture et de clôture doivent être différentes.")
+    bv_open_doc = await db.acct_bv.find_one({"_id": open_pk})
+    bv_close_doc = await db.acct_bv.find_one({"_id": close_pk})
+    if not bv_close_doc:
+        raise HTTPException(status_code=404, detail=f"Aucune BV pour {MONTHS_FR[close_month-1]} {close_year}")
+    if not bv_open_doc:
+        raise HTTPException(status_code=404, detail=f"Aucune BV d'ouverture pour {MONTHS_FR[open_month-1]} {open_year}")
+    amap = await _account_map()
+    bv_open = _bv_dict(bv_open_doc["accounts"], amap)
+    bv_close = _bv_dict(bv_close_doc["accounts"], amap)
+    groups = _bilan_groups(eng)
+
+    def bal(bvd, acct):
+        return float((bvd.get(acct) or {}).get("i", 0.0))
+
+    def ale(bvd):  # Actif − Passif − Avoir sur les comptes du Bilan (= bénéfice net cumulatif)
+        return sum((1 if a // 1000000 == 1 else -1) * bal(bvd, a) for g in groups for a in g["accounts"])
+
+    benefice_net = round(ale(bv_close) - ale(bv_open), 2)
+
+    fdr_lines, inv_lines, fin_lines = [], [], []
+    amort_total = cash_open = cash_close = 0.0
+    for grp in groups:
+        cat, sub = _cf_category(grp["label"])
+        eff = oi = ci = 0.0
+        for a in grp["accounts"]:
+            o, c = bal(bv_open, a), bal(bv_close, a)
+            oi += o; ci += c
+            d = c - o
+            eff += (-d if a // 1000000 == 1 else d)
+        eff = round(eff, 2)
+        if cat == "cash":
+            cash_open += oi; cash_close += ci
+            continue
+        if abs(eff) < 0.005:
+            continue
+        disp = grp["label"]
+        if cat == "financement" and ("année courante" in disp.lower() or "annee courante" in disp.lower()):
+            disp = "Bénéfices non répartis et distributions"
+        line = {"label": disp, "value": eff}
+        if cat == "exploitation" and sub == "amortissement":
+            amort_total += eff
+        elif cat == "exploitation":
+            fdr_lines.append(line)
+        elif cat == "investissement":
+            inv_lines.append(line)
+        else:
+            fin_lines.append(line)
+
+    amort_total = round(amort_total, 2)
+    exploitation_total = round(benefice_net + amort_total + sum(l["value"] for l in fdr_lines), 2)
+    investissement_total = round(sum(l["value"] for l in inv_lines), 2)
+    financement_total = round(sum(l["value"] for l in fin_lines), 2)
+    variation_nette = round(exploitation_total + investissement_total + financement_total, 2)
+    cash_open, cash_close = round(cash_open, 2), round(cash_close, 2)
+    ecart = round(cash_close - (cash_open + variation_nette), 2)
+    period = await db.acct_periods.find_one({"_id": close_pk})
+    return {
+        "open_period": open_pk, "close_period": close_pk,
+        "open_label": f"{MONTHS_FR[open_month-1]} {open_year}", "close_label": f"{MONTHS_FR[close_month-1]} {close_year}",
+        "locked": bool(period and period.get("locked")),
+        "benefice_net": benefice_net, "amortissement": amort_total, "fdr": fdr_lines,
+        "exploitation_total": exploitation_total,
+        "investissement": inv_lines, "investissement_total": investissement_total,
+        "financement": fin_lines, "financement_total": financement_total,
+        "variation_nette": variation_nette,
+        "encaisse_ouverture": cash_open, "encaisse_cloture": cash_close,
+        "encaisse_calculee": round(cash_open + variation_nette, 2),
+        "ecart": ecart, "balanced": abs(ecart) < 1.0,
+    }
+
+@api.get("/acct/cashflow")
+async def acct_cashflow(open_year: int, open_month: int, close_year: int, close_month: int, user: dict = Depends(get_current_user)):
+    return await _cashflow_data(open_year, open_month, close_year, close_month)
+
+def _cashflow_excel(rep):
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Flux de trésorerie"
+    from openpyxl.styles import Font, PatternFill, Alignment
+    bold = Font(bold=True); title_f = Font(bold=True, size=14); sect_f = Font(bold=True, size=11, color="0F172A")
+    fill = PatternFill("solid", fgColor="E2E8F0"); sfill = PatternFill("solid", fgColor="F1F5F9")
+    nf = '#,##0.00;[Red](#,##0.00)'
+
+    def add(label, value=None, style=None):
+        ws.append([label, value if value is not None else None])
+        row = ws[ws.max_row]
+        if style == "title":
+            row[0].font = title_f
+        elif style == "section":
+            row[0].font = sect_f
+            for c in row: c.fill = sfill
+        elif style == "subtotal":
+            for c in row: c.font = bold; c.fill = fill
+        elif style == "net":
+            for c in row: c.font = Font(bold=True, size=12)
+        if value is not None:
+            row[1].number_format = nf; row[1].alignment = Alignment(horizontal="right")
+
+    add(f"ÉTAT DES FLUX DE TRÉSORERIE", None, "title")
+    add(f"Du {rep['open_label']} au {rep['close_label']} (méthode indirecte)")
+    if not rep["locked"]:
+        add("** DONNÉES PROVISOIRES (mois de clôture non verrouillé) **")
+    ws.append([])
+    add("ACTIVITÉS D'EXPLOITATION", None, "section")
+    add("Bénéfice net (perte nette)", rep["benefice_net"])
+    if abs(rep["amortissement"]) >= 0.005:
+        add("Amortissement", rep["amortissement"])
+    if rep["fdr"]:
+        add("Variation des éléments hors caisse du fonds de roulement :")
+        for l in rep["fdr"]:
+            add(f"   {l['label']}", l["value"])
+    add("Flux liés aux activités d'exploitation", rep["exploitation_total"], "subtotal")
+    ws.append([])
+    add("ACTIVITÉS D'INVESTISSEMENT", None, "section")
+    for l in rep["investissement"]:
+        add(l["label"], l["value"])
+    add("Flux liés aux activités d'investissement", rep["investissement_total"], "subtotal")
+    ws.append([])
+    add("ACTIVITÉS DE FINANCEMENT", None, "section")
+    for l in rep["financement"]:
+        add(l["label"], l["value"])
+    add("Flux liés aux activités de financement", rep["financement_total"], "subtotal")
+    ws.append([])
+    add("VARIATION NETTE DE LA TRÉSORERIE", rep["variation_nette"], "net")
+    add("Encaisse à l'ouverture", rep["encaisse_ouverture"])
+    add("Encaisse à la clôture", rep["encaisse_cloture"], "subtotal")
+    ws.column_dimensions["A"].width = 58; ws.column_dimensions["B"].width = 20
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0); return buf
+
+@api.get("/acct/cashflow/excel")
+async def acct_cashflow_excel(open_year: int, open_month: int, close_year: int, close_month: int, user: dict = Depends(get_current_user)):
+    rep = await _cashflow_data(open_year, open_month, close_year, close_month)
+    buf = _cashflow_excel(rep)
+    fname = f"flux_tresorerie_{rep['open_period']}_{rep['close_period']}.xlsx"
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                              headers={"Content-Disposition": f"attachment; filename={fname}"})
 
