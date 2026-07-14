@@ -20,6 +20,7 @@ import bcrypt
 import jwt
 import io
 import openpyxl
+from accounting import ReportEngine
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -1789,9 +1790,216 @@ async def get_journal(user: dict = Depends(require_admin)):
 async def root():
     return {"message": "API Budget Salaires Pro"}
 
+# ---------------------------------------------------------------------------
+# Module Comptabilité (BV -> Bilan / États des résultats)
+# ---------------------------------------------------------------------------
+MONTHS_FR = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
+BILAN_CFG = {"sheet": "Bilan Détaillé", "value_cols": {"cumulatif": "I"}, "account_col": "B", "label_col": "C"}
+PNL_CFG = {"sheet": "Resultats internes", "value_cols": {"mois": "E", "cumulatif": "Q"}, "account_col": "C", "label_col": "D"}
+
+def _pkey(year, month):
+    return f"{int(year):04d}-{int(month):02d}"
+
+async def _load_engine():
+    doc = await db.acct_template.find_one({"_id": "current"})
+    if not doc:
+        return None
+    return ReportEngine.from_dict(doc["engine"])
+
+def _parse_bv_xlsx(content):
+    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+    ws = wb["BV Détaillée"] if "BV Détaillée" in wb.sheetnames else wb.active
+    accounts = []
+    for r in range(1, ws.max_row + 1):
+        a = ws.cell(r, 1).value
+        if not isinstance(a, (int, float)) or not float(a).is_integer():
+            continue
+        mov = ws.cell(r, 3).value
+        cum = ws.cell(r, 9).value
+        accounts.append({
+            "account": int(a), "name": str(ws.cell(r, 2).value or "").strip(),
+            "mov": float(mov) if isinstance(mov, (int, float)) else 0.0,
+            "cum": float(cum) if isinstance(cum, (int, float)) else 0.0,
+        })
+    return accounts
+
+def _bv_dict(accounts):
+    return {a["account"]: {"mov": a["mov"], "cum": a["cum"]} for a in accounts}
+
+@api.post("/acct/template")
+async def acct_upload_template(file: UploadFile = File(...), user: dict = Depends(require_admin)):
+    content = await file.read()
+    try:
+        eng = ReportEngine.from_template(io.BytesIO(content))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Modèle Excel invalide (.xlsx attendu)")
+    if "Bilan Détaillé" not in eng.sheets or "Resultats internes" not in eng.sheets:
+        raise HTTPException(status_code=400, detail="Le modèle doit contenir les feuilles « Bilan Détaillé » et « Resultats internes »")
+    accts = sorted(a for a in eng.template_accounts() if a is not None)
+    await db.acct_template.replace_one({"_id": "current"}, {
+        "_id": "current", "engine": eng.to_dict(), "accounts": accts,
+        "imported_at": datetime.now(timezone.utc).isoformat(), "imported_by": user["email"],
+    }, upsert=True)
+    await log_action(user, "Créer", "Comptabilité", f"Import modèle — {len(accts)} comptes mappés")
+    return {"success": True, "account_count": len(accts)}
+
+@api.get("/acct/template")
+async def acct_get_template(user: dict = Depends(get_current_user)):
+    doc = await db.acct_template.find_one({"_id": "current"})
+    if not doc:
+        return {"imported": False}
+    return {"imported": True, "account_count": len(doc.get("accounts", [])),
+            "imported_at": doc.get("imported_at"), "imported_by": doc.get("imported_by")}
+
+@api.post("/acct/bv")
+async def acct_upload_bv(year: int, month: int, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    pk = _pkey(year, month)
+    period = await db.acct_periods.find_one({"_id": pk})
+    if period and period.get("locked"):
+        raise HTTPException(status_code=403, detail=f"Le mois {MONTHS_FR[month-1]} {year} est verrouillé — aucun nouvel upload permis.")
+    content = await file.read()
+    try:
+        accounts = _parse_bv_xlsx(content)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Fichier BV invalide (.xlsx attendu)")
+    if not accounts:
+        raise HTTPException(status_code=400, detail="Aucun compte détecté dans la BV (colonne A = n° de compte, B = nom, C = mouvement, I = cumulatif)")
+    eng = await _load_engine()
+    balanced = None; diff = None; net_control = None; new_accounts = []
+    if eng:
+        bv = _bv_dict(accounts)
+        comp = eng.compute_all(bv)
+        diff = round(comp("Bilan Détaillé", "I", 174), 2)   # TOTAL PASSIF+CAPITAUX − TOTAL ACTIF
+        net_control = round(comp("Resultats internes", "E", 559), 2)  # doit être ~0
+        balanced = abs(diff) < 1.0
+        tmpl_accts = set(eng.template_accounts())
+        new_accounts = [{"account": a["account"], "name": a["name"]} for a in accounts if a["account"] not in tmpl_accts and (abs(a["mov"]) > 0.005 or abs(a["cum"]) > 0.005)]
+    await db.acct_bv.replace_one({"_id": pk}, {
+        "_id": pk, "year": int(year), "month": int(month), "accounts": accounts,
+        "uploaded_at": datetime.now(timezone.utc).isoformat(), "uploaded_by": user["email"],
+    }, upsert=True)
+    await db.acct_periods.update_one({"_id": pk}, {"$set": {
+        "_id": pk, "year": int(year), "month": int(month),
+        "last_upload_at": datetime.now(timezone.utc).isoformat(), "last_upload_by": user["email"],
+        "balanced": balanced, "diff": diff, "net_control": net_control,
+        "new_accounts": new_accounts, "account_count": len(accounts),
+    }, "$setOnInsert": {"locked": False, "lock_history": []}}, upsert=True)
+    await log_action(user, "Créer", "Comptabilité", f"Upload BV {pk} — {len(accounts)} comptes")
+    return {"success": True, "period": pk, "account_count": len(accounts),
+            "balanced": balanced, "diff": diff, "net_control": net_control, "new_accounts": new_accounts,
+            "template_imported": eng is not None}
+
+@api.get("/acct/periods")
+async def acct_periods(user: dict = Depends(get_current_user)):
+    docs = await db.acct_periods.find().sort("_id", -1).to_list(500)
+    for d in docs:
+        d["id"] = d.pop("_id")
+    return docs
+
+@api.post("/acct/period/lock")
+async def acct_lock(year: int, month: int, locked: bool = True, user: dict = Depends(require_admin)):
+    pk = _pkey(year, month)
+    period = await db.acct_periods.find_one({"_id": pk})
+    if not period:
+        raise HTTPException(status_code=404, detail="Aucune donnée pour ce mois")
+    entry = {"locked": locked, "by": user["email"], "at": datetime.now(timezone.utc).isoformat()}
+    await db.acct_periods.update_one({"_id": pk}, {"$set": {"locked": locked}, "$push": {"lock_history": entry}})
+    await log_action(user, "Modifier", "Comptabilité", f"{'Verrouillage' if locked else 'Déverrouillage'} mois {pk}")
+    return {"success": True, "locked": locked}
+
+async def _acct_report(year, month, kind):
+    eng = await _load_engine()
+    if not eng:
+        raise HTTPException(status_code=400, detail="Aucun modèle importé. Un administrateur doit d'abord importer le modèle Excel.")
+    pk = _pkey(year, month)
+    bvdoc = await db.acct_bv.find_one({"_id": pk})
+    if not bvdoc:
+        raise HTTPException(status_code=404, detail=f"Aucune BV uploadée pour {MONTHS_FR[month-1]} {year}")
+    period = await db.acct_periods.find_one({"_id": pk})
+    bv = _bv_dict(bvdoc["accounts"])
+    cfg = BILAN_CFG if kind == "bilan" else PNL_CFG
+    lines = eng.build_report(bv, cfg["sheet"], cfg["value_cols"], cfg["account_col"], cfg["label_col"])
+    return {"period": pk, "year": int(year), "month": int(month), "month_label": MONTHS_FR[month-1],
+            "kind": kind, "value_cols": list(cfg["value_cols"].keys()),
+            "locked": bool(period and period.get("locked")),
+            "balanced": period.get("balanced") if period else None,
+            "lines": lines}
+
+@api.get("/acct/report")
+async def acct_report(type: str, year: int, month: int, user: dict = Depends(get_current_user)):
+    if type not in ("bilan", "pnl"):
+        raise HTTPException(status_code=400, detail="Type invalide")
+    return await _acct_report(year, month, type)
+
+@api.get("/acct/dashboard")
+async def acct_dashboard(user: dict = Depends(get_current_user)):
+    tmpl = await db.acct_template.find_one({"_id": "current"})
+    periods = await db.acct_periods.find().sort("_id", -1).to_list(500)
+    latest = periods[0] if periods else None
+    return {
+        "template_imported": tmpl is not None,
+        "template_accounts": len(tmpl.get("accounts", [])) if tmpl else 0,
+        "period_count": len(periods),
+        "latest": {
+            "period": latest["_id"], "year": latest["year"], "month": latest["month"],
+            "month_label": MONTHS_FR[latest["month"]-1], "locked": latest.get("locked", False),
+            "balanced": latest.get("balanced"), "diff": latest.get("diff"),
+            "last_upload_at": latest.get("last_upload_at"), "last_upload_by": latest.get("last_upload_by"),
+            "new_accounts": len(latest.get("new_accounts", [])),
+        } if latest else None,
+    }
+
+def _acct_excel(rep):
+    wb = openpyxl.Workbook(); ws = wb.active
+    ws.title = "Bilan" if rep["kind"] == "bilan" else "Résultats"
+    from openpyxl.styles import Font, PatternFill, Alignment
+    bold = Font(bold=True); title_f = Font(bold=True, size=14)
+    fill = PatternFill("solid", fgColor="E2E8F0")
+    cols = rep["value_cols"]
+    col_labels = {"mois": f"{rep['month_label']} {rep['year']}", "cumulatif": "Cumulatif"}
+    ws.append([("BILAN" if rep["kind"] == "bilan" else "ÉTAT DES RÉSULTATS") + f" — {rep['month_label']} {rep['year']}"])
+    ws["A1"].font = title_f
+    if not rep["locked"]:
+        ws.append(["** DONNÉES PROVISOIRES (mois non verrouillé) **"])
+        ws[f"A{ws.max_row}"].font = Font(bold=True, color="B45309")
+    ws.append([])
+    header = ["Compte", "Description"] + [col_labels.get(k, k) for k in cols]
+    ws.append(header)
+    for c in ws[ws.max_row]:
+        c.font = bold; c.fill = fill
+    for ln in rep["lines"]:
+        row = [ln["account"] or "", ln["label"] or ""] + [ln["values"][k] for k in cols]
+        ws.append(row)
+        cells = ws[ws.max_row]
+        if ln["kind"] in ("total", "header"):
+            for c in cells:
+                c.font = bold
+            if ln["kind"] == "total":
+                for c in cells:
+                    c.fill = fill
+        for i in range(len(cols)):
+            cell = cells[2 + i]
+            cell.number_format = '#,##0.00;[Red](#,##0.00)'
+            cell.alignment = Alignment(horizontal="right")
+    ws.column_dimensions["A"].width = 12
+    ws.column_dimensions["B"].width = 52
+    for i in range(len(cols)):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(3 + i)].width = 18
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0); return buf
+
+@api.get("/acct/report/excel")
+async def acct_report_excel(type: str, year: int, month: int, user: dict = Depends(get_current_user)):
+    if type not in ("bilan", "pnl"):
+        raise HTTPException(status_code=400, detail="Type invalide")
+    rep = await _acct_report(year, month, type)
+    buf = _acct_excel(rep)
+    fname = f"{'bilan' if type=='bilan' else 'resultats'}_{_pkey(year, month)}.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename={fname}"})
+
 app.include_router(api)
 
-WRITE_ALLOW_ALL = {"/api/auth/login", "/api/auth/logout", "/api/me/preferences"}
+WRITE_ALLOW_ALL = {"/api/auth/login", "/api/auth/logout", "/api/me/preferences", "/api/acct/bv"}
 
 def _is_admin_only_path(path: str) -> bool:
     return (path.startswith("/api/users")

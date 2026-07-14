@@ -20,6 +20,8 @@ import Journal from "../pages/Journal";
 import UsersPage from "../pages/Users";
 import Preferences from "../pages/Preferences";
 import { applyTheme } from "../lib/theme";
+import { AcctDashboard, AcctBV, AcctBilan, AcctPnl, AcctCashflow, AcctAudit } from "../pages/Comptabilite";
+import { Calculator, Landmark, ClipboardList, Wallet, FileBarChart } from "lucide-react";
 
 const PAGES = {
   dashboard: { title: "Tableau de bord", sub: "Vue globale", comp: Dashboard },
@@ -31,7 +33,22 @@ const PAGES = {
   utilisateurs: { title: "Utilisateurs", sub: "Comptes & accès", comp: UsersPage },
   journal: { title: "Journal", sub: "Historique des modifications", comp: Journal },
   preferences: { title: "Mon profil", sub: "Préférences & apparence", comp: Preferences },
+  acct_dashboard: { title: "Comptabilité — Tableau de bord", sub: "Vue d'ensemble du mois", comp: AcctDashboard },
+  acct_bv: { title: "Balance de vérification", sub: "Upload & gestion mensuelle", comp: AcctBV },
+  acct_bilan: { title: "Bilan", sub: "Bilan à la fin du mois", comp: AcctBilan },
+  acct_pnl: { title: "État des résultats", sub: "P&L du mois", comp: AcctPnl },
+  acct_cashflow: { title: "Flux de trésorerie", sub: "À venir", comp: AcctCashflow },
+  acct_audit: { title: "Rapports d'audit", sub: "À venir", comp: AcctAudit },
 };
+
+const NAV_ACCT = [
+  { key: "acct_dashboard", label: "Tableau de bord", sub: "Vue d'ensemble", icon: LayoutDashboard },
+  { key: "acct_bv", label: "Balance de vérification", sub: "Upload mensuel", icon: ClipboardList },
+  { key: "acct_bilan", label: "Bilan", sub: "État de situation", icon: Landmark },
+  { key: "acct_pnl", label: "États des résultats", sub: "P&L", icon: FileBarChart },
+  { key: "acct_cashflow", label: "Flux de trésorerie", sub: "À venir", icon: Wallet },
+  { key: "acct_audit", label: "Rapports d'audit", sub: "À venir", icon: FileText },
+];
 
 const NAV_TOP = [{ key: "dashboard", label: "Tableau de bord", sub: "Vue globale", icon: LayoutDashboard }];
 const NAV_GROUP = [
@@ -162,6 +179,11 @@ function LayoutInner() {
             <span className="text-[11px] font-700 uppercase tracking-widest text-slate-500">Masse Salariale</span>
           </div>
           {NAV_GROUP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
+          <div className="flex items-center gap-2 px-3 pb-1 pt-4">
+            <Calculator size={14} className="text-slate-500" />
+            <span className="text-[11px] font-700 uppercase tracking-widest text-slate-500">Comptabilité</span>
+          </div>
+          {NAV_ACCT.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           {user?.role === "admin" && (
             <div className="pt-4">
               {NAV_BOTTOM.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}

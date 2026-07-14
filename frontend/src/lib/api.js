@@ -70,4 +70,13 @@ export const api = {
   createReportTemplate: (body) => client.post("/report-templates", body).then((r) => r.data),
   deleteReportTemplate: (id) => client.delete(`/report-templates/${id}`).then((r) => r.data),
   downloadReportParams: (kind, params) => client.get(`/reports/${kind}`, { params, responseType: "blob" }).then((r) => r.data),
+
+  acctDashboard: () => client.get("/acct/dashboard").then((r) => r.data),
+  acctGetTemplate: () => client.get("/acct/template").then((r) => r.data),
+  acctUploadTemplate: (file) => { const fd = new FormData(); fd.append("file", file); return client.post("/acct/template", fd).then((r) => r.data); },
+  acctUploadBV: (file, params) => { const fd = new FormData(); fd.append("file", file); return client.post("/acct/bv", fd, { params }).then((r) => r.data); },
+  acctPeriods: () => client.get("/acct/periods").then((r) => r.data),
+  acctLock: (params) => client.post("/acct/period/lock", {}, { params }).then((r) => r.data),
+  acctReport: (params) => client.get("/acct/report", { params }).then((r) => r.data),
+  acctReportExcel: (params) => client.get("/acct/report/excel", { params, responseType: "blob" }).then((r) => r.data),
 };

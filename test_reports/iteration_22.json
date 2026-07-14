@@ -1,0 +1,25 @@
+{
+  "summary": "End-to-end testing of the new Comptabilité module (backend + frontend). Backend: 9/9 pytest cases PASS covering /api/acct/dashboard, /api/acct/periods, /api/acct/template, /api/acct/report (bilan & pnl), /api/acct/report/excel, and role/lock gating (unauthenticated lock/template = 401/403; admin lock->unlock cycle OK; BV upload while locked returns 403). Values validated against spec: template imported with 489 accounts, Juin 2026 present, TOTAL DE L'ACTIF == TOTAL PASSIF ET CAPITAUX == 19 756 123.01 (bilan balanced, diff ~0), BÉNÉFICE NET (PERTE NETTE) mois = -35 782.38. Frontend: full navigation of Comptabilité sidebar (nav-acct_dashboard/bv/bilan/pnl/cashflow/audit), dashboard shows 489 comptes / Juin 2026 / Balancé / Non verrouillé, BV page shows template card 'Importé — 489 comptes' and period row Juin 2026 with 489 comptes + écart 0.00, lock->unlock button cycle works and label toggles Verrouiller<->Déverrouiller, Bilan renders both totals 19 756 123.01 (balanced) with provisional banner + successful Excel download, P&L renders 'Juin 2026' and 'Cumulatif' columns with (35 782,38) benefice net in parentheses/red + Excel download, cashflow/audit render 'Fonctionnalité à venir'. Final DB state restored: période 2026-06 UNLOCKED (Verrouiller button visible).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_acct_module.py",
+    "/app/test_reports/pytest/acct_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now 2093 lines — starting to be unwieldy; consider extracting /api/acct/* endpoints into a dedicated router module (e.g. routers/accounting.py) since accounting.py already isolates the compute engine.",
+    "AcctBV.onBV catches all errors generically; if BV parsing raises a specific column mismatch (e.g. col C/I not found), the user only sees 'Upload impossible' — surface parse-level messages from the backend (already provided in HTTPException detail, but a lengthy detail may be truncated in toast).",
+    "acct_upload_bv accepts year/month as query params without bounds — backend should validate month in 1..12 and year in a reasonable range (defensive against typos).",
+    "ReportView uses periods[0] as the default; if the last period is locked and the user wants a different one, the picker works, but there is no visible indicator that other periods exist beyond the currently-open one. Not a bug — future UX polish.",
+    "Test data note: the BV Juin 2026 upload was NOT re-executed via UI because a live re-upload (file download from remote URL + upload via input[type=file]) would duplicate data already seeded via curl; the backend contract for BV upload is fully covered by the periods/report values we verified and by the 403-when-locked assertion."
+  ],
+  "updated_files": ["/app/backend/tests/test_acct_module.py"],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (all scenarios)"},
+  "test_credentials": "admin@accslegro.com / admin123 OK. editor1 / user1 still 401 (already flagged in iteration_21).",
+  "seed_data_creation": "None new. Existing seed (modèle + BV Juin 2026) untouched. Lock state cycled and restored to UNLOCKED as required.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Comptabilité module is fully functional. Backend tests in /app/backend/tests/test_acct_module.py can be reused as regression suite. Key API response shape: /api/acct/dashboard -> {template_imported, template_accounts, period_count, latest:{year,month,month_label,locked,balanced,diff,new_accounts,last_upload_by}}; /api/acct/report -> {period,year,month,month_label,kind,value_cols:['mois'|'cumulatif',...],locked,balanced,lines:[{row,account,label,kind:'header|data|total',values:{mois?,cumulatif}}]}. Period id format 'YYYY-MM'. BV upload endpoint accepts multipart with query params year/month; returns 403 when period is locked (WRITE_ALLOW_ALL path but explicit lock check). PeriodPicker (shadcn Select) — click trigger then wait 300-400ms before clicking option (data-testid acct-period-opt-YYYY-MM). fmtCAD: French Canadian '19 756 123,01' (comma decimal, non-breaking space thousands), negatives in parentheses colored red (#DC2626).",
+  "rca of the issue": "N/A — no bugs found in the Comptabilité module."
+}
