@@ -476,8 +476,77 @@ function ReportView({ type, title }) {
   );
 }
 
-export function AcctBilan() { return <ReportView type="bilan" title="Bilan" />; }
+export function AcctBilan() { return <ReportView type="bilan" title="Bilan détaillé" />; }
 export function AcctPnl() { return <ReportView type="pnl" title="État des résultats" />; }
+export function AcctPnlSommaire() { return <ReportView type="pnl_sommaire" title="Résultat sommaire" />; }
+export function AcctBilanSommaire() { return <BilanSommaireView />; }
+
+function BilanSommaireView() {
+  const { periods } = usePeriods();
+  const [period, setPeriod] = useState("");
+  const [rep, setRep] = useState(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => { if (!period && periods.length) setPeriod(periods[0].id); }, [periods, period]);
+  useEffect(() => {
+    if (!period) return;
+    const [y, m] = period.split("-").map(Number);
+    setLoading(true); setRep(null);
+    api.acctReport({ type: "bilan_sommaire", year: y, month: m })
+      .then(setRep).catch((e) => toast.error(e.response?.data?.detail || "Rapport indisponible")).finally(() => setLoading(false));
+  }, [period]);
+
+  const exportExcel = async () => {
+    const [y, m] = period.split("-").map(Number);
+    try {
+      const blob = await api.acctReportExcel({ type: "bilan_sommaire", year: y, month: m });
+      const url = URL.createObjectURL(blob); const a = document.createElement("a");
+      a.href = url; a.download = `bilan_sommaire_${period}.xlsx`; a.click(); URL.revokeObjectURL(url);
+      toast.success("Export téléchargé");
+    } catch (e) { toast.error(e.response?.data?.detail || "Export impossible"); }
+  };
+
+  const Side = ({ title, rows }) => (
+    <div>
+      <h4 className="mb-2 border-b-2 border-[#063044] pb-1.5 font-display text-sm font-800 uppercase tracking-wide text-[#063044]">{title}</h4>
+      <table className="w-full text-sm">
+        <tbody className="font-mono-data">
+          {rows.map((l, i) => (
+            <tr key={i} className={`border-b border-slate-50 ${l.kind === "total" ? "bg-slate-50 font-700" : l.kind === "header" ? "font-700 text-slate-700" : ""}`}>
+              <td className={`px-3 py-1.5 text-left font-sans ${l.kind === "data" ? "pl-5 text-slate-600" : ""}`}>{l.label}</td>
+              <td className="px-3 py-1.5 text-right" style={{ color: l.value != null && l.value < 0 ? "#DC2626" : undefined }}>{l.value == null ? "" : money(l.value)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4" data-testid="acct-bilan-sommaire">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <PeriodPicker periods={periods} value={period} onChange={setPeriod} />
+        <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-bilansom-export" className="gap-2 bg-[#063044] hover:bg-[#063044]/90"><FileSpreadsheet size={15} /> Excel</Button>
+      </div>
+      {rep && !rep.locked && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-600 text-amber-700">
+          <AlertTriangle size={16} /> Données provisoires — ce mois n'est pas verrouillé.
+        </div>
+      )}
+      <div className="card overflow-hidden">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+          <h3 className="font-display text-sm font-700">Bilan sommaire{rep ? ` — ${rep.month_label} ${rep.year}` : ""}</h3>
+          {rep && <span className={`inline-flex items-center gap-1 text-xs font-600 ${Math.abs(rep.validation) < 1 ? "text-emerald-600" : "text-red-600"}`} data-testid="acct-bilansom-balance">{Math.abs(rep.validation) < 1 ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}{Math.abs(rep.validation) < 1 ? "Balancé" : `Écart ${money(rep.validation)}`}</span>}
+        </div>
+        {loading ? <p className="px-5 py-8 text-sm text-slate-500">Chargement…</p> : !rep ? <p className="px-5 py-8 text-sm text-slate-400">Sélectionnez une période.</p> : (
+          <div className="grid gap-8 p-5 lg:grid-cols-2">
+            <Side title="Actif" rows={rep.actif} />
+            <Side title="Passif et capitaux" rows={rep.passif} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function AcctComingSoon({ label }) {
   return (

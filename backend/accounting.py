@@ -33,7 +33,7 @@ class ReportEngine:
     def from_template(cls, path):
         eng = cls()
         wb = openpyxl.load_workbook(path, data_only=False)
-        for name, acc_col in (("BV Détaillée", "A"), ("Bilan Détaillé", "B"), ("Resultats internes", "C")):
+        for name, acc_col in (("BV Détaillée", "A"), ("Bilan Détaillé", "B"), ("Resultats internes", "C"), ("Bilan Sommaire", "A"), ("Resultats sommaires", "A")):
             if name not in wb.sheetnames:
                 continue
             ws = wb[name]

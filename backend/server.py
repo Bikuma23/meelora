@@ -1877,6 +1877,25 @@ PNL_CFG = {"sheet": "Resultats internes", "account_col": "C", "label_col": "D", 
            ]}
 BV_FIELD_COLS = {"c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "i": 9, "j": 10, "k": 11, "l": 12, "m": 13}
 
+PNL_SOMMAIRE_CFG = {
+    "sheet": "Resultats sommaires", "account_col": "A", "label_col": "B", "stop_after": None,
+    "stop_at": None, "exclude": None, "exclude_range": None,
+    "value_cols": {
+        "reel": "F", "bud_rev2": "G", "ecart_rev2": "H", "bud_rev1": "J", "ecart_rev1": "K",
+        "bud_ca": "M", "ecart_ca": "N",
+        "cumulatif": "P", "bud_rev2_cum": "Q", "ecart_rev2_cum": "R", "bud_rev1_cum": "T",
+        "ecart_rev1_cum": "U", "bud_ca_cum": "W", "ecart_ca_cum": "X"},
+    "col_groups": [
+        {"label": "Mois", "keys": ["reel", "bud_rev2", "ecart_rev2", "bud_rev1", "ecart_rev1", "bud_ca", "ecart_ca"]},
+        {"label": "Cumulatif (exercice à date)", "keys": ["cumulatif", "bud_rev2_cum", "ecart_rev2_cum", "bud_rev1_cum", "ecart_rev1_cum", "bud_ca_cum", "ecart_ca_cum"]},
+    ],
+    "col_toggle_groups": [
+        {"id": "rev2", "label": "Budget Rév-2", "keys": ["bud_rev2", "ecart_rev2", "bud_rev2_cum", "ecart_rev2_cum"]},
+        {"id": "rev1", "label": "Budget Rév-1", "keys": ["bud_rev1", "ecart_rev1", "bud_rev1_cum", "ecart_rev1_cum"]},
+        {"id": "ca", "label": "Budget CA", "keys": ["bud_ca", "ecart_ca", "bud_ca_cum", "ecart_ca_cum"]},
+    ]}
+
+
 def _pkey(year, month):
     return f"{int(year):04d}-{int(month):02d}"
 
@@ -2053,8 +2072,10 @@ async def _acct_report(year, month, kind):
     period = await db.acct_periods.find_one({"_id": pk})
     amap = await _account_map()
     bv = _bv_dict(bvdoc["accounts"], amap)
-    cfg = BILAN_CFG if kind == "bilan" else PNL_CFG
+    cfg = {"bilan": BILAN_CFG, "pnl": PNL_CFG, "pnl_sommaire": PNL_SOMMAIRE_CFG}[kind]
     lines = eng.build_report(bv, cfg["sheet"], cfg["value_cols"], cfg["account_col"], cfg["label_col"], cfg.get("stop_after"), cfg.get("stop_at"), cfg.get("exclude"), cfg.get("exclude_range"))
+    if kind == "pnl_sommaire":
+        lines = [l for l in lines if (l.get("label") or "").strip()]
     return {"period": pk, "year": int(year), "month": int(month), "month_label": MONTHS_FR[month-1],
             "kind": kind, "value_cols": list(cfg["value_cols"].keys()), "col_groups": cfg.get("col_groups"),
             "col_toggle_groups": cfg.get("col_toggle_groups"),
@@ -2062,9 +2083,58 @@ async def _acct_report(year, month, kind):
             "balanced": period.get("balanced") if period else None,
             "lines": lines}
 
+async def _bilan_sommaire_data(year, month):
+    eng = await _load_engine()
+    if not eng:
+        raise HTTPException(status_code=400, detail="Aucun modèle importé.")
+    pk = _pkey(year, month)
+    bvdoc = await db.acct_bv.find_one({"_id": pk})
+    if not bvdoc:
+        raise HTTPException(status_code=404, detail=f"Aucune BV uploadée pour {MONTHS_FR[month-1]} {year}")
+    if "Bilan Sommaire" not in eng.sheets:
+        raise HTTPException(status_code=400, detail="Le modèle importé ne contient pas la feuille « Bilan Sommaire ».")
+    period = await db.acct_periods.find_one({"_id": pk})
+    amap = await _account_map()
+    bv = _bv_dict(bvdoc["accounts"], amap)
+    comp = eng.compute_all(bv)
+    sd = eng.sheets["Bilan Sommaire"]
+
+    def build_side(lbl_col, val_col, r_lo, r_hi):
+        out = []
+        for r in range(r_lo, r_hi + 1):
+            cells = sd["rows"].get(r) or {}
+            lbl = cells.get(lbl_col)
+            if lbl is None:
+                continue
+            label = str(lbl).strip()
+            raw = cells.get(val_col)
+            has_val = raw is not None
+            val = round(comp("Bilan Sommaire", val_col, r), 2) if has_val else None
+            low = label.lower()
+            if low.startswith("total"):
+                kind = "total"
+            elif not has_val:
+                kind = "header"
+            else:
+                kind = "data"
+            out.append({"label": label, "value": val, "kind": kind})
+        return out
+
+    actif = build_side("B", "C", 6, 32)
+    passif = build_side("E", "F", 6, 32)
+    return {"period": pk, "year": int(year), "month": int(month), "month_label": MONTHS_FR[month-1],
+            "kind": "bilan_sommaire",
+            "locked": bool(period and period.get("locked")),
+            "actif": actif, "passif": passif,
+            "total_actif": round(comp("Bilan Sommaire", "C", 32), 2),
+            "total_passif": round(comp("Bilan Sommaire", "F", 32), 2),
+            "validation": round(comp("Bilan Sommaire", "C", 35), 2)}
+
 @api.get("/acct/report")
 async def acct_report(type: str, year: int, month: int, user: dict = Depends(get_current_user)):
-    if type not in ("bilan", "pnl"):
+    if type == "bilan_sommaire":
+        return await _bilan_sommaire_data(year, month)
+    if type not in ("bilan", "pnl", "pnl_sommaire"):
         raise HTTPException(status_code=400, detail="Type invalide")
     return await _acct_report(year, month, type)
 
@@ -2136,13 +2206,44 @@ def _acct_excel(rep):
 
 @api.get("/acct/report/excel")
 async def acct_report_excel(type: str, year: int, month: int, user: dict = Depends(get_current_user)):
-    if type not in ("bilan", "pnl"):
+    if type == "bilan_sommaire":
+        rep = await _bilan_sommaire_data(year, month)
+        buf = _bilan_sommaire_excel(rep)
+        return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                 headers={"Content-Disposition": f"attachment; filename=bilan_sommaire_{_pkey(year, month)}.xlsx"})
+    if type not in ("bilan", "pnl", "pnl_sommaire"):
         raise HTTPException(status_code=400, detail="Type invalide")
     rep = await _acct_report(year, month, type)
     buf = _acct_excel(rep)
-    fname = f"{'bilan' if type=='bilan' else 'resultats'}_{_pkey(year, month)}.xlsx"
+    fname = f"{'bilan' if type=='bilan' else ('resultats_sommaire' if type=='pnl_sommaire' else 'resultats')}_{_pkey(year, month)}.xlsx"
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                              headers={"Content-Disposition": f"attachment; filename={fname}"})
+
+def _bilan_sommaire_excel(rep):
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Bilan sommaire"
+    from openpyxl.styles import Font, Alignment
+    nf = '#,##0.00;[Red](#,##0.00)'
+    ws.append([f"BILAN SOMMAIRE — {rep['month_label']} {rep['year']}"]); ws["A1"].font = Font(bold=True, size=13)
+    ws.append([]); ws.append(["ACTIF", "", "PASSIF ET CAPITAUX", ""])
+    for c in (1, 3): ws.cell(ws.max_row, c).font = Font(bold=True, size=11)
+    a, p = rep["actif"], rep["passif"]
+    for i in range(max(len(a), len(p))):
+        la = a[i] if i < len(a) else None
+        lp = p[i] if i < len(p) else None
+        row = [la["label"] if la else "", la["value"] if la and la["value"] is not None else None,
+               lp["label"] if lp else "", lp["value"] if lp and lp["value"] is not None else None]
+        ws.append(row)
+        rr = ws.max_row
+        for (li, ci) in ((la, 1), (lp, 3)):
+            if li and li["kind"] in ("total", "header"):
+                ws.cell(rr, ci).font = Font(bold=True)
+        for ci in (2, 4):
+            if ws.cell(rr, ci).value is not None:
+                ws.cell(rr, ci).number_format = nf; ws.cell(rr, ci).alignment = Alignment(horizontal="right")
+    ws.column_dimensions["A"].width = 42; ws.column_dimensions["B"].width = 18
+    ws.column_dimensions["C"].width = 42; ws.column_dimensions["D"].width = 18
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0); return buf
+
 
 # ---------------------------------------------------------------------------
 # Flux de trésorerie (méthode indirecte) — variation entre deux périodes
