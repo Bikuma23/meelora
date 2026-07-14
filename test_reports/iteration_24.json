@@ -1,0 +1,47 @@
+{
+  "summary": "Tested new 'Réel vs Budget — Juin 2026' bar chart on Comptabilité Dashboard (backend + frontend). All 3 scenarios PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_results": {
+    "scenario_1_dashboard_chart": {
+      "status": "PASS",
+      "cards_top_visible": true,
+      "statut_juin_2026_visible": true,
+      "acct-dashboard-chart_visible": true,
+      "chart_header": "Réel vs Budget — Juin 2026",
+      "recharts_bar_rectangles": 9,
+      "expected_bars": "3 groups (Revenus, Dépenses, Bénéfice net) x 3 series (Réel, Budget CA, Budget Rév-1) = 9 ✓",
+      "legend_text": "Budget CABudget Rév-1Réel",
+      "legend_contains_all_series": true
+    },
+    "scenario_2_api_summary": {
+      "status": "PASS",
+      "endpoint": "GET /api/acct/summary?year=2026&month=6",
+      "status_code": 200,
+      "categories": ["Revenus", "Dépenses", "Bénéfice net"],
+      "revenus_reel": 1939012.15,
+      "benefice_net_reel": -35782.38,
+      "coherence_reel": "1939012.15 - 1974794.53 = -35782.38 ✓",
+      "coherence_bud_ca": "1886541.00 - 1926796.88 = -40255.88 ✓",
+      "coherence_bud_rev1": "1978000.00 - 1876515.00 = 101485.00 ✓"
+    },
+    "scenario_3_non_regression": {
+      "status": "PASS",
+      "bilan": {"loads": true, "title": "Bilan — Juin 2026", "rows": 141},
+      "pnl": {"loads": true, "title": "État des résultats — Juin 2026", "rows": 528}
+    }
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AcctDashboard: ResponsiveContainer emits recharts width(-1)/height(-1) warnings during first mount when the panel is not yet laid out. Non-blocking (chart renders correctly after layout). Could wrap container render behind an IntersectionObserver or set explicit min-width to silence warnings.",
+    "Comptabilite.js is growing (~380 lines) but still readable; consider splitting AcctDashboard and ReportView into separate files if more widgets are added."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@accslegro.com / admin123",
+  "seed_data_creation": "None. Used pre-existing Juin 2026 BV (locked, balanced).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Dashboard now shows 4 sections: 3 top cards, 'Statut — Juin 2026', and 'Réel vs Budget — Juin 2026' bar chart (data-testid='acct-dashboard-chart') with 9 recharts-bar-rectangle elements. Backend /api/acct/summary returns categories with reel/bud_ca/bud_rev1 for Revenus/Dépenses/Bénéfice net; identity Revenus - Dépenses = Bénéfice net verified for all 3 series."
+}

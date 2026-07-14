@@ -5,6 +5,7 @@ import { Button } from "../components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { toast } from "sonner";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
 import {
   Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info,
 } from "lucide-react";
@@ -44,9 +45,16 @@ function PeriodPicker({ periods, value, onChange }) {
 // ---------- Dashboard ----------
 export function AcctDashboard() {
   const [d, setD] = useState(null);
+  const [summary, setSummary] = useState(null);
   useEffect(() => { api.acctDashboard().then(setD).catch(() => {}); }, []);
+  useEffect(() => {
+    if (d?.latest) api.acctSummary({ year: d.latest.year, month: d.latest.month }).then(setSummary).catch(() => {});
+  }, [d]);
   if (!d) return <p className="text-sm text-slate-500">Chargement…</p>;
   const L = d.latest;
+  const chartData = summary?.categories?.map((c) => ({
+    name: c.label, "Réel": c.values.reel, "Budget CA": c.values.bud_ca, "Budget Rév-1": c.values.bud_rev1,
+  })) || [];
   return (
     <div className="space-y-5" data-testid="acct-dashboard">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -82,8 +90,28 @@ export function AcctDashboard() {
             </div>
             <div className="rounded-xl border border-slate-200 p-4">
               <div className="flex items-center gap-2"><Info size={16} className="text-slate-500" /><span className="text-sm font-700">{L.new_accounts} nouveau(x) compte(s)</span></div>
-              <p className="mt-1 text-xs text-slate-500">détectés au dernier upload</p>
+              <p className="mt-1 text-xs text-slate-500">non affecté(s) au dernier upload</p>
             </div>
+          </div>
+        </div>
+      )}
+      {chartData.length > 0 && (
+        <div className="card p-5" data-testid="acct-dashboard-chart">
+          <h3 className="mb-1 text-sm font-700">Réel vs Budget — {summary.month_label} {summary.year}</h3>
+          <p className="mb-4 text-xs text-slate-400">Revenus, dépenses et bénéfice net du mois comparés aux budgets.</p>
+          <div style={{ width: "100%", height: 320 }}>
+            <ResponsiveContainer>
+              <BarChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={70} />
+                <Tooltip formatter={(v) => money(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="Réel" fill="#2563EB" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Budget CA" fill="#0E9488" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Budget Rév-1" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}

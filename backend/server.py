@@ -1786,6 +1786,33 @@ async def get_journal(user: dict = Depends(require_admin)):
         d["id"] = str(d.pop("_id"))
     return docs
 
+def _acct_norm(s):
+    import unicodedata
+    s = str(s or "").replace("\xa0", " ")
+    s = "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
+    return " ".join(s.upper().split())
+
+@api.get("/acct/summary")
+async def acct_summary(year: int, month: int, user: dict = Depends(get_current_user)):
+    rep = await _acct_report(year, month, "pnl")
+    rev = ben = None
+    for ln in rep["lines"]:
+        n = _acct_norm(ln["label"])
+        if rev is None and n == "TOTAL DES REVENUS":
+            rev = ln["values"]
+        if n.startswith("BENEFICE NET") and "PERTE" in n and "SELON" not in n:
+            ben = ln["values"]
+    keys = ["reel", "bud_ca", "bud_rev1"]
+    if not rev or not ben:
+        return {"period": rep["period"], "month_label": rep["month_label"], "year": rep["year"], "categories": []}
+    cats = [
+        {"label": "Revenus", "values": {k: rev.get(k, 0) for k in keys}},
+        {"label": "Dépenses", "values": {k: round(rev.get(k, 0) - ben.get(k, 0), 2) for k in keys}},
+        {"label": "Bénéfice net", "values": {k: ben.get(k, 0) for k in keys}},
+    ]
+    return {"period": rep["period"], "month_label": rep["month_label"], "year": rep["year"],
+            "locked": rep["locked"], "categories": cats}
+
 @api.get("/")
 async def root():
     return {"message": "API Budget Salaires Pro"}

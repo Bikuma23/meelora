@@ -81,4 +81,5 @@ export const api = {
   acctReportExcel: (params) => client.get("/acct/report/excel", { params, responseType: "blob" }).then((r) => r.data),
   acctAccounts: () => client.get("/acct/accounts").then((r) => r.data),
   acctAccountMap: (assignments, params) => client.post("/acct/account-map", { assignments }, { params }).then((r) => r.data),
+  acctSummary: (params) => client.get("/acct/summary", { params }).then((r) => r.data),
 };
