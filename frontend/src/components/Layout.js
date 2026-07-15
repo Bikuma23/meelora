@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
 import {
-  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown,
+  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
@@ -52,11 +52,13 @@ const NAV_ACCT = [
 
 const NAV_GROUP = [
   { key: "dashboard", label: "Tableau de bord", sub: "Vue globale", icon: LayoutDashboard },
-  { key: "employes", label: "Employés", sub: "Gestion RH", icon: Users },
-  { key: "budget", label: "Salaires & Budget", sub: "Saisie & calculs", icon: DollarSign },
-  { key: "hypotheses", label: "Hypothèses", sub: "Taux & paramètres", icon: Settings },
-  { key: "departements", label: "Départements", sub: "Codes & superviseurs", icon: Building2 },
-  { key: "rapports", label: "Rapports", sub: "Prédéfinis & custom", icon: FileText },
+];
+const BUDGET_PARENT = { key: "budget", label: "Salaires & Budget", sub: "Saisie & calculs", icon: DollarSign };
+const BUDGET_CHILDREN = [
+  { key: "employes", label: "Employés", icon: Users },
+  { key: "hypotheses", label: "Hypothèses", icon: Settings },
+  { key: "departements", label: "Départements", icon: Building2 },
+  { key: "rapports", label: "Rapports", icon: FileText },
 ];
 const NAV_BOTTOM = [
   { key: "journal", label: "Journal", sub: "Historique des modifications", icon: ScrollText },
@@ -82,6 +84,51 @@ function NavItem({ item, active, onClick }) {
         <span className={`block truncate text-[11px] ${on ? "text-[#15AF97]" : "text-slate-400"}`}>{item.sub}</span>
       </span>
     </button>
+  );
+}
+
+function NavSubItem({ item, active, onClick }) {
+  const Icon = item.icon;
+  const on = active === item.key;
+  return (
+    <button data-testid={`nav-${item.key}`} onClick={() => onClick(item.key)}
+      className={`group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors duration-150 ${on ? "bg-white/10 font-700 text-white" : "font-600 text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+      {on && <span className="absolute left-0 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r-full bg-[#15AF97]" />}
+      <Icon size={15} strokeWidth={2.2} className={on ? "text-[#15AF97]" : "text-slate-400 group-hover:text-white"} />
+      <span className="truncate">{item.label}</span>
+    </button>
+  );
+}
+
+function NavParent({ item, children, active, onClick }) {
+  const Icon = item.icon;
+  const childActive = children.some((c) => c.key === active);
+  const on = active === item.key;
+  const [open, setOpen] = useState(childActive || on);
+  useEffect(() => { if (childActive || on) setOpen(true); }, [childActive, on]);
+  return (
+    <div>
+      <div className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors duration-150 ${on ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+        {on && <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[#15AF97]" />}
+        <button data-testid={`nav-${item.key}`} onClick={() => { onClick(item.key); setOpen(true); }} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+          <span className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${on ? "bg-[#15AF97] text-white" : "bg-white/5 text-slate-300 group-hover:bg-white/15 group-hover:text-white"}`}>
+            <Icon size={16} strokeWidth={2.2} />
+          </span>
+          <span className="min-w-0">
+            <span className={`block truncate text-sm ${on ? "font-700" : "font-600"}`}>{item.label}</span>
+            <span className={`block truncate text-[11px] ${on ? "text-[#15AF97]" : "text-slate-400"}`}>{item.sub}</span>
+          </span>
+        </button>
+        <button data-testid={`nav-${item.key}-toggle`} onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }} className="rounded-md p-1 text-slate-400 hover:text-white">
+          {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        </button>
+      </div>
+      {open && (
+        <div className="mt-1 space-y-1 border-l border-white/10 pl-3 ml-5">
+          {children.map((c) => <NavSubItem key={c.key} item={c} active={active} onClick={onClick} />)}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -179,6 +226,7 @@ function LayoutInner() {
             <span className="overline" style={{ color: "#94A3B8" }}>Masse Salariale</span>
           </div>
           {NAV_GROUP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
+          <NavParent item={BUDGET_PARENT} children={BUDGET_CHILDREN} active={active} onClick={go} />
           <div className="flex items-center gap-2 px-3 pb-1 pt-4">
             <Calculator size={13} className="text-[#15AF97]" />
             <span className="overline" style={{ color: "#94A3B8" }}>Comptabilité</span>
