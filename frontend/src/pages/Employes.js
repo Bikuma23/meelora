@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import ImportErrorsDialog from "../components/ImportErrorsDialog";
 import EmployeeDetailDialog from "../components/EmployeeDetailDialog";
 import BudgetDetailDialog from "../components/BudgetDetailDialog";
+import BudgetFicheDialog from "../components/BudgetFicheDialog";
 import { EditableCell } from "../components/EditableCell";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "../components/ui/alert-dialog";
 
@@ -204,6 +205,9 @@ export default function Employes() {
   const [detailVersions, setDetailVersions] = useState(null);
   const [scenario, setScenario] = useState("ca");
   const [budgetDetail, setBudgetDetail] = useState({ open: false, line: null, employee: null, scenario: "ca" });
+  const [ficheEdit, setFicheEdit] = useState({ open: false, line: null, scenario: "ca" });
+  const [locks, setLocks] = useState({});
+  const isAdmin = user?.role === "admin";
   const [showInactive, setShowInactive] = useState(false);
   const [securityClasses, setSecurityClasses] = useState([]);
   const [sort, setSort] = useState({ key: "employee_number", dir: "asc" });
@@ -213,6 +217,7 @@ export default function Employes() {
 
   const load = (q, inc) => api.listEmployees({ ...(q ? { q } : {}), ...((inc ?? showInactive) ? { include_inactive: true } : {}) }).then(setEmployees);
   useEffect(() => { api.listDepartments().then(setDepartments); api.getHypotheses().then((h) => setSecurityClasses(h.security_classes || [])).catch(() => {}); load(); }, []);
+  useEffect(() => { api.getLocks({ year }).then(setLocks).catch(() => {}); }, [year]);
   useEffect(() => { const t = setTimeout(() => load(query), 250); return () => clearTimeout(t); }, [query, showInactive]);
   useEffect(() => {
     api.getPreferences().then((p) => { if (p?.employees_sort?.key) setSort(p.employees_sort); if (p?.budget_scenario) setScenario(p.budget_scenario); }).catch(() => {}).finally(() => setPrefsLoaded(true));
@@ -320,6 +325,15 @@ export default function Employes() {
       if (baseline == null) baseline = scen === "ca" ? line.total_cost : (await loadBudgetLine(e, "ca"))?.total_cost ?? null;
       setBudgetDetail((p) => ({ ...p, line, scenario: scen, baseline }));
     } catch { toast.error("Chargement du budget échoué"); }
+  };
+  const afterFicheEdit = async (scn) => {
+    const e = budgetDetail.employee;
+    if (!e) return;
+    try {
+      const scen = scn || budgetDetail.scenario;
+      const line = await loadBudgetLine(e, scen);
+      if (line) setBudgetDetail((p) => ({ ...p, line, scenario: scen, open: true }));
+    } catch { /* silencieux */ }
   };
 
   return (
@@ -431,7 +445,10 @@ export default function Employes() {
 
       {dialog.open && <EmpForm open={dialog.open} onOpenChange={(v) => setDialog((p) => ({ ...p, open: v }))} initial={dialog.item} departments={departments} securityClasses={securityClasses} onSubmit={submit} />}
       <EmployeeDetailDialog open={detail.open} onOpenChange={(v) => setDetail((p) => ({ ...p, open: v }))} employee={detail.item} departments={departments} securityClasses={securityClasses} year={year} versions={detailVersions} canEdit={canEdit} onEdit={(e) => setDialog({ open: true, item: e })} onViewBudget={viewBudget} />
-      <BudgetDetailDialog open={budgetDetail.open} onOpenChange={(v) => setBudgetDetail((p) => ({ ...p, open: v }))} line={budgetDetail.line} year={year} scenario={budgetDetail.scenario} canEdit={false} onEdit={() => {}} scenarioOptions={[["ca", "Budget CA"], ["revue1", "Revue 1"], ["revue2", "Revue 2"]]} onScenarioChange={changeBudgetScenario} baselineTotal={budgetDetail.baseline} />
+      <BudgetDetailDialog open={budgetDetail.open} onOpenChange={(v) => setBudgetDetail((p) => ({ ...p, open: v }))} line={budgetDetail.line} year={year} scenario={budgetDetail.scenario} canEdit={canEdit} onEdit={(ln) => setFicheEdit({ open: true, line: ln, scenario: budgetDetail.scenario })} scenarioOptions={[["ca", "Budget CA"], ["revue1", "Revue 1"], ["revue2", "Revue 2"]]} onScenarioChange={changeBudgetScenario} baselineTotal={budgetDetail.baseline} />
+      {ficheEdit.open && ficheEdit.line && (
+        <BudgetFicheDialog open={ficheEdit.open} onOpenChange={(v) => setFicheEdit((p) => ({ ...p, open: v }))} line={ficheEdit.line} year={year} scenario={ficheEdit.scenario} locks={locks} isAdmin={isAdmin} onSaved={afterFicheEdit} />
+      )}
       <ImportErrorsDialog open={importErrors.open} onOpenChange={(v) => setImportErrors((p) => ({ ...p, open: v }))} errors={importErrors.errors} fileName={importErrors.fileName} />
       <AlertDialog open={!!confirmDel} onOpenChange={(v) => !v && setConfirmDel(null)}>
         <AlertDialogContent data-testid="delete-confirm-dialog">
