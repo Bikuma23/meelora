@@ -70,11 +70,11 @@ function NavItem({ item, active, onClick }) {
       data-testid={`nav-${item.key}`}
       onClick={() => onClick(item.key)}
       className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors duration-150 ${
-        on ? "bg-[#15AF97]/[0.08] text-[#063044] dark:bg-[#15AF97]/10 dark:text-[#15AF97]" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+        on ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/10 hover:text-white"
       }`}
     >
       {on && <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[#15AF97]" />}
-      <span className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${on ? "bg-[#063044] text-white" : "bg-slate-100 text-slate-400 group-hover:bg-slate-200 group-hover:text-slate-600"}`}>
+      <span className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${on ? "bg-[#15AF97] text-white" : "bg-white/5 text-slate-300 group-hover:bg-white/15 group-hover:text-white"}`}>
         <Icon size={16} strokeWidth={2.2} />
       </span>
       <span className="min-w-0">
@@ -159,29 +159,29 @@ function LayoutInner() {
   return (
     <div className="flex min-h-screen bg-[#F4F6F8]">
       {mobileOpen && <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setMobileOpen(false)} data-testid="sidebar-overlay" />}
-      <aside className={`fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-slate-200 bg-white px-3 py-4 transition-transform duration-200 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      <aside className={`fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-white/10 bg-[#063044] px-3 py-4 transition-transform duration-200 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="mb-6 flex items-center justify-between gap-2.5 px-2">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#063044]">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F8A942]">
               <DollarSign size={20} className="text-white" strokeWidth={2.4} />
             </span>
             <div>
-              <h1 className="font-display text-base font-800 leading-none text-slate-900">Budget Salaires</h1>
+              <h1 className="font-display text-base font-800 leading-none text-white">Budget Salaires</h1>
               <p className="text-[11px] font-600 uppercase tracking-widest text-[#F8A942]">Pro</p>
             </div>
           </div>
-          <button className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:hidden" onClick={() => setMobileOpen(false)} data-testid="sidebar-close-btn"><X size={20} /></button>
+          <button className="rounded-lg p-1.5 text-slate-300 hover:bg-white/10 lg:hidden" onClick={() => setMobileOpen(false)} data-testid="sidebar-close-btn"><X size={20} /></button>
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto">
           <div className="flex items-center gap-2 px-3 pb-1 pt-1">
             <Briefcase size={13} className="text-[#15AF97]" />
-            <span className="overline">Masse Salariale</span>
+            <span className="overline" style={{ color: "#94A3B8" }}>Masse Salariale</span>
           </div>
           {NAV_GROUP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           <div className="flex items-center gap-2 px-3 pb-1 pt-4">
             <Calculator size={13} className="text-[#15AF97]" />
-            <span className="overline">Comptabilité</span>
+            <span className="overline" style={{ color: "#94A3B8" }}>Comptabilité</span>
           </div>
           {NAV_ACCT.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           {user?.role === "admin" && (
@@ -191,30 +191,30 @@ function LayoutInner() {
           )}
         </nav>
 
-        <div className="mt-3 border-t border-slate-200 pt-3">
+        <div className="mt-3 border-t border-white/10 pt-3">
           {userMenuOpen && (
             <div className="mb-2 space-y-1" data-testid="user-submenu">
               <NavItem item={{ key: "preferences", label: "Mon profil", sub: "Préférences & apparence", icon: UserCog }} active={active} onClick={(k) => { go(k); setUserMenuOpen(false); }} />
               {user?.role === "admin" && <NavItem item={{ key: "utilisateurs", label: "Utilisateurs", sub: "Comptes & accès", icon: ShieldCheck }} active={active} onClick={(k) => { go(k); setUserMenuOpen(false); }} />}
               <button data-testid="logout-btn" onClick={logout}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-600 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600">
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-600 text-slate-300 transition-colors hover:bg-red-500/15 hover:text-red-300">
                 <LogOut size={16} /> Déconnexion
               </button>
             </div>
           )}
           <button data-testid="user-menu-toggle" onClick={() => setUserMenuOpen((o) => !o)}
-            className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-slate-100">
+            className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-white/10">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-700 text-white" style={{ backgroundColor: avatarColor }}>
               {(user?.name || "U").charAt(0)}
             </span>
             <div className="min-w-0 flex-1 text-left">
               <div className="flex items-center gap-1.5">
-                <p className="truncate text-sm font-600 text-slate-900">{user?.name}</p>
-                <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-700 uppercase" style={{ backgroundColor: roleMeta.c + "1A", color: roleMeta.c }}>{roleMeta.label}</span>
+                <p className="truncate text-sm font-600 text-white">{user?.name}</p>
+                <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-700 uppercase" style={{ backgroundColor: roleMeta.t + "22", color: roleMeta.t }}>{roleMeta.label}</span>
               </div>
               <p className="truncate text-[11px] text-slate-400">{user?.email}</p>
             </div>
-            {userMenuOpen ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronUp size={16} className="text-slate-400" />}
+            {userMenuOpen ? <ChevronDown size={16} className="text-slate-300" /> : <ChevronUp size={16} className="text-slate-300" />}
           </button>
         </div>
       </aside>
