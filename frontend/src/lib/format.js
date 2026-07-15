@@ -1,7 +1,6 @@
 export const fmtCAD = (v) =>
   new Intl.NumberFormat("fr-CA", {
-    style: "currency",
-    currency: "CAD",
+    style: "decimal",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(v || 0);

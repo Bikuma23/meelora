@@ -381,7 +381,8 @@ function excelRowStyle(ln) {
   else if (st.c) color = st.c;
   else if (ln.kind === "header") color = "#063044";
   else color = undefined;
-  return { cls: cls.join(" "), bg, color, isDark };
+  const headerDefault = !isDark && !isGrey && !st.c && ln.kind === "header";
+  return { cls: cls.join(" "), bg, color, isDark, headerDefault };
 }
 function excelCellColor(s, val, ecart) {
   if (s.isDark) return val < 0 ? "#FCA5A5" : (s.color || "#FFFFFF");
@@ -495,7 +496,7 @@ function ReportView({ type, title }) {
                   <tr key={ln.row} data-testid={`acct-line-${ln.row}`}
                     className={`border-b border-slate-50 ${s.cls}`} style={{ background: s.bg }}>
                     <td className="px-4 py-1.5 text-left" style={{ color: s.isDark ? "#94A3B8" : "#94A3B8" }}>{ln.account || ""}</td>
-                    <td className="px-4 py-1.5 text-left font-sans" style={{ color: s.color || (ln.kind === "data" ? "#334155" : undefined) }}>{ln.label}</td>
+                    <td className={`px-4 py-1.5 text-left font-sans ${s.headerDefault ? "text-[#063044]" : (!s.color && ln.kind === "data" ? "text-slate-700" : "")}`} style={{ color: s.headerDefault ? undefined : (s.color || undefined) }}>{ln.label}</td>
                     {visibleCols.map((k) => (
                       <td key={k} className={`px-4 py-1.5 text-right ${isEcart(k) ? "italic" : ""} ${showSep(k) ? "border-l-2 border-slate-200" : ""}`} style={{ color: excelCellColor(s, ln.values[k], isEcart(k)) }}>{ln.kind === "header" ? "" : money(ln.values[k])}</td>
                     ))}
@@ -580,7 +581,7 @@ function BilanSommaireView({ millions = false }) {
             const s = excelRowStyle(l);
             return (
             <tr key={i} className={`border-b border-slate-50 ${s.cls}`} style={{ background: s.bg }}>
-              <td className={`px-3 py-1.5 text-left font-sans ${l.kind === "data" ? "pl-5" : ""}`} style={{ color: s.color || (l.kind === "data" ? "#334155" : undefined) }}>{l.label}</td>
+              <td className={`px-3 py-1.5 text-left font-sans ${l.kind === "data" ? "pl-5" : ""} ${s.headerDefault ? "text-[#063044]" : (!s.color && l.kind === "data" ? "text-slate-700" : "")}`} style={{ color: s.headerDefault ? undefined : (s.color || undefined) }}>{l.label}</td>
               <td className="px-3 py-1.5 text-right" style={{ color: l.value == null ? undefined : excelCellColor(s, l.value, false) }}>{l.value == null ? "" : fmt(l.value)}</td>
             </tr>
             );

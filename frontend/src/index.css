@@ -69,6 +69,12 @@ input, button, select, textarea, table, th, td { font-family: Calibri, Carlito, 
 .dark .divide-slate-200 > * + * { border-color:#1F2937 !important; }
 .dark .hover\:bg-slate-50:hover { background-color:#1E293B !important; }
 .dark .hover\:bg-slate-100:hover { background-color:#243044 !important; }
+/* Refonte : classes arbitraires à adapter au thème sombre */
+.dark .bg-\[\#F4F6F8\] { background-color:#0B1120 !important; }
+.dark .bg-white\/80 { background-color:rgba(17,24,39,.85) !important; }
+.dark .bg-white\/70 { background-color:rgba(17,24,39,.8) !important; }
+.dark .text-\[\#063044\] { color:#E2E8F0 !important; }
+.dark .bg-\[\#eef1f5\] { background-color:#243044 !important; }
 
 @layer base {
   :root {
