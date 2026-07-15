@@ -70,16 +70,16 @@ function NavItem({ item, active, onClick }) {
       data-testid={`nav-${item.key}`}
       onClick={() => onClick(item.key)}
       className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors duration-150 ${
-        on ? "bg-[#063044]/[0.06] text-[#063044]" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+        on ? "bg-[#15AF97]/[0.08] text-[#063044] dark:bg-[#15AF97]/10 dark:text-[#15AF97]" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
       }`}
     >
-      {on && <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[#063044]" />}
+      {on && <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[#15AF97]" />}
       <span className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${on ? "bg-[#063044] text-white" : "bg-slate-100 text-slate-400 group-hover:bg-slate-200 group-hover:text-slate-600"}`}>
         <Icon size={16} strokeWidth={2.2} />
       </span>
       <span className="min-w-0">
         <span className={`block truncate text-sm ${on ? "font-700" : "font-600"}`}>{item.label}</span>
-        <span className={`block truncate text-[11px] ${on ? "text-[#063044]/55" : "text-slate-400"}`}>{item.sub}</span>
+        <span className={`block truncate text-[11px] ${on ? "text-[#15AF97]" : "text-slate-400"}`}>{item.sub}</span>
       </span>
     </button>
   );
@@ -176,13 +176,13 @@ function LayoutInner() {
         <nav className="flex-1 space-y-1 overflow-y-auto">
           {NAV_TOP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           <div className="flex items-center gap-2 px-3 pb-1 pt-4">
-            <Briefcase size={13} className="text-slate-400" />
-            <span className="text-[11px] font-700 uppercase tracking-widest text-slate-400">Masse Salariale</span>
+            <Briefcase size={13} className="text-[#15AF97]" />
+            <span className="overline">Masse Salariale</span>
           </div>
           {NAV_GROUP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           <div className="flex items-center gap-2 px-3 pb-1 pt-4">
-            <Calculator size={13} className="text-slate-400" />
-            <span className="text-[11px] font-700 uppercase tracking-widest text-slate-400">Comptabilité</span>
+            <Calculator size={13} className="text-[#15AF97]" />
+            <span className="overline">Comptabilité</span>
           </div>
           {NAV_ACCT.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           {user?.role === "admin" && (
@@ -225,12 +225,13 @@ function LayoutInner() {
           <div className="flex min-w-0 items-center gap-2.5">
             <button className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden" onClick={() => setMobileOpen(true)} data-testid="sidebar-open-btn"><Menu size={22} /></button>
             <div className="min-w-0">
-              <h2 className="font-display truncate text-lg font-800 tracking-tight text-slate-900 sm:text-xl">{page.title}</h2>
+              <p className="overline mb-0.5">{active.startsWith("acct_") ? "Comptabilité" : "Masse salariale"}</p>
+              <h2 className="font-display truncate text-lg font-400 tracking-tight text-[#063044] dark:text-white sm:text-2xl">{page.title}</h2>
               <p className="truncate text-xs text-slate-500">{page.sub}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            {!active.startsWith("acct_") && <span className="hidden rounded-full bg-[#063044]/10 px-3 py-1 text-xs font-600 text-[#063044] sm:inline-flex">Budget actif</span>}
+            {!active.startsWith("acct_") && <span className="hidden rounded-full bg-[#15AF97]/10 px-3 py-1 text-xs font-600 text-[#15AF97] sm:inline-flex">Budget actif</span>}
             <YearControls />
           </div>
         </header>

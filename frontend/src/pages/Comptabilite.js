@@ -71,12 +71,13 @@ function KpiCard({ label, value, series, idx, positiveIsGood = true, icon: Icon,
   const up = delta != null && delta >= 0;
   const good = delta == null ? true : (up === positiveIsGood);
   return (
-    <div className="card card-hover p-5" data-testid={testid}>
+    <div className="card card-hover relative overflow-hidden p-5 pl-6" data-testid={testid}>
+      <span className="absolute left-0 top-0 h-full w-1 bg-[#15AF97]" />
       <div className="flex items-start justify-between">
-        <span className="text-xs font-600 uppercase tracking-[0.12em] text-slate-500">{label}</span>
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#063044]/[0.06] text-[#063044]"><Icon size={18} /></span>
+        <span className="overline">{label}</span>
+        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#15AF97]/10 text-[#15AF97]"><Icon size={18} /></span>
       </div>
-      <p className="font-display mt-3 text-3xl font-800 tracking-tight text-slate-900">{money(value)}</p>
+      <p className="font-display mt-3 text-3xl font-700 tracking-tight text-[#063044]">{money(value)}</p>
       <div className="mt-1 flex items-center gap-1.5 text-xs font-600" style={{ color: delta == null ? "#94A3B8" : (good ? "#10B981" : "#EF4444") }}>
         {delta != null && (up ? <TrendingUp size={14} /> : <TrendingDown size={14} />)}
         {delta != null ? `${up ? "+" : ""}${delta.toFixed(1)}% vs période préc.` : "Aucune donnée antérieure"}

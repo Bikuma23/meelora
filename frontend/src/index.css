@@ -1,5 +1,4 @@
-@import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@700,800,900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -24,18 +23,30 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.font-display { font-family: Calibri, Carlito, "Segoe UI", sans-serif; letter-spacing: -0.01em; }
+.font-display { font-family: "Montserrat", "Segoe UI", sans-serif; letter-spacing: -0.01em; }
 .font-mono-data { font-family: Calibri, Carlito, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
-/* Calibri sur toute l'application (override des utilitaires Tailwind) */
+/* Calibri sur le corps et les données ; Montserrat réservé aux titres (.font-display) */
 .font-sans, .font-mono { font-family: Calibri, Carlito, "Segoe UI", sans-serif !important; }
 input, button, select, textarea, table, th, td { font-family: Calibri, Carlito, "Segoe UI", sans-serif; }
+/* Poids numériques (utilisés dans toute l'app : font-300 … font-900) */
+.font-300{font-weight:300}
+.font-400{font-weight:400}
+.font-500{font-weight:500}
+.font-600{font-weight:600}
+.font-700{font-weight:700}
+.font-800{font-weight:800}
+.font-900{font-weight:800}
 
-::selection { background: #F8A942; color: #fff; }
+/* Suptitre / overline façon accslegroupe */
+.overline { text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.7rem; font-weight: 600; color: #808080; }
+.dark .overline { color: #94A3B8; }
+
+::selection { background: #15AF97; color: #fff; }
 
 .card { background:#fff; border:1px solid #E8ECF1; border-radius:16px; box-shadow:0 2px 12px rgba(15,41,47,.05); transition: box-shadow .2s ease, transform .2s ease; }
 .card-hover:hover { box-shadow:0 10px 30px rgba(15,41,47,.10); transform: translateY(-2px); }
 
-*:focus-visible { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(15,41,47,.45); border-radius: 8px; }
+*:focus-visible { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(21,175,151,.55); border-radius: 8px; }
 
 /* ---- Thème sombre (par utilisateur) ---- */
 .dark body { background-color:#0B1120; color:#E2E8F0; }
