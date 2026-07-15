@@ -33,7 +33,7 @@ const PAGES = {
   utilisateurs: { title: "Utilisateurs", sub: "Comptes & accès", comp: UsersPage },
   journal: { title: "Journal", sub: "Historique des modifications", comp: Journal },
   preferences: { title: "Mon profil", sub: "Préférences & apparence", comp: Preferences },
-  acct_dashboard: { title: "Comptabilité — Tableau de bord", sub: "Vue d'ensemble du mois", comp: AcctDashboard },
+  acct_dashboard: { title: "Tableau de bord", sub: "Vue d'ensemble du mois", comp: AcctDashboard },
   acct_bv: { title: "Balance de vérification", sub: "Upload & gestion mensuelle", comp: AcctBV },
   acct_bilan: { title: "Bilan", sub: "État de situation financière", comp: AcctBilan },
   acct_pnl: { title: "État des résultats", sub: "P&L du mois", comp: AcctPnl },
@@ -50,8 +50,8 @@ const NAV_ACCT = [
   { key: "acct_audit", label: "Rapports d'audit", sub: "À venir", icon: FileText },
 ];
 
-const NAV_TOP = [{ key: "dashboard", label: "Tableau de bord", sub: "Vue globale", icon: LayoutDashboard }];
 const NAV_GROUP = [
+  { key: "dashboard", label: "Tableau de bord", sub: "Vue globale", icon: LayoutDashboard },
   { key: "employes", label: "Employés", sub: "Gestion RH", icon: Users },
   { key: "budget", label: "Salaires & Budget", sub: "Saisie & calculs", icon: DollarSign },
   { key: "hypotheses", label: "Hypothèses", sub: "Taux & paramètres", icon: Settings },
@@ -174,8 +174,7 @@ function LayoutInner() {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto">
-          {NAV_TOP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
-          <div className="flex items-center gap-2 px-3 pb-1 pt-4">
+          <div className="flex items-center gap-2 px-3 pb-1 pt-1">
             <Briefcase size={13} className="text-[#15AF97]" />
             <span className="overline">Masse Salariale</span>
           </div>

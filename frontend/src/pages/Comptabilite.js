@@ -71,13 +71,13 @@ function KpiCard({ label, value, series, idx, positiveIsGood = true, icon: Icon,
   const up = delta != null && delta >= 0;
   const good = delta == null ? true : (up === positiveIsGood);
   return (
-    <div className="card card-hover relative overflow-hidden p-5 pl-6" data-testid={testid}>
+    <div className="card card-hover relative overflow-hidden p-4 pl-5" data-testid={testid}>
       <span className="absolute left-0 top-0 h-full w-1 bg-[#15AF97]" />
       <div className="flex items-start justify-between">
         <span className="overline">{label}</span>
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#15AF97]/10 text-[#15AF97]"><Icon size={18} /></span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#15AF97]/10 text-[#15AF97]"><Icon size={16} /></span>
       </div>
-      <p className="font-display mt-3 text-3xl font-700 tracking-tight text-[#063044]">{money(value)}</p>
+      <p className="font-display mt-2 text-2xl font-700 tracking-tight text-[#063044]">{money(value)}</p>
       <div className="mt-1 flex items-center gap-1.5 text-xs font-600" style={{ color: delta == null ? "#94A3B8" : (good ? "#10B981" : "#EF4444") }}>
         {delta != null && (up ? <TrendingUp size={14} /> : <TrendingDown size={14} />)}
         {delta != null ? `${up ? "+" : ""}${delta.toFixed(1)}% vs période préc.` : "Aucune donnée antérieure"}
@@ -130,7 +130,7 @@ export function AcctDashboard() {
       </div>
 
       {cur && (
-        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4" data-testid="acct-kpi-grid">
+        <div className="grid max-w-5xl gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="acct-kpi-grid">
           <KpiCard label="Revenus (cumulatif)" value={cur.revenus_cumulatif} series={revSeries} idx={idx} positiveIsGood icon={Wallet} testid="kpi-revenus" />
           <KpiCard label="COGS (cumulatif)" value={cur.cogs_cumulatif} series={cogsSeries} idx={idx} positiveIsGood={false} icon={Receipt} testid="kpi-cogs" />
           <KpiCard label="BAIIA (cumulatif)" value={cur.baiia_cumulatif} series={baiiaSeries} idx={idx} positiveIsGood icon={BarChart3} testid="kpi-baiia" />
