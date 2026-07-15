@@ -321,6 +321,11 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - Vérifié par capture (bascule FR→EN : sidebar/ossature/préférences en anglais).
 - [ ] **Phase 2 (à venir)** : traduire les pages métier (Tableau de bord, Employés, Salaires & Budget, Hypothèses, Départements, Rapports, Journal, Utilisateurs) + dialogues. Comptabilité : interface traduisible, mais libellés de lignes Bilan/P&L resteront issus du modèle Excel FR jusqu'à réception d'un **modèle Excel EN** (fourni ultérieurement par l'utilisateur).
 
+- [ ] **Phase 2 (en cours)** :
+  - [x] Journal, Utilisateurs, Hypothèses, Départements, Rapports traduits (FR/EN) via dictionnaire `lib/i18n.js`.
+  - [ ] Restant : **Tableau de bord (Dashboard)**, **Employés**, **Salaires & Budget**, **Comptabilité** + dialogues (BudgetFiche, BudgetDetail, EmployeeDetail, ImportErrors, EditableCell).
+  - Comptabilité : interface à traduire ; libellés de lignes Bilan/P&L resteront issus du modèle Excel FR jusqu'à réception d'un **modèle Excel EN**.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

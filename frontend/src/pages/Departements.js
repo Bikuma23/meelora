@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { useLang } from "../context/LanguageContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -14,19 +15,17 @@ const PL_GROUPS = ["Projets", "Services", "Ventes", "Marketing", "RH", "Administ
 const empty = { code: "", description: "", superviseur: "", compte_gl: "", groupe_pl: "Services", gl_boni: "" };
 
 function DeptForm({ open, onOpenChange, initial, onSubmit }) {
+  const { t } = useLang();
   const [f, setF] = useState(empty);
   const [errors, setErrors] = useState({});
-  useEffect(() => {
-    setF(initial ? { ...initial } : empty);
-    setErrors({});
-  }, [initial, open]);
+  useEffect(() => { setF(initial ? { ...initial } : empty); setErrors({}); }, [initial, open]);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
   const submit = () => {
     const e = {};
-    ["code", "description", "superviseur", "compte_gl", "groupe_pl"].forEach((k) => { if (!String(f[k]).trim()) e[k] = "Requis"; });
+    ["code", "description", "superviseur", "compte_gl", "groupe_pl"].forEach((k) => { if (!String(f[k]).trim()) e[k] = t("Requis"); });
     setErrors(e);
-    if (Object.keys(e).length) { toast.error("Champs obligatoires manquants"); return; }
+    if (Object.keys(e).length) { toast.error(t("Champs obligatoires manquants")); return; }
     onSubmit({
       code: f.code.trim(), description: f.description.trim(), superviseur: f.superviseur.trim(),
       compte_gl: f.compte_gl.trim(), groupe_pl: f.groupe_pl, gl_boni: (f.gl_boni || "").trim(), csst: initial?.csst ?? 0,
@@ -37,41 +36,41 @@ function DeptForm({ open, onOpenChange, initial, onSubmit }) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md" data-testid="dept-form-dialog">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Building2 size={18} className="text-[#063044]" /> {initial ? "Modifier le département" : "Nouveau département"}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><Building2 size={18} className="text-[#063044]" /> {initial ? t("Modifier le département") : t("Nouveau département")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-1">
-          <p className="flex items-center gap-1.5 text-xs font-700 uppercase tracking-wide text-slate-500"><Info size={13} /> Identification</p>
-          {[["code", "Code"], ["description", "Description"], ["superviseur", "Superviseur"]].map(([k, lbl]) => (
+          <p className="flex items-center gap-1.5 text-xs font-700 uppercase tracking-wide text-slate-500"><Info size={13} /> {t("Identification")}</p>
+          {[["code", t("Code")], ["description", t("Description")], ["superviseur", t("Superviseur")]].map(([k, lbl]) => (
             <div key={k}>
               <Label className="text-xs">{lbl} <span className="text-red-500">*</span></Label>
               <Input data-testid={`dept-${k}`} className="mt-1" value={f[k]} onChange={(e) => set(k, e.target.value)} />
               {errors[k] && <p className="mt-1 text-[11px] text-red-500">{errors[k]}</p>}
             </div>
           ))}
-          <p className="flex items-center gap-1.5 pt-1 text-xs font-700 uppercase tracking-wide text-slate-500"><Info size={13} /> Comptabilité</p>
+          <p className="flex items-center gap-1.5 pt-1 text-xs font-700 uppercase tracking-wide text-slate-500"><Info size={13} /> {t("Comptabilité")}</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs">Compte GL <span className="text-red-500">*</span></Label>
+              <Label className="text-xs">{t("Compte GL")} <span className="text-red-500">*</span></Label>
               <Input data-testid="dept-compte_gl" className="mt-1 font-mono-data" value={f.compte_gl} onChange={(e) => set("compte_gl", e.target.value)} />
               {errors.compte_gl && <p className="mt-1 text-[11px] text-red-500">{errors.compte_gl}</p>}
             </div>
             <div>
-              <Label className="text-xs">Groupe P&L <span className="text-red-500">*</span></Label>
+              <Label className="text-xs">{t("Groupe P&L")} <span className="text-red-500">*</span></Label>
               <Select value={f.groupe_pl} onValueChange={(v) => set("groupe_pl", v)}>
                 <SelectTrigger data-testid="dept-groupe_pl" className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>{PL_GROUPS.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                <SelectContent>{PL_GROUPS.map((g) => <SelectItem key={g} value={g}>{t(g)}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           </div>
           <div>
-            <Label className="text-xs">Compte GL Boni <span className="text-slate-400">(optionnel)</span></Label>
+            <Label className="text-xs">{t("Compte GL Boni")} <span className="text-slate-400">{t("(optionnel)")}</span></Label>
             <Input data-testid="dept-gl_boni" className="mt-1 font-mono-data" placeholder="Ex. 5006099" value={f.gl_boni} onChange={(e) => set("gl_boni", e.target.value)} />
-            <p className="mt-1 text-[11px] text-slate-400">Compte vers lequel le boni et ses charges sociales sont extraits dans l'état des résultats (P&L).</p>
+            <p className="mt-1 text-[11px] text-slate-400">{t("Compte vers lequel le boni et ses charges sociales sont extraits dans l'état des résultats (P&L).")}</p>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-          <Button data-testid="dept-save-btn" className="bg-[#063044] hover:bg-[#063044]/90" onClick={submit}>{initial ? "Mettre à jour" : "Créer"}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("Annuler")}</Button>
+          <Button data-testid="dept-save-btn" className="bg-[#063044] hover:bg-[#063044]/90" onClick={submit}>{initial ? t("Mettre à jour") : t("Créer")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -80,6 +79,7 @@ function DeptForm({ open, onOpenChange, initial, onSubmit }) {
 
 export default function Departements() {
   const { user } = useAuth();
+  const { t } = useLang();
   const canEdit = ["admin", "editor"].includes(user?.role);
   const [depts, setDepts] = useState([]);
   const [query, setQuery] = useState("");
@@ -97,12 +97,12 @@ export default function Departements() {
       const res = await api.importDepartments(file);
       if (res.aborted || res.errors?.length) {
         setImportErrors({ open: true, errors: res.errors || [], fileName: file.name });
-        toast.error(`Importation annulée — ${res.errors.length} erreur(s)`);
+        toast.error(`${t("Importation annulée —")} ${res.errors.length} ${t("erreur(s)")}`);
       } else {
-        toast.success(`${res.inserted} département(s) importé(s)`);
+        toast.success(`${res.inserted} ${t("département(s) importé(s)")}`);
         load();
       }
-    } catch (e) { toast.error(e.response?.data?.detail || "Import échoué"); }
+    } catch (e) { toast.error(e.response?.data?.detail || t("Import échoué")); }
     finally { ev.target.value = ""; }
   };
 
@@ -112,7 +112,7 @@ export default function Departements() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = "modele_departements.xlsx"; a.click();
       URL.revokeObjectURL(url);
-    } catch { toast.error("Téléchargement du modèle échoué"); }
+    } catch { toast.error(t("Téléchargement du modèle échoué")); }
   };
 
   const filtered = useMemo(() => {
@@ -122,43 +122,43 @@ export default function Departements() {
 
   const submit = async (data) => {
     try {
-      if (dialog.item) { await api.updateDepartment(dialog.item.id, data); toast.success("Département mis à jour"); }
-      else { await api.createDepartment(data); toast.success("Département créé"); }
+      if (dialog.item) { await api.updateDepartment(dialog.item.id, data); toast.success(t("Département mis à jour")); }
+      else { await api.createDepartment(data); toast.success(t("Département créé")); }
       setDialog({ open: false, item: null }); load();
-    } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+    } catch (e) { toast.error(e.response?.data?.detail || t("Erreur")); }
   };
-  const del = async (d) => { await api.deleteDepartment(d.id); toast.success("Supprimé"); load(); };
+  const del = async (d) => { await api.deleteDepartment(d.id); toast.success(t("Supprimé")); load(); };
 
   return (
     <div className="space-y-4" data-testid="departements-page">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500"><b className="text-slate-800">{filtered.length}</b> / {depts.length} départements</p>
+        <p className="text-sm text-slate-500"><b className="text-slate-800">{filtered.length}</b> / {depts.length} {t("départements")}</p>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" className="gap-1.5" data-testid="dept-template-btn" onClick={dlTemplate}><Download size={15} /> Modèle</Button>
+          <Button variant="outline" className="gap-1.5" data-testid="dept-template-btn" onClick={dlTemplate}><Download size={15} /> {t("Modèle")}</Button>
           {canEdit && <>
           <input ref={fileRef} type="file" accept=".xlsx" className="hidden" data-testid="dept-import-input" onChange={onImport} />
-          <Button variant="outline" className="gap-1.5" data-testid="dept-import-btn" onClick={() => fileRef.current?.click()}><Upload size={15} /> Importer Excel</Button>
+          <Button variant="outline" className="gap-1.5" data-testid="dept-import-btn" onClick={() => fileRef.current?.click()}><Upload size={15} /> {t("Importer Excel")}</Button>
           <Button data-testid="add-dept-btn" className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90" onClick={() => setDialog({ open: true, item: null })}>
-            <Plus size={16} /> Nouveau département
+            <Plus size={16} /> {t("Nouveau département")}
           </Button>
           </>}
         </div>
       </div>
       <div className="card flex items-center gap-2 px-4 py-2.5">
         <Search size={16} className="text-slate-400" />
-        <input data-testid="dept-search" className="w-full bg-transparent text-sm outline-none" placeholder="Rechercher par code, description, superviseur…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input data-testid="dept-search" className="w-full bg-transparent text-sm outline-none" placeholder={t("Rechercher par code, description, superviseur…")} value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
-              <th className="px-4 py-3 text-left font-600">Code</th>
-              <th className="px-4 py-3 text-left font-600">Description</th>
-              <th className="px-4 py-3 text-left font-600">Superviseur</th>
-              <th className="px-4 py-3 text-left font-600">Compte GL</th>
-              <th className="px-4 py-3 text-left font-600">GL Boni</th>
-              <th className="px-4 py-3 text-left font-600">Groupe P&L</th>
-              <th className="px-4 py-3 text-right font-600">Actions</th>
+              <th className="px-4 py-3 text-left font-600">{t("Code")}</th>
+              <th className="px-4 py-3 text-left font-600">{t("Description")}</th>
+              <th className="px-4 py-3 text-left font-600">{t("Superviseur")}</th>
+              <th className="px-4 py-3 text-left font-600">{t("Compte GL")}</th>
+              <th className="px-4 py-3 text-left font-600">{t("GL Boni")}</th>
+              <th className="px-4 py-3 text-left font-600">{t("Groupe P&L")}</th>
+              <th className="px-4 py-3 text-right font-600">{t("Actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -169,7 +169,7 @@ export default function Departements() {
                 <td className="px-4 py-3 text-slate-600">{d.superviseur}</td>
                 <td className="px-4 py-3 font-mono-data text-slate-500">{d.compte_gl}</td>
                 <td className="px-4 py-3 font-mono-data text-slate-500">{d.gl_boni || "—"}</td>
-                <td className="px-4 py-3 text-slate-600">{d.groupe_pl}</td>
+                <td className="px-4 py-3 text-slate-600">{t(d.groupe_pl)}</td>
                 <td className="px-4 py-3">
                   {canEdit ? (
                   <div className="flex justify-end gap-1">

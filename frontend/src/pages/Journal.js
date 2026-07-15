@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { useLang } from "../context/LanguageContext";
 import { ScrollText, Plus, Pencil, Trash2 } from "lucide-react";
 
 const ACTION_STYLE = {
@@ -8,21 +9,21 @@ const ACTION_STYLE = {
   "Supprimer": { bg: "#EF44441a", color: "#EF4444", icon: Trash2 },
 };
 
-const fmtDate = (iso) => {
-  try { return new Date(iso).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" }); }
-  catch { return iso; }
-};
-
 export default function Journal() {
+  const { t, lang } = useLang();
   const [entries, setEntries] = useState(null);
   useEffect(() => { api.getJournal().then(setEntries); }, []);
-  if (!entries) return <p className="font-mono-data text-sm text-slate-500">Chargement…</p>;
+  const fmtDate = (iso) => {
+    try { return new Date(iso).toLocaleString(lang === "en" ? "en-CA" : "fr-CA", { dateStyle: "medium", timeStyle: "short" }); }
+    catch { return iso; }
+  };
+  if (!entries) return <p className="font-mono-data text-sm text-slate-500">{t("Chargement…")}</p>;
 
   return (
     <div className="space-y-4" data-testid="journal-page">
-      <p className="text-sm text-slate-500"><b className="text-slate-800">{entries.length}</b> modification(s) enregistrée(s)</p>
+      <p className="text-sm text-slate-500"><b className="text-slate-800">{entries.length}</b> {t("modification(s) enregistrée(s)")}</p>
       <div className="card overflow-hidden">
-        {entries.length === 0 && <p className="p-8 text-center text-sm text-slate-500">Aucune activité pour le moment.</p>}
+        {entries.length === 0 && <p className="p-8 text-center text-sm text-slate-500">{t("Aucune activité pour le moment.")}</p>}
         <ul>
           {entries.map((e) => {
             const st = ACTION_STYLE[e.action] || { bg: "#e2e8f0", color: "#475569", icon: ScrollText };
@@ -34,8 +35,8 @@ export default function Journal() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm">
-                    <span className="font-700" style={{ color: st.color }}>{e.action}</span>
-                    <span className="text-slate-500"> · {e.entity}</span>
+                    <span className="font-700" style={{ color: st.color }}>{t(e.action)}</span>
+                    <span className="text-slate-500"> · {t(e.entity)}</span>
                     <span className="font-600"> — {e.label}</span>
                   </p>
                   <p className="text-[11px] text-slate-400">{e.user_name || e.user_email}</p>
