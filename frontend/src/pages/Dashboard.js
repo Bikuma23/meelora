@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useYear } from "../context/YearContext";
+import { useLang } from "../context/LanguageContext";
 import { fmtCAD } from "../lib/format";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import {
@@ -42,6 +43,7 @@ function Kpi({ label, value, sub, icon: Icon, tint, testId }) {
 
 export default function Dashboard() {
   const { year, years, selectYear } = useYear();
+  const { t } = useLang();
   const [b, setB] = useState(null);
   const [cmp, setCmp] = useState(null);
   const [evo, setEvo] = useState(null);
@@ -62,37 +64,38 @@ export default function Dashboard() {
       <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
         <div className="flex flex-wrap items-center gap-3">
           <div>
-            <label className="text-[11px] uppercase text-slate-500">Année</label>
+            <label className="text-[11px] uppercase text-slate-500">{t("Année")}</label>
             <Select value={String(year)} onValueChange={(v) => selectYear(v)}><SelectTrigger className="mt-1 h-9 w-28" data-testid="dash-year"><SelectValue /></SelectTrigger>
               <SelectContent>{years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
           </div>
           <div>
-            <label className="text-[11px] uppercase text-slate-500">Scénario</label>
+            <label className="text-[11px] uppercase text-slate-500">{t("Scénario")}</label>
             <Select value={scenario} onValueChange={setScenario}><SelectTrigger className="mt-1 h-9 w-48" data-testid="dash-scenario"><SelectValue /></SelectTrigger>
-              <SelectContent>{SCEN.map(([k, l]) => <SelectItem key={k} value={k}>{l}</SelectItem>)}</SelectContent></Select>
+              <SelectContent>{SCEN.map(([k, l]) => <SelectItem key={k} value={k}>{t(l)}</SelectItem>)}</SelectContent></Select>
           </div>
           <div>
-            <label className="text-[11px] uppercase text-slate-500">Département</label>
+            <label className="text-[11px] uppercase text-slate-500">{t("Département")}</label>
             <Select value={dept} onValueChange={setDept}>
               <SelectTrigger className="mt-1 h-9 w-64" data-testid="dash-department"><SelectValue /></SelectTrigger>
               <SelectContent className="max-h-64">
-                <SelectItem value="all">Tous les départements</SelectItem>
+                <SelectItem value="all">{t("Tous les départements")}</SelectItem>
                 {departments.map((d) => <SelectItem key={d.code} value={d.code}>{d.code} — {d.description}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
         </div>
-        <span className="font-mono-data text-xs text-slate-500">{b ? `${b.kpis.headcount} entrée(s) affichée(s)` : "…"}</span>
+        <span className="font-mono-data text-xs text-slate-500">{b ? `${b.kpis.headcount} ${t("entrée(s) affichée(s)")}` : "…"}</span>
       </div>
 
       {cmp && <Comparatif cmp={cmp} />}
       {evo && evo.years.length > 1 && <Evolution evo={evo} />}
-      {!b ? <p className="font-mono-data text-sm text-slate-500">Chargement…</p> : <DashboardBody b={b} />}
+      {!b ? <p className="font-mono-data text-sm text-slate-500">{t("Chargement…")}</p> : <DashboardBody b={b} />}
     </div>
   );
 }
 
 function Comparatif({ cmp }) {
+  const { t } = useLang();
   const rows = [
     ["Salaires actuels", cmp.actuel.masse, "#808080", "Somme des salaires de base"],
     ["Budget CA", cmp.ca.budget_total, BLUE, "Coût total (avec charges)"],
@@ -106,15 +109,15 @@ function Comparatif({ cmp }) {
   const dCA = cmp.actuel.masse ? ((cmp.ca.masse - cmp.actuel.masse) / cmp.actuel.masse) * 100 : 0;
   return (
     <div className="card p-6" data-testid="comparatif-card">
-      <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><Scale size={16} className="text-[#063044]" /> Comparatif des masses salariales — {cmp.year}</h3>
+      <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><Scale size={16} className="text-[#063044]" /> {t("Comparatif des masses salariales —")} {cmp.year}</h3>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <div className="grid grid-cols-2 gap-3">
           {rows.map(([lbl, val, c, sub]) => (
             <div key={lbl} className="rounded-xl border border-slate-200 p-4" data-testid={`cmp-${lbl}`}>
               <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: c }} />
-              <p className="mt-2 text-[11px] font-600 uppercase tracking-wide text-slate-500">{lbl}</p>
+              <p className="mt-2 text-[11px] font-600 uppercase tracking-wide text-slate-500">{t(lbl)}</p>
               <p className="mt-1 font-mono-data text-lg font-700" style={{ color: c }}>{fmtCAD(val)}</p>
-              <p className="mt-0.5 text-[10px] text-slate-400">{sub}</p>
+              <p className="mt-0.5 text-[10px] text-slate-400">{t(sub)}</p>
             </div>
           ))}
         </div>
@@ -131,7 +134,7 @@ function Comparatif({ cmp }) {
               <Bar dataKey="Revue 2" fill={ORANGE} radius={[3, 3, 0, 0]} maxBarSize={26} />
             </BarChart>
           </ResponsiveContainer>
-          <p className="mt-2 text-[11px] text-slate-500">Budget CA vs Salaires actuels : <b className="text-[#063044]">{dCA >= 0 ? "+" : ""}{dCA.toFixed(1)}%</b></p>
+          <p className="mt-2 text-[11px] text-slate-500">{t("Budget CA vs Salaires actuels :")} <b className="text-[#063044]">{dCA >= 0 ? "+" : ""}{dCA.toFixed(1)}%</b></p>
         </div>
       </div>
     </div>
@@ -139,10 +142,11 @@ function Comparatif({ cmp }) {
 }
 
 function Evolution({ evo }) {
+  const { t } = useLang();
   const data = evo.years.map((y) => ({ year: String(y.year), "Salaires actuels": y.actuel, "Budget CA": y.ca, "Revue 1": y.revue1, "Revue 2": y.revue2 }));
   return (
     <div className="card p-6" data-testid="evolution-card">
-      <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><TrendingUp size={16} className="text-[#F8A942]" /> Évolution pluriannuelle de la masse salariale</h3>
+      <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><TrendingUp size={16} className="text-[#F8A942]" /> {t("Évolution pluriannuelle de la masse salariale")}</h3>
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={data} margin={{ left: 4, right: 8 }} barGap={3}>
           <CartesianGrid stroke="#EEF2F7" vertical={false} />
@@ -160,13 +164,14 @@ function Evolution({ evo }) {
 }
 
 function EmployeesKpi({ k }) {
+  const { t } = useLang();
   const sx = k.sex_counts || {};
   const typeRows = [["CCQ", k.ccq_count, "#063044"], ["Non-CCQ", k.non_ccq_count, "#808080"], ["Stagiaire", k.stagiaire_count, "#F8A942"]];
   const sexRows = [["Masculin", sx.Masculin], ["Féminin", sx.Féminin], ["Autre", sx.Autre], ["Non spéc.", sx["Non spécifié"]]];
   return (
     <div className="card p-5" data-testid="kpi-employes">
       <div className="flex items-start justify-between">
-        <span className="text-[11px] font-600 uppercase tracking-widest text-slate-500">Employés actifs</span>
+        <span className="text-[11px] font-600 uppercase tracking-widest text-slate-500">{t("Employés actifs")}</span>
         <span className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ backgroundColor: BLUE + "1a", color: BLUE }}><Users size={18} /></span>
       </div>
       <p className="mt-2 font-mono-data text-2xl font-700 tracking-tight lg:text-3xl">{k.headcount}</p>
@@ -174,7 +179,7 @@ function EmployeesKpi({ k }) {
         {typeRows.map(([lbl, val, c]) => (
           <div key={lbl} className="rounded-md bg-slate-50 px-2 py-1.5 text-center" data-testid={`emp-type-${lbl}`}>
             <p className="font-mono-data text-sm font-700" style={{ color: c }}>{val ?? 0}</p>
-            <p className="text-[9px] font-600 uppercase leading-tight text-slate-400">{lbl}</p>
+            <p className="text-[9px] font-600 uppercase leading-tight text-slate-400">{t(lbl)}</p>
           </div>
         ))}
       </div>
@@ -182,16 +187,17 @@ function EmployeesKpi({ k }) {
         {sexRows.map(([lbl, val]) => (
           <div key={lbl} className="rounded-md bg-slate-50 px-1 py-1.5 text-center" data-testid={`emp-sex-${lbl}`}>
             <p className="font-mono-data text-sm font-700 text-slate-700">{val ?? 0}</p>
-            <p className="text-[9px] font-600 uppercase leading-tight text-slate-400">{lbl}</p>
+            <p className="text-[9px] font-600 uppercase leading-tight text-slate-400">{t(lbl)}</p>
           </div>
         ))}
       </div>
-      <p className="mt-1.5 text-[9px] uppercase tracking-wide text-slate-400">Sexe à la naissance</p>
+      <p className="mt-1.5 text-[9px] uppercase tracking-wide text-slate-400">{t("Sexe à la naissance")}</p>
     </div>
   );
 }
 
 function SexDistribution({ b }) {
+  const { t } = useLang();
   const sc = b.kpis.sex_counts || {};
   const pieData = SEX_CATS.map((s) => ({ name: s, value: sc[s === "Non spécifié" ? "Non spécifié" : s] || 0 })).filter((d) => d.value > 0);
   const depts = [...(b.sex_by_department || []).filter((d) => d.total > 0)]
@@ -199,7 +205,7 @@ function SexDistribution({ b }) {
   const topFem = depts.reduce((best, d) => (d.Féminin > (best?.Féminin ?? -1) ? d : best), null);
   return (
     <div className="card p-5" data-testid="chart-sex">
-      <h3 className="mb-4 flex items-center gap-2 text-sm font-700"><PieIcon size={16} className="text-[#EC4899]" /> Répartition des effectifs par sexe à la naissance</h3>
+      <h3 className="mb-4 flex items-center gap-2 text-sm font-700"><PieIcon size={16} className="text-[#F8A942]" /> {t("Répartition des effectifs par sexe à la naissance")}</h3>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-1">
           <ResponsiveContainer width="100%" height={170}>
@@ -213,30 +219,30 @@ function SexDistribution({ b }) {
             {SEX_CATS.map((s) => (
               <div key={s} className="flex items-center gap-1.5 text-[10px] text-slate-500">
                 <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: SEX_COLORS[s] }} />
-                <span className="truncate">{s}</span>
+                <span className="truncate">{t(s)}</span>
                 <span className="ml-1 font-mono-data font-700 text-slate-700">{sc[s] || 0}</span>
               </div>
             ))}
           </div>
         </div>
         <div className="lg:col-span-2">
-          <p className="mb-1.5 text-[10px] font-600 uppercase tracking-wide text-slate-400">Par département</p>
+          <p className="mb-1.5 text-[10px] font-600 uppercase tracking-wide text-slate-400">{t("Par département")}</p>
           {topFem && topFem.Féminin > 0 && (
-            <div className="mb-2 flex items-center justify-between rounded-lg border border-[#EC4899]/30 bg-[#EC4899]/5 px-3 py-2" data-testid="sex-top-fem">
+            <div className="mb-2 flex items-center justify-between rounded-lg border border-[#F8A942]/30 bg-[#F8A942]/5 px-3 py-2" data-testid="sex-top-fem">
               <span className="flex items-center gap-1.5 text-[11px] text-slate-600">
-                <span className="h-2 w-2 rounded-sm" style={{ background: "#EC4899" }} />
-                Plus de femmes : <b className="text-slate-800">{topFem.department} — {topFem.label}</b>
+                <span className="h-2 w-2 rounded-sm" style={{ background: "#F8A942" }} />
+                {t("Plus de femmes :")} <b className="text-slate-800">{topFem.department} — {topFem.label}</b>
               </span>
-              <span className="font-mono-data text-[11px] font-700 text-[#EC4899]">{topFem.Féminin} F <span className="text-slate-400">/ {topFem.total} total</span></span>
+              <span className="font-mono-data text-[11px] font-700 text-[#F8A942]">{topFem.Féminin} F <span className="text-slate-400">/ {topFem.total} total</span></span>
             </div>
           )}
           <div className="max-h-[220px] overflow-y-auto">
             <table className="w-full text-[11px]">
               <thead className="sticky top-0 bg-white">
                 <tr className="text-slate-400">
-                  <th className="px-2 py-1 text-left font-600">Dépt</th>
-                  {SEX_CATS.map((s) => <th key={s} className="px-1.5 py-1 text-right font-600" style={{ color: SEX_COLORS[s] }}>{s === "Non spécifié" ? "N/S" : s.slice(0, 3)}</th>)}
-                  <th className="px-1.5 py-1 text-right font-700 text-slate-600">Tot.</th>
+                  <th className="px-2 py-1 text-left font-600">{t("Dépt")}</th>
+                  {SEX_CATS.map((s) => <th key={s} className="px-1.5 py-1 text-right font-600" style={{ color: SEX_COLORS[s] }}>{s === "Non spécifié" ? t("Non spéc.") : t(s).slice(0, 3)}</th>)}
+                  <th className="px-1.5 py-1 text-right font-700 text-slate-600">{t("Tot.")}</th>
                 </tr>
               </thead>
               <tbody className="font-mono-data">
@@ -257,20 +263,21 @@ function SexDistribution({ b }) {
 }
 
 function DashboardBody({ b }) {
+  const { t } = useLang();
   const k = b.kpis;
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <EmployeesKpi k={k} />
-        <Kpi testId="kpi-masse" label="Masse salariale" value={fmtCAD(k.masse_salariale)} sub="total charges salariales" icon={DollarSign} tint={TEAL} />
-        <Kpi testId="kpi-budget-global" label="Budget global" value={fmtCAD(k.budget_global)} sub="avec charges sociales" icon={Wallet} tint="#8B5CF6" />
-        <Kpi testId="kpi-salaire-moyen" label="Salaire moyen" value={fmtCAD(k.salaire_moyen)} sub="par employé" icon={TrendingUp} tint={ORANGE} />
+        <Kpi testId="kpi-masse" label={t("Masse salariale")} value={fmtCAD(k.masse_salariale)} sub={t("total charges salariales")} icon={DollarSign} tint={TEAL} />
+        <Kpi testId="kpi-budget-global" label={t("Budget global")} value={fmtCAD(k.budget_global)} sub={t("avec charges sociales")} icon={Wallet} tint="#8B5CF6" />
+        <Kpi testId="kpi-salaire-moyen" label={t("Salaire moyen")} value={fmtCAD(k.salaire_moyen)} sub={t("par employé")} icon={TrendingUp} tint={ORANGE} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="card p-6 lg:col-span-2" data-testid="chart-departments">
-          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><BarChart3 size={16} className="text-[#063044]" /> Budget par département</h3>
+          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><BarChart3 size={16} className="text-[#063044]" /> {t("Budget par département")}</h3>
           <ResponsiveContainer width="100%" height={Math.max(240, b.by_department.length * 46)}>
             <BarChart data={b.by_department} layout="vertical" margin={{ left: 8, right: 16 }} barGap={2}>
               <CartesianGrid stroke="#EEF2F7" horizontal={false} />
@@ -282,26 +289,26 @@ function DashboardBody({ b }) {
             </BarChart>
           </ResponsiveContainer>
           <div className="mt-3 flex gap-4 text-[11px] text-slate-500">
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: NAVY }} /> Salaire</span>
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: TEAL }} /> Budget total</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: NAVY }} /> {t("Salaire")}</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: TEAL }} /> {t("Budget total")}</span>
           </div>
         </div>
 
         <div className="card p-6" data-testid="chart-types">
-          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><PieIcon size={16} className="text-[#063044]" /> Types d'emploi</h3>
+          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><PieIcon size={16} className="text-[#063044]" /> {t("Types d'emploi")}</h3>
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie data={b.by_type} dataKey="total" nameKey="type" cx="50%" cy="50%" innerRadius={58} outerRadius={92} paddingAngle={2} isAnimationActive={false}>
-                {b.by_type.map((t, i) => <Cell key={i} fill={TYPE_COLORS[t.type] || "#808080"} />)}
+                {b.by_type.map((ty, i) => <Cell key={i} fill={TYPE_COLORS[ty.type] || "#808080"} />)}
               </Pie>
               <Tooltip content={<Tip />} />
             </PieChart>
           </ResponsiveContainer>
           <div className="mt-2 space-y-1.5">
-            {b.by_type.map((t) => (
-              <div key={t.type} className="flex items-center justify-between text-[11px]">
-                <span className="flex items-center gap-1.5 text-slate-500"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: TYPE_COLORS[t.type] || "#808080" }} />{t.type}</span>
-                <span className="font-mono-data">{fmtCAD(t.total)}</span>
+            {b.by_type.map((ty) => (
+              <div key={ty.type} className="flex items-center justify-between text-[11px]">
+                <span className="flex items-center gap-1.5 text-slate-500"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: TYPE_COLORS[ty.type] || "#808080" }} />{t(ty.type)}</span>
+                <span className="font-mono-data">{fmtCAD(ty.total)}</span>
               </div>
             ))}
           </div>
@@ -312,8 +319,8 @@ function DashboardBody({ b }) {
 
       <div className="card p-6" data-testid="chart-monthly">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-sm font-700"><Calendar size={16} className="text-[#063044]" /> Ventilation mensuelle</h3>
-          <span className="font-mono-data text-xs text-slate-500">Total avec charges : <b className="text-slate-800">{fmtCAD(b.totals.budget_total)}</b></span>
+          <h3 className="flex items-center gap-2 text-sm font-700"><Calendar size={16} className="text-[#063044]" /> {t("Ventilation mensuelle")}</h3>
+          <span className="font-mono-data text-xs text-slate-500">{t("Total avec charges :")} <b className="text-slate-800">{fmtCAD(b.totals.budget_total)}</b></span>
         </div>
         <div className="mb-4 overflow-x-auto">
           <table className="w-full text-xs">
@@ -321,14 +328,14 @@ function DashboardBody({ b }) {
               <tr className="text-slate-400">
                 <th className="px-2 py-1.5 text-left font-600"></th>
                 {b.monthly.map((m) => <th key={m.month} className="px-2 py-1.5 text-center font-600">{m.month}</th>)}
-                <th className="px-2 py-1.5 text-center font-700 text-slate-700">Total</th>
+                <th className="px-2 py-1.5 text-center font-700 text-slate-700">{t("Total")}</th>
               </tr>
             </thead>
             <tbody className="font-mono-data">
               {[
-                ["Sem. paie", "sem_paie", (m) => m.sem_paie],
-                ["Jours std", "jours_std", (m) => m.jours_std],
-                ["Jours CCQ", "jours_ccq", (m) => m.jours_ccq],
+                [t("Sem. paie"), "sem_paie", (m) => m.sem_paie],
+                [t("Jours std"), "jours_std", (m) => m.jours_std],
+                [t("Jours CCQ"), "jours_ccq", (m) => m.jours_ccq],
               ].map(([lbl, key, get]) => (
                 <tr key={key} className="border-t border-slate-100">
                   <td className="px-2 py-1.5 text-slate-500">{lbl}</td>
@@ -337,7 +344,7 @@ function DashboardBody({ b }) {
                 </tr>
               ))}
               <tr className="border-t border-slate-200 bg-slate-50">
-                <td className="px-2 py-1.5 font-700 text-slate-700">Total + charges</td>
+                <td className="px-2 py-1.5 font-700 text-slate-700">{t("Total + charges")}</td>
                 {b.monthly.map((m) => <td key={m.month} className="px-2 py-1.5 text-center text-[#0E9488]">{fmtCAD(m.total)}</td>)}
                 <td className="px-2 py-1.5 text-center font-700">{fmtCAD(b.totals.budget_total)}</td>
               </tr>
@@ -350,20 +357,20 @@ function DashboardBody({ b }) {
             <XAxis dataKey="month" tick={{ fontSize: 11, fontFamily: "Calibri", fill: "#94A3B8" }} axisLine={false} tickLine={false} />
             <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fontFamily: "Calibri", fill: "#94A3B8" }} axisLine={false} tickLine={false} width={40} />
             <Tooltip cursor={{ fill: "rgba(0,0,0,.03)" }} content={<Tip />} />
-            <Bar dataKey="salaires" name="Salaires" stackId="a" fill={NAVY} maxBarSize={40} />
-            <Bar dataKey="charges" name="Charges sociales" stackId="a" fill={TEAL} radius={[3, 3, 0, 0]} maxBarSize={40} />
+            <Bar dataKey="salaires" name={t("Salaires")} stackId="a" fill={NAVY} maxBarSize={40} />
+            <Bar dataKey="charges" name={t("Charges sociales")} stackId="a" fill={TEAL} radius={[3, 3, 0, 0]} maxBarSize={40} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="card p-6" data-testid="decomposition">
-          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><Layers size={16} className="text-[#063044]" /> Décomposition du budget</h3>
+          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><Layers size={16} className="text-[#063044]" /> {t("Décomposition du budget")}</h3>
           <div className="space-y-3.5">
             {b.decomposition.map((d) => (
               <div key={d.label}>
                 <div className="mb-1 flex items-center justify-between text-sm">
-                  <span className="text-slate-600">{d.label}</span>
+                  <span className="text-slate-600">{t(d.label)}</span>
                   <span className="font-mono-data"><b>{fmtCAD(d.value)}</b> <span className="text-slate-400">{d.pct}%</span></span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
@@ -375,18 +382,18 @@ function DashboardBody({ b }) {
         </div>
 
         <div className="card p-6" data-testid="top5">
-          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><TrendingUp size={16} className="text-[#063044]" /> Top 5 — Budget le plus élevé</h3>
+          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><TrendingUp size={16} className="text-[#063044]" /> {t("Top 5 — Budget le plus élevé")}</h3>
           <div className="space-y-3">
-            {b.top5.map((t) => (
-              <div key={t.rank} className="flex items-center gap-3">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-xs font-700 text-slate-500">{t.rank}</span>
+            {b.top5.map((emp) => (
+              <div key={emp.rank} className="flex items-center gap-3">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-xs font-700 text-slate-500">{emp.rank}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-600">{t.name}</p>
-                  <p className="truncate text-[11px] text-slate-500">{t.title} · {t.department}</p>
+                  <p className="truncate text-sm font-600">{emp.name}</p>
+                  <p className="truncate text-[11px] text-slate-500">{emp.title} · {emp.department}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-mono-data text-sm font-700">{fmtCAD(t.total)}</p>
-                  <p className="font-mono-data text-[11px] text-slate-400">{fmtCAD(t.base)} base</p>
+                  <p className="font-mono-data text-sm font-700">{fmtCAD(emp.total)}</p>
+                  <p className="font-mono-data text-[11px] text-slate-400">{fmtCAD(emp.base)} base</p>
                 </div>
               </div>
             ))}
