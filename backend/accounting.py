@@ -24,6 +24,45 @@ def col_letter_to_idx(letter):
     return openpyxl.utils.column_index_from_string(letter)
 
 
+# Colonne de libellé (source de style) par feuille de rapport.
+STYLE_LABEL_COL = {"Bilan Détaillé": "C", "Resultats internes": "D",
+                   "Bilan Sommaire": "B", "Resultats sommaires": "B"}
+
+
+def _cell_style(cell):
+    """Extrait un style compact reproduisant le format Excel d'une ligne de rapport :
+    b=gras, f='grey'|'dark' (fond), c=couleur police #hex, t=bordure haut, u=bordure bas."""
+    if cell is None:
+        return None
+    st = {}
+    f = cell.font
+    if f is not None and f.bold:
+        st["b"] = 1
+    fl = cell.fill
+    if fl is not None and fl.patternType == "solid":
+        fg = fl.fgColor
+        theme = getattr(fg, "theme", None)
+        tint = getattr(fg, "tint", 0) or 0
+        rgb = fg.rgb if (fg is not None and isinstance(fg.rgb, str)) else None
+        if theme == 0 and tint < 0:
+            st["f"] = "grey"          # sous-total (blanc assombri)
+        elif theme == 1 and tint > 0:
+            st["f"] = "dark"          # grand total (noir éclairci)
+        elif rgb and rgb[-6:] not in ("000000", "FFFFFF"):
+            st["f"] = "grey"
+    if f is not None and f.color is not None and isinstance(f.color.rgb, str):
+        hexc = f.color.rgb[-6:].upper()
+        if hexc not in ("000000",):
+            st["c"] = "#" + hexc
+    b = cell.border
+    if b is not None:
+        if b.top is not None and b.top.style:
+            st["t"] = 1
+        if b.bottom is not None and b.bottom.style:
+            st["u"] = 1
+    return st or None
+
+
 class ReportEngine:
     def __init__(self):
         # sheets[name] = {"rows": {row: {colLetter: formula_or_value}}, "acct": {row: account_int}}
@@ -38,7 +77,8 @@ class ReportEngine:
                 continue
             ws = wb[name]
             acc_i = col_letter_to_idx(acc_col)
-            rows, acct = {}, {}
+            style_col_i = col_letter_to_idx(STYLE_LABEL_COL[name]) if name in STYLE_LABEL_COL else None
+            rows, acct, style = {}, {}, {}
             for r in range(1, ws.max_row + 1):
                 a = ws.cell(r, acc_i).value
                 if isinstance(a, (int, float)) and float(a).is_integer():
@@ -50,7 +90,11 @@ class ReportEngine:
                         cells[openpyxl.utils.get_column_letter(c)] = v
                 if cells:
                     rows[r] = cells
-            eng.sheets[name] = {"rows": rows, "acct": acct, "acc_col": acc_col}
+                    if style_col_i is not None:
+                        s = _cell_style(ws.cell(r, style_col_i))
+                        if s:
+                            style[r] = s
+            eng.sheets[name] = {"rows": rows, "acct": acct, "acc_col": acc_col, "style": style}
         return eng
 
     def to_dict(self):
@@ -60,6 +104,7 @@ class ReportEngine:
                 "rows": {str(r): cells for r, cells in sd["rows"].items()},
                 "acct": {str(r): a for r, a in sd["acct"].items()},
                 "acc_col": sd["acc_col"],
+                "style": {str(r): s for r, s in sd.get("style", {}).items()},
             }
         return {"sheets": sheets}
 
@@ -70,7 +115,8 @@ class ReportEngine:
         for name, sd in d["sheets"].items():
             rows = {int(r): cells for r, cells in sd["rows"].items()}
             acct = {int(r): a for r, a in sd["acct"].items()}
-            eng.sheets[name] = {"rows": rows, "acct": acct, "acc_col": sd["acc_col"]}
+            style = {int(r): s for r, s in sd.get("style", {}).items()}
+            eng.sheets[name] = {"rows": rows, "acct": acct, "acc_col": sd["acc_col"], "style": style}
         return eng
 
     def compute_all(self, bv):
@@ -227,7 +273,7 @@ class ReportEngine:
                     continue
             if label is None and not has_val:
                 continue
-            out.append({"row": r, "account": acct, "label": lbl_str, "kind": kind, "values": values})
+            out.append({"row": r, "account": acct, "label": lbl_str, "kind": kind, "values": values, "style": sd.get("style", {}).get(r)})
             if stop_after and isinstance(lbl_str, str) and any(lbl_str.lower().startswith(s) for s in stop_after):
                 break
         return out

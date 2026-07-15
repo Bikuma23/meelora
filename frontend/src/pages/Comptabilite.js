@@ -358,6 +358,26 @@ export function AcctBV() {
 }
 
 // ---------- Rapport (Bilan / P&L) ----------
+// Reproduit le format Excel d'une ligne de rapport (fond, couleur police, gras, bordures).
+function excelRowStyle(ln) {
+  const st = (ln && ln.style) || {};
+  const isDark = st.f === "dark";
+  const isGrey = st.f === "grey";
+  const cls = [];
+  if (isDark || isGrey || st.b || ln.kind === "total" || ln.kind === "header") cls.push("font-700");
+  if (st.t) cls.push("border-t border-slate-300");
+  if (st.u) cls.push("border-b-2 border-slate-300");
+  const bg = isDark ? "#063044" : isGrey ? "#eef1f5" : undefined;
+  const color = isDark ? (st.c || "#FFFFFF") : (st.c || undefined);
+  return { cls: cls.join(" "), bg, color, isDark };
+}
+function excelCellColor(s, val, ecart) {
+  if (s.isDark) return val < 0 ? "#FCA5A5" : (s.color || "#FFFFFF");
+  if (val < 0) return "#DC2626";
+  if (ecart) return "#64748B";
+  return s.color || undefined;
+}
+
 function ReportView({ type, title }) {
   const { periods } = usePeriods();
   const [period, setPeriod] = useState("");
@@ -457,16 +477,19 @@ function ReportView({ type, title }) {
                 {visibleCols.map((k) => <th key={k} className={`bg-white px-4 py-2.5 text-right font-600 ${isEcart(k) ? "text-slate-500" : ""} ${showSep(k) ? "border-l-2 border-slate-200" : ""}`}>{colLabel(k)}</th>)}
               </tr></thead>
               <tbody className="font-mono-data">
-                {visibleLines.map((ln) => (
+                {visibleLines.map((ln) => {
+                  const s = excelRowStyle(ln);
+                  return (
                   <tr key={ln.row} data-testid={`acct-line-${ln.row}`}
-                    className={`border-b border-slate-50 ${ln.kind === "total" ? "bg-slate-50 font-700" : ln.kind === "header" ? "font-700 text-slate-800" : ""}`}>
-                    <td className="px-4 py-1.5 text-left text-slate-400">{ln.account || ""}</td>
-                    <td className={`px-4 py-1.5 text-left ${ln.kind === "data" ? "font-sans text-slate-600" : "font-sans"}`}>{ln.label}</td>
+                    className={`border-b border-slate-50 ${s.cls}`} style={{ background: s.bg }}>
+                    <td className="px-4 py-1.5 text-left" style={{ color: s.isDark ? "#94A3B8" : "#94A3B8" }}>{ln.account || ""}</td>
+                    <td className="px-4 py-1.5 text-left font-sans" style={{ color: s.color || (ln.kind === "data" ? "#334155" : undefined) }}>{ln.label}</td>
                     {visibleCols.map((k) => (
-                      <td key={k} className={`px-4 py-1.5 text-right ${isEcart(k) ? "italic" : ""} ${showSep(k) ? "border-l-2 border-slate-200" : ""}`} style={{ color: ln.values[k] < 0 ? "#DC2626" : (isEcart(k) ? "#64748B" : undefined) }}>{ln.kind === "header" ? "" : money(ln.values[k])}</td>
+                      <td key={k} className={`px-4 py-1.5 text-right ${isEcart(k) ? "italic" : ""} ${showSep(k) ? "border-l-2 border-slate-200" : ""}`} style={{ color: excelCellColor(s, ln.values[k], isEcart(k)) }}>{ln.kind === "header" ? "" : money(ln.values[k])}</td>
                     ))}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -538,12 +561,15 @@ function BilanSommaireView() {
       <h4 className="mb-2 border-b-2 border-[#063044] pb-1.5 font-display text-sm font-800 uppercase tracking-wide text-[#063044]">{title}</h4>
       <table className="w-full text-sm">
         <tbody className="font-mono-data">
-          {rows.map((l, i) => (
-            <tr key={i} className={`border-b border-slate-50 ${l.kind === "total" ? "bg-slate-50 font-700" : l.kind === "header" ? "font-700 text-slate-700" : ""}`}>
-              <td className={`px-3 py-1.5 text-left font-sans ${l.kind === "data" ? "pl-5 text-slate-600" : ""}`}>{l.label}</td>
-              <td className="px-3 py-1.5 text-right" style={{ color: l.value != null && l.value < 0 ? "#DC2626" : undefined }}>{l.value == null ? "" : money(l.value)}</td>
+          {rows.map((l, i) => {
+            const s = excelRowStyle(l);
+            return (
+            <tr key={i} className={`border-b border-slate-50 ${s.cls}`} style={{ background: s.bg }}>
+              <td className={`px-3 py-1.5 text-left font-sans ${l.kind === "data" ? "pl-5" : ""}`} style={{ color: s.color || (l.kind === "data" ? "#334155" : undefined) }}>{l.label}</td>
+              <td className="px-3 py-1.5 text-right" style={{ color: l.value == null ? undefined : excelCellColor(s, l.value, false) }}>{l.value == null ? "" : money(l.value)}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

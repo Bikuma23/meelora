@@ -2117,7 +2117,7 @@ async def _bilan_sommaire_data(year, month):
                 kind = "header"
             else:
                 kind = "data"
-            out.append({"label": label, "value": val, "kind": kind})
+            out.append({"label": label, "value": val, "kind": kind, "style": sd.get("style", {}).get(r)})
         return out
 
     actif = build_side("B", "C", 6, 32)
