@@ -1,159 +1,116 @@
 {
-  "theme_strategy": {
-    "mode": "light",
-    "description": "Thème clair professionnel et analytique, inspiré des normes comptables de haute précision. Palette axée sur un fond neutre très clair, avec une hiérarchie visuelle marquée par des tons 'Teal foncé' (Sarcelle) profond et des accents contrastants 'Corail/Rose'. Évite les bleus SaaS génériques au profit d'une esthétique plus éditoriale et institutionnelle."
+  "theme_and_mode": {
+    "app_type": "hybrid_fullstack",
+    "industry": "Technical Corporate / Financial Dashboard",
+    "default_mode": "light",
+    "supported_modes": ["light", "dark"]
   },
   "typography": {
-    "font_families": {
-      "heading": "Cabinet Grotesk, sans-serif",
-      "body": "IBM Plex Sans, sans-serif",
-      "mono": "JetBrains Mono, monospace"
+    "headings": {
+      "family": "Montserrat, Poppins, sans-serif",
+      "weight": "300 (Light) to 400 (Regular)",
+      "usage": "H1, H2, H3, large titles, and stylistic overlines",
+      "instruction": "Headings must be elegant and fine. Use font-light (300) for large page titles. Ensure tracking is slightly loose for uppercase overlines."
     },
-    "hierarchy": {
-      "h1": "text-4xl lg:text-5xl font-black tracking-tight text-slate-900",
-      "h2": "text-2xl lg:text-3xl font-bold tracking-tight text-slate-900",
-      "h3": "text-xl font-semibold tracking-tight text-slate-800",
-      "kpi_value": "text-3xl font-bold tracking-tight text-slate-900",
-      "body": "text-sm text-slate-600 leading-relaxed",
-      "small_label": "text-xs font-medium uppercase tracking-[0.15em] text-slate-500",
-      "table_header": "text-xs font-semibold uppercase tracking-wider text-slate-500",
-      "table_cell": "text-sm text-slate-700 font-medium tabular-nums"
+    "body_and_tables": {
+      "family": "Calibri, Carlito, 'Segoe UI', sans-serif",
+      "weight": "400 (Regular) to 700 (Bold)",
+      "usage": "All body text, financial tables, forms, buttons, and dense UI elements",
+      "instruction": "CRITICAL: The body and all financial tables MUST remain in Calibri (non-negotiable). Do NOT use Montserrat for dense data."
     },
-    "guidelines": "Ne jamais utiliser 'Inter'. Utiliser IBM Plex Sans pour tous les tableaux de bord et données chiffrées (excellente lisibilité des chiffres grâce aux tabular-nums). Cabinet Grotesk est réservé aux titres de page et grands KPI."
+    "scales": {
+      "h1_hero": "text-5xl lg:text-6xl font-light tracking-tight text-[#063044] dark:text-white",
+      "h2_section": "text-3xl lg:text-4xl font-light text-[#063044] dark:text-white",
+      "h3_card": "text-xl font-normal text-[#063044] dark:text-white",
+      "overline": "text-xs font-medium uppercase tracking-[0.2em] text-[#808080] dark:text-gray-400",
+      "body": "text-sm text-[#063044] dark:text-gray-200",
+      "table_text": "text-sm text-[#063044] dark:text-gray-200"
+    }
   },
   "colors": {
+    "primary": {
+      "name": "Navy",
+      "hex": "#063044",
+      "usage": "Large titles, text, secondary buttons, active sidebar items, table grand totals."
+    },
+    "secondary": {
+      "name": "Teal",
+      "hex": "#15AF97",
+      "usage": "Primary CTA buttons, thin vertical separator lines, active state accents."
+    },
+    "accent": {
+      "name": "Golden Orange",
+      "hex": "#F8A942",
+      "usage": "Badges, alerts, warning states, sparkline highlights."
+    },
+    "neutral": {
+      "name": "Gray",
+      "hex": "#808080",
+      "usage": "Overlines, secondary text, table subtotals."
+    },
     "backgrounds": {
-      "app_bg": "#F4F6F8",
-      "surface": "#FFFFFF",
-      "sidebar_bg": "#FFFFFF"
-    },
-    "brand": {
-      "primary_dark_teal": "#0F292F",
-      "primary_teal": "#1A3B42",
-      "accent_coral": "#FA7268",
-      "accent_pink": "#F4978E"
-    },
-    "status": {
-      "positive": "#10B981",
-      "positive_bg": "#D1FAE5",
-      "negative": "#EF4444",
-      "negative_bg": "#FEE2E2",
-      "warning": "#F59E0B",
-      "info": "#3B82F6"
-    },
-    "neutrals": {
-      "text_main": "#0F172A",
-      "text_muted": "#64748B",
-      "border": "#E2E8F0",
-      "border_light": "#F1F5F9"
-    },
-    "guidelines": "Le Sarcelle foncé (Teal) sert à structurer (barre latérale, titres, boutons primaires) et le Corail attire l'attention sur les actions spécifiques ou la data saillante. L'interdiction stricte du #1B93A4 (Teal standard) est respectée en utilisant des tons beaucoup plus sombres et profonds (#0F292F)."
+      "light": "#F9FAFB",
+      "card_light": "#FFFFFF",
+      "dark": "#0B1120",
+      "card_dark": "#111827"
+    }
   },
   "visual_enhancers": {
-    "shadows": {
-      "card": "shadow-[0_2px_12px_rgba(15,23,42,0.04)]",
-      "card_hover": "shadow-[0_8px_24px_rgba(15,23,42,0.08)]",
-      "dropdown": "shadow-[0_12px_32px_rgba(15,23,42,0.12)]"
-    },
-    "borders": {
-      "radius": "rounded-xl",
-      "style": "border border-slate-200"
-    },
-    "surfaces": {
-      "glass": "backdrop-blur-xl bg-white/80 border-b border-slate-200",
-      "metric_card": "bg-white rounded-xl border border-slate-200 shadow-[0_2px_12px_rgba(15,23,42,0.04)] p-5"
-    }
-  },
-  "grids_and_layouts": {
-    "dashboard_shell": "flex h-screen overflow-hidden bg-[#F4F6F8]",
-    "sidebar": "w-20 lg:w-64 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col",
-    "main_content": "flex-1 overflow-y-auto overflow-x-hidden flex flex-col",
-    "right_panel": "w-80 flex-shrink-0 bg-white border-l border-slate-200 p-5 hidden xl:block",
-    "kpi_grid": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6",
-    "bento_grid": "grid grid-cols-1 lg:grid-cols-12 gap-6",
-    "guidelines": "Adopter un agencement très aéré (beaucoup de padding). Utiliser un layout en 3 colonnes pour le dashboard: Sidebar (G) | Contenu Principal (C) | Smart Insights (D). Le contenu principal contient toujours un Header sticky."
+    "hero_overlay": "bg-[#063044]/80 dark:bg-[#063044]/90",
+    "thin_borders": "border border-white/20",
+    "vertical_separators": "border-l-2 border-[#15AF97]",
+    "card_shadows": "shadow-sm",
+    "corner_radius": "rounded-md"
   },
   "components": {
-    "kpi_cards": {
-      "structure": "Titre (haut gauche) | Icône (haut droite) -> Grand Chiffre -> Ligne de sparkline Recharts (hauteur 40px, pas d'axe) -> Flèche de tendance (vert/rouge) + texte '% par rapport au budget/réel'.",
-      "sparkline": "Utiliser un composant LineChart Recharts ultra-minimaliste. Ligne Teal/Corail en fonction du type de donnée."
+    "login_hero": {
+      "structure": "Split screen. Left: 50% width on desktop. Right: 50% width form.",
+      "left_panel": "Full-frame image with heavy dark corporate overlay (bg-[#063044]/80). Inside, a thin border box (border-white/20 p-8 or p-12). Contains an overline 'CARRIÈRES', a large thin H1 title with a keyword highlighted/underlined in #15AF97.",
+      "image_url": "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwxfHxjb3Jwb3JhdGUlMjBidWlsZGluZyUyMGh2YWMlMjBwcm9mZXNzaW9uYWxzfGVufDB8fHx8MTc4NDA3NjM0MXww&ixlib=rb-4.1.0&q=85"
     },
-    "semi_circular_gauges": {
-      "library": "recharts",
-      "implementation": "PieChart avec startAngle={180} et endAngle={0}, innerRadius={60%}, outerRadius={80%}. Centrer le pourcentage en texte absolu dans le conteneur."
+    "buttons": {
+      "primary": "bg-[#15AF97] hover:bg-[#15AF97]/90 text-white rounded-md px-4 py-2 font-body font-medium transition-colors",
+      "secondary": "bg-[#063044] hover:bg-[#063044]/90 text-white rounded-md px-4 py-2 font-body transition-colors",
+      "outline": "border border-[#063044] text-[#063044] dark:border-white dark:text-white hover:bg-[#063044] hover:text-white dark:hover:bg-white dark:hover:text-[#063044] rounded-md px-4 py-2 font-body transition-colors"
     },
-    "large_financial_tables": {
-      "layout": "w-full text-left border-collapse",
-      "wrapper": "overflow-x-auto border border-slate-200 rounded-lg bg-white shadow-sm",
-      "header": "bg-slate-50 sticky top-0 z-20 border-b border-slate-200 text-xs font-semibold uppercase text-slate-500",
-      "first_column": "sticky left-0 bg-white z-10 border-r border-slate-200 font-medium text-slate-900 shadow-[2px_0_5px_rgba(0,0,0,0.02)]",
-      "cells": "px-4 py-2 text-sm tabular-nums text-right whitespace-nowrap",
-      "zebra": "even:bg-slate-50/50 hover:bg-slate-50 transition-colors"
+    "cards": {
+      "kpi": "bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-100 dark:border-gray-700 p-6. Top accent border or left accent line in #15AF97.",
+      "dashboard_sections": "Use very light gray background for the main dashboard area. Cards are clean white. Use fine vertical lines (border-l border-[#15AF97] pl-4) to separate key columns or stats."
     },
-    "combined_charts": {
-      "library": "recharts",
-      "implementation": "ComposedChart combinant Bar (Revenu/Budget) et Line (Marge nette). Radius sur les barres `radius={[4, 4, 0, 0]}`. Legend et Tooltip customisés avec fond opaque."
+    "financial_tables": {
+      "instruction": "Do NOT redefine logic of rows. Keep body in Calibri. Harmonize containers with clean white backgrounds, minimal borders. Subtotals row: text-[#808080] dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50. Grand totals row: bg-[#063044] text-white font-bold.",
+      "container": "rounded-md border border-gray-200 overflow-hidden"
     },
-    "toggles_and_filters": {
-      "style": "bg-slate-100 p-1 rounded-lg inline-flex",
-      "active_state": "bg-white shadow-sm rounded-md font-medium text-slate-900",
-      "inactive_state": "text-slate-500 hover:text-slate-700"
+    "sidebar": {
+      "layout": "Fixed left sidebar. 2 main groups: 'Masse salariale', 'Comptabilité'.",
+      "active_item": "bg-[#063044]/5 text-[#063044] dark:bg-[#15AF97]/10 dark:text-[#15AF97] border-r-2 border-[#15AF97] font-medium"
+    },
+    "page_headers": {
+      "layout": "Flex container, generous padding (pt-8 pb-4). Includes uppercase overline (#808080), large thin title (#063044), and optional subtitle."
     }
+  },
+  "layouts_and_spacing": {
+    "general": "Generous whitespace. Avoid cramped elements. Use p-6, p-8, and p-12 for section paddings.",
+    "dashboard_grid": "Bento style or dense grid for KPI cards (gap-6), but maintain breathable padding inside cards.",
+    "alignment": "Left-align form labels, table headers (except numbers), and section titles. Center-align only inside specific bounded cards if appropriate."
   },
   "motion": {
-    "buttons": "transition-all duration-200 ease-in-out hover:-translate-y-[1px] hover:shadow-md active:translate-y-0",
-    "table_rows": "transition-colors duration-150 ease-in-out",
-    "charts": "Recharts animations par défaut activées, mais avec une durée modérée (500ms).",
-    "guidelines": "Aucune animation 'transition-all' globale sur le corps. Cibler précisément les éléments interactifs. Utiliser Framer Motion pour les ouvertures de modales (scale-up léger + fade)."
+    "hover_states": "Subtle opacity or background color shifts. No heavy transforms. Use transition-colors duration-200.",
+    "table_rows": "hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
   },
   "accessibility": {
-    "contrast": "Garantir un contraste WCAG AA (mini 4.5:1) pour les textes. Les textes gris clairs doivent utiliser au moins text-slate-500 sur fond blanc.",
-    "focus": "Tous les éléments interactifs doivent avoir focus-visible:ring-2 focus-visible:ring-primary_dark_teal focus-visible:ring-offset-2",
-    "testing": "CRITIQUE: Ajouter l'attribut `data-testid` sur TOUS les boutons, liens, champs de formulaire, onglets et éléments de tableau. Ex: `data-testid='btn-export-excel'`, `data-testid='tab-scenario-budget'`.",
-    "aria": "Utiliser aria-label pour les sparklines et les jauges qui n'ont pas de texte explicite."
+    "contrast": "Ensure #063044 and #15AF97 maintain at least 4.5:1 ratio against light backgrounds. Use white text strictly inside teal and navy buttons.",
+    "testing": "All interactive and key informational elements MUST include a data-testid attribute in kebab-case."
   },
-  "media_and_icons": {
-    "icons": {
-      "library": "@phosphor-icons/react",
-      "weight": "duotone ou regular",
-      "usage": "Icônes de taille 20px (w-5 h-5) dans la barre latérale, taille 24px (w-6 h-6) pour les cartes KPI."
-    }
-  },
-  "image_urls": {
-    "user_avatars": [
-      {
-        "url": "https://images.pexels.com/photos/20157010/pexels-photo-20157010.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-        "description": "Avatar professionnel homme, pour le profil administrateur",
-        "category": "auth_and_profile"
-      },
-      {
-        "url": "https://images.pexels.com/photos/14230741/pexels-photo-14230741.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-        "description": "Avatar professionnel homme asiatique, pour la liste des utilisateurs",
-        "category": "users_list"
-      }
-    ]
-  },
-  "instructions_to_main_agent": [
-    "NE PAS UTILISER DE COMPOSANTS DE TYPE CARTE SHADCN PAR DEFAUT S'ILS SONT TROP ÉPAIS. Refaire une carte avec div pure (bg-white rounded-xl border border-slate-200 shadow-sm) pour un look financier premium.",
-    "La navigation latérale (Sidebar) doit être fine, avec un fond blanc. Active item : fond Teal foncé très léger (ex: bg-[#0F292F]/5) et texte Teal foncé (#0F292F) avec une bordure gauche pleine (border-l-4).",
-    "Pour le tableau d'État des résultats (P&L) à 16 colonnes, utiliser IMPÉRATIVEMENT un wrappper natif avec `overflow-x-auto`. La première colonne (Comptes) doit rester visible au scroll horizontal (`sticky left-0 bg-white z-10`).",
-    "Les tableaux Bilan/Comptabilité nécessitent `tabular-nums` pour que les chiffres soient parfaitement alignés verticalement.",
-    "Remplacer tout arrière-plan transparent dans le Header par une classe 'backdrop-blur-xl bg-white/80' avec un 'border-b border-slate-200' pour garantir la lisibilité.",
-    "Intégrer les sparklines dans les cartes KPI avec Recharts `<LineChart>`. Cacher les axes et la grille. Couleur de la ligne : dynamique (vert pour positif, rouge pour négatif).",
-    "Utiliser `data-testid` kebab-case pour tous les éléments d'interface afin de garantir la robustesse des tests. Ex: `data-testid='kpi-revenue-card'`."
-  ],
-  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
-    "You tend to converge toward generic, 'on distribution' outputs. Avoid the 'AI slop' aesthetic. Make creative, distinctive frontends.",
-    "Do not use dark colors as gradients. Solid dark colors look good.",
-    "Do not make generic centered layouts. Left-align text, labels, and forms. Center only specific elements where optical balance demands it.",
-    "Create depth through layered design elements with subtle borders and shadows.",
-    "Never apply universal transitions (e.g., `transition: all`). Target specific properties (`transition-colors`, `transition-transform`).",
-    "DO NOT center align the app container. Do not add `.App { text-align: center; }` in CSS.",
-    "Always use modern button styles (rounded-lg or pill, sharp interaction animations, crisp colors).",
-    "NEVER use AI assistant Emoji characters (🤖🧠💡🎯) for icons. Use Phosphor Icons.",
-    "Every interaction needs micro-animations (hover states, focus rings). Static is dead.",
-    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap, especially in finance.",
-    "Missing categories for images must use real URLs provided, NEVER placeholder text or fake dummyimage.com URLs.",
-    "Ensure Sonner toasts are used for all notifications."
+  "universal_guidelines_for_main_agent": [
+    "Prioritize using pre-existing Shadcn components from src/components/ui.",
+    "Use standard Tailwind classes. Include dark mode variants (dark:bg-..., dark:text-...).",
+    "Never apply transition: all globally. Apply to specific interactive elements.",
+    "Create depth with subtle layered elements, minimal shadow-sm, and clean borders. Avoid messy gradients.",
+    "Never use purely transparent backgrounds where text overlaps images. Always use an overlay or glassmorphism.",
+    "Do NOT center align the app container. Respect left-aligned reading flows.",
+    "For the login page, create a beautiful corporate split screen. Replicate the reference site hero feeling on the left panel. The right panel has the login form.",
+    "Use Poppins or Montserrat for titles, and ONLY use Calibri for the body text, tables, inputs, and standard UI.",
+    "Remember to apply data-testid to elements to facilitate testing."
   ]
 }
