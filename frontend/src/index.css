@@ -43,6 +43,15 @@ input, button, select, textarea, table, th, td { font-family: Calibri, Carlito, 
 
 ::selection { background: #15AF97; color: #fff; }
 
+/* Barre de défilement : simple trait orange */
+* { scrollbar-width: thin; scrollbar-color: #F8A942 transparent; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background-color: #F8A942; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background-color: #e89a34; }
+::-webkit-scrollbar-button { display: none; height: 0; width: 0; }
+::-webkit-scrollbar-corner { background: transparent; }
+
 .card { background:#fff; border:1px solid #E8ECF1; border-radius:16px; box-shadow:0 2px 12px rgba(15,41,47,.05); transition: box-shadow .2s ease, transform .2s ease; }
 .card-hover:hover { box-shadow:0 10px 30px rgba(15,41,47,.10); transform: translateY(-2px); }
 
