@@ -304,6 +304,14 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Graphiques limités à 4 couleurs** #063044 · #15AF97 · #F8A942 · #808080 (Dashboard masse salariale : constantes NAVY/TEAL/ORANGE/GREY, TYPE_COLORS, SEX_COLORS, séries Salaires actuels/CA/Rév1/Rév2 ; Comptabilité : barres Réel/CA/Rév-1, cascade flux ; Rapports : tableau COLORS).
 - [x] **Bilan — bouton « Bilan sommaire (M$) »** : 3e bascule affichant le bilan sommaire avec montants exprimés en **millions** (`moneyM`, `BilanSommaireView millions`). Vérifié visuellement (Total actif = 19,76 M$, balancé).
 
+### Refonte visuelle globale — style accslegroupe.ca (2026-06-15c)
+- [x] **Refonte inspirée de www.accslegroupe.ca/emplois** appliquée à toute l'app avec palette stricte #063044 / #15AF97 / #F8A942 / #808080.
+- [x] **Typographie** : **Montserrat** (fine/élégante, `.font-display`) pour les grands titres ; **Calibri** conservé pour le corps et tous les tableaux. Ajout des utilitaires de poids `.font-300..900` (Tailwind ne générait pas `font-600/700/800` → ils étaient sans effet ; désormais réels → totaux/sous-titres correctement pondérés).
+- [x] **Page de connexion** (split-screen conservé) : panneau héros gauche = image corporate + overlay navy #063044/85, encadré à fine bordure, **overline** « PLATEFORME FINANCIÈRE », grand titre Montserrat fin avec mot **souligné teal** « bien outillé », liste à **lignes verticales teal** ; formulaire droit épuré, overlines de champs, **CTA teal**.
+- [x] **Sidebar** : labels de groupe en `.overline` + icônes teal ; item actif = liseré + fond + sous-titre **teal #15AF97**. **En-têtes de page** : overline (Masse salariale / Comptabilité) + titre Montserrat fin navy. Badge « Budget actif » teal.
+- [x] **Cartes KPI Comptabilité** : liseré vertical teal, overline, badge d'icône teal, valeur navy. Focus/selection globaux en teal.
+- [x] `design_guidelines.json` généré par l'agent design. Vérifié testing_agent iteration_27 : frontend 100 % (login, 13 items de nav, bascule Bilan 3 vues dont M$, chips P&L, dashboards + graphiques), aucune régression. (Warning Recharts sparkline non bloquant — cosmétique.)
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
