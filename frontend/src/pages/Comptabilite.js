@@ -367,12 +367,13 @@ export function AcctBV() {
 
 // ---------- Rapport (Bilan / P&L) ----------
 // Reproduit le format Excel d'une ligne de rapport (fond, couleur police, gras, bordures).
-function excelRowStyle(ln) {
+function excelRowStyle(ln, boldTotals = true) {
   const st = (ln && ln.style) || {};
   const isDark = st.f === "dark";
   const isGrey = st.f === "grey";
   const cls = [];
-  if (isDark || isGrey || st.b || ln.kind === "total" || ln.kind === "header") cls.push("font-700");
+  const bold = isDark || isGrey || st.b || (boldTotals && ln.kind === "total") || ln.kind === "header";
+  if (bold) cls.push("font-700");
   if (st.t) cls.push("border-t border-slate-300");
   if (st.u) cls.push("border-b-2 border-slate-300");
   const bg = isDark ? "#063044" : isGrey ? "#eef1f5" : undefined;
@@ -382,7 +383,9 @@ function excelRowStyle(ln) {
   else if (ln.kind === "header") color = "#063044";
   else color = undefined;
   const headerDefault = !isDark && !isGrey && !st.c && ln.kind === "header";
-  return { cls: cls.join(" "), bg, color, isDark, headerDefault };
+  // Ligne-poste non totalisée du sommaire : rendue comme une ligne de données (poids normal, slate-700).
+  const plain = !boldTotals && !bold;
+  return { cls: cls.join(" "), bg, color, isDark, headerDefault, plain };
 }
 function excelCellColor(s, val, ecart) {
   if (s.isDark) return val < 0 ? "#FCA5A5" : (s.color || "#FFFFFF");
@@ -491,12 +494,12 @@ function ReportView({ type, title }) {
               </tr></thead>
               <tbody className="font-mono-data">
                 {visibleLines.map((ln) => {
-                  const s = excelRowStyle(ln);
+                  const s = excelRowStyle(ln, !type.includes("sommaire"));
                   return (
                   <tr key={ln.row} data-testid={`acct-line-${ln.row}`}
                     className={`border-b border-slate-50 ${s.cls}`} style={{ background: s.bg }}>
                     <td className="px-4 py-1.5 text-left" style={{ color: s.isDark ? "#94A3B8" : "#94A3B8" }}>{ln.account || ""}</td>
-                    <td className={`px-4 py-1.5 text-left font-sans ${s.headerDefault ? "text-[#063044]" : (!s.color && ln.kind === "data" ? "text-slate-700" : "")}`} style={{ color: s.headerDefault ? undefined : (s.color || undefined) }}>{ln.label}</td>
+                    <td className={`px-4 py-1.5 text-left font-sans ${s.headerDefault ? "text-[#063044]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`} style={{ color: s.headerDefault ? undefined : (s.color || undefined) }}>{ln.label}</td>
                     {visibleCols.map((k) => (
                       <td key={k} className={`px-4 py-1.5 text-right ${isEcart(k) ? "italic" : ""} ${showSep(k) ? "border-l-2 border-slate-200" : ""}`} style={{ color: excelCellColor(s, ln.values[k], isEcart(k)) }}>{ln.kind === "header" ? "" : money(ln.values[k])}</td>
                     ))}
