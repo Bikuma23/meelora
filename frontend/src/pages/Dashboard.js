@@ -199,7 +199,7 @@ function SexDistribution({ b }) {
   const topFem = depts.reduce((best, d) => (d.Féminin > (best?.Féminin ?? -1) ? d : best), null);
   return (
     <div className="card p-5" data-testid="chart-sex">
-      <h3 className="mb-4 flex items-center gap-2 text-sm font-700"><PieIcon size={16} className="text-[#EC4899]" /> Répartition par sexe à la naissance</h3>
+      <h3 className="mb-4 flex items-center gap-2 text-sm font-700"><PieIcon size={16} className="text-[#EC4899]" /> Répartition des effectifs par sexe à la naissance</h3>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-1">
           <ResponsiveContainer width="100%" height={170}>
@@ -312,7 +312,7 @@ function DashboardBody({ b }) {
 
       <div className="card p-6" data-testid="chart-monthly">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-sm font-700"><Calendar size={16} className="text-[#063044]" /> Ventilation mensuelle — paie hebdomadaire réelle</h3>
+          <h3 className="flex items-center gap-2 text-sm font-700"><Calendar size={16} className="text-[#063044]" /> Ventilation mensuelle</h3>
           <span className="font-mono-data text-xs text-slate-500">Total avec charges : <b className="text-slate-800">{fmtCAD(b.totals.budget_total)}</b></span>
         </div>
         <div className="mb-4 overflow-x-auto">
