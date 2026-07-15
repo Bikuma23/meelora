@@ -8,10 +8,11 @@ import {
 } from "recharts";
 import { Users, DollarSign, Wallet, TrendingUp, Calendar, PieChart as PieIcon, BarChart3, Layers, Scale } from "lucide-react";
 
-const TEAL = "#F8A942", NAVY = "#0E1526", ORANGE = "#F59E0B", BLUE = "#063044", VIOLET = "#8B5CF6";
-const TYPE_COLORS = { "CCQ": BLUE, "Régulier temps plein": TEAL, "Stagiaire": ORANGE };
+const NAVY = "#063044", TEAL = "#15AF97", ORANGE = "#F8A942", GREY = "#808080";
+const BLUE = NAVY, VIOLET = TEAL;
+const TYPE_COLORS = { "CCQ": NAVY, "Régulier temps plein": TEAL, "Stagiaire": ORANGE };
 const SEX_CATS = ["Masculin", "Féminin", "Autre", "Non spécifié"];
-const SEX_COLORS = { "Masculin": BLUE, "Féminin": "#EC4899", "Autre": TEAL, "Non spécifié": "#94A3B8" };
+const SEX_COLORS = { "Masculin": NAVY, "Féminin": ORANGE, "Autre": TEAL, "Non spécifié": GREY };
 const SCEN = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 
 const Tip = ({ active, payload, label }) => {
@@ -93,7 +94,7 @@ export default function Dashboard() {
 
 function Comparatif({ cmp }) {
   const rows = [
-    ["Salaires actuels", cmp.actuel.masse, "#64748B", "Somme des salaires de base"],
+    ["Salaires actuels", cmp.actuel.masse, "#808080", "Somme des salaires de base"],
     ["Budget CA", cmp.ca.budget_total, BLUE, "Coût total (avec charges)"],
     ["Revue Budgétaire 1", cmp.revue1.budget_total, VIOLET, "Coût total (avec charges)"],
     ["Revue Budgétaire 2", cmp.revue2.budget_total, ORANGE, "Coût total (avec charges)"],
@@ -121,10 +122,10 @@ function Comparatif({ cmp }) {
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={chart} margin={{ left: 4, right: 8 }} barGap={3}>
               <CartesianGrid stroke="#EEF2F7" vertical={false} />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#94A3B8" }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#94A3B8" }} axisLine={false} tickLine={false} width={40} />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fontFamily: "Calibri", fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fontFamily: "Calibri", fill: "#94A3B8" }} axisLine={false} tickLine={false} width={40} />
               <Tooltip content={<Tip />} />
-              <Bar dataKey="Salaires actuels" fill="#64748B" radius={[3, 3, 0, 0]} maxBarSize={26} />
+              <Bar dataKey="Salaires actuels" fill="#808080" radius={[3, 3, 0, 0]} maxBarSize={26} />
               <Bar dataKey="Budget CA" fill={BLUE} radius={[3, 3, 0, 0]} maxBarSize={26} />
               <Bar dataKey="Revue 1" fill={VIOLET} radius={[3, 3, 0, 0]} maxBarSize={26} />
               <Bar dataKey="Revue 2" fill={ORANGE} radius={[3, 3, 0, 0]} maxBarSize={26} />
@@ -145,10 +146,10 @@ function Evolution({ evo }) {
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={data} margin={{ left: 4, right: 8 }} barGap={3}>
           <CartesianGrid stroke="#EEF2F7" vertical={false} />
-          <XAxis dataKey="year" tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#94A3B8" }} axisLine={false} tickLine={false} />
-          <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#94A3B8" }} axisLine={false} tickLine={false} width={40} />
+          <XAxis dataKey="year" tick={{ fontSize: 11, fontFamily: "Calibri", fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+          <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fontFamily: "Calibri", fill: "#94A3B8" }} axisLine={false} tickLine={false} width={40} />
           <Tooltip content={<Tip />} />
-          <Bar dataKey="Salaires actuels" fill="#64748B" radius={[3, 3, 0, 0]} maxBarSize={30} />
+          <Bar dataKey="Salaires actuels" fill="#808080" radius={[3, 3, 0, 0]} maxBarSize={30} />
           <Bar dataKey="Budget CA" fill={BLUE} radius={[3, 3, 0, 0]} maxBarSize={30} />
           <Bar dataKey="Revue 1" fill={VIOLET} radius={[3, 3, 0, 0]} maxBarSize={30} />
           <Bar dataKey="Revue 2" fill={ORANGE} radius={[3, 3, 0, 0]} maxBarSize={30} />
@@ -160,7 +161,7 @@ function Evolution({ evo }) {
 
 function EmployeesKpi({ k }) {
   const sx = k.sex_counts || {};
-  const typeRows = [["CCQ", k.ccq_count, "#063044"], ["Non-CCQ", k.non_ccq_count, "#64748B"], ["Stagiaire", k.stagiaire_count, "#F59E0B"]];
+  const typeRows = [["CCQ", k.ccq_count, "#063044"], ["Non-CCQ", k.non_ccq_count, "#808080"], ["Stagiaire", k.stagiaire_count, "#F8A942"]];
   const sexRows = [["Masculin", sx.Masculin], ["Féminin", sx.Féminin], ["Autre", sx.Autre], ["Non spéc.", sx["Non spécifié"]]];
   return (
     <div className="card p-5" data-testid="kpi-employes">
@@ -273,8 +274,8 @@ function DashboardBody({ b }) {
           <ResponsiveContainer width="100%" height={Math.max(240, b.by_department.length * 46)}>
             <BarChart data={b.by_department} layout="vertical" margin={{ left: 8, right: 16 }} barGap={2}>
               <CartesianGrid stroke="#EEF2F7" horizontal={false} />
-              <XAxis type="number" tickFormatter={(v) => `${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#94A3B8" }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="department" width={44} tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#64748B" }} axisLine={false} tickLine={false} />
+              <XAxis type="number" tickFormatter={(v) => `${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fontFamily: "Calibri", fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="department" width={44} tick={{ fontSize: 11, fontFamily: "Calibri", fill: "#64748B" }} axisLine={false} tickLine={false} />
               <Tooltip cursor={{ fill: "rgba(0,0,0,.03)" }} content={<Tip />} />
               <Bar dataKey="salaire" name="Salaire" fill={NAVY} radius={[0, 4, 4, 0]} maxBarSize={12} />
               <Bar dataKey="budget" name="Budget total" fill={TEAL} radius={[0, 4, 4, 0]} maxBarSize={12} />
@@ -291,7 +292,7 @@ function DashboardBody({ b }) {
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie data={b.by_type} dataKey="total" nameKey="type" cx="50%" cy="50%" innerRadius={58} outerRadius={92} paddingAngle={2} isAnimationActive={false}>
-                {b.by_type.map((t, i) => <Cell key={i} fill={TYPE_COLORS[t.type] || "#94A3B8"} />)}
+                {b.by_type.map((t, i) => <Cell key={i} fill={TYPE_COLORS[t.type] || "#808080"} />)}
               </Pie>
               <Tooltip content={<Tip />} />
             </PieChart>
@@ -299,7 +300,7 @@ function DashboardBody({ b }) {
           <div className="mt-2 space-y-1.5">
             {b.by_type.map((t) => (
               <div key={t.type} className="flex items-center justify-between text-[11px]">
-                <span className="flex items-center gap-1.5 text-slate-500"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: TYPE_COLORS[t.type] || "#94A3B8" }} />{t.type}</span>
+                <span className="flex items-center gap-1.5 text-slate-500"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: TYPE_COLORS[t.type] || "#808080" }} />{t.type}</span>
                 <span className="font-mono-data">{fmtCAD(t.total)}</span>
               </div>
             ))}
@@ -346,8 +347,8 @@ function DashboardBody({ b }) {
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={b.monthly} margin={{ left: 4, right: 4 }}>
             <CartesianGrid stroke="#EEF2F7" vertical={false} />
-            <XAxis dataKey="month" tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#94A3B8" }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#94A3B8" }} axisLine={false} tickLine={false} width={40} />
+            <XAxis dataKey="month" tick={{ fontSize: 11, fontFamily: "Calibri", fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+            <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fontFamily: "Calibri", fill: "#94A3B8" }} axisLine={false} tickLine={false} width={40} />
             <Tooltip cursor={{ fill: "rgba(0,0,0,.03)" }} content={<Tip />} />
             <Bar dataKey="salaires" name="Salaires" stackId="a" fill={NAVY} maxBarSize={40} />
             <Bar dataKey="charges" name="Charges sociales" stackId="a" fill={TEAL} radius={[3, 3, 0, 0]} maxBarSize={40} />

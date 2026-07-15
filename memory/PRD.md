@@ -297,6 +297,13 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] Mapping visuel front (`excelRowStyle`/`excelCellColor` dans `Comptabilite.js`) : sous-totaux = fond gris clair + texte **#063044** gras + bordure haut ; grand total Actif/Passif = accent **#F8A942** ; grand total Revenus/Marge = fond navy **#063044** + texte blanc + bordures ; en-têtes de section = gras souligné ; annotations « Réel vs Budget »/« Diff » en rouge **#C00000** ; négatifs en rouge/parenthèses.
 - [x] Modèle Excel réimporté (non destructif) pour peupler les styles. Vérifié visuellement (Bilan + P&L, sous-totaux/grands totaux/annotations) + curl (styles présents sur les 4 rapports, Bilan sommaire validation −0,0).
 
+### Ajustements UI Comptabilité — police, gras, palette, M$ (2026-06-15b)
+- [x] **Police Calibri** sur toute l'application (`index.css` : body + override des utilitaires `font-sans`/`font-mono`/`font-display`/`font-mono-data`, éléments de formulaire et tables ; fallback Carlito/Segoe UI).
+- [x] **Sous-totaux & totaux en gras** dans Bilan/P&L (via `excelRowStyle`, déjà `font-700` sur fonds gris/foncé et lignes total).
+- [x] **Titres de catégories/groupes** (Bilan & P&L) en **gras + #063044** (couleur par défaut des lignes `header` dans `excelRowStyle`).
+- [x] **Graphiques limités à 4 couleurs** #063044 · #15AF97 · #F8A942 · #808080 (Dashboard masse salariale : constantes NAVY/TEAL/ORANGE/GREY, TYPE_COLORS, SEX_COLORS, séries Salaires actuels/CA/Rév1/Rév2 ; Comptabilité : barres Réel/CA/Rév-1, cascade flux ; Rapports : tableau COLORS).
+- [x] **Bilan — bouton « Bilan sommaire (M$) »** : 3e bascule affichant le bilan sommaire avec montants exprimés en **millions** (`moneyM`, `BilanSommaireView millions`). Vérifié visuellement (Total actif = 19,76 M$, balancé).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

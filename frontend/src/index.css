@@ -17,15 +17,18 @@
 
 body {
   margin: 0;
-  font-family: "IBM Plex Sans", sans-serif;
+  font-family: Calibri, Carlito, "Segoe UI", "Trebuchet MS", sans-serif;
   -webkit-font-smoothing: antialiased;
   background-color: #F4F6F8;
   color: #0F172A;
   font-variant-numeric: tabular-nums;
 }
 
-.font-display { font-family: "Cabinet Grotesk", "IBM Plex Sans", sans-serif; letter-spacing: -0.02em; }
-.font-mono-data { font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; }
+.font-display { font-family: Calibri, Carlito, "Segoe UI", sans-serif; letter-spacing: -0.01em; }
+.font-mono-data { font-family: Calibri, Carlito, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
+/* Calibri sur toute l'application (override des utilitaires Tailwind) */
+.font-sans, .font-mono { font-family: Calibri, Carlito, "Segoe UI", sans-serif !important; }
+input, button, select, textarea, table, th, td { font-family: Calibri, Carlito, "Segoe UI", sans-serif; }
 
 ::selection { background: #F8A942; color: #fff; }
 

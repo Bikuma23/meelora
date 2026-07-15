@@ -16,7 +16,7 @@ const VENTIL = [
 const SCEN = [["actuel", "Salaires actuels"], ["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 const TYPES = ["all", "CCQ", "Régulier temps plein", "Régulier temps partiel", "Stagiaire"];
 const TABS = [["synthese", "Synthèse", LayoutDashboard], ["pnl", "État des résultats (P&L)", BarChart3], ["classe", "Masse par classe", Layers], ["compare", "Comparatif scénarios", GitCompareArrows], ["custom", "Constructeur personnalisé", Table2]];
-const COLORS = ["#063044", "#F8A942", "#F59E0B", "#EC4899", "#8B5CF6", "#EF4444", "#0EA5E9"];
+const COLORS = ["#063044", "#15AF97", "#F8A942", "#808080"];
 const fmtK = (v) => `${Math.round(v / 1000)}k`;
 
 export default function Rapports() {

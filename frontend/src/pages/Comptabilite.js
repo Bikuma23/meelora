@@ -19,6 +19,13 @@ function money(v) {
   return n < 0 ? `(${abs})` : abs;
 }
 
+function moneyM(v) {
+  if (v == null || v === "") return "—";
+  const n = Number(v) / 1e6;
+  const abs = Math.abs(n).toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n < 0 ? `(${abs})` : abs;
+}
+
 function usePeriods() {
   const [periods, setPeriods] = useState([]);
   const reload = useCallback(() => api.acctPeriods().then(setPeriods).catch(() => {}), []);
@@ -166,7 +173,7 @@ export function AcctDashboard() {
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="Réel" fill="#063044" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Budget CA" fill="#F8A942" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Budget Rév-1" fill="#CBD5E1" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Budget Rév-1" fill="#808080" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -368,7 +375,11 @@ function excelRowStyle(ln) {
   if (st.t) cls.push("border-t border-slate-300");
   if (st.u) cls.push("border-b-2 border-slate-300");
   const bg = isDark ? "#063044" : isGrey ? "#eef1f5" : undefined;
-  const color = isDark ? (st.c || "#FFFFFF") : (st.c || undefined);
+  let color;
+  if (isDark) color = st.c || "#FFFFFF";
+  else if (st.c) color = st.c;
+  else if (ln.kind === "header") color = "#063044";
+  else color = undefined;
   return { cls: cls.join(" "), bg, color, isDark };
 }
 function excelCellColor(s, val, ecart) {
@@ -516,8 +527,10 @@ export function AcctBilan() {
   const [v, setV] = useState("detaille");
   return (
     <div className="space-y-4">
-      <ViewToggle value={v} onChange={setV} options={[{ value: "detaille", label: "Bilan détaillé" }, { value: "sommaire", label: "Bilan sommaire" }]} />
-      {v === "detaille" ? <ReportView type="bilan" title="Bilan détaillé" /> : <BilanSommaireView />}
+      <ViewToggle value={v} onChange={setV} options={[{ value: "detaille", label: "Bilan détaillé" }, { value: "sommaire", label: "Bilan sommaire" }, { value: "sommaire_m", label: "Bilan sommaire (M$)" }]} />
+      {v === "detaille" ? <ReportView type="bilan" title="Bilan détaillé" />
+        : v === "sommaire_m" ? <BilanSommaireView millions />
+        : <BilanSommaireView />}
     </div>
   );
 }
@@ -532,11 +545,12 @@ export function AcctPnl() {
   );
 }
 
-function BilanSommaireView() {
+function BilanSommaireView({ millions = false }) {
   const { periods } = usePeriods();
   const [period, setPeriod] = useState("");
   const [rep, setRep] = useState(null);
   const [loading, setLoading] = useState(false);
+  const fmt = millions ? moneyM : money;
   useEffect(() => { if (!period && periods.length) setPeriod(periods[0].id); }, [periods, period]);
   useEffect(() => {
     if (!period) return;
@@ -566,7 +580,7 @@ function BilanSommaireView() {
             return (
             <tr key={i} className={`border-b border-slate-50 ${s.cls}`} style={{ background: s.bg }}>
               <td className={`px-3 py-1.5 text-left font-sans ${l.kind === "data" ? "pl-5" : ""}`} style={{ color: s.color || (l.kind === "data" ? "#334155" : undefined) }}>{l.label}</td>
-              <td className="px-3 py-1.5 text-right" style={{ color: l.value == null ? undefined : excelCellColor(s, l.value, false) }}>{l.value == null ? "" : money(l.value)}</td>
+              <td className="px-3 py-1.5 text-right" style={{ color: l.value == null ? undefined : excelCellColor(s, l.value, false) }}>{l.value == null ? "" : fmt(l.value)}</td>
             </tr>
             );
           })}
@@ -588,7 +602,7 @@ function BilanSommaireView() {
       )}
       <div className="card overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-          <h3 className="font-display text-sm font-700">Bilan sommaire{rep ? ` — ${rep.month_label} ${rep.year}` : ""}</h3>
+          <h3 className="font-display text-sm font-700">Bilan sommaire{millions ? " (en M$)" : ""}{rep ? ` — ${rep.month_label} ${rep.year}` : ""}</h3>
           {rep && <span className={`inline-flex items-center gap-1 text-xs font-600 ${Math.abs(rep.validation) < 1 ? "text-emerald-600" : "text-red-600"}`} data-testid="acct-bilansom-balance">{Math.abs(rep.validation) < 1 ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}{Math.abs(rep.validation) < 1 ? "Balancé" : `Écart ${money(rep.validation)}`}</span>}
         </div>
         {loading ? <p className="px-5 py-8 text-sm text-slate-500">Chargement…</p> : !rep ? <p className="px-5 py-8 text-sm text-slate-400">Sélectionnez une période.</p> : (
@@ -651,10 +665,10 @@ function CashflowView() {
 
   const waterfall = rep ? (() => {
     let run = rep.encaisse_ouverture;
-    const steps = [{ name: "Ouverture", range: [0, run], fill: "#64748B", delta: run }];
+    const steps = [{ name: "Ouverture", range: [0, run], fill: "#808080", delta: run }];
     [["Exploitation", rep.exploitation_total], ["Investissement", rep.investissement_total], ["Financement", rep.financement_total]].forEach(([name, delta]) => {
       const start = run, end = run + delta;
-      steps.push({ name, range: [Math.min(start, end), Math.max(start, end)], fill: delta >= 0 ? "#0E9488" : "#DC2626", delta });
+      steps.push({ name, range: [Math.min(start, end), Math.max(start, end)], fill: delta >= 0 ? "#15AF97" : "#F8A942", delta });
       run = end;
     });
     steps.push({ name: "Clôture", range: [0, run], fill: "#063044", delta: run });
