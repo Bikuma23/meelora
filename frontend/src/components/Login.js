@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useLang } from "../context/LanguageContext";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -14,6 +15,7 @@ function formatErr(detail) {
 
 export default function Login() {
   const { login } = useAuth();
+  const { t } = useLang();
   const [email, setEmail] = useState("admin@accslegro.com");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -46,28 +48,28 @@ export default function Login() {
           </span>
           <div>
             <h1 className="font-display text-lg font-600 text-white">Budget Salaires</h1>
-            <p className="overline text-[#F8A942]">Pro · Québec</p>
+            <p className="overline text-[#F8A942]">Terrebonne · Québec</p>
           </div>
         </div>
 
         <div className="relative z-10">
           <div className="max-w-md border border-white/20 p-8">
-            <p className="overline mb-4 text-white/70">Plateforme financière</p>
+            <p className="overline mb-4 text-white/70">{t("Plateforme financière")}</p>
             <h2 className="font-display text-4xl font-300 leading-[1.15] text-white">
-              Pilotez votre<br />masse salariale en étant{" "}
-              <span className="font-400 underline decoration-[#15AF97] decoration-2 underline-offset-4">bien outillé</span>.
+              {t("Pilotez votre")}<br />{t("masse salariale en étant")}{" "}
+              <span className="font-400 underline decoration-[#15AF97] decoration-2 underline-offset-4">{t("bien outillé")}</span>.
             </h2>
           </div>
           <div className="mt-8 space-y-3">
-            {[[TrendingUp, "Calculs de paie et charges en temps réel"], [BarChart3, "Bilan, État des résultats & flux de trésorerie"], [ShieldCheck, "Accès par rôle et journal d'audit"]].map(([Ic, t], i) => (
+            {[[TrendingUp, "Calculs de paie et charges en temps réel"], [BarChart3, "Bilan, État des résultats & flux de trésorerie"], [ShieldCheck, "Accès par rôle et journal d'audit"]].map(([Ic, text], i) => (
               <div key={i} className="flex items-center gap-3 border-l-2 border-[#15AF97] pl-3 text-sm text-slate-200">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10"><Ic size={16} className="text-[#15AF97]" /></span>
-                {t}
+                {t(text)}
               </div>
             ))}
           </div>
         </div>
-        <p className="relative z-10 text-xs text-slate-300">© {new Date().getFullYear()} Budget Salaires Pro</p>
+        <p className="relative z-10 text-xs text-slate-300">© {new Date().getFullYear()} Budget Salaires</p>
       </div>
 
       {/* Formulaire */}
@@ -79,32 +81,32 @@ export default function Login() {
             </span>
             <div>
               <h1 className="font-display text-lg font-600 text-slate-900">Budget Salaires</h1>
-              <p className="overline text-[#F8A942]">Pro · Québec</p>
+              <p className="overline text-[#F8A942]">Terrebonne · Québec</p>
             </div>
           </div>
           <form onSubmit={submit} className="card p-8" data-testid="login-form">
-            <p className="overline mb-2">Espace sécurisé</p>
-            <h2 className="font-display mb-1 text-3xl font-300 text-[#063044]">Bon retour</h2>
-            <p className="mb-6 text-sm text-slate-500">Connectez-vous à votre tableau de bord.</p>
+            <p className="overline mb-2">{t("Espace sécurisé")}</p>
+            <h2 className="font-display mb-1 text-3xl font-300 text-[#063044]">{t("Bon retour")}</h2>
+            <p className="mb-6 text-sm text-slate-500">{t("Connectez-vous à votre tableau de bord.")}</p>
             <div className="space-y-4">
               <div>
-                <Label className="overline">Courriel</Label>
+                <Label className="overline">{t("Courriel")}</Label>
                 <Input data-testid="login-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                   className="mt-1.5" required />
               </div>
               <div>
-                <Label className="overline">Mot de passe</Label>
+                <Label className="overline">{t("Mot de passe")}</Label>
                 <Input data-testid="login-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                   className="mt-1.5" required />
               </div>
               {error && <p data-testid="login-error" className="text-sm font-500 text-red-600">{error}</p>}
               <Button data-testid="login-submit" type="submit" disabled={loading}
                 className="w-full gap-2 rounded-md bg-[#15AF97] font-600 text-white hover:bg-[#15AF97]/90">
-                <LogIn size={16} /> {loading ? "Connexion…" : "Se connecter"}
+                <LogIn size={16} /> {loading ? t("Connexion…") : t("Se connecter")}
               </Button>
             </div>
           </form>
-          <p className="mt-6 text-center text-xs text-slate-400">Accès sécurisé · réservé au personnel autorisé</p>
+          <p className="mt-6 text-center text-xs text-slate-400">{t("Accès sécurisé · réservé au personnel autorisé")}</p>
         </div>
       </div>
     </div>

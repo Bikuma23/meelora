@@ -1,6 +1,7 @@
 import "./App.css";
 import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { LanguageProvider } from "./context/LanguageContext";
 import Login from "./components/Login";
 import Layout from "./components/Layout";
 
@@ -16,8 +17,10 @@ function App() {
   return (
     <div className="App">
       <AuthProvider>
-        <Shell />
-        <Toaster position="top-right" richColors />
+        <LanguageProvider>
+          <Shell />
+          <Toaster position="top-right" richColors />
+        </LanguageProvider>
       </AuthProvider>
     </div>
   );

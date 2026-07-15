@@ -312,6 +312,15 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Cartes KPI Comptabilité** : liseré vertical teal, overline, badge d'icône teal, valeur navy. Focus/selection globaux en teal.
 - [x] `design_guidelines.json` généré par l'agent design. Vérifié testing_agent iteration_27 : frontend 100 % (login, 13 items de nav, bascule Bilan 3 vues dont M$, chips P&L, dashboards + graphiques), aucune régression. (Warning Recharts sparkline non bloquant — cosmétique.)
 
+### Bilinguisme FR/EN — Phase 1 (2026-06-15d)
+- [x] Infrastructure i18n : `context/LanguageContext.js` (provider `useLang` avec `lang`, `setLang`, `t`) + dictionnaire `lib/i18n.js` (clés FR → EN). Langue par défaut **Français**, persistée dans les préférences (`language`) + localStorage. Montée dans `App.js`.
+- [x] **Sélecteur de langue dans « Mon profil »** (FR / English US) — carte dédiée, persistance auto.
+- [x] Ossature traduite : barre latérale (nav + sous-menus + labels de groupe), en-têtes de pages (PAGES titres/sous-titres), sélecteur d'année + dialogue nouvelle année, menu utilisateur/rôles, page de connexion, page « Mon profil ».
+- [x] **Logos** : « Pro » retiré du logo latéral ; connexion → ligne « Pro · Québec » remplacée par **« Terrebonne · Québec »**.
+- [x] Format des montants conservé en québécois (10 782 099,30) dans les deux langues (choix utilisateur).
+- Vérifié par capture (bascule FR→EN : sidebar/ossature/préférences en anglais).
+- [ ] **Phase 2 (à venir)** : traduire les pages métier (Tableau de bord, Employés, Salaires & Budget, Hypothèses, Départements, Rapports, Journal, Utilisateurs) + dialogues. Comptabilité : interface traduisible, mais libellés de lignes Bilan/P&L resteront issus du modèle Excel FR jusqu'à réception d'un **modèle Excel EN** (fourni ultérieurement par l'utilisateur).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

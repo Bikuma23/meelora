@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
+import { useLang } from "../context/LanguageContext";
 import {
   LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight,
 } from "lucide-react";
@@ -65,6 +66,7 @@ const NAV_BOTTOM = [
 ];
 
 function NavItem({ item, active, onClick }) {
+  const { t } = useLang();
   const Icon = item.icon;
   const on = active === item.key;
   return (
@@ -80,14 +82,15 @@ function NavItem({ item, active, onClick }) {
         <Icon size={16} strokeWidth={2.2} />
       </span>
       <span className="min-w-0">
-        <span className={`block truncate text-sm ${on ? "font-700" : "font-600"}`}>{item.label}</span>
-        <span className={`block truncate text-[11px] ${on ? "text-[#15AF97]" : "text-slate-400"}`}>{item.sub}</span>
+        <span className={`block truncate text-sm ${on ? "font-700" : "font-600"}`}>{t(item.label)}</span>
+        <span className={`block truncate text-[11px] ${on ? "text-[#15AF97]" : "text-slate-400"}`}>{t(item.sub)}</span>
       </span>
     </button>
   );
 }
 
 function NavSubItem({ item, active, onClick }) {
+  const { t } = useLang();
   const Icon = item.icon;
   const on = active === item.key;
   return (
@@ -95,12 +98,13 @@ function NavSubItem({ item, active, onClick }) {
       className={`group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors duration-150 ${on ? "bg-white/10 font-700 text-white" : "font-600 text-slate-300 hover:bg-white/10 hover:text-white"}`}>
       {on && <span className="absolute left-0 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r-full bg-[#15AF97]" />}
       <Icon size={15} strokeWidth={2.2} className={on ? "text-[#15AF97]" : "text-slate-400 group-hover:text-white"} />
-      <span className="truncate">{item.label}</span>
+      <span className="truncate">{t(item.label)}</span>
     </button>
   );
 }
 
 function NavParent({ item, children, active, onClick }) {
+  const { t } = useLang();
   const Icon = item.icon;
   const childActive = children.some((c) => c.key === active);
   const on = active === item.key;
@@ -115,8 +119,8 @@ function NavParent({ item, children, active, onClick }) {
             <Icon size={16} strokeWidth={2.2} />
           </span>
           <span className="min-w-0">
-            <span className={`block truncate text-sm ${on ? "font-700" : "font-600"}`}>{item.label}</span>
-            <span className={`block truncate text-[11px] ${on ? "text-[#15AF97]" : "text-slate-400"}`}>{item.sub}</span>
+            <span className={`block truncate text-sm ${on ? "font-700" : "font-600"}`}>{t(item.label)}</span>
+            <span className={`block truncate text-[11px] ${on ? "text-[#15AF97]" : "text-slate-400"}`}>{t(item.sub)}</span>
           </span>
         </button>
         <button data-testid={`nav-${item.key}-toggle`} onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }} className="rounded-md p-1 text-slate-400 hover:text-white">
@@ -134,6 +138,7 @@ function NavParent({ item, children, active, onClick }) {
 
 function YearControls() {
   const { years, year, selectYear, refresh } = useYear();
+  const { t } = useLang();
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ year: "", source_year: "", source_scenario: "ca" });
   const openDialog = () => {
@@ -155,31 +160,31 @@ function YearControls() {
         <SelectTrigger className="h-8 w-24" data-testid="header-year-select"><SelectValue /></SelectTrigger>
         <SelectContent>{years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
       </Select>
-      <Button variant="outline" size="sm" className="h-8 gap-1.5" data-testid="new-year-btn" onClick={openDialog}><Plus size={14} /> Année</Button>
+      <Button variant="outline" size="sm" className="h-8 gap-1.5" data-testid="new-year-btn" onClick={openDialog}><Plus size={14} /> {t("Année")}</Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent data-testid="new-year-dialog">
           <DialogHeader>
-            <DialogTitle>Nouvelle année budgétaire</DialogTitle>
-            <DialogDescription className="text-xs">Le scénario source de l'année de départ devient le « Salaire actuel » de la nouvelle année.</DialogDescription>
+            <DialogTitle>{t("Nouvelle année budgétaire")}</DialogTitle>
+            <DialogDescription className="text-xs">{t("Le scénario source de l'année de départ devient le « Salaire actuel » de la nouvelle année.")}</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-3 py-1 sm:grid-cols-3">
-            <div><label className="text-[11px] uppercase text-slate-500">Nouvelle année</label>
+            <div><label className="text-[11px] uppercase text-slate-500">{t("Nouvelle année")}</label>
               <Input data-testid="ny-year" type="number" className="mt-1 font-mono-data" value={f.year} onChange={(e) => setF((p) => ({ ...p, year: e.target.value }))} /></div>
-            <div><label className="text-[11px] uppercase text-slate-500">Année source</label>
+            <div><label className="text-[11px] uppercase text-slate-500">{t("Année source")}</label>
               <Select value={f.source_year} onValueChange={(v) => setF((p) => ({ ...p, source_year: v }))}>
                 <SelectTrigger data-testid="ny-source-year" className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>{years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
               </Select></div>
-            <div><label className="text-[11px] uppercase text-slate-500">Report basé sur</label>
+            <div><label className="text-[11px] uppercase text-slate-500">{t("Report basé sur")}</label>
               <Select value={f.source_scenario} onValueChange={(v) => setF((p) => ({ ...p, source_scenario: v }))}>
                 <SelectTrigger data-testid="ny-source-scenario" className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="ca">Budget CA</SelectItem><SelectItem value="revue1">Revue Budgétaire 1</SelectItem><SelectItem value="revue2">Revue Budgétaire 2</SelectItem></SelectContent>
+                <SelectContent><SelectItem value="ca">{t("Budget CA")}</SelectItem><SelectItem value="revue1">{t("Revue Budgétaire 1")}</SelectItem><SelectItem value="revue2">{t("Revue Budgétaire 2")}</SelectItem></SelectContent>
               </Select></div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
-            <Button data-testid="ny-create-btn" className="bg-[#063044] hover:bg-[#063044]/90" onClick={create}>Créer l'année</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>{t("Annuler")}</Button>
+            <Button data-testid="ny-create-btn" className="bg-[#063044] hover:bg-[#063044]/90" onClick={create}>{t("Créer l'année")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -193,6 +198,7 @@ export default function Layout() {
 
 function LayoutInner() {
   const { user, logout } = useAuth();
+  const { t } = useLang();
   const [active, setActive] = useState("dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -214,7 +220,6 @@ function LayoutInner() {
             </span>
             <div>
               <h1 className="font-display text-base font-800 leading-none text-white">Budget Salaires</h1>
-              <p className="text-[11px] font-600 uppercase tracking-widest text-[#F8A942]">Pro</p>
             </div>
           </div>
           <button className="rounded-lg p-1.5 text-slate-300 hover:bg-white/10 lg:hidden" onClick={() => setMobileOpen(false)} data-testid="sidebar-close-btn"><X size={20} /></button>
@@ -223,13 +228,13 @@ function LayoutInner() {
         <nav className="flex-1 space-y-1 overflow-y-auto">
           <div className="flex items-center gap-2 px-3 pb-1 pt-1">
             <Briefcase size={13} className="text-[#15AF97]" />
-            <span className="overline" style={{ color: "#94A3B8" }}>Masse Salariale</span>
+            <span className="overline" style={{ color: "#94A3B8" }}>{t("Masse Salariale")}</span>
           </div>
           {NAV_GROUP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           <NavParent item={BUDGET_PARENT} children={BUDGET_CHILDREN} active={active} onClick={go} />
           <div className="flex items-center gap-2 px-3 pb-1 pt-4">
             <Calculator size={13} className="text-[#15AF97]" />
-            <span className="overline" style={{ color: "#94A3B8" }}>Comptabilité</span>
+            <span className="overline" style={{ color: "#94A3B8" }}>{t("Comptabilité")}</span>
           </div>
           {NAV_ACCT.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           {user?.role === "admin" && (
@@ -246,7 +251,7 @@ function LayoutInner() {
               {user?.role === "admin" && <NavItem item={{ key: "utilisateurs", label: "Utilisateurs", sub: "Comptes & accès", icon: ShieldCheck }} active={active} onClick={(k) => { go(k); setUserMenuOpen(false); }} />}
               <button data-testid="logout-btn" onClick={logout}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-600 text-slate-300 transition-colors hover:bg-red-500/15 hover:text-red-300">
-                <LogOut size={16} /> Déconnexion
+                <LogOut size={16} /> {t("Déconnexion")}
               </button>
             </div>
           )}
@@ -258,7 +263,7 @@ function LayoutInner() {
             <div className="min-w-0 flex-1 text-left">
               <div className="flex items-center gap-1.5">
                 <p className="truncate text-sm font-600 text-white">{user?.name}</p>
-                <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-700 uppercase" style={{ backgroundColor: roleMeta.t + "22", color: roleMeta.t }}>{roleMeta.label}</span>
+                <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-700 uppercase" style={{ backgroundColor: roleMeta.t + "22", color: roleMeta.t }}>{t(roleMeta.label)}</span>
               </div>
               <p className="truncate text-[11px] text-slate-400">{user?.email}</p>
             </div>
@@ -272,13 +277,13 @@ function LayoutInner() {
           <div className="flex min-w-0 items-center gap-2.5">
             <button className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden" onClick={() => setMobileOpen(true)} data-testid="sidebar-open-btn"><Menu size={22} /></button>
             <div className="min-w-0">
-              <p className="overline mb-0.5">{active.startsWith("acct_") ? "Comptabilité" : "Masse salariale"}</p>
-              <h2 className="font-display truncate text-lg font-400 tracking-tight text-[#063044] dark:text-white sm:text-2xl">{page.title}</h2>
-              <p className="truncate text-xs text-slate-500">{page.sub}</p>
+              <p className="overline mb-0.5">{active.startsWith("acct_") ? t("Comptabilité") : t("Masse salariale")}</p>
+              <h2 className="font-display truncate text-lg font-400 tracking-tight text-[#063044] dark:text-white sm:text-2xl">{t(page.title)}</h2>
+              <p className="truncate text-xs text-slate-500">{t(page.sub)}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            {!active.startsWith("acct_") && <span className="hidden rounded-full bg-[#15AF97]/10 px-3 py-1 text-xs font-600 text-[#15AF97] sm:inline-flex">Budget actif</span>}
+            {!active.startsWith("acct_") && <span className="hidden rounded-full bg-[#15AF97]/10 px-3 py-1 text-xs font-600 text-[#15AF97] sm:inline-flex">{t("Budget actif")}</span>}
             <YearControls />
           </div>
         </header>
