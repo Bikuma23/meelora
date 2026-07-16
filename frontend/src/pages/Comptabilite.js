@@ -95,7 +95,7 @@ export function AcctDashboard() {
   const [summary, setSummary] = useState(null);
   const [trend, setTrend] = useState([]);
   useEffect(() => { api.acctDashboard().then(setD).catch(() => {}); api.acctTrend().then(setTrend).catch(() => {}); }, []);
-  useEffect(() => { if (!period && periods.length) setPeriod(periods[0].id); }, [periods, period]);
+  useEffect(() => { if (periods.length && !periods.some((p) => p.id === period)) setPeriod(periods[0].id); }, [periods, period]);
   useEffect(() => {
     if (!period) { setSummary(null); return; }
     const [y, m] = period.split("-").map(Number);
@@ -434,7 +434,7 @@ function ReportView({ type, title }) {
   const [loading, setLoading] = useState(false);
   const [hideZero, setHideZero] = useState(false);
   const [hiddenGroups, setHiddenGroups] = useState({});
-  useEffect(() => { if (!period && periods.length) setPeriod(periods[0].id); }, [periods, period]);
+  useEffect(() => { if (periods.length && !periods.some((p) => p.id === period)) setPeriod(periods[0].id); }, [periods, period]);
   useEffect(() => {
     if (!period) return;
     const [y, m] = period.split("-").map(Number);
@@ -589,7 +589,7 @@ function BilanSommaireView({ millions = false }) {
   const [rep, setRep] = useState(null);
   const [loading, setLoading] = useState(false);
   const fmt = millions ? moneyM : money;
-  useEffect(() => { if (!period && periods.length) setPeriod(periods[0].id); }, [periods, period]);
+  useEffect(() => { if (periods.length && !periods.some((p) => p.id === period)) setPeriod(periods[0].id); }, [periods, period]);
   useEffect(() => {
     if (!period) return;
     const [y, m] = period.split("-").map(Number);
@@ -677,8 +677,8 @@ function CashflowView() {
 
   useEffect(() => {
     if (!periods.length) return;
-    if (!closeP) setCloseP(periods[0].id);
-    if (!openP) setOpenP((periods[1] || periods[0]).id);
+    if (!periods.some((p) => p.id === closeP)) setCloseP(periods[0].id);
+    if (!periods.some((p) => p.id === openP)) setOpenP((periods[1] || periods[0]).id);
   }, [periods, closeP, openP]);
 
   useEffect(() => {
