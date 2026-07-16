@@ -201,15 +201,21 @@ function KpiDetailDialog({ open, onOpenChange, type, kpi }) {
           <>
             <DialogHeader>
               <DialogTitle>DSO — Délai moyen de recouvrement</DialogTitle>
-              <DialogDescription className="text-xs">{month_label} {year} · (Comptes clients ÷ Ventes YTD annualisées) × 365</DialogDescription>
+              <DialogDescription className="text-xs">{month_label} {year} · (Comptes clients courants hors retenues ÷ Ventes des 12 derniers mois) × 365</DialogDescription>
             </DialogHeader>
-            <div className="rounded-lg bg-slate-50 px-4 py-1">
-              <DRow label={dso.ar_label || "Comptes à recevoir"} value={money(dso.ar)} />
-              <DRow label="Ventes cumulatives (YTD)" value={money(dso.sales_ytd)} />
-              <DRow label="Mois écoulés" value={dso.months} />
-              <DRow label="Ventes annualisées (YTD ÷ mois × 12)" value={money(dso.annualized_sales)} />
-              <DRow label="DSO = CC ÷ ventes annualisées × 365" value={fmtDays(dso.value)} strong />
-            </div>
+            {!dso.available ? (
+              <div className="flex items-start gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                <AlertTriangle size={16} className="mt-0.5 shrink-0" /><span>{dso.reason}</span>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-slate-50 px-4 py-1">
+                <DRow label={dso.ar_label || "Comptes à recevoir"} value={money(dso.ar)} />
+                <DRow label="− Retenues contractuelles exclues" value={money(dso.retenues)} />
+                <DRow label="= Comptes clients courants" value={money(dso.ar_courant)} />
+                <DRow label="Ventes (12 derniers mois réels)" value={money(dso.sales_12m)} />
+                <DRow label="DSO = CC courants ÷ ventes 12 mois × 365" value={fmtDays(dso.value)} strong />
+              </div>
+            )}
             <SourceLinks periodId={period} links={[["acct_bilan", "Voir le Bilan"], ["acct_pnl", "Voir l'État des résultats"]]} />
           </>
         )}
@@ -425,9 +431,9 @@ export function AcctDashboard() {
           </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <IndicatorCard testid="indicator-dso" title="DSO — Recouvrement clients" icon={Clock}
-              caption="Délai moyen d'encaissement des comptes clients (jours)." provisional={!kpi.locked}
+              caption="Délai moyen d'encaissement des clients (jours) — base glissante 12 mois, hors retenues." provisional={!kpi.locked}
               unavailable={!kpi.dso.available} reason={kpi.dso.reason}
-              mainText={fmtDays(kpi.dso.value)} sub={kpi.dso.available ? `CC ${money(kpi.dso.ar)} · ventes ann. ${money(kpi.dso.annualized_sales)}` : null}
+              mainText={fmtDays(kpi.dso.value)} sub={kpi.dso.available ? `CC courants ${money(kpi.dso.ar_courant)} · ventes 12m ${money(kpi.dso.sales_12m)}` : null}
               trendNode={kpi.dso.available && <TrendBadge testid="trend-dso" trend={kpi.trend?.dso} higherIsBetter={false} unit="days" />}
               onClick={() => openKpi("dso")} />
             <IndicatorCard testid="indicator-dpo" title="DPO — Paiement fournisseurs" icon={Clock}

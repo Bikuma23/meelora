@@ -2230,42 +2230,39 @@ async def _kpi_data(year, month, with_trend=True):
     cl_total = _find_line(bdata["passif"], "TOTAL DU PASSIF A COURT TERME")
     actif_ct, passif_ct = _bilan_ct_lines(bdata)
     fig = _pnl_figures(pnl)
-    sales_ytd = fig["sales"].get("cumulatif")
-    cogs_ytd = fig["cogs"].get("cumulatif")
 
-    # --- DSO ---
-    dso = {"available": False, "value": None, "reason": None,
-           "ar_label": ar["label"] if ar else None, "ar": ar["value"] if ar else None,
-           "sales_ytd": sales_ytd, "months": months, "annualized_sales": None}
-    if ar is None:
-        dso["reason"] = "Compte « Comptes à recevoir » introuvable dans le mapping du bilan."
-    elif not sales_ytd or sales_ytd <= 0:
-        dso["reason"] = "Ventes YTD indisponibles ou nulles (impossible d'annualiser)."
-    else:
-        ann = sales_ytd / months * 12
-        dso["annualized_sales"] = round(ann, 2)
-        dso["value"] = round(ar["value"] / ann * 365, 1)
-        dso["available"] = True
+    # --- Retenues contractuelles sur factures émises (garantie de construction) ---
+    retenues = 0.0; retenues_label = None; retenues_found = False
+    try:
+        bilan_det = await _acct_report(year, month, "bilan")
+        for ln in bilan_det["lines"]:
+            n = _acct_norm(ln["label"])
+            if "RETENUE" in n and "CONSTRUCTION" in n:
+                retenues = ln["values"].get("cumulatif") or 0.0
+                retenues_label = ln["label"]; retenues_found = True
+                break
+    except Exception:
+        pass
 
-    # --- DPO --- base glissante 12 mois : Achats = COGS(12 derniers mois réels) + variation d'inventaire sur 12 mois
+    # --- Fenêtre glissante 12 mois : ventes & COGS mensuels réels ---
     inv_current = inv["value"] if inv else None
-    cogs_12m = 0.0
+    cogs_12m = 0.0; sales_12m = 0.0
     missing = []
-    window_periods = []
     for k in range(12):
         wy, wm = _add_months(year, month, -k)
         wpk = _pkey(wy, wm)
-        window_periods.append(wpk)
         wp = await db.acct_periods.find_one({"_id": wpk})
         wbv = await db.acct_bv.find_one({"_id": wpk})
         if not wp or not wbv:
             missing.append(wpk); continue
         try:
-            wpnl = await _acct_report(wy, wm, "pnl_sommaire")
-            cm = _pnl_figures(wpnl)["cogs"].get("reel")
-            cogs_12m += (cm or 0.0)
+            wf = _pnl_figures(await _acct_report(wy, wm, "pnl_sommaire"))
+            cogs_12m += (wf["cogs"].get("reel") or 0.0)
+            sales_12m += (wf["sales"].get("reel") or 0.0)
         except Exception:
             missing.append(wpk)
+    months_available = 12 - len(missing)
+
     # Inventaire il y a 12 mois (ouverture de la fenêtre glissante)
     oy, om = _add_months(year, month, -12)
     inv12_pk = _pkey(oy, om)
@@ -2278,7 +2275,24 @@ async def _kpi_data(year, month, with_trend=True):
                 inv_12m = l12["value"]
         except Exception:
             pass
-    months_available = 12 - len(missing)
+
+    # --- DSO --- base glissante 12 mois ; comptes clients courants = CC − retenues (dénominateur ventes NON ajusté)
+    ar_courant = round(ar["value"] - retenues, 2) if ar else None
+    dso = {"available": False, "value": None, "reason": None, "method": "rolling_12m",
+           "ar_label": ar["label"] if ar else None, "ar": ar["value"] if ar else None,
+           "retenues": round(retenues, 2), "ar_courant": ar_courant,
+           "sales_12m": round(sales_12m, 2), "months_available": months_available}
+    if ar is None:
+        dso["reason"] = "Compte « Comptes à recevoir » introuvable dans le mapping du bilan."
+    elif missing:
+        dso["reason"] = f"DSO non calculable de façon fiable — {months_available}/12 mois réels disponibles (base glissante 12 mois requise)."
+    elif sales_12m <= 0:
+        dso["reason"] = "Ventes des 12 derniers mois nulles ou négatives."
+    else:
+        dso["value"] = round(ar_courant / sales_12m * 365, 1)
+        dso["available"] = True
+
+    # --- DPO --- base glissante 12 mois : Achats = COGS(12 derniers mois réels) + variation d'inventaire sur 12 mois
     inv_var = round(inv_current - inv_12m, 2) if (inv_current is not None and inv_12m is not None) else None
     dpo = {"available": False, "value": None, "reason": None, "method": "rolling_12m",
            "ap_label": ap["label"] if ap else None, "ap": ap["value"] if ap else None,
@@ -2297,19 +2311,6 @@ async def _kpi_data(year, month, with_trend=True):
         else:
             dpo["value"] = round(ap["value"] / purchases * 365, 1)
             dpo["available"] = True
-
-    # --- Retenues contractuelles sur factures émises (garantie de construction) ---
-    retenues = 0.0; retenues_label = None; retenues_found = False
-    try:
-        bilan_det = await _acct_report(year, month, "bilan")
-        for ln in bilan_det["lines"]:
-            n = _acct_norm(ln["label"])
-            if "RETENUE" in n and "CONSTRUCTION" in n:
-                retenues = ln["values"].get("cumulatif") or 0.0
-                retenues_label = ln["label"]; retenues_found = True
-                break
-    except Exception:
-        pass
 
     # --- Fonds de roulement (FDR) & Besoin en fonds de roulement (BFR) ---
     # Exclusion des retenues contractuelles de l'actif court terme et des comptes clients.
