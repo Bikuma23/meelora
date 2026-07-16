@@ -124,7 +124,28 @@ const acctGoto = (navKey, periodId) => {
 };
 const fmtDays = (v) => v == null ? "—" : `${Number(v).toLocaleString("fr-CA", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} j`;
 
-function IndicatorCard({ title, caption, mainText, sub, unavailable, reason, provisional, icon: Icon, onClick, testid }) {
+const fmtDelta = (v, unit) => {
+  const sign = v > 0 ? "+" : v < 0 ? "−" : "";
+  const abs = Math.abs(v);
+  if (unit === "days") return `${sign}${abs.toLocaleString("fr-CA", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} j`;
+  return `${sign}${abs.toLocaleString("fr-CA", { maximumFractionDigits: 0 })}`;
+};
+function TrendBadge({ trend, higherIsBetter, unit, testid }) {
+  if (!trend) return null;
+  const { delta, delta_pct } = trend;
+  const flat = Math.abs(delta) < 1e-9;
+  const up = delta > 0;
+  const good = flat ? null : (higherIsBetter ? up : !up);
+  const color = flat ? "bg-slate-100 text-slate-400" : good ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600";
+  const Icon = flat ? Minus : up ? TrendingUp : TrendingDown;
+  return (
+    <span data-testid={testid} className={`inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-700 ${color}`} title="vs mois précédent">
+      <Icon size={11} /> {fmtDelta(delta, unit)}{delta_pct != null ? ` · ${delta > 0 ? "+" : delta < 0 ? "−" : ""}${Math.abs(delta_pct).toLocaleString("fr-CA", { maximumFractionDigits: 1 })} %` : ""}
+    </span>
+  );
+}
+
+function IndicatorCard({ title, caption, mainText, sub, unavailable, reason, provisional, icon: Icon, onClick, testid, trendNode }) {
   return (
     <button data-testid={testid} onClick={unavailable ? undefined : onClick} disabled={unavailable}
       className={`card group relative flex flex-col gap-2 p-5 text-left transition-shadow ${unavailable ? "cursor-default opacity-90" : "cursor-pointer hover:shadow-md"}`}>
@@ -140,6 +161,7 @@ function IndicatorCard({ title, caption, mainText, sub, unavailable, reason, pro
         <>
           <span className="font-mono-data text-2xl font-800 text-[#063044]" data-testid={`${testid}-value`}>{mainText}</span>
           {sub && <span className="font-mono-data text-xs font-600 text-slate-500">{sub}</span>}
+          {trendNode}
         </>
       )}
       <span className="text-[11px] leading-snug text-slate-400">{caption}</span>
@@ -406,11 +428,13 @@ export function AcctDashboard() {
               caption="Délai moyen d'encaissement des comptes clients (jours)." provisional={!kpi.locked}
               unavailable={!kpi.dso.available} reason={kpi.dso.reason}
               mainText={fmtDays(kpi.dso.value)} sub={kpi.dso.available ? `CC ${money(kpi.dso.ar)} · ventes ann. ${money(kpi.dso.annualized_sales)}` : null}
+              trendNode={kpi.dso.available && <TrendBadge testid="trend-dso" trend={kpi.trend?.dso} higherIsBetter={false} unit="days" />}
               onClick={() => openKpi("dso")} />
             <IndicatorCard testid="indicator-dpo" title="DPO — Paiement fournisseurs" icon={Clock}
               caption="Délai moyen de paiement des fournisseurs (jours) — base glissante 12 mois." provisional={!kpi.locked}
               unavailable={!kpi.dpo.available} reason={kpi.dpo.reason}
               mainText={fmtDays(kpi.dpo.value)} sub={kpi.dpo.available ? `CF ${money(kpi.dpo.ap)} · achats 12m ${money(kpi.dpo.purchases_12m)}` : null}
+              trendNode={kpi.dpo.available && <TrendBadge testid="trend-dpo" trend={kpi.trend?.dpo} higherIsBetter={true} unit="days" />}
               onClick={() => openKpi("dpo")} />
             <button data-testid="indicator-fdr" onClick={kpi.fdr.available ? () => openKpi("fdr") : undefined} disabled={!kpi.fdr.available}
               className={`card group relative flex flex-col gap-2 p-5 text-left transition-shadow sm:col-span-2 xl:col-span-1 ${kpi.fdr.available ? "cursor-pointer hover:shadow-md" : "cursor-default opacity-90"}`}>
@@ -426,11 +450,13 @@ export function AcctDashboard() {
                     <span className="text-[10px] font-700 uppercase tracking-wide text-slate-400">FDR</span>
                     <p className="font-mono-data text-xl font-800 text-[#063044]" data-testid="indicator-fdr-value">{money(kpi.fdr.value)}</p>
                     <span className="font-mono-data text-[11px] font-600 text-slate-500">Ratio {kpi.fdr.ratio ?? "—"}</span>
+                    <div className="mt-1"><TrendBadge testid="trend-fdr" trend={kpi.trend?.fdr} higherIsBetter={true} unit="money" /></div>
                   </div>
                   <div>
                     <span className="text-[10px] font-700 uppercase tracking-wide text-slate-400">BFR</span>
                     <p className="font-mono-data text-xl font-800 text-[#0E9488]" data-testid="indicator-bfr-value">{kpi.fdr.bfr?.available ? money(kpi.fdr.bfr.value) : "—"}</p>
                     <span className="font-mono-data text-[11px] font-600 text-slate-500">Cycle opérationnel</span>
+                    {kpi.fdr.bfr?.available && <div className="mt-1"><TrendBadge testid="trend-bfr" trend={kpi.trend?.bfr} higherIsBetter={false} unit="money" /></div>}
                   </div>
                 </div>
               )}

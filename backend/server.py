@@ -2216,7 +2216,7 @@ def _pnl_figures(pnl):
             out["charges"] = {"reel": ln["values"].get("reel"), "cumulatif": ln["values"].get("cumulatif")}
     return out
 
-async def _kpi_data(year, month):
+async def _kpi_data(year, month, with_trend=True):
     bdata = await _bilan_sommaire_data(year, month)
     pnl = await _acct_report(year, month, "pnl_sommaire")
     months = int(month)  # exercice = année civile -> mois écoulés = n° du mois
@@ -2338,9 +2338,33 @@ async def _kpi_data(year, month):
         fdr["bfr"]["value"] = round(ar_courant + inv_current - ap["value"], 2)
         fdr["bfr"]["available"] = True
 
-    return {"period": pk, "year": int(year), "month": int(month), "month_label": MONTHS_FR[month - 1],
-            "locked": bool(period and period.get("locked")),
-            "dso": dso, "dpo": dpo, "fdr": fdr}
+    result = {"period": pk, "year": int(year), "month": int(month), "month_label": MONTHS_FR[month - 1],
+              "locked": bool(period and period.get("locked")),
+              "dso": dso, "dpo": dpo, "fdr": fdr}
+
+    # --- Tendance vs mois précédent ---
+    if with_trend:
+        py, pm = _add_months(year, month, -1)
+        prev = None
+        if await db.acct_bv.find_one({"_id": _pkey(py, pm)}):
+            try:
+                prev = await _kpi_data(py, pm, with_trend=False)
+            except Exception:
+                prev = None
+        def _trend(cur, prv):
+            if cur is None or prv is None:
+                return None
+            delta = round(cur - prv, 2)
+            pct = round((delta / abs(prv)) * 100, 1) if prv else None
+            return {"prev": prv, "delta": delta, "delta_pct": pct}
+        result["trend"] = {
+            "period": _pkey(py, pm), "month_label": MONTHS_FR[pm - 1], "year": int(py),
+            "dso": _trend(dso.get("value"), (prev or {}).get("dso", {}).get("value")),
+            "dpo": _trend(dpo.get("value"), (prev or {}).get("dpo", {}).get("value")),
+            "fdr": _trend(fdr.get("value"), (prev or {}).get("fdr", {}).get("value")),
+            "bfr": _trend(fdr.get("bfr", {}).get("value"), (prev or {}).get("fdr", {}).get("bfr", {}).get("value")),
+        }
+    return result
 
 @api.get("/acct/kpis")
 async def acct_kpis(year: int, month: int, user: dict = Depends(get_current_user)):
