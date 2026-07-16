@@ -2276,11 +2276,14 @@ async def _kpi_data(year, month, with_trend=True):
         except Exception:
             pass
 
-    # --- DSO --- base glissante 12 mois ; comptes clients courants = CC − retenues (dénominateur ventes NON ajusté)
+    # --- DSO --- base glissante 12 mois ; CC courants nets de taxes (÷ 1,14975), hors retenues
+    QC_TAX = 1.14975  # TPS 5% + TVQ 9,975% (le solde CC/CF inclut les taxes, pas les ventes/COGS)
     ar_courant = round(ar["value"] - retenues, 2) if ar else None
+    ar_courant_net = round(ar_courant / QC_TAX, 2) if ar_courant is not None else None
     dso = {"available": False, "value": None, "reason": None, "method": "rolling_12m",
            "ar_label": ar["label"] if ar else None, "ar": ar["value"] if ar else None,
            "retenues": round(retenues, 2), "ar_courant": ar_courant,
+           "tax_factor": QC_TAX, "ar_courant_net": ar_courant_net,
            "sales_12m": round(sales_12m, 2), "months_available": months_available}
     if ar is None:
         dso["reason"] = "Compte « Comptes à recevoir » introuvable dans le mapping du bilan."
@@ -2289,13 +2292,15 @@ async def _kpi_data(year, month, with_trend=True):
     elif sales_12m <= 0:
         dso["reason"] = "Ventes des 12 derniers mois nulles ou négatives."
     else:
-        dso["value"] = round(ar_courant / sales_12m * 365, 1)
+        dso["value"] = round(ar_courant_net / sales_12m * 365, 1)
         dso["available"] = True
 
-    # --- DPO --- base glissante 12 mois : Achats = COGS(12 derniers mois réels) + variation d'inventaire sur 12 mois
+    # --- DPO --- base glissante 12 mois ; CF nets de taxes (÷ 1,14975) ; Achats = COGS 12m + variation d'inventaire 12m
     inv_var = round(inv_current - inv_12m, 2) if (inv_current is not None and inv_12m is not None) else None
+    ap_net = round(ap["value"] / QC_TAX, 2) if ap else None
     dpo = {"available": False, "value": None, "reason": None, "method": "rolling_12m",
            "ap_label": ap["label"] if ap else None, "ap": ap["value"] if ap else None,
+           "tax_factor": QC_TAX, "ap_net": ap_net,
            "cogs_12m": round(cogs_12m, 2), "inv_current": inv_current, "inv_12m": inv_12m,
            "inv_12m_period": inv12_pk, "inv_variation": inv_var,
            "months_available": months_available, "purchases_12m": None}
@@ -2309,7 +2314,7 @@ async def _kpi_data(year, month, with_trend=True):
         if purchases <= 0:
             dpo["reason"] = "Achats des 12 derniers mois nuls ou négatifs."
         else:
-            dpo["value"] = round(ap["value"] / purchases * 365, 1)
+            dpo["value"] = round(ap_net / purchases * 365, 1)
             dpo["available"] = True
 
     # --- Fonds de roulement (FDR) & Besoin en fonds de roulement (BFR) ---

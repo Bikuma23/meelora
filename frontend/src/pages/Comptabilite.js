@@ -201,7 +201,7 @@ function KpiDetailDialog({ open, onOpenChange, type, kpi }) {
           <>
             <DialogHeader>
               <DialogTitle>DSO — Délai moyen de recouvrement</DialogTitle>
-              <DialogDescription className="text-xs">{month_label} {year} · (Comptes clients courants hors retenues ÷ Ventes des 12 derniers mois) × 365</DialogDescription>
+              <DialogDescription className="text-xs">{month_label} {year} · (Comptes clients courants nets de taxes, hors retenues ÷ Ventes des 12 derniers mois) × 365</DialogDescription>
             </DialogHeader>
             {!dso.available ? (
               <div className="flex items-start gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-700">
@@ -212,8 +212,9 @@ function KpiDetailDialog({ open, onOpenChange, type, kpi }) {
                 <DRow label={dso.ar_label || "Comptes à recevoir"} value={money(dso.ar)} />
                 <DRow label="− Retenues contractuelles exclues" value={money(dso.retenues)} />
                 <DRow label="= Comptes clients courants" value={money(dso.ar_courant)} />
+                <DRow label={`÷ ${dso.tax_factor} (net TPS+TVQ)`} value={money(dso.ar_courant_net)} />
                 <DRow label="Ventes (12 derniers mois réels)" value={money(dso.sales_12m)} />
-                <DRow label="DSO = CC courants ÷ ventes 12 mois × 365" value={fmtDays(dso.value)} strong />
+                <DRow label="DSO = CC courants nets ÷ ventes 12 mois × 365" value={fmtDays(dso.value)} strong />
               </div>
             )}
             <SourceLinks periodId={period} links={[["acct_bilan", "Voir le Bilan"], ["acct_pnl", "Voir l'État des résultats"]]} />
@@ -223,7 +224,7 @@ function KpiDetailDialog({ open, onOpenChange, type, kpi }) {
           <>
             <DialogHeader>
               <DialogTitle>DPO — Délai moyen de paiement fournisseurs</DialogTitle>
-              <DialogDescription className="text-xs">{month_label} {year} · (Comptes fournisseurs ÷ Achats des 12 derniers mois) × 365 · Achats = COGS 12 mois + variation d'inventaire sur 12 mois</DialogDescription>
+              <DialogDescription className="text-xs">{month_label} {year} · (Comptes fournisseurs nets de taxes ÷ Achats des 12 derniers mois) × 365 · Achats = COGS 12 mois + variation d'inventaire sur 12 mois</DialogDescription>
             </DialogHeader>
             {!dpo.available ? (
               <div className="flex items-start gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-700">
@@ -232,12 +233,13 @@ function KpiDetailDialog({ open, onOpenChange, type, kpi }) {
             ) : (
               <div className="rounded-lg bg-slate-50 px-4 py-1">
                 <DRow label={dpo.ap_label || "Comptes fournisseurs"} value={money(dpo.ap)} />
+                <DRow label={`÷ ${dpo.tax_factor} (net TPS+TVQ)`} value={money(dpo.ap_net)} />
                 <DRow label="COGS (12 derniers mois réels)" value={money(dpo.cogs_12m)} />
                 <DRow label="Inventaire (fin de période)" value={money(dpo.inv_current)} />
                 <DRow label={`Inventaire il y a 12 mois${dpo.inv_12m_period ? ` (${dpo.inv_12m_period})` : ""}`} value={money(dpo.inv_12m)} />
                 <DRow label="Variation d'inventaire (12 mois)" value={money(dpo.inv_variation)} />
                 <DRow label="Achats 12 mois = COGS + variation" value={money(dpo.purchases_12m)} />
-                <DRow label="DPO = CF ÷ achats 12 mois × 365" value={fmtDays(dpo.value)} strong />
+                <DRow label="DPO = CF nets ÷ achats 12 mois × 365" value={fmtDays(dpo.value)} strong />
               </div>
             )}
             <SourceLinks periodId={period} links={[["acct_bilan", "Voir le Bilan"], ["acct_pnl", "Voir l'État des résultats"]]} />
