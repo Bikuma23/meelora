@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "../components/ui/alert-dialog";
@@ -213,6 +214,7 @@ function KpiDetailDialog({ open, onOpenChange, type, kpi }) {
                 <DRow label="− Retenues contractuelles exclues" value={money(dso.retenues)} />
                 <DRow label="= Comptes clients courants" value={money(dso.ar_courant)} />
                 <DRow label={`÷ ${dso.tax_factor} (net TPS+TVQ)`} value={money(dso.ar_courant_net)} />
+                {dso.dispute > 0 && <DRow label={`− Montant en litige${dso.dispute_note ? ` (${dso.dispute_note})` : ""}`} value={money(dso.dispute)} />}
                 <DRow label="Ventes (12 derniers mois réels)" value={money(dso.sales_12m)} />
                 <DRow label="DSO = CC courants nets ÷ ventes 12 mois × 365" value={fmtDays(dso.value)} strong />
               </div>
@@ -295,6 +297,95 @@ function KpiDetailDialog({ open, onOpenChange, type, kpi }) {
   );
 }
 
+function DsoCard({ kpi, provisional, onOpen, onSaved }) {
+  const dso = kpi.dso;
+  const [amount, setAmount] = useState(String(dso.dispute || 0));
+  const [note, setNote] = useState(dso.dispute_note || "");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setAmount(String(dso.dispute || 0)); setNote(dso.dispute_note || ""); }, [kpi.period, dso.dispute, dso.dispute_note]);
+  const dirty = String(parseFloat(amount) || 0) !== String(dso.dispute || 0) || (note || "") !== (dso.dispute_note || "");
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.acctKpiAdjust({ year: kpi.year, month: kpi.month }, { dso_dispute: parseFloat(amount) || 0, dso_dispute_note: note });
+      toast.success("Montant en litige mis à jour");
+      onSaved && onSaved();
+    } catch (e) { toast.error(e.response?.data?.detail || "Échec de l'enregistrement"); }
+    finally { setSaving(false); }
+  };
+  return (
+    <div className="card relative flex flex-col gap-2 p-5" data-testid="indicator-dso">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-700 uppercase tracking-wide text-slate-500">DSO — Recouvrement clients</span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#063044]/8 text-[#063044]"><Clock size={16} /></span>
+      </div>
+      {!dso.available ? (
+        <div className="flex items-start gap-1.5 py-1 text-xs text-amber-600" data-testid="indicator-dso-unavailable"><AlertTriangle size={14} className="mt-0.5 shrink-0" /><span>{dso.reason}</span></div>
+      ) : (
+        <>
+          <span className="font-mono-data text-2xl font-800 text-[#063044]" data-testid="indicator-dso-value">{fmtDays(dso.value)}</span>
+          <span className="font-mono-data text-xs font-600 text-slate-500">CC courants nets {money(dso.ar_courant_net)} · ventes 12m {money(dso.sales_12m)}</span>
+          <TrendBadge testid="trend-dso" trend={kpi.trend?.dso} higherIsBetter={false} unit="days" />
+        </>
+      )}
+      <span className="text-[11px] leading-snug text-slate-400">Délai moyen d'encaissement (jours) — base glissante 12 mois, net de taxes.</span>
+      {provisional && dso.available && <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-700 text-amber-700"><AlertTriangle size={11} /> Provisoire</span>}
+
+      <div className="mt-1 rounded-lg border border-dashed border-slate-300 bg-slate-50/60 p-3">
+        <label className="mb-1 block text-[11px] font-700 text-slate-600">Montant en litige (net de taxes)</label>
+        <div className="flex items-center gap-2">
+          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} data-testid="dso-dispute-input"
+            className="h-8 w-40 font-mono-data text-sm" placeholder="0" onClick={(e) => e.stopPropagation()} />
+          <Button size="sm" onClick={save} disabled={!dirty || saving} data-testid="dso-dispute-save" className="h-8 bg-[#063044] hover:bg-[#063044]/90">
+            {saving ? "…" : "Enregistrer"}
+          </Button>
+          {parseFloat(amount) > 0 && (
+            <Button size="sm" variant="ghost" data-testid="dso-dispute-reset" className="h-8 text-slate-500" onClick={() => { setAmount("0"); setNote(""); }}>Remettre à 0</Button>
+          )}
+        </div>
+        <Input value={note} onChange={(e) => setNote(e.target.value)} data-testid="dso-dispute-note"
+          className="mt-2 h-8 text-xs" placeholder="Note (ex. Litige client ABC depuis 2025)" onClick={(e) => e.stopPropagation()} />
+        {dso.dispute > 0 && (
+          <p className="mt-2 text-[11px] text-slate-500" data-testid="dso-dispute-active">
+            Exclu du calcul : <span className="font-mono-data font-700 text-red-600">{money(dso.dispute)}</span>{dso.dispute_note ? ` — ${dso.dispute_note}` : ""}
+          </p>
+        )}
+      </div>
+
+      {dso.available && <button onClick={onOpen} data-testid="indicator-dso-detail" className="w-fit text-[11px] font-600 text-[#0E9488] hover:underline">Voir le détail →</button>}
+    </div>
+  );
+}
+
+function TaxSettingsDialog({ open, onOpenChange, current, onSaved }) {
+  const [val, setVal] = useState(String(current ?? 1.14975));
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setVal(String(current ?? 1.14975)); }, [current, open]);
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.acctSaveSettings({ tax_factor: parseFloat(val) });
+      toast.success("Taux de taxe enregistré");
+      onSaved && onSaved(); onOpenChange(false);
+    } catch (e) { toast.error(e.response?.data?.detail || "Échec"); }
+    finally { setSaving(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="tax-settings-dialog" className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Taux de taxe combiné (DSO / DPO)</DialogTitle>
+          <DialogDescription className="text-xs">Facteur diviseur appliqué aux soldes clients/fournisseurs pour les ramener hors taxes. Standard Québec : 1,14975 (TPS 5% + TVQ 9,975%).</DialogDescription>
+        </DialogHeader>
+        <div className="flex items-center gap-2">
+          <Input type="number" step="0.00001" value={val} onChange={(e) => setVal(e.target.value)} data-testid="tax-factor-input" className="h-9 w-40 font-mono-data" />
+          <Button onClick={save} disabled={saving || !(parseFloat(val) > 0)} data-testid="tax-factor-save" className="bg-[#063044] hover:bg-[#063044]/90">Enregistrer</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ProjChart({ title, data, color, note, onOpen, testid }) {
   return (
     <div className="card p-5" data-testid={testid}>
@@ -360,8 +451,16 @@ export function AcctDashboard() {
   const [kpiDialog, setKpiDialog] = useState({ open: false, type: null });
   const [proj, setProj] = useState(null);
   const [projDialog, setProjDialog] = useState({ open: false, series: null });
-  useEffect(() => { api.acctDashboard().then(setD).catch(() => {}); api.acctTrend().then(setTrend).catch(() => {}); api.acctProjections().then(setProj).catch(() => {}); }, []);
+  const [taxDialog, setTaxDialog] = useState(false);
+  const [taxFactor, setTaxFactor] = useState(1.14975);
+  useEffect(() => { api.acctDashboard().then(setD).catch(() => {}); api.acctTrend().then(setTrend).catch(() => {}); api.acctProjections().then(setProj).catch(() => {}); api.acctSettings().then((s) => setTaxFactor(s.tax_factor)).catch(() => {}); }, []);
   useEffect(() => { if (periods.length && !periods.some((p) => p.id === period)) setPeriod(periods[0].id); }, [periods, period]);
+  const reloadKpi = useCallback(() => {
+    if (!period) return;
+    const [y, m] = period.split("-").map(Number);
+    api.acctKpis({ year: y, month: m }).then(setKpi).catch(() => setKpi(null));
+    api.acctProjections().then(setProj).catch(() => {});
+  }, [period]);
   useEffect(() => {
     if (!period) { setSummary(null); setKpi(null); return; }
     const [y, m] = period.split("-").map(Number);
@@ -425,19 +524,19 @@ export function AcctDashboard() {
         <div className="space-y-2" data-testid="acct-indicators">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-700 text-slate-700">Indicateurs — {kpi.month_label} {kpi.year}</h3>
-            {!kpi.locked && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-600 text-amber-700" data-testid="kpi-provisional-banner">
-                <AlertTriangle size={13} /> Données provisoires — mois non verrouillé
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              <button onClick={() => setTaxDialog(true)} data-testid="tax-settings-btn" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-600 text-slate-500 hover:bg-slate-50" title="Taux de taxe DSO/DPO">
+                <Scale size={12} /> Taxe {taxFactor}
+              </button>
+              {!kpi.locked && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-600 text-amber-700" data-testid="kpi-provisional-banner">
+                  <AlertTriangle size={13} /> Données provisoires — mois non verrouillé
+                </span>
+              )}
+            </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <IndicatorCard testid="indicator-dso" title="DSO — Recouvrement clients" icon={Clock}
-              caption="Délai moyen d'encaissement des clients (jours) — base glissante 12 mois, hors retenues." provisional={!kpi.locked}
-              unavailable={!kpi.dso.available} reason={kpi.dso.reason}
-              mainText={fmtDays(kpi.dso.value)} sub={kpi.dso.available ? `CC courants ${money(kpi.dso.ar_courant)} · ventes 12m ${money(kpi.dso.sales_12m)}` : null}
-              trendNode={kpi.dso.available && <TrendBadge testid="trend-dso" trend={kpi.trend?.dso} higherIsBetter={false} unit="days" />}
-              onClick={() => openKpi("dso")} />
+            <DsoCard kpi={kpi} provisional={!kpi.locked} onOpen={() => openKpi("dso")} onSaved={reloadKpi} />
             <IndicatorCard testid="indicator-dpo" title="DPO — Paiement fournisseurs" icon={Clock}
               caption="Délai moyen de paiement des fournisseurs (jours) — base glissante 12 mois." provisional={!kpi.locked}
               unavailable={!kpi.dpo.available} reason={kpi.dpo.reason}
@@ -558,6 +657,7 @@ export function AcctDashboard() {
 
       <KpiDetailDialog open={kpiDialog.open} onOpenChange={(v) => setKpiDialog((p) => ({ ...p, open: v }))} type={kpiDialog.type} kpi={kpi} />
       <ProjectionDetailDialog open={projDialog.open} onOpenChange={(v) => setProjDialog((p) => ({ ...p, open: v }))} series={projDialog.series} proj={proj} />
+      <TaxSettingsDialog open={taxDialog} onOpenChange={setTaxDialog} current={taxFactor} onSaved={() => { api.acctSettings().then((s) => setTaxFactor(s.tax_factor)).catch(() => {}); reloadKpi(); }} />
     </div>
   );
 }

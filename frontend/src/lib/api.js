@@ -88,4 +88,7 @@ export const api = {
   acctTrend: () => client.get("/acct/trend").then((r) => r.data),
   acctKpis: (params) => client.get("/acct/kpis", { params }).then((r) => r.data),
   acctProjections: () => client.get("/acct/projections").then((r) => r.data),
+  acctSettings: () => client.get("/acct/settings").then((r) => r.data),
+  acctSaveSettings: (body) => client.put("/acct/settings", body).then((r) => r.data),
+  acctKpiAdjust: (params, body) => client.put("/acct/kpi-adjust", body, { params }).then((r) => r.data),
 };

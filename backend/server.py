@@ -2216,6 +2216,14 @@ def _pnl_figures(pnl):
             out["charges"] = {"reel": ln["values"].get("reel"), "cumulatif": ln["values"].get("cumulatif")}
     return out
 
+async def _acct_tax_factor():
+    doc = await db.acct_settings.find_one({"_id": "kpi"})
+    try:
+        v = float(doc.get("tax_factor")) if doc and doc.get("tax_factor") else 1.14975
+        return v if v > 0 else 1.14975
+    except Exception:
+        return 1.14975
+
 async def _kpi_data(year, month, with_trend=True):
     bdata = await _bilan_sommaire_data(year, month)
     pnl = await _acct_report(year, month, "pnl_sommaire")
@@ -2276,14 +2284,23 @@ async def _kpi_data(year, month, with_trend=True):
         except Exception:
             pass
 
-    # --- DSO --- base glissante 12 mois ; CC courants nets de taxes (÷ 1,14975), hors retenues
-    QC_TAX = 1.14975  # TPS 5% + TVQ 9,975% (le solde CC/CF inclut les taxes, pas les ventes/COGS)
+    # --- DSO --- base glissante 12 mois ; CC courants nets de taxes (÷ taux QC), hors retenues, moins litige manuel
+    QC_TAX = await _acct_tax_factor()  # TPS 5% + TVQ 9,975% par défaut (configurable)
+    adj = await db.acct_kpi_adjust.find_one({"_id": pk}) or {}
+    dispute = 0.0
+    try:
+        dispute = float(adj.get("dso_dispute") or 0.0)
+    except Exception:
+        dispute = 0.0
+    dispute_note = adj.get("dso_dispute_note") or ""
     ar_courant = round(ar["value"] - retenues, 2) if ar else None
     ar_courant_net = round(ar_courant / QC_TAX, 2) if ar_courant is not None else None
+    ar_dso_base = round(ar_courant_net - dispute, 2) if ar_courant_net is not None else None
     dso = {"available": False, "value": None, "reason": None, "method": "rolling_12m",
            "ar_label": ar["label"] if ar else None, "ar": ar["value"] if ar else None,
            "retenues": round(retenues, 2), "ar_courant": ar_courant,
            "tax_factor": QC_TAX, "ar_courant_net": ar_courant_net,
+           "dispute": round(dispute, 2), "dispute_note": dispute_note, "ar_dso_base": ar_dso_base,
            "sales_12m": round(sales_12m, 2), "months_available": months_available}
     if ar is None:
         dso["reason"] = "Compte « Comptes à recevoir » introuvable dans le mapping du bilan."
@@ -2292,7 +2309,7 @@ async def _kpi_data(year, month, with_trend=True):
     elif sales_12m <= 0:
         dso["reason"] = "Ventes des 12 derniers mois nulles ou négatives."
     else:
-        dso["value"] = round(ar_courant_net / sales_12m * 365, 1)
+        dso["value"] = round(ar_dso_base / sales_12m * 365, 1)
         dso["available"] = True
 
     # --- DPO --- base glissante 12 mois ; CF nets de taxes (÷ 1,14975) ; Achats = COGS 12m + variation d'inventaire 12m
@@ -2375,6 +2392,36 @@ async def _kpi_data(year, month, with_trend=True):
 @api.get("/acct/kpis")
 async def acct_kpis(year: int, month: int, user: dict = Depends(get_current_user)):
     return await _kpi_data(year, month)
+
+@api.get("/acct/settings")
+async def acct_get_settings(user: dict = Depends(get_current_user)):
+    return {"tax_factor": await _acct_tax_factor()}
+
+class AcctSettingsBody(BaseModel):
+    tax_factor: float
+
+@api.put("/acct/settings")
+async def acct_put_settings(body: AcctSettingsBody, user: dict = Depends(get_current_user)):
+    tf = float(body.tax_factor)
+    if tf <= 0:
+        raise HTTPException(status_code=400, detail="Le taux de taxe doit être supérieur à 0.")
+    await db.acct_settings.update_one({"_id": "kpi"}, {"$set": {"tax_factor": tf, "updated_by": user["email"], "updated_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    await log_action(user, "Modifier", "Comptabilité", f"Taux de taxe KPI = {tf}")
+    return {"tax_factor": tf}
+
+class KpiAdjustBody(BaseModel):
+    dso_dispute: float = 0.0
+    dso_dispute_note: str = ""
+
+@api.put("/acct/kpi-adjust")
+async def acct_put_kpi_adjust(year: int, month: int, body: KpiAdjustBody, user: dict = Depends(get_current_user)):
+    pk = _pkey(year, month)
+    amount = max(0.0, float(body.dso_dispute or 0.0))
+    await db.acct_kpi_adjust.update_one({"_id": pk}, {"$set": {
+        "dso_dispute": amount, "dso_dispute_note": (body.dso_dispute_note or "").strip(),
+        "updated_by": user["email"], "updated_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    await log_action(user, "Modifier", "Comptabilité", f"Litige DSO {pk} = {amount}")
+    return {"period": pk, "dso_dispute": amount, "dso_dispute_note": (body.dso_dispute_note or "").strip()}
 
 def _linreg_project(ys, n_future):
     pts = [(i, v) for i, v in enumerate(ys) if v is not None]
