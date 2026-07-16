@@ -8,7 +8,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
-  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays,
+  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink,
 } from "lucide-react";
 
 const MONTHS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -118,18 +118,208 @@ function KpiCard({ label, value, series, idx, positiveIsGood = true, icon: Icon,
   );
 }
 
+const acctGoto = (navKey, periodId) => {
+  if (periodId) sessionStorage.setItem("acct_focus_period", periodId);
+  window.dispatchEvent(new CustomEvent("acct-navigate", { detail: navKey }));
+};
+const fmtDays = (v) => v == null ? "—" : `${Number(v).toLocaleString("fr-CA", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} j`;
+
+function IndicatorCard({ title, caption, mainText, sub, unavailable, reason, provisional, icon: Icon, onClick, testid }) {
+  return (
+    <button data-testid={testid} onClick={unavailable ? undefined : onClick} disabled={unavailable}
+      className={`card group relative flex flex-col gap-2 p-5 text-left transition-shadow ${unavailable ? "cursor-default opacity-90" : "cursor-pointer hover:shadow-md"}`}>
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-700 uppercase tracking-wide text-slate-500">{title}</span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#063044]/8 text-[#063044]"><Icon size={16} /></span>
+      </div>
+      {unavailable ? (
+        <div className="flex items-start gap-1.5 py-1 text-xs text-amber-600" data-testid={`${testid}-unavailable`}>
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" /><span>{reason || "Indicateur non calculable"}</span>
+        </div>
+      ) : (
+        <>
+          <span className="font-mono-data text-2xl font-800 text-[#063044]" data-testid={`${testid}-value`}>{mainText}</span>
+          {sub && <span className="font-mono-data text-xs font-600 text-slate-500">{sub}</span>}
+        </>
+      )}
+      <span className="text-[11px] leading-snug text-slate-400">{caption}</span>
+      {provisional && !unavailable && (
+        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-700 text-amber-700"><AlertTriangle size={11} /> Provisoire</span>
+      )}
+      {!unavailable && <span className="text-[11px] font-600 text-[#0E9488] opacity-0 transition-opacity group-hover:opacity-100">Voir le détail →</span>}
+    </button>
+  );
+}
+
+const DRow = ({ label, value, strong, mono = true }) => (
+  <div className={`flex items-center justify-between gap-4 py-1.5 ${strong ? "border-t border-slate-200 font-700" : ""}`}>
+    <span className={`text-sm ${strong ? "text-slate-800" : "text-slate-500"}`}>{label}</span>
+    <span className={`text-sm ${mono ? "font-mono-data" : ""} ${strong ? "text-[#063044]" : "text-slate-700"}`}>{value}</span>
+  </div>
+);
+
+function SourceLinks({ periodId, links }) {
+  return (
+    <div className="flex flex-wrap gap-2 pt-2">
+      {links.map(([key, label]) => (
+        <Button key={key} size="sm" variant="outline" data-testid={`kpi-goto-${key}`} className="gap-1.5"
+          onClick={() => acctGoto(key, periodId)}><ExternalLink size={13} /> {label}</Button>
+      ))}
+    </div>
+  );
+}
+
+function KpiDetailDialog({ open, onOpenChange, type, kpi }) {
+  if (!kpi) return null;
+  const { dso, dpo, fdr, period, month_label, year } = kpi;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="kpi-detail-dialog" className="max-h-[90vh] max-w-lg overflow-y-auto">
+        {type === "dso" && (
+          <>
+            <DialogHeader>
+              <DialogTitle>DSO — Délai moyen de recouvrement</DialogTitle>
+              <DialogDescription className="text-xs">{month_label} {year} · (Comptes clients ÷ Ventes YTD annualisées) × 365</DialogDescription>
+            </DialogHeader>
+            <div className="rounded-lg bg-slate-50 px-4 py-1">
+              <DRow label={dso.ar_label || "Comptes à recevoir"} value={money(dso.ar)} />
+              <DRow label="Ventes cumulatives (YTD)" value={money(dso.sales_ytd)} />
+              <DRow label="Mois écoulés" value={dso.months} />
+              <DRow label="Ventes annualisées (YTD ÷ mois × 12)" value={money(dso.annualized_sales)} />
+              <DRow label="DSO = CC ÷ ventes annualisées × 365" value={fmtDays(dso.value)} strong />
+            </div>
+            <SourceLinks periodId={period} links={[["acct_bilan", "Voir le Bilan"], ["acct_pnl", "Voir l'État des résultats"]]} />
+          </>
+        )}
+        {type === "dpo" && (
+          <>
+            <DialogHeader>
+              <DialogTitle>DPO — Délai moyen de paiement fournisseurs</DialogTitle>
+              <DialogDescription className="text-xs">{month_label} {year} · (Comptes fournisseurs ÷ Achats YTD annualisés) × 365 · Achats = COGS YTD + variation d'inventaire</DialogDescription>
+            </DialogHeader>
+            <div className="rounded-lg bg-slate-50 px-4 py-1">
+              <DRow label={dpo.ap_label || "Comptes fournisseurs"} value={money(dpo.ap)} />
+              <DRow label="COGS cumulatif (YTD)" value={money(dpo.cogs_ytd)} />
+              <DRow label="Inventaire (fin de période)" value={money(dpo.inv_current)} />
+              <DRow label={`Inventaire d'ouverture${dpo.inv_open_period ? ` (${dpo.inv_open_period})` : ""}`} value={dpo.inv_variation_available ? money(dpo.inv_open) : "N/D"} />
+              <DRow label="Variation d'inventaire (YTD)" value={dpo.inv_variation_available ? money(dpo.inv_variation) : "N/D"} />
+              <DRow label="Achats YTD = COGS + variation" value={money(dpo.purchases_ytd)} />
+              <DRow label="Mois écoulés" value={dpo.months} />
+              <DRow label="Achats annualisés (YTD ÷ mois × 12)" value={money(dpo.annualized_purchases)} />
+              <DRow label="DPO = CF ÷ achats annualisés × 365" value={fmtDays(dpo.value)} strong />
+            </div>
+            {!dpo.inv_variation_available && (
+              <p className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">Variation d'inventaire indisponible (BV de décembre {year - 1} absente) — achats basés sur le COGS seul.</p>
+            )}
+            <SourceLinks periodId={period} links={[["acct_bilan", "Voir le Bilan"], ["acct_pnl", "Voir l'État des résultats"]]} />
+          </>
+        )}
+        {type === "fdr" && (
+          <>
+            <DialogHeader>
+              <DialogTitle>Fonds de roulement</DialogTitle>
+              <DialogDescription className="text-xs">{month_label} {year} · Actif court terme − Passif court terme</DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <p className="mb-1 text-[11px] font-700 uppercase tracking-wide text-[#063044]">Actif à court terme</p>
+                <div className="rounded-lg bg-slate-50 px-3 py-1">
+                  {(fdr.actif_ct || []).map((l, i) => <DRow key={i} label={l.label} value={money(l.value)} />)}
+                  <DRow label="Total actif court terme" value={money(fdr.current_assets)} strong />
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] font-700 uppercase tracking-wide text-[#063044]">Passif à court terme</p>
+                <div className="rounded-lg bg-slate-50 px-3 py-1">
+                  {(fdr.passif_ct || []).map((l, i) => <DRow key={i} label={l.label} value={money(l.value)} />)}
+                  <DRow label="Total passif court terme" value={money(fdr.current_liabilities)} strong />
+                </div>
+              </div>
+            </div>
+            <div className="rounded-lg bg-[#063044]/5 px-4 py-1">
+              <DRow label="Fonds de roulement (Actif CT − Passif CT)" value={money(fdr.value)} strong />
+              <DRow label="Ratio de fonds de roulement (Actif CT ÷ Passif CT)" value={fdr.ratio != null ? `${fdr.ratio}` : "—"} strong />
+            </div>
+            <SourceLinks periodId={period} links={[["acct_bilan", "Voir le Bilan"]]} />
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProjChart({ title, data, color, note, onOpen, testid }) {
+  return (
+    <div className="card p-5" data-testid={testid}>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-700">{title}</h3>
+        <button onClick={onOpen} data-testid={`${testid}-detail`} className="inline-flex items-center gap-1 rounded-full bg-[#F8A942]/15 px-2 py-0.5 text-[10px] font-700 uppercase tracking-wide text-[#B45309] hover:bg-[#F8A942]/25">Projection · détail</button>
+      </div>
+      <p className="mb-3 text-xs text-slate-400">{note}</p>
+      <div style={{ width: "100%", height: 250 }}>
+        <ResponsiveContainer>
+          <LineChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 0 }} onClick={onOpen}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+            <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={1} />
+            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={64} />
+            <Tooltip formatter={(v) => money(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Line type="monotone" dataKey="reel" name="Réel" stroke={color} strokeWidth={2.2} dot={{ r: 2 }} connectNulls />
+            <Line type="monotone" dataKey="projete" name="Projeté" stroke={color} strokeWidth={2} strokeDasharray="5 4" dot={{ r: 2 }} connectNulls />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function ProjectionDetailDialog({ open, onOpenChange, series, proj }) {
+  if (!proj || !series) return null;
+  const keyMap = { cash: "cash", sales: "sales", charges: "charges", cogs: "cogs" };
+  const k = keyMap[series.key];
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="projection-detail-dialog" className="max-h-[90vh] max-w-lg overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{series.title} — base de la projection</DialogTitle>
+          <DialogDescription className="text-xs">
+            Valeurs réelles (mois verrouillés) utilisées pour la régression linéaire.
+            {series.key === "cash" && ` Trésorerie décalée du DSO (${proj.lag_in_months} mois d'encaissement) et du DPO (${proj.lag_out_months} mois de paiement).`}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="rounded-lg bg-slate-50 px-3 py-1">
+          {(proj.base || []).map((b, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 border-b border-slate-100 py-1.5 last:border-0">
+              <span className="text-sm text-slate-600">{b.month_label} {b.year}</span>
+              <span className="font-mono-data text-sm text-slate-800">{money(b[k])}</span>
+              <button data-testid={`proj-goto-${b.year}-${b.month}`} onClick={() => acctGoto(series.key === "cash" ? "acct_bilan" : "acct_pnl", `${b.year}-${String(b.month).padStart(2, "0")}`)}
+                className="inline-flex items-center gap-1 text-[11px] font-600 text-[#0E9488] hover:underline">source <ArrowRight size={12} /></button>
+            </div>
+          ))}
+        </div>
+        <p className="text-[11px] text-slate-400">Projection statistique (tendance) — ce n'est pas un budget saisi manuellement.</p>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function AcctDashboard() {
   const [d, setD] = useState(null);
   const { periods } = usePeriods();
   const [period, setPeriod] = useState("");
   const [summary, setSummary] = useState(null);
   const [trend, setTrend] = useState([]);
-  useEffect(() => { api.acctDashboard().then(setD).catch(() => {}); api.acctTrend().then(setTrend).catch(() => {}); }, []);
+  const [kpi, setKpi] = useState(null);
+  const [kpiDialog, setKpiDialog] = useState({ open: false, type: null });
+  const [proj, setProj] = useState(null);
+  const [projDialog, setProjDialog] = useState({ open: false, series: null });
+  useEffect(() => { api.acctDashboard().then(setD).catch(() => {}); api.acctTrend().then(setTrend).catch(() => {}); api.acctProjections().then(setProj).catch(() => {}); }, []);
   useEffect(() => { if (periods.length && !periods.some((p) => p.id === period)) setPeriod(periods[0].id); }, [periods, period]);
   useEffect(() => {
-    if (!period) { setSummary(null); return; }
+    if (!period) { setSummary(null); setKpi(null); return; }
     const [y, m] = period.split("-").map(Number);
     api.acctSummary({ year: y, month: m }).then(setSummary).catch(() => setSummary(null));
+    api.acctKpis({ year: y, month: m }).then(setKpi).catch(() => setKpi(null));
   }, [period]);
   if (!d) return <p className="text-sm text-slate-500">Chargement…</p>;
   const sel = periods.find((p) => p.id === period);
@@ -147,6 +337,21 @@ export function AcctDashboard() {
   const cogsSeries = trend.map((t) => t.cogs_cumulatif ?? 0);
   const baiiaSeries = trend.map((t) => t.baiia_cumulatif ?? 0);
   const benSeries = trend.map((t) => t.benefice_cumulatif ?? 0);
+  const projChart = (key) => {
+    if (!proj || proj.insufficient) return [];
+    const short = (y, m) => `${MONTHS[m - 1].slice(0, 3)} ${String(y).slice(2)}`;
+    const base = (proj.base || []).map((b) => ({ name: short(b.year, b.month), reel: b[key], projete: null }));
+    const proje = (proj.projection || []).map((p) => ({ name: short(p.year, p.month), reel: null, projete: p[key] }));
+    if (base.length) base[base.length - 1].projete = proj.base[proj.base.length - 1][key];
+    return [...base, ...proje];
+  };
+  const projSeries = [
+    { key: "cash", title: "Trésorerie (encaisse)", color: "#0E9488", testid: "proj-cash", note: `Solde d'encaisse projeté en tenant compte du DSO (${proj?.lag_in_months ?? "—"} mois) et du DPO (${proj?.lag_out_months ?? "—"} mois).` },
+    { key: "sales", title: "Ventes", color: "#063044", testid: "proj-sales", note: "Ventes mensuelles réelles puis projetées (tendance)." },
+    { key: "charges", title: "Frais (hors COGS)", color: "#F8A942", testid: "proj-charges", note: "Total des charges d'exploitation, hors coût des marchandises vendues." },
+    { key: "cogs", title: "COGS (coût des marchandises vendues)", color: "#808080", testid: "proj-cogs", note: "Coût des marchandises vendues, mensuel." },
+  ];
+  const openKpi = (type) => setKpiDialog({ open: true, type });
   return (
     <div className="space-y-6" data-testid="acct-dashboard">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -166,6 +371,53 @@ export function AcctDashboard() {
           <KpiCard label="COGS (cumulatif)" value={cur.cogs_cumulatif} series={cogsSeries} idx={idx} positiveIsGood={false} icon={Receipt} testid="kpi-cogs" />
           <KpiCard label="BAIIA (cumulatif)" value={cur.baiia_cumulatif} series={baiiaSeries} idx={idx} positiveIsGood icon={BarChart3} testid="kpi-baiia" />
           <KpiCard label="Bénéfice net (cumulatif)" value={cur.benefice_cumulatif} series={benSeries} idx={idx} positiveIsGood icon={PiggyBank} testid="kpi-benefice" />
+        </div>
+      )}
+
+      {kpi && (
+        <div className="space-y-2" data-testid="acct-indicators">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-700 text-slate-700">Indicateurs — {kpi.month_label} {kpi.year}</h3>
+            {!kpi.locked && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-600 text-amber-700" data-testid="kpi-provisional-banner">
+                <AlertTriangle size={13} /> Données provisoires — mois non verrouillé
+              </span>
+            )}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <IndicatorCard testid="indicator-dso" title="DSO — Recouvrement clients" icon={Clock}
+              caption="Délai moyen d'encaissement des comptes clients (jours)." provisional={!kpi.locked}
+              unavailable={!kpi.dso.available} reason={kpi.dso.reason}
+              mainText={fmtDays(kpi.dso.value)} sub={kpi.dso.available ? `CC ${money(kpi.dso.ar)} · ventes ann. ${money(kpi.dso.annualized_sales)}` : null}
+              onClick={() => openKpi("dso")} />
+            <IndicatorCard testid="indicator-dpo" title="DPO — Paiement fournisseurs" icon={Clock}
+              caption="Délai moyen de paiement des comptes fournisseurs (jours)." provisional={!kpi.locked}
+              unavailable={!kpi.dpo.available} reason={kpi.dpo.reason}
+              mainText={fmtDays(kpi.dpo.value)} sub={kpi.dpo.available ? `CF ${money(kpi.dpo.ap)} · achats ann. ${money(kpi.dpo.annualized_purchases)}` : null}
+              onClick={() => openKpi("dpo")} />
+            <IndicatorCard testid="indicator-fdr" title="Fonds de roulement" icon={Scale}
+              caption="Actif court terme − Passif court terme, avec ratio." provisional={!kpi.locked}
+              unavailable={!kpi.fdr.available} reason={kpi.fdr.reason}
+              mainText={money(kpi.fdr.value)} sub={kpi.fdr.available && kpi.fdr.ratio != null ? `Ratio ${kpi.fdr.ratio}` : null}
+              onClick={() => openKpi("fdr")} />
+          </div>
+        </div>
+      )}
+
+      {proj && !proj.insufficient && (
+        <div className="space-y-2" data-testid="acct-projections">
+          <div className="flex items-center gap-2">
+            <TrendingUp size={16} className="text-[#0E9488]" />
+            <h3 className="text-sm font-700 text-slate-700">Projection 12 mois</h3>
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#F8A942]/15 px-2 py-0.5 text-[10px] font-700 uppercase tracking-wide text-[#B45309]">Projection statistique</span>
+          </div>
+          <p className="text-xs text-slate-400">Tendance des {proj.n_base} derniers mois verrouillés (régression linéaire) — trait plein = réel, pointillé = projeté. Ce n'est pas un budget saisi manuellement.</p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {projSeries.map((s) => (
+              <ProjChart key={s.key} testid={s.testid} title={s.title} color={s.color} note={s.note}
+                data={projChart(s.key)} onOpen={() => setProjDialog({ open: true, series: s })} />
+            ))}
+          </div>
         </div>
       )}
 
@@ -231,6 +483,9 @@ export function AcctDashboard() {
           </div>
         </div>
       )}
+
+      <KpiDetailDialog open={kpiDialog.open} onOpenChange={(v) => setKpiDialog((p) => ({ ...p, open: v }))} type={kpiDialog.type} kpi={kpi} />
+      <ProjectionDetailDialog open={projDialog.open} onOpenChange={(v) => setProjDialog((p) => ({ ...p, open: v }))} series={projDialog.series} proj={proj} />
     </div>
   );
 }
@@ -464,7 +719,12 @@ function ReportView({ type, title }) {
   const [loading, setLoading] = useState(false);
   const [hideZero, setHideZero] = useState(false);
   const [hiddenGroups, setHiddenGroups] = useState({});
-  useEffect(() => { if (periods.length && !periods.some((p) => p.id === period)) setPeriod(periods[0].id); }, [periods, period]);
+  useEffect(() => {
+    if (!periods.length) return;
+    const f = sessionStorage.getItem("acct_focus_period");
+    if (f && periods.some((p) => p.id === f)) { sessionStorage.removeItem("acct_focus_period"); setPeriod(f); return; }
+    if (!periods.some((p) => p.id === period)) setPeriod(periods[0].id);
+  }, [periods, period]);
   useEffect(() => {
     if (!period) return;
     const [y, m] = period.split("-").map(Number);
@@ -621,7 +881,12 @@ function BilanSommaireView({ millions = false }) {
   const [rep, setRep] = useState(null);
   const [loading, setLoading] = useState(false);
   const fmt = millions ? moneyM : money;
-  useEffect(() => { if (periods.length && !periods.some((p) => p.id === period)) setPeriod(periods[0].id); }, [periods, period]);
+  useEffect(() => {
+    if (!periods.length) return;
+    const f = sessionStorage.getItem("acct_focus_period");
+    if (f && periods.some((p) => p.id === f)) { sessionStorage.removeItem("acct_focus_period"); setPeriod(f); return; }
+    if (!periods.some((p) => p.id === period)) setPeriod(periods[0].id);
+  }, [periods, period]);
   useEffect(() => {
     if (!period) return;
     const [y, m] = period.split("-").map(Number);

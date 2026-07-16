@@ -1,0 +1,34 @@
+{
+  "summary": "Validated new Comptabilité dashboard indicators (DSO, DPO, FDR) + 12-month projections + drill-downs. Backend: 4/4 pytest passed on /api/acct/kpis (Juin 2026, Aug 2025) & /api/acct/projections (auth + shape). Frontend: end-to-end Playwright — login, navigate to acct_dashboard, 3 indicator cards render, year/month independent selects recalc KPIs (Juin 2026: DSO 129,6 j, DPO 18,5 j, FDR 6 488 906,60, Ratio 2.88; Aug 2025 DSO 156,1 j). DSO/DPO/FDR dialogs open with correct content (kpi-detail-dialog testid), source links (kpi-goto-acct_bilan / kpi-goto-acct_pnl) present. Voir le Bilan navigates to Bilan on Juin 2026 (header 'Bilan détaillé — Juin 2026' confirmed). FDR dialog lists Actif CT / Passif CT rows + totaux + FDR + Ratio. DPO dialog for Aug 2025 shows 'N/D' for Inventaire ouverture and Variation, plus the amber note 'Variation d'inventaire indisponible'. All 4 projection charts (proj-cash/sales/charges/cogs) render with Réel + Projeté lines. 'Projection · détail' opens projection-detail-dialog with 12 real months and per-month 'source' links (proj-goto-YYYY-M); clicking a source link navigates to the correct report page.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Comptabilité dashboard (KPI sparklines + charts)", "issues": ["Recharts warnings 'width(-1) height(-1)' still pollute console (~15 occurrences per page load) — non-blocking, same as iteration_27; suggest setting min-height on ResponsiveContainer parents"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_acct_kpis_projections.py",
+    "/app/test_reports/pytest/iteration_28.xml"
+  ],
+  "action_items": [
+    "Optional: silence Recharts width(-1)/height(-1) warnings on KPI cards and projection charts"
+  ],
+  "critical_code_review_comments": [
+    "server.py getting large (~2745 lines) — consider splitting the Comptabilité module (endpoints _kpi_data, _projection_data, _bilan_sommaire_data, _acct_report) into a separate router file.",
+    "Comptabilite.js is ~1107 lines with several distinct components (AcctDashboard, KpiDetailDialog, ProjectionDetailDialog, ProjChart, PeriodSelect, etc.) — recommend splitting into feature files under /pages/comptabilite/.",
+    "acct_projections uses last 12 base months regardless of contiguity — acceptable per spec (locked months only) but no guard against gaps between months; consider warning if base months are non-contiguous.",
+    "Provisional banner (kpi-provisional-banner) only appears when kpi.locked === false. During test, Aug 2025 was locked so banner not shown — behavior correct but not visually validated with a non-locked month."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_acct_kpis_projections.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@accslegro.com / admin123",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Endpoints: GET /api/acct/kpis?year&month returns {period, month_label, locked, dso{available,value,ar,sales_ytd,months,annualized_sales,reason,ar_label}, dpo{...,inv_current,inv_open,inv_open_period,inv_variation,inv_variation_available,purchases_ytd,annualized_purchases}, fdr{...,actif_ct[],passif_ct[],current_assets,current_liabilities,ratio}}. GET /api/acct/projections returns {insufficient,n_base,base[],projection[],dso,dpo,lag_in_months,lag_out_months}. Cross-page navigation uses window event 'acct-navigate' with sessionStorage 'acct_focus_period'. Period selectors testids: acct-dash-year-select / acct-dash-year-opt-<yyyy>, acct-dash-month-select / acct-dash-month-opt-<m>. Projection detail source links: proj-goto-<year>-<month>.",
+  "rca of the issue": "N/A — feature working as specified. Values match user-provided expectations exactly."
+}

@@ -206,6 +206,11 @@ function LayoutInner() {
   const page = PAGES[active];
   const Active = page.comp;
   const go = (k) => { setActive(k); setMobileOpen(false); };
+  useEffect(() => {
+    const handler = (e) => { if (e.detail) { setActive(e.detail); setMobileOpen(false); } };
+    window.addEventListener("acct-navigate", handler);
+    return () => window.removeEventListener("acct-navigate", handler);
+  }, []);
   const roleMeta = { admin: { label: "Admin", c: "#063044", t: "#93B4FF" }, editor: { label: "Éditeur", c: "#0E9488", t: "#5EEAD4" }, user: { label: "Utilisateur", c: "#64748B", t: "#94A3B8" } }[user?.role] || { label: "Utilisateur", c: "#64748B", t: "#94A3B8" };
   useEffect(() => { api.getPreferences().then((p) => { applyTheme(p?.theme); if (p?.avatar_color) setAvatarColor(p.avatar_color); }).catch(() => {}); }, []);
 

@@ -2169,6 +2169,216 @@ async def acct_dashboard(user: dict = Depends(get_current_user)):
         } if latest else None,
     }
 
+# ---------------------------------------------------------------------------
+# Indicateurs (KPI) : DSO, DPO, Fonds de roulement + projections 12 mois
+# ---------------------------------------------------------------------------
+def _find_line(lines, exact_norm):
+    for l in lines:
+        if _acct_norm(l.get("label")) == exact_norm:
+            return l
+    return None
+
+def _bilan_ct_lines(bdata):
+    """Lignes de détail (data) de l'actif court terme et du passif court terme."""
+    actif_ct, passif_ct = [], []
+    inb = False
+    for l in bdata["actif"]:
+        n = _acct_norm(l["label"])
+        if n == "ACTIF COURT TERME":
+            inb = True; continue
+        if inb:
+            if n.startswith("TOTAL"):
+                break
+            if l.get("kind") == "data":
+                actif_ct.append({"label": l["label"], "value": l["value"]})
+    inb = False
+    for l in bdata["passif"]:
+        n = _acct_norm(l["label"])
+        if n == "PASSIF A COURT TERME":
+            inb = True; continue
+        if inb:
+            if n.startswith("TOTAL"):
+                break
+            if l.get("kind") == "data":
+                passif_ct.append({"label": l["label"], "value": l["value"]})
+    return actif_ct, passif_ct
+
+def _pnl_figures(pnl):
+    """Extrait (mois, cumulatif) pour ventes, COGS, charges depuis un rapport P&L."""
+    out = {"sales": {}, "cogs": {}, "charges": {}}
+    for ln in pnl["lines"]:
+        n = _acct_norm(ln["label"])
+        if not out["sales"] and n == "TOTAL DES REVENUS":
+            out["sales"] = {"reel": ln["values"].get("reel"), "cumulatif": ln["values"].get("cumulatif")}
+        if not out["cogs"] and (n == "COUT DES MARCHANDISES VENDUES" or (n.startswith("TOTAL") and "COUT DES MARCHANDISES VENDUES" in n)):
+            out["cogs"] = {"reel": ln["values"].get("reel"), "cumulatif": ln["values"].get("cumulatif")}
+        if not out["charges"] and n == "TOTAL DES CHARGES":
+            out["charges"] = {"reel": ln["values"].get("reel"), "cumulatif": ln["values"].get("cumulatif")}
+    return out
+
+async def _kpi_data(year, month):
+    bdata = await _bilan_sommaire_data(year, month)
+    pnl = await _acct_report(year, month, "pnl_sommaire")
+    months = int(month)  # exercice = année civile -> mois écoulés = n° du mois
+    pk = _pkey(year, month)
+    period = await db.acct_periods.find_one({"_id": pk})
+
+    ar = _find_line(bdata["actif"], "COMPTES A RECEVOIR")
+    inv = _find_line(bdata["actif"], "INVENTAIRE")
+    ca_total = _find_line(bdata["actif"], "TOTAL DE L'ACTIF A COURT TERME")
+    ap = _find_line(bdata["passif"], "COMPTES FOURNISSEURS")
+    cl_total = _find_line(bdata["passif"], "TOTAL DU PASSIF A COURT TERME")
+    actif_ct, passif_ct = _bilan_ct_lines(bdata)
+    fig = _pnl_figures(pnl)
+    sales_ytd = fig["sales"].get("cumulatif")
+    cogs_ytd = fig["cogs"].get("cumulatif")
+
+    # --- DSO ---
+    dso = {"available": False, "value": None, "reason": None,
+           "ar_label": ar["label"] if ar else None, "ar": ar["value"] if ar else None,
+           "sales_ytd": sales_ytd, "months": months, "annualized_sales": None}
+    if ar is None:
+        dso["reason"] = "Compte « Comptes à recevoir » introuvable dans le mapping du bilan."
+    elif not sales_ytd or sales_ytd <= 0:
+        dso["reason"] = "Ventes YTD indisponibles ou nulles (impossible d'annualiser)."
+    else:
+        ann = sales_ytd / months * 12
+        dso["annualized_sales"] = round(ann, 2)
+        dso["value"] = round(ar["value"] / ann * 365, 1)
+        dso["available"] = True
+
+    # --- Inventaire d'ouverture (fin d'exercice précédent = déc. N-1) ---
+    inv_current = inv["value"] if inv else None
+    inv_open = None; inv_open_period = None
+    open_pk = _pkey(year - 1, 12)
+    if await db.acct_bv.find_one({"_id": open_pk}):
+        try:
+            bopen = await _bilan_sommaire_data(year - 1, 12)
+            lo = _find_line(bopen["actif"], "INVENTAIRE")
+            if lo is not None:
+                inv_open = lo["value"]; inv_open_period = open_pk
+        except Exception:
+            pass
+    inv_var = round(inv_current - inv_open, 2) if (inv_current is not None and inv_open is not None) else None
+
+    # --- DPO ---  Achats YTD = COGS YTD + variation d'inventaire YTD
+    dpo = {"available": False, "value": None, "reason": None,
+           "ap_label": ap["label"] if ap else None, "ap": ap["value"] if ap else None,
+           "cogs_ytd": cogs_ytd, "inv_current": inv_current, "inv_open": inv_open,
+           "inv_open_period": inv_open_period, "inv_variation": inv_var,
+           "inv_variation_available": inv_var is not None,
+           "purchases_ytd": None, "months": months, "annualized_purchases": None}
+    if ap is None:
+        dpo["reason"] = "Compte « Comptes fournisseurs » introuvable dans le mapping du bilan."
+    elif cogs_ytd is None:
+        dpo["reason"] = "COGS YTD indisponible."
+    else:
+        purchases = cogs_ytd + (inv_var or 0.0)
+        dpo["purchases_ytd"] = round(purchases, 2)
+        if purchases <= 0:
+            dpo["reason"] = "Achats YTD annualisés nuls ou négatifs."
+        else:
+            ann = purchases / months * 12
+            dpo["annualized_purchases"] = round(ann, 2)
+            dpo["value"] = round(ap["value"] / ann * 365, 1)
+            dpo["available"] = True
+
+    # --- Fonds de roulement ---
+    fdr = {"available": False, "value": None, "ratio": None, "reason": None,
+           "current_assets": ca_total["value"] if ca_total else None,
+           "current_liabilities": cl_total["value"] if cl_total else None,
+           "actif_ct": actif_ct, "passif_ct": passif_ct}
+    if ca_total is None or cl_total is None:
+        fdr["reason"] = "Totaux actif/passif à court terme introuvables dans le mapping du bilan."
+    else:
+        fdr["value"] = round(ca_total["value"] - cl_total["value"], 2)
+        fdr["ratio"] = round(ca_total["value"] / cl_total["value"], 2) if cl_total["value"] else None
+        fdr["available"] = True
+
+    return {"period": pk, "year": int(year), "month": int(month), "month_label": MONTHS_FR[month - 1],
+            "locked": bool(period and period.get("locked")),
+            "dso": dso, "dpo": dpo, "fdr": fdr}
+
+@api.get("/acct/kpis")
+async def acct_kpis(year: int, month: int, user: dict = Depends(get_current_user)):
+    return await _kpi_data(year, month)
+
+def _linreg_project(ys, n_future):
+    pts = [(i, v) for i, v in enumerate(ys) if v is not None]
+    if len(pts) < 2:
+        last = next((v for v in reversed(ys) if v is not None), 0.0) or 0.0
+        return [round(float(last), 2)] * n_future
+    n = len(pts); sx = sum(p[0] for p in pts); sy = sum(p[1] for p in pts)
+    sxx = sum(p[0] ** 2 for p in pts); sxy = sum(p[0] * p[1] for p in pts)
+    denom = n * sxx - sx * sx
+    if denom == 0:
+        slope = 0.0; intercept = sy / n
+    else:
+        slope = (n * sxy - sx * sy) / denom; intercept = (sy - slope * sx) / n
+    start = len(ys)
+    return [round(intercept + slope * (start + k), 2) for k in range(n_future)]
+
+def _add_months(y, m, k):
+    idx = (y * 12 + (m - 1)) + k
+    return idx // 12, idx % 12 + 1
+
+@api.get("/acct/projections")
+async def acct_projections(user: dict = Depends(get_current_user)):
+    periods = await db.acct_periods.find({"locked": True}).sort("_id", 1).to_list(500)
+    series = []
+    for p in periods:
+        y, m = p["year"], p["month"]
+        try:
+            bdata = await _bilan_sommaire_data(y, m)
+            pnl = await _acct_report(y, m, "pnl_sommaire")
+        except Exception:
+            continue
+        cash = None
+        enc = _find_line(bdata["actif"], "ENCAISSE")
+        if enc is not None:
+            cash = enc["value"]
+        fig = _pnl_figures(pnl)
+        series.append({"period": p["_id"], "year": y, "month": m, "month_label": MONTHS_FR[m - 1],
+                       "cash": cash, "sales": fig["sales"].get("reel"),
+                       "charges": fig["charges"].get("reel"), "cogs": fig["cogs"].get("reel")})
+    if len(series) < 2:
+        return {"insufficient": True, "n_base": len(series), "base": series, "projection": []}
+    base = series[-12:]
+    n_fut = 12
+    sales_p = _linreg_project([b["sales"] for b in base], n_fut)
+    charges_p = _linreg_project([b["charges"] for b in base], n_fut)
+    cogs_p = _linreg_project([b["cogs"] for b in base], n_fut)
+
+    # KPI (DSO/DPO) du dernier mois verrouillé pour caler le décalage de trésorerie
+    last = base[-1]
+    try:
+        kpi = await _kpi_data(last["year"], last["month"])
+        dso = kpi["dso"]["value"]; dpo = kpi["dpo"]["value"]
+    except Exception:
+        dso = dpo = None
+    lag_in = max(0, min(11, round((dso or 0) / 30.44)))
+    lag_out = max(0, min(11, round((dpo or 0) / 30.44)))
+
+    # Séries combinées (base + projection) pour appliquer le décalage
+    comb_sales = [b["sales"] or 0 for b in base] + sales_p
+    comb_out = [((b["charges"] or 0) + (b["cogs"] or 0)) for b in base] + [charges_p[k] + cogs_p[k] for k in range(n_fut)]
+    bl = len(base)
+    cash_start = last["cash"] or 0.0
+    proj = []
+    run_cash = cash_start
+    for f in range(n_fut):
+        gi = bl + f
+        collections = comb_sales[max(0, gi - lag_in)]
+        payments = comb_out[max(0, gi - lag_out)]
+        run_cash = run_cash + collections - payments
+        y2, m2 = _add_months(last["year"], last["month"], f + 1)
+        proj.append({"year": y2, "month": m2, "month_label": MONTHS_FR[m2 - 1],
+                     "cash": round(run_cash, 2), "sales": sales_p[f],
+                     "charges": charges_p[f], "cogs": cogs_p[f]})
+    return {"insufficient": False, "n_base": len(base), "base": base, "projection": proj,
+            "dso": dso, "dpo": dpo, "lag_in_months": lag_in, "lag_out_months": lag_out}
+
+
 def _acct_excel(rep):
     wb = openpyxl.Workbook(); ws = wb.active
     ws.title = "Bilan" if rep["kind"] == "bilan" else "Résultats"
