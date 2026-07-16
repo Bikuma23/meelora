@@ -236,11 +236,14 @@ function KpiDetailDialog({ open, onOpenChange, type, kpi }) {
               <div className="rounded-lg bg-slate-50 px-4 py-1">
                 <DRow label={dpo.ap_label || "Comptes fournisseurs"} value={money(dpo.ap)} />
                 <DRow label={`÷ ${dpo.tax_factor} (net TPS+TVQ)`} value={money(dpo.ap_net)} />
+                {dpo.dispute > 0 && <DRow label={`− Montant en litige${dpo.dispute_note ? ` (${dpo.dispute_note})` : ""}`} value={money(dpo.dispute)} />}
                 <DRow label="COGS (12 derniers mois réels)" value={money(dpo.cogs_12m)} />
+                <DRow label="− Main-d'œuvre incluse au COGS (12 mois)" value={money(dpo.labor_12m)} />
+                <DRow label="= COGS hors main-d'œuvre" value={money(dpo.cogs_ex_labor_12m)} />
                 <DRow label="Inventaire (fin de période)" value={money(dpo.inv_current)} />
                 <DRow label={`Inventaire il y a 12 mois${dpo.inv_12m_period ? ` (${dpo.inv_12m_period})` : ""}`} value={money(dpo.inv_12m)} />
                 <DRow label="Variation d'inventaire (12 mois)" value={money(dpo.inv_variation)} />
-                <DRow label="Achats 12 mois = COGS + variation" value={money(dpo.purchases_12m)} />
+                <DRow label="Achats 12 mois = COGS hors M.O. + variation" value={money(dpo.purchases_12m)} />
                 <DRow label="DPO = CF nets ÷ achats 12 mois × 365" value={fmtDays(dpo.value)} strong />
               </div>
             )}
@@ -354,6 +357,65 @@ function DsoCard({ kpi, provisional, onOpen, onSaved }) {
       </div>
 
       {dso.available && <button onClick={onOpen} data-testid="indicator-dso-detail" className="w-fit text-[11px] font-600 text-[#0E9488] hover:underline">Voir le détail →</button>}
+    </div>
+  );
+}
+
+function DpoCard({ kpi, provisional, onOpen, onSaved }) {
+  const dpo = kpi.dpo;
+  const [amount, setAmount] = useState(String(dpo.dispute || 0));
+  const [note, setNote] = useState(dpo.dispute_note || "");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setAmount(String(dpo.dispute || 0)); setNote(dpo.dispute_note || ""); }, [kpi.period, dpo.dispute, dpo.dispute_note]);
+  const dirty = String(parseFloat(amount) || 0) !== String(dpo.dispute || 0) || (note || "") !== (dpo.dispute_note || "");
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.acctKpiAdjust({ year: kpi.year, month: kpi.month }, { dpo_dispute: parseFloat(amount) || 0, dpo_dispute_note: note });
+      toast.success("Montant en litige mis à jour");
+      onSaved && onSaved();
+    } catch (e) { toast.error(e.response?.data?.detail || "Échec de l'enregistrement"); }
+    finally { setSaving(false); }
+  };
+  return (
+    <div className="card relative flex flex-col gap-2 p-5" data-testid="indicator-dpo">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-700 uppercase tracking-wide text-slate-500">DPO — Paiement fournisseurs</span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#063044]/8 text-[#063044]"><Clock size={16} /></span>
+      </div>
+      {!dpo.available ? (
+        <div className="flex items-start gap-1.5 py-1 text-xs text-amber-600" data-testid="indicator-dpo-unavailable"><AlertTriangle size={14} className="mt-0.5 shrink-0" /><span>{dpo.reason}</span></div>
+      ) : (
+        <>
+          <span className="font-mono-data text-2xl font-800 text-[#063044]" data-testid="indicator-dpo-value">{fmtDays(dpo.value)}</span>
+          <span className="font-mono-data text-xs font-600 text-slate-500">CF nets {money(dpo.ap_net)} · achats 12m {money(dpo.purchases_12m)}</span>
+          <TrendBadge testid="trend-dpo" trend={kpi.trend?.dpo} higherIsBetter={true} unit="days" />
+        </>
+      )}
+      <span className="text-[11px] leading-snug text-slate-400">Délai moyen de paiement (jours) — base glissante 12 mois, net de taxes, hors main-d'œuvre du COGS.</span>
+      {provisional && dpo.available && <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-700 text-amber-700"><AlertTriangle size={11} /> Provisoire</span>}
+
+      <div className="mt-1 rounded-lg border border-dashed border-slate-300 bg-slate-50/60 p-3">
+        <label className="mb-1 block text-[11px] font-700 text-slate-600">Montant en litige (net de taxes)</label>
+        <div className="flex items-center gap-2">
+          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} data-testid="dpo-dispute-input"
+            className="h-8 w-40 font-mono-data text-sm" placeholder="0" />
+          <Button size="sm" onClick={save} disabled={!dirty || saving} data-testid="dpo-dispute-save" className="h-8 bg-[#063044] hover:bg-[#063044]/90">{saving ? "…" : "Enregistrer"}</Button>
+          {parseFloat(amount) > 0 && (
+            <Button size="sm" variant="ghost" data-testid="dpo-dispute-reset" className="h-8 text-slate-500" onClick={() => { setAmount("0"); setNote(""); }}>Remettre à 0</Button>
+          )}
+        </div>
+        <Input value={note} onChange={(e) => setNote(e.target.value)} data-testid="dpo-dispute-note"
+          className="mt-2 h-8 text-xs" placeholder="Note (ex. Facture fournisseur contestée)" />
+        {dpo.dispute > 0 && (
+          <p className="mt-2 text-[11px] text-slate-500" data-testid="dpo-dispute-active">
+            Exclu du calcul : <span className="font-mono-data font-700 text-red-600">{money(dpo.dispute)}</span>{dpo.dispute_note ? ` — ${dpo.dispute_note}` : ""}
+            {dpo.dispute_carried && <span className="ml-1 italic text-slate-400" data-testid="dpo-dispute-carried">(reporté depuis {dpo.dispute_source})</span>}
+          </p>
+        )}
+      </div>
+
+      {dpo.available && <button onClick={onOpen} data-testid="indicator-dpo-detail" className="w-fit text-[11px] font-600 text-[#0E9488] hover:underline">Voir le détail →</button>}
     </div>
   );
 }
@@ -538,12 +600,7 @@ export function AcctDashboard() {
           </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <DsoCard kpi={kpi} provisional={!kpi.locked} onOpen={() => openKpi("dso")} onSaved={reloadKpi} />
-            <IndicatorCard testid="indicator-dpo" title="DPO — Paiement fournisseurs" icon={Clock}
-              caption="Délai moyen de paiement des fournisseurs (jours) — base glissante 12 mois." provisional={!kpi.locked}
-              unavailable={!kpi.dpo.available} reason={kpi.dpo.reason}
-              mainText={fmtDays(kpi.dpo.value)} sub={kpi.dpo.available ? `CF ${money(kpi.dpo.ap)} · achats 12m ${money(kpi.dpo.purchases_12m)}` : null}
-              trendNode={kpi.dpo.available && <TrendBadge testid="trend-dpo" trend={kpi.trend?.dpo} higherIsBetter={true} unit="days" />}
-              onClick={() => openKpi("dpo")} />
+            <DpoCard kpi={kpi} provisional={!kpi.locked} onOpen={() => openKpi("dpo")} onSaved={reloadKpi} />
             <button data-testid="indicator-fdr" onClick={kpi.fdr.available ? () => openKpi("fdr") : undefined} disabled={!kpi.fdr.available}
               className={`card group relative flex flex-col gap-2 p-5 text-left transition-shadow sm:col-span-2 xl:col-span-1 ${kpi.fdr.available ? "cursor-pointer hover:shadow-md" : "cursor-default opacity-90"}`}>
               <div className="flex items-center justify-between">

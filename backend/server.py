@@ -2224,6 +2224,37 @@ async def _acct_tax_factor():
     except Exception:
         return 1.14975
 
+def _pnl_cogs_labor(pnl_det):
+    """(ventes_reel, cogs_reel, main_oeuvre_cogs_reel) depuis le P&L détaillé."""
+    sales = cogs = None
+    labor = 0.0
+    in_cogs = False
+    for ln in pnl_det["lines"]:
+        n = _acct_norm(ln["label"])
+        if sales is None and n == "TOTAL DES REVENUS":
+            sales = ln["values"].get("reel")
+        if n == "COUT DES MARCHANDISES VENDUES" and ln.get("kind") == "header":
+            in_cogs = True
+        if in_cogs and n.startswith("TOTAL MAIN D") and "UVRE" in n:  # ligature Œ non décomposée
+            labor += (ln["values"].get("reel") or 0.0)
+        if n.startswith("TOTAL") and "COUT DES MARCHANDISES VENDUES" in n:
+            cogs = ln["values"].get("reel")
+            in_cogs = False
+            break
+    return sales, cogs, round(labor, 2)
+
+async def _kpi_dispute(pk, field):
+    """Report automatique : dernier ajustement explicite (≤ période) pour ce champ."""
+    docs = await db.acct_kpi_adjust.find({"_id": {"$lte": pk}, field: {"$exists": True}}).sort("_id", -1).to_list(1)
+    doc = docs[0] if docs else {}
+    try:
+        amount = float(doc.get(field) or 0.0)
+    except Exception:
+        amount = 0.0
+    note = doc.get(field + "_note") or ""
+    src = doc.get("_id") if doc else None
+    return {"amount": round(amount, 2), "note": note, "source": src, "carried": bool(src and src != pk)}
+
 async def _kpi_data(year, month, with_trend=True):
     bdata = await _bilan_sommaire_data(year, month)
     pnl = await _acct_report(year, month, "pnl_sommaire")
@@ -2252,9 +2283,9 @@ async def _kpi_data(year, month, with_trend=True):
     except Exception:
         pass
 
-    # --- Fenêtre glissante 12 mois : ventes & COGS mensuels réels ---
+    # --- Fenêtre glissante 12 mois : ventes, COGS & main-d'œuvre du COGS mensuels réels (P&L détaillé) ---
     inv_current = inv["value"] if inv else None
-    cogs_12m = 0.0; sales_12m = 0.0
+    cogs_12m = 0.0; sales_12m = 0.0; labor_12m = 0.0
     missing = []
     for k in range(12):
         wy, wm = _add_months(year, month, -k)
@@ -2264,9 +2295,8 @@ async def _kpi_data(year, month, with_trend=True):
         if not wp or not wbv:
             missing.append(wpk); continue
         try:
-            wf = _pnl_figures(await _acct_report(wy, wm, "pnl_sommaire"))
-            cogs_12m += (wf["cogs"].get("reel") or 0.0)
-            sales_12m += (wf["sales"].get("reel") or 0.0)
+            s, c, lab = _pnl_cogs_labor(await _acct_report(wy, wm, "pnl"))
+            sales_12m += (s or 0.0); cogs_12m += (c or 0.0); labor_12m += lab
         except Exception:
             missing.append(wpk)
     months_available = 12 - len(missing)
@@ -2286,17 +2316,8 @@ async def _kpi_data(year, month, with_trend=True):
 
     # --- DSO --- base glissante 12 mois ; CC courants nets de taxes (÷ taux QC), hors retenues, moins litige manuel
     QC_TAX = await _acct_tax_factor()  # TPS 5% + TVQ 9,975% par défaut (configurable)
-    # Report automatique : dernier ajustement enregistré à date (≤ période courante) tant qu'il n'est pas remis à 0.
-    adj_list = await db.acct_kpi_adjust.find({"_id": {"$lte": pk}}).sort("_id", -1).to_list(1)
-    adj = adj_list[0] if adj_list else {}
-    dispute = 0.0
-    try:
-        dispute = float(adj.get("dso_dispute") or 0.0)
-    except Exception:
-        dispute = 0.0
-    dispute_note = adj.get("dso_dispute_note") or ""
-    dispute_source = adj.get("_id") if adj else None
-    dispute_carried = bool(dispute_source and dispute_source != pk)
+    dso_adj = await _kpi_dispute(pk, "dso_dispute")
+    dispute = dso_adj["amount"]
     ar_courant = round(ar["value"] - retenues, 2) if ar else None
     ar_courant_net = round(ar_courant / QC_TAX, 2) if ar_courant is not None else None
     ar_dso_base = round(ar_courant_net - dispute, 2) if ar_courant_net is not None else None
@@ -2304,8 +2325,8 @@ async def _kpi_data(year, month, with_trend=True):
            "ar_label": ar["label"] if ar else None, "ar": ar["value"] if ar else None,
            "retenues": round(retenues, 2), "ar_courant": ar_courant,
            "tax_factor": QC_TAX, "ar_courant_net": ar_courant_net,
-           "dispute": round(dispute, 2), "dispute_note": dispute_note, "ar_dso_base": ar_dso_base,
-           "dispute_source": dispute_source, "dispute_carried": dispute_carried,
+           "dispute": dispute, "dispute_note": dso_adj["note"], "ar_dso_base": ar_dso_base,
+           "dispute_source": dso_adj["source"], "dispute_carried": dso_adj["carried"],
            "sales_12m": round(sales_12m, 2), "months_available": months_available}
     if ar is None:
         dso["reason"] = "Compte « Comptes à recevoir » introuvable dans le mapping du bilan."
@@ -2317,13 +2338,20 @@ async def _kpi_data(year, month, with_trend=True):
         dso["value"] = round(ar_dso_base / sales_12m * 365, 1)
         dso["available"] = True
 
-    # --- DPO --- base glissante 12 mois ; CF nets de taxes (÷ 1,14975) ; Achats = COGS 12m + variation d'inventaire 12m
+    # --- DPO --- base glissante 12 mois ; CF nets de taxes (÷ taux QC) moins litige ; Achats = (COGS 12m − main-d'œuvre COGS 12m) + variation d'inventaire 12m
     inv_var = round(inv_current - inv_12m, 2) if (inv_current is not None and inv_12m is not None) else None
+    dpo_adj = await _kpi_dispute(pk, "dpo_dispute")
+    dpo_dispute = dpo_adj["amount"]
     ap_net = round(ap["value"] / QC_TAX, 2) if ap else None
+    ap_dpo_base = round(ap_net - dpo_dispute, 2) if ap_net is not None else None
+    cogs_ex_labor_12m = round(cogs_12m - labor_12m, 2)
     dpo = {"available": False, "value": None, "reason": None, "method": "rolling_12m",
            "ap_label": ap["label"] if ap else None, "ap": ap["value"] if ap else None,
            "tax_factor": QC_TAX, "ap_net": ap_net,
-           "cogs_12m": round(cogs_12m, 2), "inv_current": inv_current, "inv_12m": inv_12m,
+           "dispute": dpo_dispute, "dispute_note": dpo_adj["note"], "ap_dpo_base": ap_dpo_base,
+           "dispute_source": dpo_adj["source"], "dispute_carried": dpo_adj["carried"],
+           "cogs_12m": round(cogs_12m, 2), "labor_12m": round(labor_12m, 2), "cogs_ex_labor_12m": cogs_ex_labor_12m,
+           "inv_current": inv_current, "inv_12m": inv_12m,
            "inv_12m_period": inv12_pk, "inv_variation": inv_var,
            "months_available": months_available, "purchases_12m": None}
     if ap is None:
@@ -2331,12 +2359,12 @@ async def _kpi_data(year, month, with_trend=True):
     elif missing or inv_12m is None:
         dpo["reason"] = f"DPO non calculable de façon fiable — {months_available}/12 mois réels disponibles (base glissante 12 mois requise)."
     else:
-        purchases = cogs_12m + (inv_var or 0.0)
+        purchases = cogs_ex_labor_12m + (inv_var or 0.0)
         dpo["purchases_12m"] = round(purchases, 2)
         if purchases <= 0:
             dpo["reason"] = "Achats des 12 derniers mois nuls ou négatifs."
         else:
-            dpo["value"] = round(ap_net / purchases * 365, 1)
+            dpo["value"] = round(ap_dpo_base / purchases * 365, 1)
             dpo["available"] = True
 
     # --- Fonds de roulement (FDR) & Besoin en fonds de roulement (BFR) ---
@@ -2415,18 +2443,27 @@ async def acct_put_settings(body: AcctSettingsBody, user: dict = Depends(get_cur
     return {"tax_factor": tf}
 
 class KpiAdjustBody(BaseModel):
-    dso_dispute: float = 0.0
-    dso_dispute_note: str = ""
+    dso_dispute: Optional[float] = None
+    dso_dispute_note: Optional[str] = None
+    dpo_dispute: Optional[float] = None
+    dpo_dispute_note: Optional[str] = None
 
 @api.put("/acct/kpi-adjust")
 async def acct_put_kpi_adjust(year: int, month: int, body: KpiAdjustBody, user: dict = Depends(get_current_user)):
     pk = _pkey(year, month)
-    amount = max(0.0, float(body.dso_dispute or 0.0))
-    await db.acct_kpi_adjust.update_one({"_id": pk}, {"$set": {
-        "dso_dispute": amount, "dso_dispute_note": (body.dso_dispute_note or "").strip(),
-        "updated_by": user["email"], "updated_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
-    await log_action(user, "Modifier", "Comptabilité", f"Litige DSO {pk} = {amount}")
-    return {"period": pk, "dso_dispute": amount, "dso_dispute_note": (body.dso_dispute_note or "").strip()}
+    provided = body.dict(exclude_unset=True)
+    sets = {}
+    for f in ("dso_dispute", "dpo_dispute"):
+        if f in provided:
+            sets[f] = max(0.0, float(provided[f] or 0.0))
+    for f in ("dso_dispute_note", "dpo_dispute_note"):
+        if f in provided:
+            sets[f] = (provided[f] or "").strip()
+    if sets:
+        sets["updated_by"] = user["email"]; sets["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await db.acct_kpi_adjust.update_one({"_id": pk}, {"$set": sets}, upsert=True)
+        await log_action(user, "Modifier", "Comptabilité", f"Ajustement KPI {pk}: {', '.join(k for k in sets if k.endswith('dispute'))}")
+    return {"period": pk, **{k: v for k, v in sets.items() if k not in ("updated_by", "updated_at")}}
 
 def _linreg_project(ys, n_future):
     pts = [(i, v) for i, v in enumerate(ys) if v is not None]
