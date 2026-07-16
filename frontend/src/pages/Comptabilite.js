@@ -9,7 +9,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
-  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink,
+  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2,
 } from "lucide-react";
 
 const MONTHS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -636,6 +636,8 @@ function AiChatPanel({ year, month }) {
 }
 
 export function AcctDashboard() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [d, setD] = useState(null);
   const { periods } = usePeriods();
   const [period, setPeriod] = useState("");
@@ -646,6 +648,7 @@ export function AcctDashboard() {
   const [proj, setProj] = useState(null);
   const [projDialog, setProjDialog] = useState({ open: false, series: null });
   const [taxDialog, setTaxDialog] = useState(false);
+  const [aiDialog, setAiDialog] = useState(false);
   const [taxFactor, setTaxFactor] = useState(1.14975);
   useEffect(() => { api.acctDashboard().then(setD).catch(() => {}); api.acctTrend().then(setTrend).catch(() => {}); api.acctProjections().then(setProj).catch(() => {}); api.acctSettings().then((s) => setTaxFactor(s.tax_factor)).catch(() => {}); }, []);
   useEffect(() => { if (periods.length && !periods.some((p) => p.id === period)) setPeriod(periods[0].id); }, [periods, period]);
@@ -702,6 +705,12 @@ export function AcctDashboard() {
         <div className="flex items-center gap-4 text-xs text-slate-400">
           <span className="inline-flex items-center gap-1.5"><FileSpreadsheet size={13} /> {d.template_imported ? `${d.template_accounts} comptes` : "Modèle non importé"}</span>
           <span className="inline-flex items-center gap-1.5"><Layers size={13} /> {d.period_count} périodes</span>
+          {isAdmin && (
+            <button onClick={() => setAiDialog(true)} data-testid="ai-config-btn" title="Configuration de l'assistant IA"
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 font-600 text-slate-500 hover:bg-slate-50">
+              <Sparkles size={13} className="text-[#0E9488]" /> Assistant IA
+            </button>
+          )}
         </div>
       </div>
 
@@ -844,14 +853,76 @@ export function AcctDashboard() {
         </div>
       )}
 
+      {period && (
+        <div className="grid gap-4 lg:grid-cols-2" data-testid="acct-ai-section">
+          <VarianceCard year={Number(period.split("-")[0])} month={Number(period.split("-")[1])} />
+          <AiChatPanel year={Number(period.split("-")[0])} month={Number(period.split("-")[1])} />
+        </div>
+      )}
+
       <KpiDetailDialog open={kpiDialog.open} onOpenChange={(v) => setKpiDialog((p) => ({ ...p, open: v }))} type={kpiDialog.type} kpi={kpi} />
       <ProjectionDetailDialog open={projDialog.open} onOpenChange={(v) => setProjDialog((p) => ({ ...p, open: v }))} series={projDialog.series} proj={proj} />
       <TaxSettingsDialog open={taxDialog} onOpenChange={setTaxDialog} current={taxFactor} onSaved={() => { api.acctSettings().then((s) => setTaxFactor(s.tax_factor)).catch(() => {}); reloadKpi(); }} />
+      <AiConfigDialog open={aiDialog} onOpenChange={setAiDialog} />
     </div>
   );
 }
 
 // ---------- Balance de vérification ----------
+function AnomaliesCard({ periods }) {
+  const [period, setPeriod] = useState("");
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => { if (periods.length && !periods.some((p) => p.id === period)) setPeriod(periods[0].id); }, [periods, period]);
+  const detect = async () => {
+    if (!period) return;
+    const [y, m] = period.split("-").map(Number);
+    setLoading(true);
+    try { setData(await api.acctAiAnomalies({ year: y, month: m })); }
+    catch (e) { toast.error(e.response?.data?.detail || "Erreur IA"); }
+    finally { setLoading(false); }
+  };
+  if (!periods.length) return null;
+  return (
+    <div className="card p-5" data-testid="acct-anomalies-card">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h3 className="flex items-center gap-2 text-sm font-700 text-slate-700"><Sparkles size={15} className="text-[#0E9488]" /> Détection d'anomalies (IA)</h3>
+        <div className="flex items-center gap-2">
+          <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId="acct-anomalies" />
+          <Button size="sm" onClick={detect} disabled={loading} data-testid="acct-anomalies-btn" className="bg-[#063044] hover:bg-[#063044]/90">{loading ? "Analyse…" : "Détecter"}</Button>
+        </div>
+      </div>
+      {!data ? <p className="text-xs text-slate-400">Repère les comptes dont le solde s'écarte fortement de leur moyenne des 6 derniers mois. Signalements non bloquants.</p>
+        : data.available === false ? <p className="text-xs text-amber-600" data-testid="acct-anomalies-unavailable">{data.reason || "Fonctionnalité IA non configurée."}</p>
+        : (data.anomalies || []).length === 0 ? <p className="text-xs text-slate-500" data-testid="acct-anomalies-empty">Aucune anomalie détectée pour cette période.</p>
+        : (
+          <div className="space-y-3" data-testid="acct-anomalies-result">
+            {data.summary && <p className="whitespace-pre-line rounded-lg bg-slate-50 p-3 text-sm leading-relaxed text-slate-700" data-testid="acct-anomalies-summary">{data.summary}</p>}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2 text-left font-600">Compte</th><th className="px-3 py-2 text-right font-600">Solde</th>
+                  <th className="px-3 py-2 text-right font-600">Moyenne</th><th className="px-3 py-2 text-right font-600">Écart</th><th className="px-3 py-2 text-right font-600">z</th>
+                </tr></thead>
+                <tbody>
+                  {data.anomalies.map((an) => (
+                    <tr key={an.account} className="border-b border-slate-100" data-testid={`acct-anomaly-${an.account}`}>
+                      <td className="px-3 py-2"><span className="font-mono-data text-slate-500">{an.account}</span> <span className="text-slate-700">{an.name}</span></td>
+                      <td className="px-3 py-2 text-right font-mono-data">{money(an.value)}</td>
+                      <td className="px-3 py-2 text-right font-mono-data text-slate-500">{money(an.moyenne)}</td>
+                      <td className="px-3 py-2 text-right font-mono-data" style={{ color: an.ecart < 0 ? "#DC2626" : "#0E9488" }}>{money(an.ecart)}</td>
+                      <td className="px-3 py-2 text-right font-mono-data font-700 text-[#B45309]">{an.z}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+    </div>
+  );
+}
+
 export function AcctBV() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -865,6 +936,8 @@ export function AcctBV() {
   const [newAcct, setNewAcct] = useState({ open: false, list: [] });
   const [accts, setAccts] = useState([]);
   const [assign, setAssign] = useState({});
+  const [assignText, setAssignText] = useState({});
+  const [suggesting, setSuggesting] = useState({});
   const [confirmDel, setConfirmDel] = useState(null);
   const loadTmpl = useCallback(() => api.acctGetTemplate().then(setTmpl).catch(() => {}), []);
   useEffect(() => { loadTmpl(); api.acctAccounts().then(setAccts).catch(() => {}); }, [loadTmpl]);
@@ -904,8 +977,24 @@ export function AcctBV() {
     try {
       await api.acctAccountMap(clean, { year, month });
       toast.success(`${Object.keys(clean).length} compte(s) affecté(s)`);
-      setNewAcct({ open: false, list: [] }); setAssign({}); reload();
+      setNewAcct({ open: false, list: [] }); setAssign({}); setAssignText({}); reload();
     } catch (err) { toast.error(err.response?.data?.detail || "Enregistrement impossible"); }
+  };
+  const suggestMapping = async (a) => {
+    setSuggesting((s) => ({ ...s, [a.account]: true }));
+    try {
+      const r = await api.acctAiSuggestMapping({ account: a.account, name: a.name });
+      if (r.available === false) { toast.warning(r.reason || "Fonctionnalité IA non configurée."); return; }
+      const sug = r.suggestion || {};
+      if (sug.account) {
+        setAssign((s) => ({ ...s, [a.account]: Number(sug.account) }));
+        setAssignText((s) => ({ ...s, [a.account]: `${sug.account} — ${sug.name || ""}` }));
+        toast.success(`Suggestion : ${sug.account} — ${sug.name || ""}${sug.raison ? ` (${sug.raison})` : ""}`);
+      } else {
+        toast.info("Aucune suggestion pertinente trouvée.");
+      }
+    } catch (err) { toast.error(err.response?.data?.detail || "Suggestion impossible"); }
+    finally { setSuggesting((s) => ({ ...s, [a.account]: false })); }
   };
   const allAssigned = newAcct.list.length > 0 && newAcct.list.every((a) => assign[a.account]);
 
@@ -997,6 +1086,8 @@ export function AcctBV() {
         </div>
       </div>
 
+      <AnomaliesCard periods={periods} />
+
       <AlertDialog open={!!confirmDel} onOpenChange={(v) => !v && setConfirmDel(null)}>
         <AlertDialogContent data-testid="acct-delete-confirm-dialog">
           <AlertDialogHeader>
@@ -1028,9 +1119,17 @@ export function AcctBV() {
             {newAcct.list.map((a) => (
               <div key={a.account} className="grid grid-cols-2 items-center gap-3 rounded-lg border border-slate-200 p-2">
                 <div className="text-sm"><span className="font-mono-data text-slate-500">{a.account}</span> <span className="text-slate-700">{a.name}</span></div>
-                <input list="acct-target-list" data-testid={`acct-assign-${a.account}`} placeholder="Regrouper avec le compte…"
-                  className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-[#063044]"
-                  onChange={(e) => { const m = e.target.value.match(/^(\d+)/); setAssign((s) => ({ ...s, [a.account]: m ? Number(m[1]) : "" })); }} />
+                <div className="flex items-center gap-1.5">
+                  <input list="acct-target-list" data-testid={`acct-assign-${a.account}`} placeholder="Regrouper avec le compte…"
+                    value={assignText[a.account] || ""}
+                    className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-[#063044]"
+                    onChange={(e) => { const val = e.target.value; setAssignText((s) => ({ ...s, [a.account]: val })); const m = val.match(/^(\d+)/); setAssign((s) => ({ ...s, [a.account]: m ? Number(m[1]) : "" })); }} />
+                  <button type="button" data-testid={`acct-suggest-${a.account}`} onClick={() => suggestMapping(a)} disabled={!!suggesting[a.account]}
+                    title="Suggérer une catégorie (IA)"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#0E9488]/40 px-2 py-1.5 text-xs font-600 text-[#0E9488] hover:bg-[#0E9488]/10 disabled:opacity-50">
+                    <Wand2 size={13} /> {suggesting[a.account] ? "…" : "Suggérer"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
