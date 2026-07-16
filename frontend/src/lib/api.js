@@ -91,4 +91,12 @@ export const api = {
   acctSettings: () => client.get("/acct/settings").then((r) => r.data),
   acctSaveSettings: (body) => client.put("/acct/settings", body).then((r) => r.data),
   acctKpiAdjust: (params, body) => client.put("/acct/kpi-adjust", body, { params }).then((r) => r.data),
+  acctAiStatus: () => client.get("/acct/ai/status").then((r) => r.data),
+  acctAiGetConfig: () => client.get("/acct/ai/config").then((r) => r.data),
+  acctAiSaveConfig: (body) => client.put("/acct/ai/config", body).then((r) => r.data),
+  acctAiClearKeys: () => client.delete("/acct/ai/config/key").then((r) => r.data),
+  acctAiVariance: (params) => client.post("/acct/ai/variance", {}, { params }).then((r) => r.data),
+  acctAiAnomalies: (params) => client.post("/acct/ai/anomalies", {}, { params }).then((r) => r.data),
+  acctAiChat: (body) => client.post("/acct/ai/chat", body).then((r) => r.data),
+  acctAiSuggestMapping: (body) => client.post("/acct/ai/suggest-mapping", body).then((r) => r.data),
 };
