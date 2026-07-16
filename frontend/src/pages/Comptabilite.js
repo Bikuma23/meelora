@@ -195,21 +195,22 @@ function KpiDetailDialog({ open, onOpenChange, type, kpi }) {
           <>
             <DialogHeader>
               <DialogTitle>DPO — Délai moyen de paiement fournisseurs</DialogTitle>
-              <DialogDescription className="text-xs">{month_label} {year} · (Comptes fournisseurs ÷ Achats YTD annualisés) × 365 · Achats = COGS YTD + variation d'inventaire</DialogDescription>
+              <DialogDescription className="text-xs">{month_label} {year} · (Comptes fournisseurs ÷ Achats des 12 derniers mois) × 365 · Achats = COGS 12 mois + variation d'inventaire sur 12 mois</DialogDescription>
             </DialogHeader>
-            <div className="rounded-lg bg-slate-50 px-4 py-1">
-              <DRow label={dpo.ap_label || "Comptes fournisseurs"} value={money(dpo.ap)} />
-              <DRow label="COGS cumulatif (YTD)" value={money(dpo.cogs_ytd)} />
-              <DRow label="Inventaire (fin de période)" value={money(dpo.inv_current)} />
-              <DRow label={`Inventaire d'ouverture${dpo.inv_open_period ? ` (${dpo.inv_open_period})` : ""}`} value={dpo.inv_variation_available ? money(dpo.inv_open) : "N/D"} />
-              <DRow label="Variation d'inventaire (YTD)" value={dpo.inv_variation_available ? money(dpo.inv_variation) : "N/D"} />
-              <DRow label="Achats YTD = COGS + variation" value={money(dpo.purchases_ytd)} />
-              <DRow label="Mois écoulés" value={dpo.months} />
-              <DRow label="Achats annualisés (YTD ÷ mois × 12)" value={money(dpo.annualized_purchases)} />
-              <DRow label="DPO = CF ÷ achats annualisés × 365" value={fmtDays(dpo.value)} strong />
-            </div>
-            {!dpo.inv_variation_available && (
-              <p className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">Variation d'inventaire indisponible (BV de décembre {year - 1} absente) — achats basés sur le COGS seul.</p>
+            {!dpo.available ? (
+              <div className="flex items-start gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                <AlertTriangle size={16} className="mt-0.5 shrink-0" /><span>{dpo.reason}</span>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-slate-50 px-4 py-1">
+                <DRow label={dpo.ap_label || "Comptes fournisseurs"} value={money(dpo.ap)} />
+                <DRow label="COGS (12 derniers mois réels)" value={money(dpo.cogs_12m)} />
+                <DRow label="Inventaire (fin de période)" value={money(dpo.inv_current)} />
+                <DRow label={`Inventaire il y a 12 mois${dpo.inv_12m_period ? ` (${dpo.inv_12m_period})` : ""}`} value={money(dpo.inv_12m)} />
+                <DRow label="Variation d'inventaire (12 mois)" value={money(dpo.inv_variation)} />
+                <DRow label="Achats 12 mois = COGS + variation" value={money(dpo.purchases_12m)} />
+                <DRow label="DPO = CF ÷ achats 12 mois × 365" value={fmtDays(dpo.value)} strong />
+              </div>
             )}
             <SourceLinks periodId={period} links={[["acct_bilan", "Voir le Bilan"], ["acct_pnl", "Voir l'État des résultats"]]} />
           </>
@@ -217,8 +218,8 @@ function KpiDetailDialog({ open, onOpenChange, type, kpi }) {
         {type === "fdr" && (
           <>
             <DialogHeader>
-              <DialogTitle>Fonds de roulement</DialogTitle>
-              <DialogDescription className="text-xs">{month_label} {year} · Actif court terme − Passif court terme</DialogDescription>
+              <DialogTitle>Fonds de roulement (FDR) & Besoin en fonds de roulement (BFR)</DialogTitle>
+              <DialogDescription className="text-xs">{month_label} {year} · Retenues contractuelles exclues (garantie de construction, encaissables hors cycle court terme)</DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
@@ -236,10 +237,26 @@ function KpiDetailDialog({ open, onOpenChange, type, kpi }) {
                 </div>
               </div>
             </div>
-            <div className="rounded-lg bg-[#063044]/5 px-4 py-1">
-              <DRow label="Fonds de roulement (Actif CT − Passif CT)" value={money(fdr.value)} strong />
-              <DRow label="Ratio de fonds de roulement (Actif CT ÷ Passif CT)" value={fdr.ratio != null ? `${fdr.ratio}` : "—"} strong />
+            <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-1">
+              <DRow label={`Retenues contractuelles exclues${fdr.retenues_label ? ` (${fdr.retenues_label})` : ""}`} value={money(fdr.retenues)} />
+              {!fdr.retenues_found && <p className="py-1 text-[11px] text-amber-600">Aucun compte de retenues contractuelles identifié dans le mapping — exclusion nulle appliquée.</p>}
             </div>
+            <div className="rounded-lg bg-[#063044]/5 px-4 py-1">
+              <DRow label="Actif court terme (hors retenues)" value={money(fdr.current_assets_excl)} />
+              <DRow label="FDR = Actif CT (hors retenues) − Passif CT" value={money(fdr.value)} strong />
+              <DRow label="Ratio de fonds de roulement" value={fdr.ratio != null ? `${fdr.ratio}` : "—"} strong />
+            </div>
+            {fdr.bfr && fdr.bfr.available ? (
+              <div className="rounded-lg bg-[#0E9488]/8 px-4 py-1">
+                <p className="pt-1 text-[11px] font-700 uppercase tracking-wide text-[#0E9488]">Besoin en fonds de roulement (BFR)</p>
+                <DRow label="Comptes clients courants (hors retenues)" value={money(fdr.bfr.ar_courant)} />
+                <DRow label="+ Inventaire" value={money(fdr.bfr.inventory)} />
+                <DRow label="− Comptes fournisseurs" value={money(fdr.bfr.ap)} />
+                <DRow label="BFR = CC courants + Inventaire − CF" value={money(fdr.bfr.value)} strong />
+              </div>
+            ) : fdr.bfr && fdr.bfr.reason ? (
+              <p className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">BFR non calculable : {fdr.bfr.reason}</p>
+            ) : null}
             <SourceLinks periodId={period} links={[["acct_bilan", "Voir le Bilan"]]} />
           </>
         )}
@@ -391,15 +408,36 @@ export function AcctDashboard() {
               mainText={fmtDays(kpi.dso.value)} sub={kpi.dso.available ? `CC ${money(kpi.dso.ar)} · ventes ann. ${money(kpi.dso.annualized_sales)}` : null}
               onClick={() => openKpi("dso")} />
             <IndicatorCard testid="indicator-dpo" title="DPO — Paiement fournisseurs" icon={Clock}
-              caption="Délai moyen de paiement des comptes fournisseurs (jours)." provisional={!kpi.locked}
+              caption="Délai moyen de paiement des fournisseurs (jours) — base glissante 12 mois." provisional={!kpi.locked}
               unavailable={!kpi.dpo.available} reason={kpi.dpo.reason}
-              mainText={fmtDays(kpi.dpo.value)} sub={kpi.dpo.available ? `CF ${money(kpi.dpo.ap)} · achats ann. ${money(kpi.dpo.annualized_purchases)}` : null}
+              mainText={fmtDays(kpi.dpo.value)} sub={kpi.dpo.available ? `CF ${money(kpi.dpo.ap)} · achats 12m ${money(kpi.dpo.purchases_12m)}` : null}
               onClick={() => openKpi("dpo")} />
-            <IndicatorCard testid="indicator-fdr" title="Fonds de roulement" icon={Scale}
-              caption="Actif court terme − Passif court terme, avec ratio." provisional={!kpi.locked}
-              unavailable={!kpi.fdr.available} reason={kpi.fdr.reason}
-              mainText={money(kpi.fdr.value)} sub={kpi.fdr.available && kpi.fdr.ratio != null ? `Ratio ${kpi.fdr.ratio}` : null}
-              onClick={() => openKpi("fdr")} />
+            <button data-testid="indicator-fdr" onClick={kpi.fdr.available ? () => openKpi("fdr") : undefined} disabled={!kpi.fdr.available}
+              className={`card group relative flex flex-col gap-2 p-5 text-left transition-shadow sm:col-span-2 xl:col-span-1 ${kpi.fdr.available ? "cursor-pointer hover:shadow-md" : "cursor-default opacity-90"}`}>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-700 uppercase tracking-wide text-slate-500">Fonds de roulement / BFR</span>
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#063044]/8 text-[#063044]"><Scale size={16} /></span>
+              </div>
+              {!kpi.fdr.available ? (
+                <div className="flex items-start gap-1.5 py-1 text-xs text-amber-600" data-testid="indicator-fdr-unavailable"><AlertTriangle size={14} className="mt-0.5 shrink-0" /><span>{kpi.fdr.reason}</span></div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-[10px] font-700 uppercase tracking-wide text-slate-400">FDR</span>
+                    <p className="font-mono-data text-xl font-800 text-[#063044]" data-testid="indicator-fdr-value">{money(kpi.fdr.value)}</p>
+                    <span className="font-mono-data text-[11px] font-600 text-slate-500">Ratio {kpi.fdr.ratio ?? "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-700 uppercase tracking-wide text-slate-400">BFR</span>
+                    <p className="font-mono-data text-xl font-800 text-[#0E9488]" data-testid="indicator-bfr-value">{kpi.fdr.bfr?.available ? money(kpi.fdr.bfr.value) : "—"}</p>
+                    <span className="font-mono-data text-[11px] font-600 text-slate-500">Cycle opérationnel</span>
+                  </div>
+                </div>
+              )}
+              <span className="text-[11px] leading-snug text-slate-400">Retenues contractuelles exclues : <span className="font-mono-data text-slate-500">{money(kpi.fdr.retenues)}</span></span>
+              {!kpi.locked && kpi.fdr.available && <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-700 text-amber-700"><AlertTriangle size={11} /> Provisoire</span>}
+              {kpi.fdr.available && <span className="text-[11px] font-600 text-[#0E9488] opacity-0 transition-opacity group-hover:opacity-100">Voir le détail →</span>}
+            </button>
           </div>
         </div>
       )}

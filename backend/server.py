@@ -2247,53 +2247,96 @@ async def _kpi_data(year, month):
         dso["value"] = round(ar["value"] / ann * 365, 1)
         dso["available"] = True
 
-    # --- Inventaire d'ouverture (fin d'exercice précédent = déc. N-1) ---
+    # --- DPO --- base glissante 12 mois : Achats = COGS(12 derniers mois réels) + variation d'inventaire sur 12 mois
     inv_current = inv["value"] if inv else None
-    inv_open = None; inv_open_period = None
-    open_pk = _pkey(year - 1, 12)
-    if await db.acct_bv.find_one({"_id": open_pk}):
+    cogs_12m = 0.0
+    missing = []
+    window_periods = []
+    for k in range(12):
+        wy, wm = _add_months(year, month, -k)
+        wpk = _pkey(wy, wm)
+        window_periods.append(wpk)
+        wp = await db.acct_periods.find_one({"_id": wpk})
+        wbv = await db.acct_bv.find_one({"_id": wpk})
+        if not wp or not wbv:
+            missing.append(wpk); continue
         try:
-            bopen = await _bilan_sommaire_data(year - 1, 12)
-            lo = _find_line(bopen["actif"], "INVENTAIRE")
-            if lo is not None:
-                inv_open = lo["value"]; inv_open_period = open_pk
+            wpnl = await _acct_report(wy, wm, "pnl_sommaire")
+            cm = _pnl_figures(wpnl)["cogs"].get("reel")
+            cogs_12m += (cm or 0.0)
+        except Exception:
+            missing.append(wpk)
+    # Inventaire il y a 12 mois (ouverture de la fenêtre glissante)
+    oy, om = _add_months(year, month, -12)
+    inv12_pk = _pkey(oy, om)
+    inv_12m = None
+    if await db.acct_bv.find_one({"_id": inv12_pk}):
+        try:
+            b12 = await _bilan_sommaire_data(oy, om)
+            l12 = _find_line(b12["actif"], "INVENTAIRE")
+            if l12 is not None:
+                inv_12m = l12["value"]
         except Exception:
             pass
-    inv_var = round(inv_current - inv_open, 2) if (inv_current is not None and inv_open is not None) else None
-
-    # --- DPO ---  Achats YTD = COGS YTD + variation d'inventaire YTD
-    dpo = {"available": False, "value": None, "reason": None,
+    months_available = 12 - len(missing)
+    inv_var = round(inv_current - inv_12m, 2) if (inv_current is not None and inv_12m is not None) else None
+    dpo = {"available": False, "value": None, "reason": None, "method": "rolling_12m",
            "ap_label": ap["label"] if ap else None, "ap": ap["value"] if ap else None,
-           "cogs_ytd": cogs_ytd, "inv_current": inv_current, "inv_open": inv_open,
-           "inv_open_period": inv_open_period, "inv_variation": inv_var,
-           "inv_variation_available": inv_var is not None,
-           "purchases_ytd": None, "months": months, "annualized_purchases": None}
+           "cogs_12m": round(cogs_12m, 2), "inv_current": inv_current, "inv_12m": inv_12m,
+           "inv_12m_period": inv12_pk, "inv_variation": inv_var,
+           "months_available": months_available, "purchases_12m": None}
     if ap is None:
         dpo["reason"] = "Compte « Comptes fournisseurs » introuvable dans le mapping du bilan."
-    elif cogs_ytd is None:
-        dpo["reason"] = "COGS YTD indisponible."
+    elif missing or inv_12m is None:
+        dpo["reason"] = f"DPO non calculable de façon fiable — {months_available}/12 mois réels disponibles (base glissante 12 mois requise)."
     else:
-        purchases = cogs_ytd + (inv_var or 0.0)
-        dpo["purchases_ytd"] = round(purchases, 2)
+        purchases = cogs_12m + (inv_var or 0.0)
+        dpo["purchases_12m"] = round(purchases, 2)
         if purchases <= 0:
-            dpo["reason"] = "Achats YTD annualisés nuls ou négatifs."
+            dpo["reason"] = "Achats des 12 derniers mois nuls ou négatifs."
         else:
-            ann = purchases / months * 12
-            dpo["annualized_purchases"] = round(ann, 2)
-            dpo["value"] = round(ap["value"] / ann * 365, 1)
+            dpo["value"] = round(ap["value"] / purchases * 365, 1)
             dpo["available"] = True
 
-    # --- Fonds de roulement ---
+    # --- Retenues contractuelles sur factures émises (garantie de construction) ---
+    retenues = 0.0; retenues_label = None; retenues_found = False
+    try:
+        bilan_det = await _acct_report(year, month, "bilan")
+        for ln in bilan_det["lines"]:
+            n = _acct_norm(ln["label"])
+            if "RETENUE" in n and "CONSTRUCTION" in n:
+                retenues = ln["values"].get("cumulatif") or 0.0
+                retenues_label = ln["label"]; retenues_found = True
+                break
+    except Exception:
+        pass
+
+    # --- Fonds de roulement (FDR) & Besoin en fonds de roulement (BFR) ---
+    # Exclusion des retenues contractuelles de l'actif court terme et des comptes clients.
     fdr = {"available": False, "value": None, "ratio": None, "reason": None,
            "current_assets": ca_total["value"] if ca_total else None,
            "current_liabilities": cl_total["value"] if cl_total else None,
-           "actif_ct": actif_ct, "passif_ct": passif_ct}
+           "current_assets_excl": None,
+           "retenues": round(retenues, 2), "retenues_label": retenues_label, "retenues_found": retenues_found,
+           "actif_ct": actif_ct, "passif_ct": passif_ct,
+           "bfr": {"available": False, "value": None, "reason": None,
+                   "ar": ar["value"] if ar else None, "ar_label": ar["label"] if ar else None,
+                   "ar_courant": None, "inventory": inv_current, "ap": ap["value"] if ap else None}}
     if ca_total is None or cl_total is None:
         fdr["reason"] = "Totaux actif/passif à court terme introuvables dans le mapping du bilan."
     else:
-        fdr["value"] = round(ca_total["value"] - cl_total["value"], 2)
-        fdr["ratio"] = round(ca_total["value"] / cl_total["value"], 2) if cl_total["value"] else None
+        ca_excl = ca_total["value"] - retenues
+        fdr["current_assets_excl"] = round(ca_excl, 2)
+        fdr["value"] = round(ca_excl - cl_total["value"], 2)
+        fdr["ratio"] = round(ca_excl / cl_total["value"], 2) if cl_total["value"] else None
         fdr["available"] = True
+    if ar is None or inv_current is None or ap is None:
+        fdr["bfr"]["reason"] = "Comptes clients, inventaire ou fournisseurs introuvables dans le mapping du bilan."
+    else:
+        ar_courant = ar["value"] - retenues
+        fdr["bfr"]["ar_courant"] = round(ar_courant, 2)
+        fdr["bfr"]["value"] = round(ar_courant + inv_current - ap["value"], 2)
+        fdr["bfr"]["available"] = True
 
     return {"period": pk, "year": int(year), "month": int(month), "month_label": MONTHS_FR[month - 1],
             "locked": bool(period and period.get("locked")),
