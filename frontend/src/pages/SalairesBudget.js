@@ -2,6 +2,7 @@ import { useEffect, useState, Fragment } from "react";
 import { api } from "../lib/api";
 import { useYear } from "../context/YearContext";
 import { useAuth } from "../context/AuthContext";
+import { useLang } from "../context/LanguageContext";
 import { fmtCAD } from "../lib/format";
 import BudgetFicheDialog from "../components/BudgetFicheDialog";
 import BudgetDetailDialog from "../components/BudgetDetailDialog";
@@ -48,6 +49,7 @@ function lineToOverride(ln, revueMode) {
 }
 
 export default function SalairesBudget() {
+  const { t } = useLang();
   const { year } = useYear();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -89,25 +91,25 @@ export default function SalairesBudget() {
   }, []);
   useEffect(() => { if (prefsLoaded) api.updatePreferences({ budget_scenario: scenario }).catch(() => {}); }, [scenario, prefsLoaded]);
   useEffect(() => { if (prefsLoaded) api.updatePreferences({ budget_sort: sort }).catch(() => {}); }, [sort, prefsLoaded]);
-  if (!b) return <p className="font-mono-data text-sm text-slate-500">Chargement…</p>;
+  if (!b) return <p className="font-mono-data text-sm text-slate-500">{t("Chargement…")}</p>;
 
   const applyAug = async () => {
-    if (!canEdit) { toast.error("Vous n'avez pas les droits pour modifier ce budget."); return; }
+    if (!canEdit) { toast.error(t("Vous n'avez pas les droits pour modifier ce budget.")); return; }
     setApplying(true);
     try {
       const r = await api.applyAugmentation({ ccq_pct: Number(augCcq) || 0, std_pct: Number(augStd) || 0 }, { year, scenario });
-      toast.success(`Augmentation appliquée à ${r.updated} employé(s)`);
+      toast.success(`${t("Augmentation appliquée à")} ${r.updated} ${t("employé(s)")}`);
       await load();
-    } catch (e) { toast.error(e.response?.data?.detail || "Application impossible"); }
+    } catch (e) { toast.error(e.response?.data?.detail || t("Application impossible")); }
     finally { setApplying(false); }
   };
 
   const toggleLock = async () => {
     try {
       await api.setLock({ year, scenario, locked: !locked });
-      toast.success(!locked ? `${LABEL[scenario]} ${year} verrouillé` : `${LABEL[scenario]} ${year} déverrouillé`);
+      toast.success(!locked ? `${t(LABEL[scenario])} ${year} ${t("verrouillé")}` : `${t(LABEL[scenario])} ${year} ${t("déverrouillé")}`);
       loadLocks();
-    } catch (e) { toast.error(e.response?.data?.detail || "Action impossible"); }
+    } catch (e) { toast.error(e.response?.data?.detail || t("Action impossible")); }
   };
 
   const openDetail = async (ln) => {
@@ -125,8 +127,8 @@ export default function SalairesBudget() {
     if (!canEdit) return;
     const o = lineToOverride(ln, scenario.startsWith("revue"));
     Object.assign(o, patch);
-    try { await api.saveBudgetOverride(ln.employee_id, o, { year, scenario }); toast.success("Modifié"); load(); }
-    catch (e) { toast.error(e.response?.data?.detail || "Enregistrement impossible"); }
+    try { await api.saveBudgetOverride(ln.employee_id, o, { year, scenario }); toast.success(t("Modifié")); load(); }
+    catch (e) { toast.error(e.response?.data?.detail || t("Enregistrement impossible")); }
   };
   const changeDetailScenario = async (scen) => {
     const emp_id = detail.line?.employee_id;
@@ -135,14 +137,14 @@ export default function SalairesBudget() {
       const d = await api.getBudget({ year, scenario: scen });
       const l = d.lines.find((x) => x.employee_id === emp_id);
       if (l) setDetail((p) => ({ ...p, line: l, scenario: scen }));
-    } catch { toast.error("Chargement du scénario échoué"); }
+    } catch { toast.error(t("Chargement du scénario échoué")); }
   };
 
   const openNoEntry = async () => {
     try {
       const r = await api.getBudgetNoEntry({ year, scenario });
       setNoEntry({ open: true, list: r.employees || [], busy: false, scenario });
-    } catch { toast.error("Chargement impossible"); }
+    } catch { toast.error(t("Chargement impossible")); }
   };
   // Déclenché automatiquement après l'enregistrement d'une fiche (savedScn = scénario enregistré).
   const afterFicheSave = async (savedScn) => {
@@ -157,10 +159,10 @@ export default function SalairesBudget() {
     setNoEntry((p) => ({ ...p, busy: true }));
     try {
       const r = await api.inactivateNoEntry({ year, scenario: noEntry.scenario });
-      toast.success(`${r.inactivated} employé(s) inactivé(s)`);
+      toast.success(`${r.inactivated} ${t("employé(s) inactivé(s)")}`);
       setNoEntry({ open: false, list: [], busy: false, scenario: noEntry.scenario });
       load();
-    } catch (e) { toast.error(e.response?.data?.detail || "Action impossible"); setNoEntry((p) => ({ ...p, busy: false })); }
+    } catch (e) { toast.error(e.response?.data?.detail || t("Action impossible")); setNoEntry((p) => ({ ...p, busy: false })); }
   };
 
   const q = tableQuery.trim().toLowerCase();
@@ -200,25 +202,25 @@ export default function SalairesBudget() {
           {SCENARIOS.map(([k, lbl]) => (
             <button key={k} data-testid={`scenario-${k}`} onClick={() => setScenario(k)}
               className={`rounded-md px-3.5 py-1.5 text-xs font-700 transition-colors ${scenario === k ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
-              {lbl}
+              {t(lbl)}
             </button>
           ))}
         </div>
         <div className="flex items-center gap-3">
           {locked && (
             <span className="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-xs font-700 text-red-600" data-testid="lock-badge">
-              <Lock size={13} /> Verrouillé{lockInfo?.locked_by ? ` · ${lockInfo.locked_by}${lockInfo.locked_at ? " le " + new Date(lockInfo.locked_at).toLocaleDateString("fr-CA") : ""}` : ""}
+              <Lock size={13} /> {t("Verrouillé")}{lockInfo?.locked_by ? ` · ${lockInfo.locked_by}${lockInfo.locked_at ? " le " + new Date(lockInfo.locked_at).toLocaleDateString("fr-CA") : ""}` : ""}
             </span>
           )}
           {isAdmin && (
             <Button variant="outline" size="sm" onClick={toggleLock} data-testid="lock-toggle-btn"
               className={`gap-1.5 ${locked ? "border-red-200 text-red-600 hover:bg-red-50" : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"}`}>
-              {locked ? <><Unlock size={14} /> Déverrouiller</> : <><ShieldCheck size={14} /> Verrouiller le budget</>}
+              {locked ? <><Unlock size={14} /> {t("Déverrouiller")}</> : <><ShieldCheck size={14} /> {t("Verrouiller le budget")}</>}
             </Button>
           )}
           {canEdit && (
             <Button variant="outline" size="sm" onClick={openNoEntry} data-testid="inactivate-noentry-btn" className="gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50">
-              <UserX size={14} /> Inactiver sans budget
+              <UserX size={14} /> {t("Inactiver sans budget")}
             </Button>
           )}
         </div>
@@ -228,8 +230,8 @@ export default function SalairesBudget() {
         <div className="flex items-center gap-2 self-center pr-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0630441a] text-[#063044]"><TrendingUp size={16} /></span>
           <div>
-            <p className="text-sm font-700 leading-tight">Augmentation globale</p>
-            <p className="text-[11px] text-slate-500">Appliquée à tous — {LABEL[scenario]} {year}</p>
+            <p className="text-sm font-700 leading-tight">{t("Augmentation globale")}</p>
+            <p className="text-[11px] text-slate-500">{t("Appliquée à tous —")} {t(LABEL[scenario])} {year}</p>
           </div>
         </div>
         <div className="w-28">
@@ -241,15 +243,15 @@ export default function SalairesBudget() {
           <Input data-testid="global-aug-std" type="number" step="0.1" disabled={!canEdit} className="mt-1 font-mono-data" value={augStd} onChange={(e) => setAugStd(e.target.value)} />
         </div>
         <Button data-testid="global-aug-apply" onClick={applyAug} disabled={!canEdit || applying} className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90">
-          <TrendingUp size={15} /> {applying ? "Application…" : "Appliquer à tous"}
+          <TrendingUp size={15} /> {applying ? t("Application…") : t("Appliquer à tous")}
         </Button>
-        <p className="w-full text-[11px] text-slate-400 sm:w-auto sm:flex-1 sm:text-right">Écrase l'augmentation de chaque employé pour ce scénario. Vous pourrez ensuite ajuster individuellement via la fiche.</p>
+        <p className="w-full text-[11px] text-slate-400 sm:w-auto sm:flex-1 sm:text-right">{t("Écrase l'augmentation de chaque employé pour ce scénario. Vous pourrez ensuite ajuster individuellement via la fiche.")}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {cards.map(([lbl, val, c]) => (
           <div key={lbl} className="card p-4">
-            <p className="text-[11px] font-600 uppercase tracking-wide text-slate-500">{lbl}</p>
+            <p className="text-[11px] font-600 uppercase tracking-wide text-slate-500">{t(lbl)}</p>
             <p className="mt-1.5 font-mono-data text-lg font-700 text-slate-800" style={c ? { color: c } : undefined}>{fmtCAD(val)}</p>
           </div>
         ))}
@@ -258,18 +260,18 @@ export default function SalairesBudget() {
       <div className="card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3.5">
           <div>
-            <h3 className="text-sm font-700">{viewMode === "employee" ? `Saisie & calculs par employé — ${LABEL[scenario]} ${year}` : `Totaux par département — ${LABEL[scenario]} ${year}`}</h3>
-            <p className="text-xs text-slate-500">{viewMode === "department" ? "Coûts agrégés par département (tri par numéro croissant)." : canEdit ? "Double-cliquez sur Nouveau salaire, Augm. % ou Vac. % pour une édition rapide, ou « modifier » pour la fiche complète." : "Cliquez sur une ligne pour voir le détail. Budget verrouillé — consultation seule."}</p>
+            <h3 className="text-sm font-700">{viewMode === "employee" ? `${t("Saisie & calculs par employé —")} ${t(LABEL[scenario])} ${year}` : `${t("Totaux par département —")} ${t(LABEL[scenario])} ${year}`}</h3>
+            <p className="text-xs text-slate-500">{viewMode === "department" ? t("Coûts agrégés par département (tri par numéro croissant).") : canEdit ? t("Double-cliquez sur Nouveau salaire, Augm. % ou Vac. % pour une édition rapide, ou « modifier » pour la fiche complète.") : t("Cliquez sur une ligne pour voir le détail. Budget verrouillé — consultation seule.")}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1" data-testid="view-mode-toggle">
-              <button data-testid="view-by-employee" onClick={() => setViewMode("employee")} className={`rounded-md px-3 py-1.5 text-xs font-700 transition-colors ${viewMode === "employee" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Par employé</button>
-              <button data-testid="view-by-department" onClick={() => setViewMode("department")} className={`rounded-md px-3 py-1.5 text-xs font-700 transition-colors ${viewMode === "department" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Par département</button>
+              <button data-testid="view-by-employee" onClick={() => setViewMode("employee")} className={`rounded-md px-3 py-1.5 text-xs font-700 transition-colors ${viewMode === "employee" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{t("Par employé")}</button>
+              <button data-testid="view-by-department" onClick={() => setViewMode("department")} className={`rounded-md px-3 py-1.5 text-xs font-700 transition-colors ${viewMode === "department" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{t("Par département")}</button>
             </div>
             <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
               <Search size={15} className="text-slate-400" />
               <input data-testid="budget-table-search" className="w-56 bg-transparent text-sm outline-none"
-                placeholder="Rechercher (nom, dépt, type, montant…)" value={tableQuery} onChange={(e) => setTableQuery(e.target.value)} />
+                placeholder={t("Rechercher (nom, dépt, type, montant…)")} value={tableQuery} onChange={(e) => setTableQuery(e.target.value)} />
             </div>
           </div>
         </div>
@@ -282,23 +284,23 @@ export default function SalairesBudget() {
                   <th key={col.key} data-testid={`sort-${col.key}`} onClick={() => toggleSort(col.key)}
                     className={`cursor-pointer select-none px-4 py-3 font-600 hover:text-slate-600 ${col.align === "right" ? "text-right" : "text-left"}`}>
                     <span className={`inline-flex items-center gap-1 ${col.align === "right" ? "flex-row-reverse" : ""}`}>
-                      {col.label}
+                      {t(col.label)}
                       {sort.key === col.key
                         ? (sort.dir === "asc" ? <ChevronUp size={13} className="text-[#063044]" /> : <ChevronDown size={13} className="text-[#063044]" />)
                         : <ChevronsUpDown size={12} className="opacity-40" />}
                     </span>
                   </th>
                 ))}
-                <th className="px-4 py-3 text-right font-600">Modifier</th>
+                <th className="px-4 py-3 text-right font-600">{t("Modifier")}</th>
               </tr>
             </thead>
             <tbody>
               {sortedLines.map((ln) => (
                 <tr key={ln.employee_number} onClick={() => openDetail(ln)} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" data-testid={`budget-row-${ln.employee_number}`}>
                   <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(ln.employee_number).padStart(3, "0")}</td>
-                  <td className="px-4 py-2.5 font-600">{ln.name}{ln.overridden && <span className="ml-2 rounded bg-[#F8A9421a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">Ajusté</span>}{ln.prorated && <span className="ml-2 rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active} mois</span>}</td>
+                  <td className="px-4 py-2.5 font-600">{ln.name}{ln.overridden && <span className="ml-2 rounded bg-[#F8A9421a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">{t("Ajusté")}</span>}{ln.prorated && <span className="ml-2 rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active} {t("mois")}</span>}</td>
                   <td className="px-4 py-2.5 font-mono-data text-slate-500">{ln.department}</td>
-                  <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#063044" : "#64748B" }}>{ln.is_ccq ? "CCQ" : typeLabel(ln.employment_type)}</span></td>
+                  <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#063044" : "#64748B" }}>{ln.is_ccq ? "CCQ" : t(typeLabel(ln.employment_type))}</span></td>
                   <td className="px-4 py-2.5 text-right"><EditableCell canEdit={canEdit} value={ln.new_salary} display={fmtCAD(ln.new_salary)} step="1" testId={`qedit-salary-${ln.employee_number}`} onSave={(v) => quickSave(ln, { augmentation: (ln.base_salary * (ln.employment_rate || 1)) ? v / (ln.base_salary * (ln.employment_rate || 1)) - 1 : 0 })} /></td>
                   <td className="px-4 py-2.5 text-right"><EditableCell canEdit={canEdit} value={+(ln.augmentation * 100).toFixed(3)} display={`${(ln.augmentation * 100).toFixed(2)} %`} step="0.1" testId={`qedit-aug-${ln.employee_number}`} onSave={(v) => quickSave(ln, { augmentation: v / 100 })} /></td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.vacation)}</td>
@@ -318,7 +320,7 @@ export default function SalairesBudget() {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-300 bg-slate-50 text-sm font-700" data-testid="budget-total-row">
-                <td className="px-4 py-3" colSpan={4}>TOTAL — {sortedLines.length} employé(s)</td>
+                <td className="px-4 py-3" colSpan={4}>TOTAL — {sortedLines.length} {t("employé(s)")}</td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.new_salary, 0))}</td>
                 <td className="px-4 py-3"></td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.vacation, 0))}</td>
@@ -338,14 +340,14 @@ export default function SalairesBudget() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
-                <th className="px-4 py-3 text-left font-600">Département</th>
-                <th className="px-4 py-3 text-right font-600">Employés</th>
-                <th className="px-4 py-3 text-right font-600">Nouveau salaire</th>
-                <th className="px-4 py-3 text-right font-600">Vacances</th>
-                <th className="px-4 py-3 text-right font-600">Primes</th>
-                <th className="px-4 py-3 text-right font-600">Salaire brut total</th>
-                <th className="px-4 py-3 text-right font-600">Avantages</th>
-                <th className="px-4 py-3 text-right font-600">Coût total</th>
+                <th className="px-4 py-3 text-left font-600">{t("Département")}</th>
+                <th className="px-4 py-3 text-right font-600">{t("Employés")}</th>
+                <th className="px-4 py-3 text-right font-600">{t("Nouveau salaire")}</th>
+                <th className="px-4 py-3 text-right font-600">{t("Vacances")}</th>
+                <th className="px-4 py-3 text-right font-600">{t("Primes")}</th>
+                <th className="px-4 py-3 text-right font-600">{t("Salaire brut total")}</th>
+                <th className="px-4 py-3 text-right font-600">{t("Avantages")}</th>
+                <th className="px-4 py-3 text-right font-600">{t("Coût total")}</th>
               </tr>
             </thead>
             <tbody>
@@ -383,7 +385,7 @@ export default function SalairesBudget() {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-300 bg-slate-50 text-sm font-700" data-testid="dept-total-row">
-                <td className="px-4 py-3">TOTAL — {deptGroups.length} département(s)</td>
+                <td className="px-4 py-3">TOTAL — {deptGroups.length} {t("département(s)")}</td>
                 <td className="px-4 py-3 text-right font-mono-data">{deptGroups.reduce((s, g) => s + g.count, 0)}</td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(deptGroups.reduce((s, g) => s + g.new_salary, 0))}</td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(deptGroups.reduce((s, g) => s + g.vacation, 0))}</td>
@@ -406,9 +408,9 @@ export default function SalairesBudget() {
                   <p className="truncate font-700">{ln.name}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     <span className="font-mono-data text-[11px] text-slate-400">#{String(ln.employee_number).padStart(3, "0")}</span>
-                    <span className="font-mono-data text-[11px] text-slate-400">· Dépt {ln.department}</span>
-                    <span className="rounded px-1.5 py-0.5 text-[9px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#063044" : "#64748B" }}>{ln.is_ccq ? "CCQ" : typeLabel(ln.employment_type)}</span>
-                    {ln.overridden && <span className="rounded bg-[#F8A9421a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">Ajusté</span>}
+                    <span className="font-mono-data text-[11px] text-slate-400">· {t("Dépt")} {ln.department}</span>
+                    <span className="rounded px-1.5 py-0.5 text-[9px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#063044" : "#64748B" }}>{ln.is_ccq ? "CCQ" : t(typeLabel(ln.employment_type))}</span>
+                    {ln.overridden && <span className="rounded bg-[#F8A9421a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">{t("Ajusté")}</span>}
                     {ln.prorated && <span className="rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active}m</span>}
                   </div>
                 </div>
@@ -419,15 +421,15 @@ export default function SalairesBudget() {
               </div>
               <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px]">
                 {[["Nouveau salaire", ln.new_salary], ["Vacances", ln.vacation], ["Primes", ln.primes_total], ["Avantages", ln.avantages]].map(([l, v]) => (
-                  <div key={l} className="flex justify-between"><span className="text-slate-500">{l}</span><span className="font-mono-data">{fmtCAD(v)}</span></div>
+                  <div key={l} className="flex justify-between"><span className="text-slate-500">{t(l)}</span><span className="font-mono-data">{fmtCAD(v)}</span></div>
                 ))}
-                <div className="col-span-2 mt-1 flex justify-between border-t border-slate-100 pt-1.5"><span className="font-600 text-slate-600">Salaire brut</span><span className="font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(ln.salaire_brut)}</span></div>
-                <div className="col-span-2 flex justify-between"><span className="font-700">Coût total</span><span className="font-mono-data font-700">{fmtCAD(ln.total_budgeted)}</span></div>
+                <div className="col-span-2 mt-1 flex justify-between border-t border-slate-100 pt-1.5"><span className="font-600 text-slate-600">{t("Salaire brut")}</span><span className="font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(ln.salaire_brut)}</span></div>
+                <div className="col-span-2 flex justify-between"><span className="font-700">{t("Coût total")}</span><span className="font-mono-data font-700">{fmtCAD(ln.total_budgeted)}</span></div>
               </div>
             </div>
           ))}
           <div className="flex items-center justify-between bg-slate-50 px-4 py-3 text-sm font-700" data-testid="budget-cards-total">
-            <span>TOTAL — {sortedLines.length} employé(s)</span>
+            <span>TOTAL — {sortedLines.length} {t("employé(s)")}</span>
             <span className="font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.total_budgeted, 0))}</span>
           </div>
         </div>
@@ -442,14 +444,14 @@ export default function SalairesBudget() {
                     {expandedDepts.has(g.department) ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
                     <span className="font-mono-data text-slate-400">{g.department}</span> {g.label}
                   </p>
-                  <span className="text-[11px] text-slate-500">{g.count} empl.</span>
+                  <span className="text-[11px] text-slate-500">{g.count} {t("empl.")}</span>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px]">
                   {[["Nouveau salaire", g.new_salary], ["Vacances", g.vacation], ["Primes", g.primes_total], ["Avantages", g.avantages]].map(([l, v]) => (
-                    <div key={l} className="flex justify-between"><span className="text-slate-500">{l}</span><span className="font-mono-data">{fmtCAD(v)}</span></div>
+                    <div key={l} className="flex justify-between"><span className="text-slate-500">{t(l)}</span><span className="font-mono-data">{fmtCAD(v)}</span></div>
                   ))}
-                  <div className="col-span-2 mt-1 flex justify-between border-t border-slate-100 pt-1.5"><span className="font-600 text-slate-600">Salaire brut</span><span className="font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(g.salaire_brut)}</span></div>
-                  <div className="col-span-2 flex justify-between"><span className="font-700">Coût total</span><span className="font-mono-data font-700">{fmtCAD(g.total_budgeted)}</span></div>
+                  <div className="col-span-2 mt-1 flex justify-between border-t border-slate-100 pt-1.5"><span className="font-600 text-slate-600">{t("Salaire brut")}</span><span className="font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(g.salaire_brut)}</span></div>
+                  <div className="col-span-2 flex justify-between"><span className="font-700">{t("Coût total")}</span><span className="font-mono-data font-700">{fmtCAD(g.total_budgeted)}</span></div>
                 </div>
               </div>
               {expandedDepts.has(g.department) && (
@@ -465,7 +467,7 @@ export default function SalairesBudget() {
             </div>
           ))}
           <div className="flex items-center justify-between bg-slate-50 px-4 py-3 text-sm font-700" data-testid="dept-cards-total">
-            <span>TOTAL — {deptGroups.length} département(s)</span>
+            <span>TOTAL — {deptGroups.length} {t("département(s)")}</span>
             <span className="font-mono-data">{fmtCAD(deptGroups.reduce((s, g) => s + g.total_budgeted, 0))}</span>
           </div>
         </div>
@@ -483,11 +485,11 @@ export default function SalairesBudget() {
       <AlertDialog open={noEntry.open} onOpenChange={(v) => !v && setNoEntry((p) => ({ ...p, open: false }))}>
         <AlertDialogContent data-testid="noentry-dialog">
           <AlertDialogHeader>
-            <AlertDialogTitle>Inactiver les employés sans budget — {LABEL[noEntry.scenario] || noEntry.scenario} {year} ?</AlertDialogTitle>
+            <AlertDialogTitle>{t("Inactiver les employés sans budget —")} {t(LABEL[noEntry.scenario]) || noEntry.scenario} {year} ?</AlertDialogTitle>
             <AlertDialogDescription>
               {noEntry.list.length === 0
-                ? `Tous les employés actifs ont un budget saisi pour ${LABEL[noEntry.scenario] || noEntry.scenario} ${year}. Aucune action nécessaire.`
-                : `${noEntry.list.length} employé(s) actif(s) n'ont aucun budget saisi pour ${LABEL[noEntry.scenario] || noEntry.scenario} ${year} et seront marqués « Inactif ». Ils seront exclus des calculs. Cette action est réversible via la fiche employé.`}
+                ? `${t("Tous les employés actifs ont un budget saisi pour")} ${t(LABEL[noEntry.scenario]) || noEntry.scenario} ${year}. ${t("Aucune action nécessaire.")}`
+                : `${noEntry.list.length} ${t("employé(s) actif(s) n'ont aucun budget saisi pour")} ${t(LABEL[noEntry.scenario]) || noEntry.scenario} ${year} ${t("et seront marqués « Inactif ». Ils seront exclus des calculs. Cette action est réversible via la fiche employé.")}`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {noEntry.list.length > 0 && (
@@ -495,16 +497,16 @@ export default function SalairesBudget() {
               {noEntry.list.map((e) => (
                 <div key={e.id} className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 last:border-0">
                   <span><span className="font-mono-data text-slate-400">#{String(e.employee_number).padStart(3, "0")}</span> {e.name}</span>
-                  <span className="font-mono-data text-slate-400">Dépt {e.department}</span>
+                  <span className="font-mono-data text-slate-400">{t("Dépt")} {e.department}</span>
                 </div>
               ))}
             </div>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="noentry-cancel">Annuler</AlertDialogCancel>
+            <AlertDialogCancel data-testid="noentry-cancel">{t("Annuler")}</AlertDialogCancel>
             {noEntry.list.length > 0 && (
               <AlertDialogAction data-testid="noentry-confirm" disabled={noEntry.busy} className="bg-amber-600 hover:bg-amber-700" onClick={(ev) => { ev.preventDefault(); confirmInactivate(); }}>
-                {noEntry.busy ? "Traitement…" : "Inactiver"}
+                {noEntry.busy ? t("Traitement…") : t("Inactiver")}
               </AlertDialogAction>
             )}
           </AlertDialogFooter>

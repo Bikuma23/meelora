@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useYear } from "../context/YearContext";
+import { useLang } from "../context/LanguageContext";
 import { fmtCAD, computeAge, computeSeniority } from "../lib/format";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -30,16 +31,18 @@ const empty = {
 };
 
 function Field({ label, error, testId, children }) {
+  const { t } = useLang();
   return (
     <div>
       <Label className="text-[11px] font-600 uppercase tracking-wide text-slate-500">{label}</Label>
       <div className="mt-1">{children}</div>
-      {error && <p data-testid={`${testId}-error`} className="mt-1 text-[11px] font-500 text-red-500">{error}</p>}
+      {error && <p data-testid={`${testId}-error`} className="mt-1 text-[11px] font-500 text-red-500">{t(error)}</p>}
     </div>
   );
 }
 
 function EmpForm({ open, onOpenChange, initial, departments, securityClasses = [], onSubmit }) {
+  const { t } = useLang();
   const [f, setF] = useState(empty);
   const [errors, setErrors] = useState({});
   useEffect(() => {
@@ -71,7 +74,7 @@ function EmpForm({ open, onOpenChange, initial, departments, securityClasses = [
     if (!f.hire_date) e.hire_date = REQ;
     if (!f.birth_date) e.birth_date = REQ;
     setErrors(e);
-    if (Object.keys(e).length) { toast.error("Veuillez corriger les champs obligatoires"); return; }
+    if (Object.keys(e).length) { toast.error(t("Veuillez corriger les champs obligatoires")); return; }
     onSubmit({
       name: f.name.trim(), department: f.department, title: f.title.trim(), employment_type: f.employment_type,
       ccq_category: isCCQ ? f.ccq_category : "N/A", current_annual_salary: Number(f.current_annual_salary),
@@ -90,101 +93,101 @@ function EmpForm({ open, onOpenChange, initial, departments, securityClasses = [
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto" data-testid="employee-form-dialog">
         <DialogHeader>
-          <DialogTitle>{initial ? `${initial.name} — #${String(initial.employee_number).padStart(3, "0")}` : "Nouvel employé"}</DialogTitle>
-          <DialogDescription className="text-xs">Âge et ancienneté calculés automatiquement. Le sexe à la naissance est facultatif.</DialogDescription>
+          <DialogTitle>{initial ? `${initial.name} — #${String(initial.employee_number).padStart(3, "0")}` : t("Nouvel employé")}</DialogTitle>
+          <DialogDescription className="text-xs">{t("Âge et ancienneté calculés automatiquement. Le sexe à la naissance est facultatif.")}</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-1 gap-4 py-1 sm:grid-cols-2">
-          <Field label="Nom complet" error={errors.name} testId="f-name"><Input data-testid="f-name" value={f.name} onChange={(e) => set("name", e.target.value)} /></Field>
-          <Field label="Statut" testId="f-active">
+          <Field label={t("Nom complet")} error={errors.name} testId="f-name"><Input data-testid="f-name" value={f.name} onChange={(e) => set("name", e.target.value)} /></Field>
+          <Field label={t("Statut")} testId="f-active">
             <label className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 px-3">
-              <span className={`text-[11px] font-600 uppercase ${f.active ? "text-emerald-600" : "text-red-500"}`}>{f.active ? "Actif" : "Inactif"}</span>
+              <span className={`text-[11px] font-600 uppercase ${f.active ? "text-emerald-600" : "text-red-500"}`}>{f.active ? t("Actif") : t("Inactif")}</span>
               <Switch data-testid="f-active" checked={f.active} onCheckedChange={(v) => set("active", v)} />
             </label>
           </Field>
-          <Field label="Sexe à la naissance" testId="f-sex">
+          <Field label={t("Sexe à la naissance")} testId="f-sex">
             <Select value={f.sex_at_birth} onValueChange={(v) => set("sex_at_birth", v)}>
-              <SelectTrigger data-testid="f-sex"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
-              <SelectContent>{SEXES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+              <SelectTrigger data-testid="f-sex"><SelectValue placeholder={t("Sélectionner…")} /></SelectTrigger>
+              <SelectContent>{SEXES.map((s) => <SelectItem key={s} value={s}>{t(s)}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
           <div className="hidden sm:block" />
-          <Field label="Date de naissance" error={errors.birth_date} testId="f-birth"><Input data-testid="f-birth" type="date" className="font-mono-data" value={f.birth_date} onChange={(e) => set("birth_date", e.target.value)} /></Field>
-          <Field label="Âge (calculé)" testId="f-age-box">
+          <Field label={t("Date de naissance")} error={errors.birth_date} testId="f-birth"><Input data-testid="f-birth" type="date" className="font-mono-data" value={f.birth_date} onChange={(e) => set("birth_date", e.target.value)} /></Field>
+          <Field label={t("Âge (calculé)")} testId="f-age-box">
             <div className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3">
               <Cake size={15} className="text-[#063044]" />
-              <span data-testid="f-age" className="ml-auto font-mono-data text-sm font-700">{age != null ? `${age} ans` : "—"}</span>
+              <span data-testid="f-age" className="ml-auto font-mono-data text-sm font-700">{age != null ? `${age} ${t("ans")}` : "—"}</span>
             </div>
           </Field>
-          <Field label="Superviseur (du département)" testId="f-supervisor"><Input data-testid="f-supervisor" value={f.supervisor} readOnly placeholder="Sélectionnez un département" className="bg-slate-50 text-slate-600" /></Field>
-          <Field label="Titre / Poste" error={errors.title} testId="f-title"><Input data-testid="f-title" value={f.title} onChange={(e) => set("title", e.target.value)} /></Field>
-          <Field label="Département" error={errors.department} testId="f-department">
+          <Field label={t("Superviseur (du département)")} testId="f-supervisor"><Input data-testid="f-supervisor" value={f.supervisor} readOnly placeholder={t("Sélectionnez un département")} className="bg-slate-50 text-slate-600" /></Field>
+          <Field label={t("Titre / Poste")} error={errors.title} testId="f-title"><Input data-testid="f-title" value={f.title} onChange={(e) => set("title", e.target.value)} /></Field>
+          <Field label={t("Département")} error={errors.department} testId="f-department">
             <Select value={f.department} onValueChange={(v) => setF((p) => ({ ...p, department: v, supervisor: departments.find((d) => d.code === v)?.superviseur || "" }))}>
-              <SelectTrigger data-testid="f-department"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
+              <SelectTrigger data-testid="f-department"><SelectValue placeholder={t("Sélectionner…")} /></SelectTrigger>
               <SelectContent className="max-h-64">{departments.map((d) => <SelectItem key={d.code} value={d.code}>{d.code} — {d.description}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
-          <Field label="Type d'emploi" error={errors.employment_type} testId="f-type">
+          <Field label={t("Type d'emploi")} error={errors.employment_type} testId="f-type">
             <Select value={f.employment_type} onValueChange={(v) => set("employment_type", v)}>
               <SelectTrigger data-testid="f-type"><SelectValue /></SelectTrigger>
-              <SelectContent>{TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+              <SelectContent>{TYPES.map((ty) => <SelectItem key={ty} value={ty}>{t(ty)}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
-          <Field label="Classe de sécurité (CSST)" testId="f-security-class">
+          <Field label={t("Classe de sécurité (CSST)")} testId="f-security-class">
             <Select value={f.security_class || "none"} onValueChange={(v) => set("security_class", v === "none" ? "" : v)}>
-              <SelectTrigger data-testid="f-security-class"><SelectValue placeholder="Aucune" /></SelectTrigger>
-              <SelectContent><SelectItem value="none">Aucune</SelectItem>{securityClasses.map((c) => <SelectItem key={c.code} value={c.code}>{c.code} — {c.description} ({(c.rate * 100).toFixed(2)}%)</SelectItem>)}</SelectContent>
+              <SelectTrigger data-testid="f-security-class"><SelectValue placeholder={t("Aucune")} /></SelectTrigger>
+              <SelectContent><SelectItem value="none">{t("Aucune")}</SelectItem>{securityClasses.map((c) => <SelectItem key={c.code} value={c.code}>{c.code} — {c.description} ({(c.rate * 100).toFixed(2)}%)</SelectItem>)}</SelectContent>
             </Select>
           </Field>
           {isCCQ && (
-            <Field label="Catégorie CCQ" error={errors.ccq_category} testId="f-ccq-category">
+            <Field label={t("Catégorie CCQ")} error={errors.ccq_category} testId="f-ccq-category">
               <Select value={f.ccq_category} onValueChange={(v) => set("ccq_category", v)}>
-                <SelectTrigger data-testid="f-ccq-category"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
-                <SelectContent><SelectItem value="Électricien">Électricien</SelectItem><SelectItem value="Frigoriste">Frigoriste</SelectItem></SelectContent>
+                <SelectTrigger data-testid="f-ccq-category"><SelectValue placeholder={t("Sélectionner…")} /></SelectTrigger>
+                <SelectContent><SelectItem value="Électricien">{t("Électricien")}</SelectItem><SelectItem value="Frigoriste">{t("Frigoriste")}</SelectItem></SelectContent>
               </Select>
             </Field>
           )}
           {isCCQ && (
-            <Field label="Type de prime" error={errors.prime_type} testId="f-prime-type">
+            <Field label={t("Type de prime")} error={errors.prime_type} testId="f-prime-type">
               <Select value={f.prime_type} onValueChange={(v) => set("prime_type", v)}>
                 <SelectTrigger data-testid="f-prime-type"><SelectValue /></SelectTrigger>
-                <SelectContent>{["Aucune Prime", "Prime 8%", "Prime 11%", "Prime 12%"].map((x) => <SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent>
+                <SelectContent>{["Aucune Prime", "Prime 8%", "Prime 11%", "Prime 12%"].map((x) => <SelectItem key={x} value={x}>{t(x)}</SelectItem>)}</SelectContent>
               </Select>
             </Field>
           )}
-          <Field label="Salaire annuel actuel ($)" error={errors.current_annual_salary} testId="f-salary"><Input data-testid="f-salary" type="number" className="font-mono-data" value={f.current_annual_salary} onChange={(e) => set("current_annual_salary", e.target.value)} /></Field>
-          <Field label="Taux de vacances (%)" error={errors.vacation_rate_pct} testId="f-vacation"><Input data-testid="f-vacation" type="number" step="0.1" className="font-mono-data" value={f.vacation_rate_pct} onChange={(e) => set("vacation_rate_pct", e.target.value)} /></Field>
-          <Field label="Jours maladie / perso (informatif)" error={errors.sick_personal_days} testId="f-sick"><Input data-testid="f-sick" type="number" className="font-mono-data" value={f.sick_personal_days} onChange={(e) => set("sick_personal_days", e.target.value)} /></Field>
-          <Field label="Jours fériés (Noël & Jour de l'an) (informatif)" error={errors.holiday_days} testId="f-holiday"><Input data-testid="f-holiday" type="number" className="font-mono-data" value={f.holiday_days} onChange={(e) => set("holiday_days", e.target.value)} /></Field>
-          <Field label="Date d'embauche" error={errors.hire_date} testId="f-hire"><Input data-testid="f-hire" type="date" className="font-mono-data" value={f.hire_date} onChange={(e) => set("hire_date", e.target.value)} /></Field>
-          <Field label="Ancienneté (calculée)" testId="f-seniority-box">
+          <Field label={t("Salaire annuel actuel ($)")} error={errors.current_annual_salary} testId="f-salary"><Input data-testid="f-salary" type="number" className="font-mono-data" value={f.current_annual_salary} onChange={(e) => set("current_annual_salary", e.target.value)} /></Field>
+          <Field label={t("Taux de vacances (%)")} error={errors.vacation_rate_pct} testId="f-vacation"><Input data-testid="f-vacation" type="number" step="0.1" className="font-mono-data" value={f.vacation_rate_pct} onChange={(e) => set("vacation_rate_pct", e.target.value)} /></Field>
+          <Field label={t("Jours maladie / perso (informatif)")} error={errors.sick_personal_days} testId="f-sick"><Input data-testid="f-sick" type="number" className="font-mono-data" value={f.sick_personal_days} onChange={(e) => set("sick_personal_days", e.target.value)} /></Field>
+          <Field label={t("Jours fériés (Noël & Jour de l'an) (informatif)")} error={errors.holiday_days} testId="f-holiday"><Input data-testid="f-holiday" type="number" className="font-mono-data" value={f.holiday_days} onChange={(e) => set("holiday_days", e.target.value)} /></Field>
+          <Field label={t("Date d'embauche")} error={errors.hire_date} testId="f-hire"><Input data-testid="f-hire" type="date" className="font-mono-data" value={f.hire_date} onChange={(e) => set("hire_date", e.target.value)} /></Field>
+          <Field label={t("Ancienneté (calculée)")} testId="f-seniority-box">
             <div className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3">
               <CalendarClock size={15} className="text-[#063044]" />
-              <span data-testid="f-seniority" className="ml-auto font-mono-data text-sm font-700">{sen != null ? `${sen} an${sen > 1 ? "s" : ""}` : "—"}</span>
+              <span data-testid="f-seniority" className="ml-auto font-mono-data text-sm font-700">{sen != null ? `${sen} ${t(sen > 1 ? "ans" : "an")}` : "—"}</span>
             </div>
           </Field>
-          <Field label="Date de fin d'emploi (optionnel)" testId="f-end"><Input data-testid="f-end" type="date" className="font-mono-data" value={f.end_date} onChange={(e) => set("end_date", e.target.value)} /></Field>
+          <Field label={t("Date de fin d'emploi (optionnel)")} testId="f-end"><Input data-testid="f-end" type="date" className="font-mono-data" value={f.end_date} onChange={(e) => set("end_date", e.target.value)} /></Field>
           <div className="hidden sm:block" />
         </div>
         <div className="border-t border-slate-200 pt-4">
-          <p className="mb-2 text-xs font-700 uppercase tracking-widest text-slate-500">Primes & allocations</p>
+          <p className="mb-2 text-xs font-700 uppercase tracking-widest text-slate-500">{t("Primes & allocations")}</p>
           {isCCQ ? (
             <div className="grid grid-cols-3 gap-3">
               {[["prime_garde", "Prime de garde"], ["prime_halo", "Prime HALO 5%"], ["alloc_securite", "Alloc. sécurité"]].map(([k, lbl]) => (
-                <label key={k} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"><span className="text-[11px] font-500">{lbl}</span><Switch data-testid={`f-${k}`} checked={f[k]} onCheckedChange={(v) => set(k, v)} /></label>
+                <label key={k} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"><span className="text-[11px] font-500">{t(lbl)}</span><Switch data-testid={`f-${k}`} checked={f[k]} onCheckedChange={(v) => set(k, v)} /></label>
               ))}
             </div>
           ) : (
             <div className="space-y-2">
               <div className="grid grid-cols-3 gap-3">
-                <label className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"><span className="text-[11px] font-500">Alloc. sécurité</span><Switch data-testid="f-alloc_securite" checked={f.alloc_securite} onCheckedChange={(v) => set("alloc_securite", v)} /></label>
+                <label className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"><span className="text-[11px] font-500">{t("Alloc. sécurité")}</span><Switch data-testid="f-alloc_securite" checked={f.alloc_securite} onCheckedChange={(v) => set("alloc_securite", v)} /></label>
               </div>
-              <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] text-slate-500">Primes CCQ (garde, HALO) non applicables. Le BONI, le REER et l'assurance collective se gèrent dans la fiche Salaires & Budget.</p>
+              <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] text-slate-500">{t("Primes CCQ (garde, HALO) non applicables. Le BONI, le REER et l'assurance collective se gèrent dans la fiche Salaires & Budget.")}</p>
             </div>
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-          <Button data-testid="employee-save-btn" className="bg-[#063044] hover:bg-[#063044]/90" onClick={submit}>Enregistrer</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("Annuler")}</Button>
+          <Button data-testid="employee-save-btn" className="bg-[#063044] hover:bg-[#063044]/90" onClick={submit}>{t("Enregistrer")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -192,6 +195,7 @@ function EmpForm({ open, onOpenChange, initial, departments, securityClasses = [
 }
 
 export default function Employes() {
+  const { t } = useLang();
   const { user } = useAuth();
   const { year } = useYear();
   const canEdit = ["admin", "editor"].includes(user?.role);
@@ -228,12 +232,12 @@ export default function Employes() {
 
   const submit = async (data) => {
     try {
-      if (dialog.item) { await api.updateEmployee(dialog.item.id, data); toast.success("Employé mis à jour"); }
-      else { await api.createEmployee(data); toast.success("Employé ajouté"); }
+      if (dialog.item) { await api.updateEmployee(dialog.item.id, data); toast.success(t("Employé mis à jour")); }
+      else { await api.createEmployee(data); toast.success(t("Employé ajouté")); }
       setDialog({ open: false, item: null }); load(query);
-    } catch { toast.error("Erreur lors de l'enregistrement"); }
+    } catch { toast.error(t("Erreur lors de l'enregistrement")); }
   };
-  const del = async (e) => { await api.deleteEmployee(e.id); toast.success("Employé supprimé"); load(query); };
+  const del = async (e) => { await api.deleteEmployee(e.id); toast.success(t("Employé supprimé")); load(query); };
   const empToBody = (e) => ({
     name: e.name, department: e.department, title: e.title || "", employment_type: e.employment_type,
     ccq_category: e.ccq_category, current_annual_salary: e.current_annual_salary,
@@ -245,8 +249,8 @@ export default function Employes() {
   });
   const quickSaveEmp = async (e, patch) => {
     if (!canEdit) return;
-    try { await api.updateEmployee(e.id, { ...empToBody(e), ...patch }); toast.success("Modifié"); load(query); }
-    catch (err) { toast.error(err.response?.data?.detail || "Enregistrement impossible"); }
+    try { await api.updateEmployee(e.id, { ...empToBody(e), ...patch }); toast.success(t("Modifié")); load(query); }
+    catch (err) { toast.error(err.response?.data?.detail || t("Enregistrement impossible")); }
   };
   const onImport = async (ev) => {
     const file = ev.target.files?.[0];
@@ -255,12 +259,12 @@ export default function Employes() {
       const res = await api.importEmployees(file);
       if (res.aborted || res.errors?.length) {
         setImportErrors({ open: true, errors: res.errors || [], fileName: file.name });
-        toast.error(`Importation annulée — ${res.errors.length} erreur(s)`);
+        toast.error(`${t("Importation annulée —")} ${res.errors.length} ${t("erreur(s)")}`);
       } else {
-        toast.success(`${res.inserted} ajout(s)${res.updated ? `, ${res.updated} mise(s) à jour` : ""}`);
+        toast.success(`${res.inserted} ${t("ajout(s)")}${res.updated ? `, ${res.updated} ${t("mise(s) à jour")}` : ""}`);
         load(query);
       }
-    } catch (e) { toast.error(e.response?.data?.detail || "Import échoué"); }
+    } catch (e) { toast.error(e.response?.data?.detail || t("Import échoué")); }
     finally { ev.target.value = ""; }
   };
 
@@ -281,9 +285,9 @@ export default function Employes() {
     return sort.dir === "asc" ? cmp : -cmp;
   });
   const HEAD = [
-    ["#", "left", "employee_number"], ["Titre / Poste", "left", "title"], ["Nom", "left", "name"],
-    ["Dépt", "left", "department"], ["Type", "left", "employment_type"], ["Classe de sécurité", "left", "security_class"],
-    ["Salaire", "right", "current_annual_salary"], ["Vac. %", "right", "vacation_rate"], ["Âge", "right", "age"], ["Ancien.", "right", "seniority"], ["Actions", "right", null],
+    ["#", "left", "employee_number"], [t("Titre / Poste"), "left", "title"], [t("Nom"), "left", "name"],
+    [t("Dépt"), "left", "department"], [t("Type"), "left", "employment_type"], [t("Classe de sécurité"), "left", "security_class"],
+    [t("Salaire"), "right", "current_annual_salary"], [t("Vac. %"), "right", "vacation_rate"], [t("Âge"), "right", "age"], [t("Ancien."), "right", "seniority"], [t("Actions"), "right", null],
   ];
 
   const dlTemplate = async () => {
@@ -292,7 +296,7 @@ export default function Employes() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = "modele_employes.xlsx"; a.click();
       URL.revokeObjectURL(url);
-    } catch { toast.error("Téléchargement du modèle échoué"); }
+    } catch { toast.error(t("Téléchargement du modèle échoué")); }
   };
 
   const loadBudgetLine = async (e, scen) => {
@@ -310,21 +314,21 @@ export default function Employes() {
   const viewBudget = async (e) => {
     try {
       const [line, caLine] = await Promise.all([loadBudgetLine(e, scenario), scenario === "ca" ? null : loadBudgetLine(e, "ca")]);
-      if (!line) { toast.error(`Aucune fiche budget pour cet employé (${year}).`); return; }
+      if (!line) { toast.error(`${t("Aucune fiche budget pour cet employé")} (${year}).`); return; }
       const baseline = (scenario === "ca" ? line : caLine)?.total_cost ?? null;
       setBudgetDetail({ open: true, line, employee: e, scenario, baseline });
-    } catch { toast.error("Chargement du budget échoué"); }
+    } catch { toast.error(t("Chargement du budget échoué")); }
   };
   const changeBudgetScenario = async (scen) => {
     const e = budgetDetail.employee;
     if (!e) return;
     try {
       const line = await loadBudgetLine(e, scen);
-      if (!line) { toast.error(`Aucune fiche pour ce scénario (${year}).`); return; }
+      if (!line) { toast.error(`${t("Aucune fiche pour ce scénario")} (${year}).`); return; }
       let baseline = budgetDetail.baseline;
       if (baseline == null) baseline = scen === "ca" ? line.total_cost : (await loadBudgetLine(e, "ca"))?.total_cost ?? null;
       setBudgetDetail((p) => ({ ...p, line, scenario: scen, baseline }));
-    } catch { toast.error("Chargement du budget échoué"); }
+    } catch { toast.error(t("Chargement du budget échoué")); }
   };
   const afterFicheEdit = async (scn) => {
     const e = budgetDetail.employee;
@@ -339,20 +343,20 @@ export default function Employes() {
   return (
     <div className="space-y-4" data-testid="employees-page">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-slate-500"><b className="text-slate-800">{employees.length}</b> employés · masse actuelle {fmtCAD(dl)}</p>
+        <p className="text-sm text-slate-500"><b className="text-slate-800">{employees.length}</b> {t("employés")} · {t("masse actuelle")} {fmtCAD(dl)}</p>
         <div className="flex flex-wrap items-center gap-2">
           <label className="card flex items-center gap-2 px-3 py-2 text-[11px] font-600 uppercase text-slate-500" data-testid="toggle-inactive-label">
-            Afficher inactifs <Switch data-testid="toggle-inactive" checked={showInactive} onCheckedChange={setShowInactive} />
+            {t("Afficher inactifs")} <Switch data-testid="toggle-inactive" checked={showInactive} onCheckedChange={setShowInactive} />
           </label>
           <div className="card flex items-center gap-2 px-3 py-2">
             <Search size={15} className="text-slate-400" />
-            <input data-testid="employee-search" className="w-56 bg-transparent text-sm outline-none" placeholder="Rechercher…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input data-testid="employee-search" className="w-56 bg-transparent text-sm outline-none" placeholder={t("Rechercher…")} value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
-          <Button variant="outline" className="gap-1.5" data-testid="employee-template-btn" onClick={dlTemplate}><Download size={15} /> Modèle</Button>
+          <Button variant="outline" className="gap-1.5" data-testid="employee-template-btn" onClick={dlTemplate}><Download size={15} /> {t("Modèle")}</Button>
           {canEdit && <>
           <input ref={fileRef} type="file" accept=".xlsx" className="hidden" data-testid="employee-import-input" onChange={onImport} />
-          <Button variant="outline" className="gap-1.5" data-testid="employee-import-btn" onClick={() => fileRef.current?.click()}><Upload size={15} /> Importer Excel</Button>
-          <Button data-testid="add-employee-btn" className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90" onClick={() => setDialog({ open: true, item: null })}><Plus size={16} /> Ajouter</Button>
+          <Button variant="outline" className="gap-1.5" data-testid="employee-import-btn" onClick={() => fileRef.current?.click()}><Upload size={15} /> {t("Importer Excel")}</Button>
+          <Button data-testid="add-employee-btn" className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90" onClick={() => setDialog({ open: true, item: null })}><Plus size={16} /> {t("Ajouter")}</Button>
           </>}
         </div>
       </div>
@@ -380,9 +384,9 @@ export default function Employes() {
                 <tr key={e.id} onClick={() => openDetail(e)} className={`cursor-pointer border-b border-slate-100 hover:bg-slate-50 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-row-${e.employee_number}`}>
                   <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(e.employee_number).padStart(3, "0")}</td>
                   <td className="px-4 py-2.5 text-[13px] text-slate-600">{e.title || "—"}</td>
-                  <td className="px-4 py-2.5 font-600">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">Inactif</span>}</td>
+                  <td className="px-4 py-2.5 font-600">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">{t("Inactif")}</span>}</td>
                   <td className="px-4 py-2.5 text-[13px]">{e.department}</td>
-                  <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#063044" : "#64748B" }}>{e.is_ccq ? "CCQ" : typeLabel(e.employment_type)}</span></td>
+                  <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#063044" : "#64748B" }}>{e.is_ccq ? "CCQ" : t(typeLabel(e.employment_type))}</span></td>
                   <td className="px-4 py-2.5" data-testid={`employee-secclass-${e.employee_number}`}>
                     {e.security_class ? (
                       <div className="flex flex-col leading-tight">
@@ -394,7 +398,7 @@ export default function Employes() {
                   <td className="px-4 py-2.5 text-right"><EditableCell canEdit={canEdit} value={e.current_annual_salary} display={fmtCAD(e.current_annual_salary)} step="1" testId={`qedit-emp-salary-${e.employee_number}`} onSave={(v) => quickSaveEmp(e, { current_annual_salary: v })} /></td>
                   <td className="px-4 py-2.5 text-right"><EditableCell canEdit={canEdit} value={+(e.vacation_rate * 100).toFixed(3)} display={`${(e.vacation_rate * 100).toFixed(2)} %`} step="0.1" testId={`qedit-emp-vac-${e.employee_number}`} onSave={(v) => quickSaveEmp(e, { vacation_rate: v / 100 })} /></td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{computeAge(e.birth_date)}</td>
-                  <td className="px-4 py-2.5 text-right font-mono-data">{computeSeniority(e.hire_date)} ans</td>
+                  <td className="px-4 py-2.5 text-right font-mono-data">{computeSeniority(e.hire_date)} {t("ans")}</td>
                   <td className="px-4 py-2.5">
                     {canEdit ? (
                     <div className="flex justify-end gap-1">
@@ -405,7 +409,7 @@ export default function Employes() {
                   </td>
                 </tr>
               ))}
-              {employees.length === 0 && <tr><td colSpan={11} className="px-4 py-10 text-center text-sm text-slate-500">Aucun employé trouvé.</td></tr>}
+              {employees.length === 0 && <tr><td colSpan={11} className="px-4 py-10 text-center text-sm text-slate-500">{t("Aucun employé trouvé.")}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -415,12 +419,12 @@ export default function Employes() {
             <div key={e.id} onClick={() => openDetail(e)} className={`cursor-pointer p-4 active:bg-slate-50 ${e.active === false ? "opacity-60" : ""}`} data-testid={`employee-card-${e.employee_number}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="truncate font-700">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">Inactif</span>}</p>
+                  <p className="truncate font-700">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">{t("Inactif")}</span>}</p>
                   <p className="truncate text-[13px] text-slate-500">{e.title || "—"}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     <span className="font-mono-data text-[11px] text-slate-400">#{String(e.employee_number).padStart(3, "0")}</span>
-                    <span className="font-mono-data text-[11px] text-slate-400">· Dépt {e.department}</span>
-                    <span className="rounded px-1.5 py-0.5 text-[9px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#063044" : "#64748B" }}>{e.is_ccq ? "CCQ" : typeLabel(e.employment_type)}</span>
+                    <span className="font-mono-data text-[11px] text-slate-400">· {t("Dépt")} {e.department}</span>
+                    <span className="rounded px-1.5 py-0.5 text-[9px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#063044" : "#64748B" }}>{e.is_ccq ? "CCQ" : t(typeLabel(e.employment_type))}</span>
                   </div>
                 </div>
                 {canEdit && (
@@ -431,15 +435,15 @@ export default function Employes() {
                 )}
               </div>
               <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px]">
-                <div className="flex justify-between"><span className="text-slate-500">Salaire</span><span className="font-mono-data">{fmtCAD(e.current_annual_salary)}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Âge</span><span className="font-mono-data">{computeAge(e.birth_date)}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Ancienneté</span><span className="font-mono-data">{computeSeniority(e.hire_date)} ans</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Classe séc.</span><span className="font-mono-data text-right">{e.security_class ? `${e.security_class}` : "—"}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">{t("Salaire")}</span><span className="font-mono-data">{fmtCAD(e.current_annual_salary)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">{t("Âge")}</span><span className="font-mono-data">{computeAge(e.birth_date)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">{t("Ancienneté")}</span><span className="font-mono-data">{computeSeniority(e.hire_date)} {t("ans")}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">{t("Classe séc.")}</span><span className="font-mono-data text-right">{e.security_class ? `${e.security_class}` : "—"}</span></div>
                 {e.security_class && classMap[e.security_class]?.description && <div className="col-span-2 text-right text-[11px] text-slate-400">{classMap[e.security_class].description}</div>}
               </div>
             </div>
           ))}
-          {employees.length === 0 && <p className="px-4 py-10 text-center text-sm text-slate-500">Aucun employé trouvé.</p>}
+          {employees.length === 0 && <p className="px-4 py-10 text-center text-sm text-slate-500">{t("Aucun employé trouvé.")}</p>}
         </div>
       </div>
 
@@ -453,16 +457,16 @@ export default function Employes() {
       <AlertDialog open={!!confirmDel} onOpenChange={(v) => !v && setConfirmDel(null)}>
         <AlertDialogContent data-testid="delete-confirm-dialog">
           <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer cet employé ?</AlertDialogTitle>
+            <AlertDialogTitle>{t("Supprimer cet employé ?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {confirmDel ? `« ${confirmDel.name} » (#${String(confirmDel.employee_number).padStart(3, "0")}) sera définitivement supprimé, ainsi que ses budgets saisis. Cette action est irréversible.` : ""}
+              {confirmDel ? `« ${confirmDel.name} » (#${String(confirmDel.employee_number).padStart(3, "0")}) ${t("sera définitivement supprimé, ainsi que ses budgets saisis. Cette action est irréversible.")}` : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="delete-cancel-btn">Annuler</AlertDialogCancel>
+            <AlertDialogCancel data-testid="delete-cancel-btn">{t("Annuler")}</AlertDialogCancel>
             <AlertDialogAction data-testid="delete-confirm-btn" className="bg-red-600 hover:bg-red-700"
               onClick={async () => { const e = confirmDel; setConfirmDel(null); await del(e); }}>
-              Supprimer
+              {t("Supprimer")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

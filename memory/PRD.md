@@ -362,6 +362,19 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] Frontend : helpers partagés (`MONTHS`, `money`, `moneyM`, `usePeriods`, `PeriodSelect`) dans `pages/comptabilite/shared.js` ; composants IA (`AiConfigDialog`, `VarianceCard`, `AiChatPanel`, `AnomaliesCard`) dans `pages/comptabilite/AiComponents.js`. `Comptabilite.js` réduit de ~1567 → ~1326 lignes.
 - [x] Vérifié : backend curl e2e (status/config/variance/suggest-mapping avec vraie IA) + smoke frontend (tous les composants IA rendus sur dashboard & BV). Aucune régression.
 
+## Traduction FR/EN — Phase 2 complétée (2026-07)
+- [x] `Employes.js` et `SalairesBudget.js` entièrement bilingues via `useLang()` / `t()` (formulaire employé, tableaux, cartes mobiles, dialogues, toasts, en-têtes, badges).
+- [x] ~110 nouvelles clés ajoutées au dictionnaire `lib/i18n.js` (section Employés + Salaires & Budget).
+- [x] Valeurs métier (types d'emploi, scénarios, primes) traduites à l'affichage seulement — les valeurs envoyées au backend restent en français.
+- [x] Vérifié en anglais (capture) : Employés + Salaires & Budget + formulaire d'ajout d'employé rendus intégralement en anglais. Bascule FR/EN opérationnelle.
+
+## Traduction FR/EN — dialogues partagés (2026-07)
+- [x] `BudgetFicheDialog`, `BudgetDetailDialog`, `EmployeeDetailDialog` entièrement bilingues via `useLang()`/`t()` (en-têtes de sections, labels, notes explicatives, ventilation mensuelle, boutons, toasts).
+- [x] Valeurs d'enum stockées (sexe, type de prime, scénarios, types d'emploi) traduites à l'affichage (`t(e.sex_at_birth)`, `t(e.prime_type || "Aucune Prime")`).
+- [x] Acronymes fiscaux (RRQ, AE, RQAP, FSS, CSST) laissés tels quels (identiques FR/EN).
+- [x] Vérifié en anglais (capture EmployeeDetailDialog) : rendu intégral en anglais, compilation propre.
+- [x] Couverture i18n désormais complète sur les pages RH/Budget et leurs dialogues.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
