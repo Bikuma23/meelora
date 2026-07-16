@@ -326,6 +326,23 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
   - [ ] Restant : **Tableau de bord (Dashboard)**, **Employés**, **Salaires & Budget**, **Comptabilité** + dialogues (BudgetFiche, BudgetDetail, EmployeeDetail, ImportErrors, EditableCell).
   - Comptabilité : interface à traduire ; libellés de lignes Bilan/P&L resteront issus du modèle Excel FR jusqu'à réception d'un **modèle Excel EN**.
 
+## Implémenté (Comptabilité — Indicateurs & Projections — 2026-07)
+- [x] **KPI DSO** : (Comptes à recevoir fin de période ÷ Ventes YTD annualisées) × 365. Ventes = « TOTAL DES REVENUS » cumulatif. Exercice = année civile (mois écoulés = n° du mois).
+- [x] **KPI DPO** : (Comptes fournisseurs ÷ Achats YTD annualisés) × 365. Achats YTD = COGS YTD + variation d'inventaire (Inventaire fin − Inventaire ouverture = déc. N-1). Si BV déc. N-1 absente → variation « N/D », achats = COGS seul (note visible).
+- [x] **KPI Fonds de roulement** : Actif court terme − Passif court terme + ratio (Actif CT ÷ Passif CT).
+- [x] Recalcul auto selon la période (sélecteurs Année/Mois). Bannière « données provisoires » si mois non verrouillé. Message « non calculable » si comptes clients/fournisseurs/totaux introuvables dans le mapping.
+- [x] **Drill-down** cliquable sur chaque KPI (dialogue avec détail des composants + formule visible) + boutons « Voir le Bilan / État des résultats » qui naviguent vers le rapport source **synchronisé sur la même période** (event window `acct-navigate` + sessionStorage `acct_focus_period`).
+- [x] **Projections 12 mois** : 4 graphiques (Trésorerie, Ventes, Frais hors COGS, COGS) — régression linéaire sur les 12 derniers mois **verrouillés** uniquement ; réel (trait plein) + projeté (pointillé), badge « Projection statistique ». Trésorerie cale les encaissements/décaissements sur le DSO/DPO (décalage en mois). Drill-down « Projection · détail » listant les mois réels de base + liens source par mois.
+- Backend : `GET /api/acct/kpis?year&month`, `GET /api/acct/projections` (helpers `_kpi_data`, `_projection_data`, `_pnl_figures`, `_bilan_ct_lines`).
+- Tests : backend 4/4 pytest + frontend 100% (iteration_28). Valeurs Juin 2026 : DSO 129,6 j, DPO 18,5 j, FDR 6 488 906,60 (ratio 2.88).
+
+## Implémenté (Comptabilité — UX période — 2026-07)
+- [x] Suppression d'une BV non verrouillée (bouton + confirmation ; masqué si verrouillé). `DELETE /api/acct/period` (admin).
+- [x] État vide « Aucune période disponible » dans les vues Bilan/P&L/Flux.
+- [x] Sélecteurs Année + Mois indépendants (comme la Balance de vérification) dans Tableau de bord, Bilan, P&L, Flux ; masquage du sélecteur d'année global du bandeau sur les pages Comptabilité.
+- [x] P&L sommaire : seuls les totaux en gras (aligné sur le P&L détaillé).
+
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
