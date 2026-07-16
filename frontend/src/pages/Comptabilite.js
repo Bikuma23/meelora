@@ -51,6 +51,16 @@ function PeriodPicker({ periods, value, onChange }) {
 }
 
 // ---------- Dashboard ----------
+function NoPeriodsState({ testId = "acct-no-periods" }) {
+  return (
+    <div className="card flex flex-col items-center gap-2 px-5 py-14 text-center" data-testid={testId}>
+      <FileSpreadsheet size={30} className="text-slate-300" />
+      <p className="text-sm font-700 text-slate-600">Aucune période disponible</p>
+      <p className="max-w-md text-xs text-slate-400">Aucune balance de vérification n'est chargée. Rendez-vous dans « Balance de vérification » pour uploader une BV (.xlsx).</p>
+    </div>
+  );
+}
+
 function Sparkline({ data, color }) {
   const d = (data || []).map((v, i) => ({ i, v }));
   if (d.length < 2) return <div style={{ height: 36 }} className="mt-3" />;
@@ -471,6 +481,8 @@ function ReportView({ type, title }) {
   const showSep = (k) => k === "cumulatif" && visibleGroups && visibleGroups.length > 1;
   const visibleLines = rep ? rep.lines.filter((ln) => !(hideZero && ln.kind === "data" && visibleCols.every((k) => Math.abs(ln.values[k] || 0) < 0.005))) : [];
 
+  if (!periods.length) return <NoPeriodsState testId={`acct-no-periods-${type}`} />;
+
   return (
     <div className="space-y-4" data-testid={`acct-report-${type}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -627,6 +639,8 @@ function BilanSommaireView({ millions = false }) {
     </div>
   );
 
+  if (!periods.length) return <NoPeriodsState testId="acct-no-periods-bilansom" />;
+
   return (
     <div className="space-y-4" data-testid="acct-bilan-sommaire">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -721,6 +735,8 @@ function CashflowView() {
       </td>
     </tr>
   );
+
+  if (!periods.length) return <NoPeriodsState testId="acct-no-periods-cashflow" />;
 
   return (
     <div className="space-y-4" data-testid="acct-cashflow">
