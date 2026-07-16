@@ -357,11 +357,16 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Dégradation gracieuse** alignée : variance/chat/suggest-mapping renvoient `{available:false, reason}` (au lieu de 503) si IA non configurée OU erreur LLM transitoire → l'UI ne casse jamais.
 - [x] Tests : backend 6/6 pytest + frontend 100% (iteration_29). Tous les flux IA validés avec la clé Emergent.
 
+## Refactor (léger & sûr — 2026-07)
+- [x] Backend : endpoints IA extraits dans `acct_ai.py` (APIRouter) — helpers partagés injectés via `acct_ai.init(...)` depuis `server.py` (aucun changement de logique). `api.include_router(acct_ai.router)` avant `app.include_router(api)`.
+- [x] Frontend : helpers partagés (`MONTHS`, `money`, `moneyM`, `usePeriods`, `PeriodSelect`) dans `pages/comptabilite/shared.js` ; composants IA (`AiConfigDialog`, `VarianceCard`, `AiChatPanel`, `AnomaliesCard`) dans `pages/comptabilite/AiComponents.js`. `Comptabilite.js` réduit de ~1567 → ~1326 lignes.
+- [x] Vérifié : backend curl e2e (status/config/variance/suggest-mapping avec vraie IA) + smoke frontend (tous les composants IA rendus sur dashboard & BV). Aucune régression.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
 - Gestion multi-années / duplication du budget actif.
-- **Refactor** : `server.py` (~3160 l.) et `Comptabilite.js` (>1500 l.) à découper (routeur IA + `pages/comptabilite/ai/*`).
+- **Refactor complet (P2)** : découper le reste de `server.py` (endpoints Comptabilité/budget) et les dialogues restants de `Comptabilite.js` si souhaité.
 - **Traduction FR/EN** (Phase 2) à compléter sur `Employes.js`, `SalairesBudget.js`.
 - Rétention/TTL sur `acct_ai_chat` (historique chat non borné).
 
