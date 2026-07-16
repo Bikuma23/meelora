@@ -4,10 +4,11 @@ import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "../components/ui/alert-dialog";
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
-  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3,
+  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2,
 } from "lucide-react";
 
 const MONTHS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -218,6 +219,7 @@ export function AcctBV() {
   const [newAcct, setNewAcct] = useState({ open: false, list: [] });
   const [accts, setAccts] = useState([]);
   const [assign, setAssign] = useState({});
+  const [confirmDel, setConfirmDel] = useState(null);
   const loadTmpl = useCallback(() => api.acctGetTemplate().then(setTmpl).catch(() => {}), []);
   useEffect(() => { loadTmpl(); api.acctAccounts().then(setAccts).catch(() => {}); }, [loadTmpl]);
 
@@ -244,6 +246,11 @@ export function AcctBV() {
   const toggleLock = async (p) => {
     try { await api.acctLock({ year: p.year, month: p.month, locked: !p.locked }); toast.success(!p.locked ? "Mois verrouillé" : "Mois déverrouillé"); reload(); }
     catch (err) { toast.error(err.response?.data?.detail || "Action impossible"); }
+  };
+  const deletePeriod = async (p) => {
+    try { await api.acctDeletePeriod({ year: p.year, month: p.month }); toast.success(`BV ${MONTHS[p.month - 1]} ${p.year} supprimée`); reload(); }
+    catch (err) { toast.error(err.response?.data?.detail || "Suppression impossible"); }
+    finally { setConfirmDel(null); }
   };
   const saveAssignments = async () => {
     const clean = {};
@@ -323,10 +330,18 @@ export function AcctBV() {
                   <td className="px-5 py-2.5 text-xs text-slate-500">{p.last_upload_at ? new Date(p.last_upload_at).toLocaleString("fr-CA") : "—"}</td>
                   <td className="px-5 py-2.5 text-right">
                     {isAdmin ? (
-                      <Button size="sm" variant="outline" data-testid={`acct-lock-${p.id}`} onClick={() => toggleLock(p)}
-                        className={`gap-1 ${p.locked ? "border-emerald-200 text-emerald-700" : "border-red-200 text-red-600"}`}>
-                        {p.locked ? <><Unlock size={13} /> Déverrouiller</> : <><Lock size={13} /> Verrouiller</>}
-                      </Button>
+                      <div className="inline-flex items-center gap-2">
+                        <Button size="sm" variant="outline" data-testid={`acct-lock-${p.id}`} onClick={() => toggleLock(p)}
+                          className={`gap-1 ${p.locked ? "border-emerald-200 text-emerald-700" : "border-red-200 text-red-600"}`}>
+                          {p.locked ? <><Unlock size={13} /> Déverrouiller</> : <><Lock size={13} /> Verrouiller</>}
+                        </Button>
+                        {!p.locked && (
+                          <Button size="sm" variant="outline" data-testid={`acct-delete-${p.id}`} onClick={() => setConfirmDel(p)}
+                            className="gap-1 border-red-200 text-red-600 hover:bg-red-50">
+                            <Trash2 size={13} /> Supprimer
+                          </Button>
+                        )}
+                      </div>
                     ) : <span className="text-xs text-slate-400">—</span>}
                   </td>
                 </tr>
@@ -335,6 +350,24 @@ export function AcctBV() {
           </table>
         </div>
       </div>
+
+      <AlertDialog open={!!confirmDel} onOpenChange={(v) => !v && setConfirmDel(null)}>
+        <AlertDialogContent data-testid="acct-delete-confirm-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer cette balance de vérification ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDel ? `La BV de ${MONTHS[confirmDel.month - 1]} ${confirmDel.year} et ses données seront définitivement supprimées. Cette action est irréversible.` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="acct-delete-cancel-btn">Annuler</AlertDialogCancel>
+            <AlertDialogAction data-testid="acct-delete-confirm-btn" className="bg-red-600 hover:bg-red-700"
+              onClick={() => deletePeriod(confirmDel)}>
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={newAcct.open} onOpenChange={() => { /* bloquant : fermeture via bouton uniquement */ }}>
         <DialogContent data-testid="acct-newacct-dialog" className="max-w-2xl">

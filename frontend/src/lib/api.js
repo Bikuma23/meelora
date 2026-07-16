@@ -77,6 +77,7 @@ export const api = {
   acctUploadBV: (file, params) => { const fd = new FormData(); fd.append("file", file); return client.post("/acct/bv", fd, { params }).then((r) => r.data); },
   acctPeriods: () => client.get("/acct/periods").then((r) => r.data),
   acctLock: (params) => client.post("/acct/period/lock", {}, { params }).then((r) => r.data),
+  acctDeletePeriod: (params) => client.delete("/acct/period", { params }).then((r) => r.data),
   acctReport: (params) => client.get("/acct/report", { params }).then((r) => r.data),
   acctReportExcel: (params) => client.get("/acct/report/excel", { params, responseType: "blob" }).then((r) => r.data),
   acctAccounts: () => client.get("/acct/accounts").then((r) => r.data),

@@ -2025,6 +2025,19 @@ async def acct_lock(year: int, month: int, locked: bool = True, user: dict = Dep
     await log_action(user, "Modifier", "Comptabilité", f"{'Verrouillage' if locked else 'Déverrouillage'} mois {pk}")
     return {"success": True, "locked": locked}
 
+@api.delete("/acct/period")
+async def acct_delete_period(year: int, month: int, user: dict = Depends(require_admin)):
+    pk = _pkey(year, month)
+    period = await db.acct_periods.find_one({"_id": pk})
+    if not period:
+        raise HTTPException(status_code=404, detail="Aucune donnée pour ce mois")
+    if period.get("locked"):
+        raise HTTPException(status_code=403, detail=f"Le mois {MONTHS_FR[month-1]} {year} est verrouillé — suppression impossible.")
+    await db.acct_bv.delete_one({"_id": pk})
+    await db.acct_periods.delete_one({"_id": pk})
+    await log_action(user, "Supprimer", "Comptabilité", f"Suppression BV {pk}")
+    return {"success": True, "period": pk}
+
 @api.get("/acct/accounts")
 async def acct_accounts(user: dict = Depends(get_current_user)):
     doc = await db.acct_template.find_one({"_id": "current"})
