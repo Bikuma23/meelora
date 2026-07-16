@@ -2570,7 +2570,7 @@ async def acct_ai_variance(year: int, month: int, user: dict = Depends(get_curre
     except ai_service.AINotConfigured as e:
         return {"available": False, "reason": str(e), "rows": rows}
     except ai_service.AIError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        return {"available": False, "reason": str(e), "rows": rows}
 
 # ---- 2. Détection d'anomalies (statistique + explication IA) ----
 async def _ai_anomalies(year, month, sensitivity):
@@ -2676,7 +2676,7 @@ async def acct_ai_chat(body: AIChatBody, user: dict = Depends(get_current_user))
     except ai_service.AINotConfigured as e:
         return {"available": False, "reason": str(e)}
     except ai_service.AIError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        return {"available": False, "reason": str(e)}
     now = datetime.now(timezone.utc).isoformat()
     await db.acct_ai_chat.insert_one({"session_id": body.session_id, "user": user["email"], "q": body.question, "a": answer, "at": now})
     return {"available": True, "answer": answer}
@@ -2710,7 +2710,7 @@ async def acct_ai_suggest_mapping(body: AISuggestBody, user: dict = Depends(get_
     except ai_service.AINotConfigured as e:
         return {"available": False, "reason": str(e)}
     except ai_service.AIError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        return {"available": False, "reason": str(e)}
     import re
     m = re.search(r"\{.*\}", raw, re.S)
     try:

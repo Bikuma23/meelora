@@ -346,10 +346,24 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] P&L sommaire : seuls les totaux en gras (aligné sur le P&L détaillé).
 
 
+## Implémenté (Comptabilité — Phase 3 IA — 2026-07)
+- [x] Surcouche IA **lecture seule** sur le module Comptabilité (jamais de modification des données comptables).
+- [x] Fournisseur configurable : **Clé universelle Emergent** (défaut, actif), OpenAI, ou Azure OpenAI. Config admin-only (`/api/acct/ai/config`, `/status`, `DELETE /config/key`). Secrets stockés côté serveur, jamais exposés au client.
+- [x] **Analyse de variance** (`POST /api/acct/ai/variance`) : commentaire IA des écarts réel vs budget (seuils $/% configurables).
+- [x] **Détection d'anomalies** (`POST /api/acct/ai/anomalies`) : z-score sur moyenne 6 mois + résumé IA. Signalements non bloquants.
+- [x] **Chat Q&A** (`POST /api/acct/ai/chat`) : assistant factuel basé uniquement sur bilan/P&L/KPI/tendance ; historique en DB.
+- [x] **Suggestion de mapping** (`POST /api/acct/ai/suggest-mapping`) : bouton « Suggérer » dans la fenêtre d'affectation des nouveaux comptes.
+- [x] Frontend branché dans `Comptabilite.js` : `VarianceCard` + `AiChatPanel` (tableau de bord), bouton `ai-config-btn` (engrenage IA, admin), `AnomaliesCard` (page BV), boutons `acct-suggest-<compte>` (dialogue nouveaux comptes).
+- [x] **Dégradation gracieuse** alignée : variance/chat/suggest-mapping renvoient `{available:false, reason}` (au lieu de 503) si IA non configurée OU erreur LLM transitoire → l'UI ne casse jamais.
+- [x] Tests : backend 6/6 pytest + frontend 100% (iteration_29). Tous les flux IA validés avec la clé Emergent.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
 - Gestion multi-années / duplication du budget actif.
+- **Refactor** : `server.py` (~3160 l.) et `Comptabilite.js` (>1500 l.) à découper (routeur IA + `pages/comptabilite/ai/*`).
+- **Traduction FR/EN** (Phase 2) à compléter sur `Employes.js`, `SalairesBudget.js`.
+- Rétention/TTL sur `acct_ai_chat` (historique chat non borné).
 
 ## Backlog Phase 2 (obsolète — livré)
 - Rapports prédéfinis & personnalisés (export PDF/Excel).
