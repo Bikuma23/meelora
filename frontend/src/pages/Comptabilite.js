@@ -8,7 +8,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
-  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2,
+  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays,
 } from "lucide-react";
 
 const MONTHS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -34,19 +34,39 @@ function usePeriods() {
   return { periods, reload };
 }
 
-function PeriodPicker({ periods, value, onChange }) {
+function PeriodSelect({ periods, value, onChange, testId = "acct" }) {
+  const years = [...new Set(periods.map((p) => p.year))].sort((a, b) => b - a);
+  const [y, m] = value ? value.split("-").map(Number) : [null, null];
+  const monthsForYear = periods.filter((p) => p.year === y).sort((a, b) => a.month - b.month);
+  const setYear = (ny) => {
+    ny = Number(ny);
+    const monthsY = periods.filter((p) => p.year === ny).map((p) => p.month).sort((a, b) => a - b);
+    const nm = monthsY.includes(m) ? m : monthsY[0];
+    if (nm) onChange(`${ny}-${String(nm).padStart(2, "0")}`);
+  };
+  const setMonth = (nm) => onChange(`${y}-${String(Number(nm)).padStart(2, "0")}`);
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger data-testid="acct-period-picker" className="w-56"><SelectValue placeholder="Choisir une période" /></SelectTrigger>
-      <SelectContent>
-        {periods.length === 0 && <SelectItem value="none" disabled>Aucune période</SelectItem>}
-        {periods.map((p) => (
-          <SelectItem key={p.id} value={p.id} data-testid={`acct-period-opt-${p.id}`}>
-            {MONTHS[p.month - 1]} {p.year} {p.locked ? "🔒" : ""}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="flex items-center gap-2">
+      <CalendarDays size={15} className="text-[#063044]" />
+      <Select value={y ? String(y) : ""} onValueChange={setYear}>
+        <SelectTrigger data-testid={`${testId}-year-select`} className="w-24"><SelectValue placeholder="Année" /></SelectTrigger>
+        <SelectContent>
+          {years.length === 0 && <SelectItem value="none" disabled>—</SelectItem>}
+          {years.map((yy) => <SelectItem key={yy} value={String(yy)} data-testid={`${testId}-year-opt-${yy}`}>{yy}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      <Select value={m ? String(m) : ""} onValueChange={setMonth}>
+        <SelectTrigger data-testid={`${testId}-month-select`} className="w-40"><SelectValue placeholder="Mois" /></SelectTrigger>
+        <SelectContent>
+          {monthsForYear.length === 0 && <SelectItem value="none" disabled>—</SelectItem>}
+          {monthsForYear.map((p) => (
+            <SelectItem key={p.month} value={String(p.month)} data-testid={`${testId}-month-opt-${p.month}`}>
+              {MONTHS[p.month - 1]} {p.locked ? "🔒" : ""}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 
@@ -132,7 +152,7 @@ export function AcctDashboard() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-600 text-slate-500">Période affichée :</span>
-          <PeriodPicker periods={periods} value={period} onChange={setPeriod} />
+          <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId="acct-dash" />
         </div>
         <div className="flex items-center gap-4 text-xs text-slate-400">
           <span className="inline-flex items-center gap-1.5"><FileSpreadsheet size={13} /> {d.template_imported ? `${d.template_accounts} comptes` : "Modèle non importé"}</span>
@@ -487,7 +507,7 @@ function ReportView({ type, title }) {
     <div className="space-y-4" data-testid={`acct-report-${type}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
-          <PeriodPicker periods={periods} value={period} onChange={setPeriod} />
+          <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId={`acct-${type}`} />
           <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600" data-testid="acct-hidezero-label">
             <input type="checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} data-testid="acct-hidezero-toggle" className="h-4 w-4 rounded border-slate-300" />
             Masquer les comptes à solde zéro
@@ -644,7 +664,7 @@ function BilanSommaireView({ millions = false }) {
   return (
     <div className="space-y-4" data-testid="acct-bilan-sommaire">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <PeriodPicker periods={periods} value={period} onChange={setPeriod} />
+        <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId="acct-bilansom" />
         <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-bilansom-export" className="gap-2 bg-[#063044] hover:bg-[#063044]/90"><FileSpreadsheet size={15} /> Excel</Button>
       </div>
       {rep && !rep.locked && (
@@ -744,11 +764,11 @@ function CashflowView() {
         <div className="flex flex-wrap items-end gap-4">
           <div>
             <label className="block text-xs font-600 text-slate-500">Ouverture (solde de départ)</label>
-            <div className="mt-1"><PeriodPicker periods={periods} value={openP} onChange={setOpenP} /></div>
+            <div className="mt-1"><PeriodSelect periods={periods} value={openP} onChange={setOpenP} testId="acct-cf-open" /></div>
           </div>
           <div>
             <label className="block text-xs font-600 text-slate-500">Clôture (période courante)</label>
-            <div className="mt-1"><PeriodPicker periods={periods} value={closeP} onChange={setCloseP} /></div>
+            <div className="mt-1"><PeriodSelect periods={periods} value={closeP} onChange={setCloseP} testId="acct-cf-close" /></div>
           </div>
         </div>
         <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-cashflow-export" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
