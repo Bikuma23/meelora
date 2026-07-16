@@ -348,6 +348,7 @@ function DsoCard({ kpi, provisional, onOpen, onSaved }) {
         {dso.dispute > 0 && (
           <p className="mt-2 text-[11px] text-slate-500" data-testid="dso-dispute-active">
             Exclu du calcul : <span className="font-mono-data font-700 text-red-600">{money(dso.dispute)}</span>{dso.dispute_note ? ` — ${dso.dispute_note}` : ""}
+            {dso.dispute_carried && <span className="ml-1 italic text-slate-400" data-testid="dso-dispute-carried">(reporté depuis {dso.dispute_source})</span>}
           </p>
         )}
       </div>

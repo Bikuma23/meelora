@@ -2286,13 +2286,17 @@ async def _kpi_data(year, month, with_trend=True):
 
     # --- DSO --- base glissante 12 mois ; CC courants nets de taxes (÷ taux QC), hors retenues, moins litige manuel
     QC_TAX = await _acct_tax_factor()  # TPS 5% + TVQ 9,975% par défaut (configurable)
-    adj = await db.acct_kpi_adjust.find_one({"_id": pk}) or {}
+    # Report automatique : dernier ajustement enregistré à date (≤ période courante) tant qu'il n'est pas remis à 0.
+    adj_list = await db.acct_kpi_adjust.find({"_id": {"$lte": pk}}).sort("_id", -1).to_list(1)
+    adj = adj_list[0] if adj_list else {}
     dispute = 0.0
     try:
         dispute = float(adj.get("dso_dispute") or 0.0)
     except Exception:
         dispute = 0.0
     dispute_note = adj.get("dso_dispute_note") or ""
+    dispute_source = adj.get("_id") if adj else None
+    dispute_carried = bool(dispute_source and dispute_source != pk)
     ar_courant = round(ar["value"] - retenues, 2) if ar else None
     ar_courant_net = round(ar_courant / QC_TAX, 2) if ar_courant is not None else None
     ar_dso_base = round(ar_courant_net - dispute, 2) if ar_courant_net is not None else None
@@ -2301,6 +2305,7 @@ async def _kpi_data(year, month, with_trend=True):
            "retenues": round(retenues, 2), "ar_courant": ar_courant,
            "tax_factor": QC_TAX, "ar_courant_net": ar_courant_net,
            "dispute": round(dispute, 2), "dispute_note": dispute_note, "ar_dso_base": ar_dso_base,
+           "dispute_source": dispute_source, "dispute_carried": dispute_carried,
            "sales_12m": round(sales_12m, 2), "months_available": months_available}
     if ar is None:
         dso["reason"] = "Compte « Comptes à recevoir » introuvable dans le mapping du bilan."
