@@ -402,6 +402,12 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] Frontend : bouton désactivé si moins de 2 scénarios ; sélection mémorisée (localStorage) ; régénère si analyse déjà affichée.
 - [x] **Vérifié** (curl + Playwright) : juin 2026 compare `['ca','rev1']`, Rév-2 exclu ; l'IA cite la dérive -45,4 %→-60,9 % sur MARGE BRUTE - PROJETS.
 
+## Usage de l'agent IA accessible à tous les rôles (2026-07)
+- [x] Cause : le middleware `write_guard` (server.py) bloquait les POST pour le rôle « user » (lecture seule) ; les endpoints d'usage IA étant des POST, ils étaient inaccessibles aux utilisateurs.
+- [x] Correctif : ajout de `/api/acct/ai/variance`, `/api/acct/ai/anomalies`, `/api/acct/ai/chat`, `/api/acct/ai/suggest-mapping` à `WRITE_ALLOW_ALL`. La **configuration** (`/api/acct/ai/config`, `.../config/key`) reste admin-only (dépendance `_get_admin`).
+- [x] Frontend déjà conforme : bouton « Assistant IA » (config) gaté `isAdmin` ; cartes IA (variance, chat, anomalies) visibles à tous.
+- [x] **Vérifié** (curl rôles + Playwright) : editor.test & user.test → variance/anomalies/chat POST = 200 ; config GET/PUT = 403 ; en tant que « user » l'UI génère l'analyse et le bouton config est masqué.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

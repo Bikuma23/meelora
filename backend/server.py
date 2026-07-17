@@ -3017,7 +3017,8 @@ api.include_router(acct_ai.router)
 
 app.include_router(api)
 
-WRITE_ALLOW_ALL = {"/api/auth/login", "/api/auth/logout", "/api/me/preferences", "/api/acct/bv", "/api/acct/account-map"}
+WRITE_ALLOW_ALL = {"/api/auth/login", "/api/auth/logout", "/api/me/preferences", "/api/acct/bv", "/api/acct/account-map",
+                   "/api/acct/ai/variance", "/api/acct/ai/anomalies", "/api/acct/ai/chat", "/api/acct/ai/suggest-mapping"}
 
 def _is_admin_only_path(path: str) -> bool:
     return (path.startswith("/api/users")
