@@ -1965,6 +1965,8 @@ def _parse_ledger_xlsx(content, year=None, month=None):
     c_date = find(lambda n: "date" in n)
     c_debit = find(lambda n: "débit" in n or "debit" in n)
     c_credit = find(lambda n: "crédit" in n or "credit" in n)
+    c_numero = find(lambda n: "numéro" in n or "numero" in n or "n°" in n)
+    c_type = find(lambda n: n == "type" or n.startswith("type"))
     desc_cols = sorted([c for name, c in headers if ("description" in name or "libell" in name)])
     c_payee = next((c for c in desc_cols if c < (c_compte or 9999)), None)
     c_acctname = next((c for c in desc_cols if c > (c_compte or 0)), None)
@@ -1988,8 +1990,19 @@ def _parse_ledger_xlsx(content, year=None, month=None):
         crd = ws.cell(r, c_credit).value if c_credit else None; crd = float(crd) if isinstance(crd, (int, float)) else 0.0
         if dbt == 0 and crd == 0:
             continue
-        txns.append({"account": acct, "date": date_s, "description": desc,
-                     "debit": round(dbt, 2), "credit": round(crd, 2), "amount": round(dbt - crd, 2)})
+        numero = None
+        if c_numero:
+            nv = ws.cell(r, c_numero).value
+            if nv is not None and str(nv).strip():
+                numero = str(int(nv)) if isinstance(nv, float) and float(nv).is_integer() else str(nv).strip()
+        etype = str(ws.cell(r, c_type).value or "").strip() if c_type else ""
+        rec = {"account": acct, "date": date_s, "description": desc,
+               "debit": round(dbt, 2), "credit": round(crd, 2), "amount": round(dbt - crd, 2)}
+        if numero:
+            rec["numero"] = numero
+        if etype:
+            rec["type"] = etype
+        txns.append(rec)
     return txns
 
 @api.post("/acct/template")
@@ -2201,14 +2214,48 @@ async def acct_ledger_transactions(year: int, month: int, q: str = "", skip: int
     doc = await db.acct_ledger.find_one({"_id": pk})
     if not doc:
         raise HTTPException(status_code=404, detail="Aucun grand livre détaillé pour ce mois")
-    txns = doc.get("transactions", [])
+    all_txns = doc.get("transactions", [])
+    indexed = [{**t, "idx": i} for i, t in enumerate(all_txns)]
     ql = (q or "").strip().lower()
     if ql:
-        txns = [t for t in txns if ql in str(t.get("account", "")).lower() or ql in (t.get("description") or "").lower()]
-    total = len(txns)
-    page = txns[skip:skip + min(limit, 500)]
+        indexed = [t for t in indexed if ql in str(t.get("account", "")).lower() or ql in (t.get("description") or "").lower()]
+    total = len(indexed)
+    page = indexed[skip:skip + min(limit, 500)]
     return {"period": pk, "total": total, "skip": skip, "limit": limit, "transactions": page,
-            "account_count": len(doc.get("account_totals", {})), "grand_total": len(doc.get("transactions", []))}
+            "account_count": len(doc.get("account_totals", {})), "grand_total": len(all_txns)}
+
+
+@api.get("/acct/ledger/entry")
+async def acct_ledger_entry(year: int, month: int, index: int, user: dict = Depends(get_current_user)):
+    """Reconstitue l'écriture complète (toutes les lignes débit/crédit) d'une transaction.
+    Regroupe par « numéro » si disponible, sinon par plage contiguë partageant date + description."""
+    pk = _pkey(year, month)
+    doc = await db.acct_ledger.find_one({"_id": pk})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Aucun grand livre détaillé pour ce mois")
+    txns = doc.get("transactions", [])
+    if index < 0 or index >= len(txns):
+        raise HTTPException(status_code=404, detail="Transaction introuvable")
+    base = txns[index]
+    group_by = "numero" if base.get("numero") else "date_description"
+    if group_by == "numero":
+        lines = [{**t, "idx": i} for i, t in enumerate(txns) if t.get("numero") == base["numero"]]
+    else:
+        key = (base.get("date"), base.get("description"))
+        lo = index
+        while lo - 1 >= 0 and (txns[lo - 1].get("date"), txns[lo - 1].get("description")) == key:
+            lo -= 1
+        hi = index
+        while hi + 1 < len(txns) and (txns[hi + 1].get("date"), txns[hi + 1].get("description")) == key:
+            hi += 1
+        lines = [{**txns[i], "idx": i} for i in range(lo, hi + 1)]
+    total_debit = round(sum(l.get("debit") or 0 for l in lines), 2)
+    total_credit = round(sum(l.get("credit") or 0 for l in lines), 2)
+    return {"period": pk, "group_by": group_by,
+            "numero": base.get("numero"), "type": base.get("type"),
+            "date": base.get("date"), "description": base.get("description"),
+            "lines": lines, "total_debit": total_debit, "total_credit": total_credit,
+            "balanced": abs(total_debit - total_credit) < 0.01}
 
 @api.get("/acct/ledger/status")
 async def acct_ledger_status(year: int, month: int, user: dict = Depends(get_current_user)):

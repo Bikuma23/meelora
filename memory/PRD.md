@@ -419,6 +419,11 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] Frontend (`AiChatPanel`) : chips « Sources » sous chaque réponse IA (libellé + montant formaté), testid `ai-chat-source-{i}-{j}`.
 - [x] **Vérifié** (curl + Playwright) : « créances clients et encaisse » → chips « Comptes à recevoir 7 656 359,73 » et « Encaisse 574 427,81 » (concordent avec le Bilan).
 
+## Grand livre — détail de l'écriture au clic (2026-07)
+- [x] Chaque ligne de `LedgerPreviewDialog` est cliquable : elle déploie l'écriture complète (toutes les lignes débit/crédit), avec en-tête (N°/Type/Date), ligne cliquée surlignée, totaux débit/crédit et indicateur d'équilibre.
+- [x] Backend : parser (`_parse_ledger_xlsx`) capture désormais `numero` et `type` (imports futurs) ; endpoint `GET /acct/ledger/entry?year&month&index` regroupe par **numéro** si présent, sinon par **plage contiguë date+description** (fallback pour les données déjà importées sans numéro). `/transactions` renvoie un `idx` stable.
+- [x] **Vérifié** (curl + Playwright) : Fév. 2026 — clic « Ministre des finances » → 2 lignes (1001020 crédit / 2002100 débit) équilibrées 15 474,52 ; badge « groupé par date + description » affiché (numéro absent des données actuelles).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

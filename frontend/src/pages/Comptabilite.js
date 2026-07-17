@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Fragment } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/button";
@@ -9,7 +9,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
-  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download, Search,
+  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download, Search, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { MONTHS, money, moneyM, usePeriods, PeriodSelect } from "./comptabilite/shared";
 import { AiConfigDialog, VarianceCard, AiChatPanel, AnomaliesCard } from "./comptabilite/AiComponents";
@@ -689,8 +689,12 @@ function LedgerPreviewDialog({ open, onOpenChange, year, month }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [skip, setSkip] = useState(0);
+  const [openIdx, setOpenIdx] = useState(null);
+  const [entry, setEntry] = useState(null);
+  const [entryLoading, setEntryLoading] = useState(false);
   const LIMIT = 100;
-  useEffect(() => { if (!open) { setQ(""); setSkip(0); setData(null); } }, [open]);
+  useEffect(() => { if (!open) { setQ(""); setSkip(0); setData(null); setOpenIdx(null); setEntry(null); } }, [open]);
+  useEffect(() => { setOpenIdx(null); setEntry(null); }, [skip, q]);
   useEffect(() => {
     if (!open || !year || !month) return;
     setLoading(true);
@@ -700,6 +704,12 @@ function LedgerPreviewDialog({ open, onOpenChange, year, month }) {
     }, 300);
     return () => clearTimeout(h);
   }, [open, year, month, q, skip]);
+  const toggleEntry = (t) => {
+    if (openIdx === t.idx) { setOpenIdx(null); setEntry(null); return; }
+    setOpenIdx(t.idx); setEntry(null); setEntryLoading(true);
+    api.acctLedgerEntry({ year, month, index: t.idx })
+      .then(setEntry).catch(() => setEntry(null)).finally(() => setEntryLoading(false));
+  };
   const total = data?.total || 0;
   const txns = data?.transactions || [];
   return (
@@ -707,7 +717,7 @@ function LedgerPreviewDialog({ open, onOpenChange, year, month }) {
       <DialogContent data-testid="ledger-preview-dialog" className="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#0E9488]" /> Grand livre — {month ? MONTHS[month - 1] : ""} {year}</DialogTitle>
-          <DialogDescription>{data ? `${(data.grand_total || 0).toLocaleString("fr-CA")} transactions · ${data.account_count} comptes` : "Chargement…"}</DialogDescription>
+          <DialogDescription>{data ? `${(data.grand_total || 0).toLocaleString("fr-CA")} transactions · ${data.account_count} comptes — cliquez une ligne pour voir l'écriture` : "Chargement…"}</DialogDescription>
         </DialogHeader>
         <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
           <Search size={15} className="text-slate-400" />
@@ -717,20 +727,67 @@ function LedgerPreviewDialog({ open, onOpenChange, year, month }) {
         <div className="flex-1 overflow-y-auto rounded-lg border border-slate-200">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-slate-50"><tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-400">
+              <th className="w-6 px-2 py-2"></th>
               <th className="px-3 py-2 text-left font-600">Date</th><th className="px-3 py-2 text-left font-600">Compte</th>
               <th className="px-3 py-2 text-left font-600">Description</th><th className="px-3 py-2 text-right font-600">Montant</th>
             </tr></thead>
             <tbody data-testid="ledger-preview-rows">
-              {loading ? <tr><td colSpan={4} className="px-3 py-8 text-center text-slate-400">Chargement…</td></tr>
-                : txns.length === 0 ? <tr><td colSpan={4} className="px-3 py-8 text-center text-slate-400">Aucune transaction.</td></tr>
-                : txns.map((t, i) => (
-                  <tr key={i} className="border-b border-slate-100">
+              {loading ? <tr><td colSpan={5} className="px-3 py-8 text-center text-slate-400">Chargement…</td></tr>
+                : txns.length === 0 ? <tr><td colSpan={5} className="px-3 py-8 text-center text-slate-400">Aucune transaction.</td></tr>
+                : txns.map((t) => {
+                  const isOpen = openIdx === t.idx;
+                  return (
+                  <Fragment key={t.idx}>
+                  <tr className={`cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 ${isOpen ? "bg-[#0E9488]/5" : ""}`}
+                      data-testid={`ledger-row-${t.idx}`} onClick={() => toggleEntry(t)}>
+                    <td className="px-2 py-1.5 text-slate-400">{isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
                     <td className="px-3 py-1.5 font-mono-data text-slate-500">{t.date}</td>
                     <td className="px-3 py-1.5 font-mono-data text-slate-600">{t.account}</td>
                     <td className="px-3 py-1.5 text-slate-700">{t.description}</td>
                     <td className="px-3 py-1.5 text-right font-mono-data" style={{ color: (t.amount || 0) < 0 ? "#DC2626" : "#0E9488" }}>{money(t.amount)}</td>
                   </tr>
-                ))}
+                  {isOpen && (
+                    <tr data-testid={`ledger-entry-${t.idx}`}>
+                      <td colSpan={5} className="bg-slate-50 px-3 py-3">
+                        {entryLoading ? <p className="text-xs text-slate-400">Chargement de l'écriture…</p>
+                          : !entry ? <p className="text-xs text-red-500">Écriture introuvable.</p>
+                          : (
+                          <div className="rounded-lg border border-slate-200 bg-white p-3" data-testid={`ledger-entry-detail-${t.idx}`}>
+                            <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
+                              <span className="font-700 uppercase tracking-wider text-slate-400">Écriture</span>
+                              {entry.numero && <span>N° <span className="font-600 text-slate-700">{entry.numero}</span></span>}
+                              {entry.type && <span>Type : <span className="font-600 text-slate-700">{entry.type}</span></span>}
+                              <span>Date : <span className="font-mono-data text-slate-700">{entry.date}</span></span>
+                              {entry.group_by === "date_description" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-600 text-amber-700" title="Regroupée par date + description (numéro d'écriture absent des données importées)">groupé par date + description</span>}
+                            </div>
+                            <table className="w-full text-sm">
+                              <thead><tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-400">
+                                <th className="px-2 py-1 text-left font-600">Compte</th><th className="px-2 py-1 text-left font-600">Description</th>
+                                <th className="px-2 py-1 text-right font-600">Débit</th><th className="px-2 py-1 text-right font-600">Crédit</th>
+                              </tr></thead>
+                              <tbody>
+                                {entry.lines.map((l) => (
+                                  <tr key={l.idx} className={`border-b border-slate-50 ${l.idx === t.idx ? "bg-[#0E9488]/10" : ""}`}>
+                                    <td className="px-2 py-1 font-mono-data text-slate-600">{l.account}</td>
+                                    <td className="px-2 py-1 text-slate-700">{l.description}</td>
+                                    <td className="px-2 py-1 text-right font-mono-data text-slate-700">{l.debit ? money(l.debit) : ""}</td>
+                                    <td className="px-2 py-1 text-right font-mono-data text-slate-700">{l.credit ? money(l.credit) : ""}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot><tr className="border-t border-slate-200 font-600">
+                                <td className="px-2 py-1 text-slate-500" colSpan={2}>Total {entry.balanced ? "· équilibrée ✓" : "· déséquilibre ⚠"}</td>
+                                <td className="px-2 py-1 text-right font-mono-data">{money(entry.total_debit)}</td>
+                                <td className="px-2 py-1 text-right font-mono-data">{money(entry.total_credit)}</td>
+                              </tr></tfoot>
+                            </table>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
+                );})}
             </tbody>
           </table>
         </div>

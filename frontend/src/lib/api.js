@@ -79,6 +79,7 @@ export const api = {
   acctUploadLedgerAll: (file) => { const fd = new FormData(); fd.append("file", file); return client.post("/acct/ledger/import-all", fd).then((r) => r.data); },
   acctLedgerStatus: (params) => client.get("/acct/ledger/status", { params }).then((r) => r.data),
   acctLedgerTransactions: (params) => client.get("/acct/ledger/transactions", { params }).then((r) => r.data),
+  acctLedgerEntry: (params) => client.get("/acct/ledger/entry", { params }).then((r) => r.data),
   acctDeleteLedger: (params) => client.delete("/acct/ledger", { params }).then((r) => r.data),
   acctLedgerTemplate: () => client.get("/acct/ledger/template", { responseType: "blob" }).then((r) => r.data),
   acctPeriods: () => client.get("/acct/periods").then((r) => r.data),
