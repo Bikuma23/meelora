@@ -112,14 +112,34 @@ async def acct_ai_clear_keys(user: dict = Depends(_get_admin)):
     return _ai_config_public(await _ai_config())
 
 # ---- 1. Analyse de variance ----
-async def _ai_variance_ctx(year, month, amt_thr, pct_thr):
+# Scénarios budgétaires : champs P&L correspondants (mois + cumulatif).
+VARIANCE_SCENARIOS = {
+    "ca":   {"label": "Budget CA",     "bud": "bud_ca",   "ecart": "ecart_ca",   "ecart_cum": "ecart_ca_cum"},
+    "rev1": {"label": "Budget Rév-1",  "bud": "bud_rev1", "ecart": "ecart_rev1", "ecart_cum": "ecart_rev1_cum"},
+    "rev2": {"label": "Budget Rév-2",  "bud": "bud_rev2", "ecart": "ecart_rev2", "ecart_cum": "ecart_rev2_cum"},
+}
+
+
+def _scenario_has_data(pnl, scen):
+    """Un scénario a des données si au moins une ligne du P&L a un budget non nul."""
+    f = VARIANCE_SCENARIOS[scen]
+    for ln in pnl["lines"]:
+        if ln.get("kind") not in ("data", "total"):
+            continue
+        if abs(ln["values"].get(f["bud"]) or 0) > 0.005:
+            return True
+    return False
+
+
+async def _ai_variance_ctx(year, month, amt_thr, pct_thr, scenario="ca"):
+    f = VARIANCE_SCENARIOS.get(scenario, VARIANCE_SCENARIOS["ca"])
     pnl = await _acct_report(year, month, "pnl")
     rows = []
     for ln in pnl["lines"]:
         if ln.get("kind") not in ("data", "total"):
             continue
         v = ln["values"]
-        ec = v.get("ecart_ca"); bud = v.get("bud_ca")
+        ec = v.get(f["ecart"]); bud = v.get(f["bud"])
         if ec is None:
             continue
         pct = (abs(ec) / abs(bud) * 100) if bud else None
@@ -127,7 +147,7 @@ async def _ai_variance_ctx(year, month, amt_thr, pct_thr):
             rows.append({"poste": ln["label"], "account": ln.get("account"),
                          "reel": round(v.get("reel") or 0, 2), "budget": round(bud or 0, 2),
                          "ecart": round(ec, 2), "ecart_pct": round(pct, 1) if pct is not None else None,
-                         "ecart_ytd": round(v.get("ecart_ca_cum") or 0, 2)})
+                         "ecart_ytd": round(v.get(f["ecart_cum"]) or 0, 2)})
     rows.sort(key=lambda r: abs(r["ecart"]), reverse=True)
     return rows[:25]
 
@@ -188,13 +208,23 @@ async def _variance_txns(year, month, rows, max_rows=3, max_txn=25, summarize_th
             result[r["poste"]] = {"mode": "detail", "n_transactions": len(rel), "transactions": enriched[:max_txn]}
     return result or None
 
+@router.get("/acct/ai/variance/scenarios")
+async def acct_ai_variance_scenarios(year: int, month: int, user: dict = Depends(_get_user)):
+    """Indique quels scénarios budgétaires disposent de données pour la période (pour l'UI)."""
+    pnl = await _acct_report(year, month, "pnl")
+    return {"scenarios": {s: _scenario_has_data(pnl, s) for s in VARIANCE_SCENARIOS}}
+
+
 @router.post("/acct/ai/variance")
-async def acct_ai_variance(year: int, month: int, user: dict = Depends(_get_user)):
+async def acct_ai_variance(year: int, month: int, scenario: str = "ca", user: dict = Depends(_get_user)):
+    if scenario not in VARIANCE_SCENARIOS:
+        scenario = "ca"
+    scen = VARIANCE_SCENARIOS[scenario]
     cfg = await _ai_config()
     amt = float(cfg.get("variance_threshold_amount", 10000)); pct = float(cfg.get("variance_threshold_pct", 10))
-    rows = await _ai_variance_ctx(year, month, amt, pct)
+    rows = await _ai_variance_ctx(year, month, amt, pct, scenario)
     if not rows:
-        return {"available": True, "commentary": None, "rows": [], "empty": True}
+        return {"available": True, "commentary": None, "rows": [], "empty": True, "scenario": scenario}
     detail = await _variance_txns(year, month, rows)
     system = ("Tu es un analyste financier. Commente UNIQUEMENT à partir des données d'écarts fournies (réel vs budget). "
               "N'invente aucun chiffre ni contexte. Rédige en français, 3 à 6 phrases concises, en citant les postes et montants les plus significatifs. "
@@ -204,16 +234,17 @@ async def acct_ai_variance(year: int, month: int, user: dict = Depends(_get_user
                    "Utilise-les pour préciser si un écart provient d'une transaction ponctuelle inhabituelle (champ « inhabituelle=true ») "
                    "plutôt que d'une dérive générale du compte. Ces transactions sont un échantillon ciblé, pas la liste exhaustive.")
     import json as _json
-    user_p = f"Période {MONTHS_FR[month-1]} {year}. Seuils: {amt}$ ou {pct}%. Écarts significatifs (réel vs budget):\n{_json.dumps(rows, ensure_ascii=False)}"
+    user_p = (f"Période {MONTHS_FR[month-1]} {year}. Scénario budgétaire comparé : {scen['label']}. "
+              f"Seuils: {amt}$ ou {pct}%. Écarts significatifs (réel vs {scen['label']}):\n{_json.dumps(rows, ensure_ascii=False)}")
     if detail:
         user_p += "\n\nTransactions détaillées ciblées (filtrage déterministe, non exhaustif) par poste en écart:\n" + _json.dumps(detail, ensure_ascii=False)
     try:
         txt = await ai_service.ai_complete(cfg, system, user_p, user["email"], max_tokens=600)
-        return {"available": True, "commentary": txt, "rows": rows, "ledger_used": bool(detail), "detail": detail or {}}
+        return {"available": True, "commentary": txt, "rows": rows, "ledger_used": bool(detail), "detail": detail or {}, "scenario": scenario}
     except ai_service.AINotConfigured as e:
-        return {"available": False, "reason": str(e), "rows": rows}
+        return {"available": False, "reason": str(e), "rows": rows, "scenario": scenario}
     except ai_service.AIError as e:
-        return {"available": False, "reason": str(e), "rows": rows}
+        return {"available": False, "reason": str(e), "rows": rows, "scenario": scenario}
 
 # ---- 2. Détection d'anomalies (statistique + explication IA) ----
 async def _ai_anomalies(year, month, sensitivity):

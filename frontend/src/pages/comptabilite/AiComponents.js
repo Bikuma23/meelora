@@ -81,25 +81,63 @@ export function AiConfigDialog({ open, onOpenChange }) {
   );
 }
 
+const VARIANCE_SCENARIOS = [
+  { id: "ca", label: "Budget CA" },
+  { id: "rev1", label: "Budget Rév-1" },
+  { id: "rev2", label: "Budget Rév-2" },
+];
+const LS_SCENARIO_KEY = "acct.ai.variance.scenario";
+
 export function VarianceCard({ year, month }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [openPoste, setOpenPoste] = useState(null);
-  const gen = async () => {
+  const [avail, setAvail] = useState(null);
+  const [scenario, setScenario] = useState(() => localStorage.getItem(LS_SCENARIO_KEY) || "");
+
+  useEffect(() => {
+    setData(null); setOpenPoste(null); setAvail(null);
+    api.acctAiVarianceScenarios({ year, month }).then((r) => setAvail(r.scenarios || {})).catch(() => setAvail({}));
+  }, [year, month]);
+
+  const gen = async (scen) => {
+    if (!scen) return;
     setLoading(true); setOpenPoste(null);
-    try { setData(await api.acctAiVariance({ year, month })); }
+    try { setData(await api.acctAiVariance({ year, month, scenario: scen })); }
     catch (e) { toast.error(e.response?.data?.detail || "Erreur IA"); }
     finally { setLoading(false); }
+  };
+  const selectScenario = (scen) => {
+    if (loading || (avail && avail[scen] === false)) return;
+    setScenario(scen);
+    localStorage.setItem(LS_SCENARIO_KEY, scen);
+    if (data) gen(scen); // changer de scénario régénère une analyse déjà présente
   };
   const detail = data?.detail || {};
   const postes = Object.keys(detail);
   return (
     <div className="card p-5" data-testid="ai-variance-card">
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-sm font-700 text-slate-700"><FileText size={15} className="text-[#0E9488]" /> Analyse de variance (IA)</h3>
-        <Button size="sm" onClick={gen} disabled={loading} data-testid="ai-variance-btn" className="bg-[#063044] hover:bg-[#063044]/90">{loading ? "Analyse…" : "Générer"}</Button>
+        <Button size="sm" onClick={() => gen(scenario)} disabled={loading || !scenario} data-testid="ai-variance-btn" className="bg-[#063044] hover:bg-[#063044]/90">{loading ? "Analyse…" : "Générer"}</Button>
       </div>
-      {!data ? <p className="text-xs text-slate-400">Générez un commentaire des écarts réel vs budget les plus significatifs de la période.</p>
+      <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="ai-variance-scenarios">
+        <span className="text-[11px] font-700 uppercase tracking-wider text-slate-400">Scénario budgétaire :</span>
+        {VARIANCE_SCENARIOS.map((s) => {
+          const hasData = avail ? avail[s.id] !== false : true;
+          const active = scenario === s.id;
+          return (
+            <button key={s.id} onClick={() => selectScenario(s.id)} disabled={!hasData || loading}
+              title={!hasData ? "Aucune donnée pour ce scénario sur cette période" : undefined}
+              data-testid={`ai-variance-scenario-${s.id}`}
+              className={`rounded-full border px-3 py-1 text-xs font-600 transition-colors ${active ? "border-[#063044] bg-[#063044] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488] hover:text-[#0E9488]"} ${(!hasData || loading) ? "cursor-not-allowed opacity-40 hover:border-slate-300 hover:text-slate-600" : ""}`}>
+              {s.label}
+            </button>
+          );
+        })}
+      </div>
+      {!scenario ? <p className="text-xs text-slate-400" data-testid="ai-variance-hint">Choisissez un scénario budgétaire ci-dessus puis cliquez « Générer » pour commenter les écarts réel vs budget les plus significatifs.</p>
+        : !data ? <p className="text-xs text-slate-400">Cliquez « Générer » pour analyser les écarts réel vs {VARIANCE_SCENARIOS.find((s) => s.id === scenario)?.label} de la période.</p>
         : data.available === false ? <p className="text-xs text-amber-600" data-testid="ai-variance-unavailable">{data.reason || "Fonctionnalité IA non configurée."}</p>
         : data.empty ? <p className="text-xs text-slate-500">Aucun écart au-delà des seuils configurés pour cette période.</p>
         : (

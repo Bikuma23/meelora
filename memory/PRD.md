@@ -388,6 +388,14 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Colonne « Grand livre »** dans le tableau des Périodes : badge vert ✓ cliquable + nombre de transactions par mois (ou « — » si absent), alimenté par `ledger_count`.
 - [x] **Import global « toutes les périodes »** (`POST /acct/ledger/import-all`) : un seul upload du rapport annuel répartit les transactions par mois selon la date. Importe uniquement les mois **non verrouillés** (seuil ≥10 txns pour écarter le bruit) ; renvoie un récap `imported / skipped_locked / skipped_small`. Bouton frontend dédié avec toasts de synthèse. Validé sur le fichier réel : 2026-01 (5242) + 2026-02 (4820) importés. Nettoyage effectué.
 
+## Analyse de variance IA — sélection du scénario budgétaire (2026-07)
+- [x] `VarianceCard` : 3 boutons de scénario **Budget CA / Budget Rév-1 / Budget Rév-2** (libellés cohérents avec le reste du module), sélection exclusive.
+- [x] Aucun scénario généré par défaut (l'utilisateur choisit un scénario puis clique « Générer », bouton distinct). Sélection mémorisée via `localStorage` (`acct.ai.variance.scenario`).
+- [x] **Changer de scénario régénère l'analyse** (nouvel appel IA) si une analyse est déjà affichée.
+- [x] Bouton **désactivé** si le scénario n'a pas de données pour la période (pas d'appel/erreur). Nouvel endpoint `GET /acct/ai/variance/scenarios?year&month` → `{ca,rev1,rev2: bool}`.
+- [x] Backend : `POST /acct/ai/variance` accepte `scenario` (`ca|rev1|rev2`) ; mappe vers les bons champs P&L (`bud_ca/ecart_ca`, `bud_rev1/ecart_rev1`, `bud_rev2/ecart_rev2` + cumulatifs). Aucune modification de la logique budget vs réel du Bilan/P&L.
+- [x] **Vérifié** (curl + Playwright) : scénarios juin 2026 → `{ca:true, rev1:true, rev2:false}` ; CA et Rév-1 produisent des budgets/écarts distincts ; Rév-2 bouton désactivé ; Générer activé après sélection ; bascule CA→Rév-1 régénère et cite les écarts Rév-1 exacts.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
