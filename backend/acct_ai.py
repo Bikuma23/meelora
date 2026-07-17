@@ -444,6 +444,27 @@ class AIChatBody(BaseModel):
     year: int
     month: int
 
+
+def _split_answer_sources(raw):
+    """Sépare la réponse en texte + tableau de sources (bloc « ###SOURCES### » suivi d'un JSON)."""
+    import json as _json, re as _re
+    if not raw:
+        return "", []
+    parts = _re.split(r"#{2,3}\s*SOURCES\s*#{2,3}", raw, maxsplit=1, flags=_re.IGNORECASE)
+    answer = parts[0].strip()
+    sources = []
+    if len(parts) > 1:
+        m = _re.search(r"\[.*\]", parts[1], _re.S)
+        if m:
+            try:
+                arr = _json.loads(m.group(0))
+                for s in arr if isinstance(arr, list) else []:
+                    if isinstance(s, dict) and s.get("poste") is not None:
+                        sources.append({"poste": str(s.get("poste")), "valeur": s.get("valeur")})
+            except Exception:
+                pass
+    return answer, sources
+
 @router.post("/acct/ai/chat")
 async def acct_ai_chat(body: AIChatBody, user: dict = Depends(_get_user)):
     cfg = await _ai_config()
@@ -457,22 +478,26 @@ async def acct_ai_chat(body: AIChatBody, user: dict = Depends(_get_user)):
               "(ex. « créances clients » ≈ « comptes clients / débiteurs », « encaisse » ≈ « trésorerie / caisse / banque », "
               "« fournisseurs » ≈ « comptes fournisseurs / créditeurs »). Cite le libellé exact du contexte et le montant. "
               "N'invente JAMAIS de chiffres. Ne réponds « information non disponible » QUE si, après avoir cherché tous les libellés équivalents, "
-              "la donnée est réellement absente du contexte. Sois concis et factuel.")
+              "la donnée est réellement absente du contexte. Sois concis et factuel.\n\n"
+              "IMPORTANT : termine TOUJOURS ta réponse par une ligne exactement au format « ###SOURCES### » suivie d'un tableau JSON "
+              "listant les données du contexte que tu as réellement utilisées, sous la forme "
+              "[{\"poste\": \"<libellé exact du contexte>\", \"valeur\": <nombre>}]. Si aucune donnée du contexte n'a été utilisée, mets un tableau vide [].")
     user_p = f"Contexte (données réelles du module, période {MONTHS_FR[body.month-1]} {body.year}):\n{ctx}\n\nQuestion: {body.question}"
     try:
-        answer = await ai_service.ai_complete(cfg, system, user_p, user["email"], max_tokens=700)
+        raw = await ai_service.ai_complete(cfg, system, user_p, user["email"], max_tokens=800)
     except ai_service.AINotConfigured as e:
         return {"available": False, "reason": str(e)}
     except ai_service.AIError as e:
         return {"available": False, "reason": f"Erreur de connexion au service IA : {e}. Vérifiez la configuration de l'assistant IA."}
+    answer, sources = _split_answer_sources(raw)
     now = datetime.now(timezone.utc).isoformat()
-    await db.acct_ai_chat.insert_one({"session_id": body.session_id, "user": user["email"], "q": body.question, "a": answer, "at": now})
-    return {"available": True, "answer": answer}
+    await db.acct_ai_chat.insert_one({"session_id": body.session_id, "user": user["email"], "q": body.question, "a": answer, "sources": sources, "at": now})
+    return {"available": True, "answer": answer, "sources": sources}
 
 @router.get("/acct/ai/chat/history")
 async def acct_ai_chat_history(session_id: str, user: dict = Depends(_get_user)):
     docs = await db.acct_ai_chat.find({"session_id": session_id}).sort("at", 1).to_list(50)
-    return [{"q": d["q"], "a": d["a"], "at": d.get("at")} for d in docs]
+    return [{"q": d["q"], "a": d["a"], "sources": d.get("sources", []), "at": d.get("at")} for d in docs]
 
 # ---- 4. Suggestion de mapping ----
 class AISuggestBody(BaseModel):

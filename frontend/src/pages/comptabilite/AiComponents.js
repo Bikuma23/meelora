@@ -220,7 +220,7 @@ export function AiChatPanel({ year, month }) {
     const question = q.trim(); setQ(""); setMsgs((m) => [...m, { role: "user", text: question }]); setLoading(true);
     try {
       const r = await api.acctAiChat({ session_id: sid, question, year, month });
-      setMsgs((m) => [...m, { role: "ai", text: r.available === false ? (r.reason || "Fonctionnalité IA non configurée.") : r.answer }]);
+      setMsgs((m) => [...m, { role: "ai", text: r.available === false ? (r.reason || "Fonctionnalité IA non configurée.") : r.answer, sources: r.sources || [] }]);
     } catch (e) { setMsgs((m) => [...m, { role: "ai", text: e.response?.data?.detail || "Erreur IA" }]); }
     finally { setLoading(false); }
   };
@@ -232,6 +232,18 @@ export function AiChatPanel({ year, month }) {
         {msgs.map((m, i) => (
           <div key={i} className={`text-sm ${m.role === "user" ? "text-right" : ""}`}>
             <span className={`inline-block rounded-lg px-3 py-1.5 ${m.role === "user" ? "bg-[#063044] text-white" : "bg-white text-slate-700 shadow-sm"}`}>{m.text}</span>
+            {m.role === "ai" && m.sources?.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5" data-testid={`ai-chat-sources-${i}`}>
+                <span className="text-[10px] font-700 uppercase tracking-wider text-slate-400">Sources :</span>
+                {m.sources.map((s, j) => (
+                  <span key={j} data-testid={`ai-chat-source-${i}-${j}`}
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-600">
+                    <span className="font-600">{s.poste}</span>
+                    {s.valeur !== null && s.valeur !== undefined && <span className="font-mono-data text-[#0E9488]">{money(s.valeur)}</span>}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         ))}
         {loading && <p className="text-xs text-slate-400">L'assistant réfléchit…</p>}

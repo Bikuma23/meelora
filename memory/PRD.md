@@ -414,6 +414,11 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] Correctif : contexte enrichi avec bilan détaillé complet (actif/passif toutes lignes), P&L avec budget_ca, et flux de trésorerie (mois précédent → courant, via `_cashflow_data` injecté dans `init`). Prompt système invite au rapprochement des libellés équivalents. Message d'erreur IA reflète la vraie cause (« Erreur de connexion au service IA … »).
 - [x] **Vérifié** : réponses confrontées au Bilan réel juin 2026 — Comptes à recevoir 7 656 359,73 ; Encaisse 574 427,81 ; Fournisseurs 874 454,86 ; Flux exploitation -615 997,09 ; Actif CT 9 936 986,74. Toutes exactes.
 
+## Chat IA — affichage des sources (2026-07)
+- [x] Le modèle retourne désormais, en fin de réponse, un bloc `###SOURCES###` + JSON des postes/valeurs du contexte réellement utilisés ; le backend le sépare (`_split_answer_sources`) et renvoie `sources: [{poste, valeur}]` (nettoie le texte affiché). Persisté dans `acct_ai_chat` et exposé dans l'historique.
+- [x] Frontend (`AiChatPanel`) : chips « Sources » sous chaque réponse IA (libellé + montant formaté), testid `ai-chat-source-{i}-{j}`.
+- [x] **Vérifié** (curl + Playwright) : « créances clients et encaisse » → chips « Comptes à recevoir 7 656 359,73 » et « Encaisse 574 427,81 » (concordent avec le Bilan).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
