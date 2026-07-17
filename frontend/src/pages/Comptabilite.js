@@ -886,10 +886,11 @@ export function AcctBV() {
             <thead><tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
               <th className="px-5 py-2.5 text-left font-600">Mois</th><th className="px-5 py-2.5 text-left font-600">Statut</th>
               <th className="px-5 py-2.5 text-right font-600">Comptes</th><th className="px-5 py-2.5 text-right font-600">Écart bilan</th>
+              <th className="px-5 py-2.5 text-center font-600">Grand livre</th>
               <th className="px-5 py-2.5 text-left font-600">Dernier upload</th><th className="px-5 py-2.5 text-right font-600">Action</th>
             </tr></thead>
             <tbody>
-              {periods.length === 0 && <tr><td colSpan={6} className="px-5 py-8 text-center text-slate-400">Aucune période.</td></tr>}
+              {periods.length === 0 && <tr><td colSpan={7} className="px-5 py-8 text-center text-slate-400">Aucune période.</td></tr>}
               {periods.map((p) => (
                 <tr key={p.id} className="border-b border-slate-100" data-testid={`acct-period-row-${p.id}`}>
                   <td className="px-5 py-2.5 font-600">{MONTHS[p.month - 1]} {p.year}</td>
@@ -899,6 +900,13 @@ export function AcctBV() {
                   </td>
                   <td className="px-5 py-2.5 text-right font-mono-data">{p.account_count ?? "—"}</td>
                   <td className="px-5 py-2.5 text-right font-mono-data" style={{ color: p.balanced ? "#0E9488" : "#DC2626" }}>{money(p.diff)}</td>
+                  <td className="px-5 py-2.5 text-center" data-testid={`acct-period-ledger-${p.id}`}>
+                    {p.ledger_count ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-600 text-emerald-700" title={`${p.ledger_count} transactions`}>
+                        <CheckCircle2 size={12} /> {p.ledger_count.toLocaleString("fr-CA")}
+                      </span>
+                    ) : <span className="text-slate-300">—</span>}
+                  </td>
                   <td className="px-5 py-2.5 text-xs text-slate-500">{p.last_upload_at ? new Date(p.last_upload_at).toLocaleString("fr-CA") : "—"}</td>
                   <td className="px-5 py-2.5 text-right">
                     {isAdmin ? (
