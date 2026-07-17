@@ -424,6 +424,11 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] Backend : parser (`_parse_ledger_xlsx`) capture désormais `numero` et `type` (imports futurs) ; endpoint `GET /acct/ledger/entry?year&month&index` regroupe par **numéro** si présent, sinon par **plage contiguë date+description** (fallback pour les données déjà importées sans numéro). `/transactions` renvoie un `idx` stable.
 - [x] **Vérifié** (curl + Playwright) : Fév. 2026 — clic « Ministre des finances » → 2 lignes (1001020 crédit / 2002100 débit) équilibrées 15 474,52 ; badge « groupé par date + description » affiché (numéro absent des données actuelles).
 
+## Variance IA → lien vers l'écriture du grand livre (2026-07)
+- [x] Chaque transaction ciblée de l'analyse de variance (mode détail) affiche un lien « Voir » qui ouvre l'écriture complète (dialogue `EntryDialog`) via `/acct/ledger/entry`, ligne source surlignée, totaux + équilibre.
+- [x] Backend : `_variance_txns` attache l'`idx` (index original du grand livre) à chaque transaction détaillée.
+- [x] **Vérifié** (curl + Playwright) : fév. 2026 — clic « Voir » sur « Consommation matériel projet février 2026 » → écriture à 3 lignes (5005000 débit / 5505000 + 1001200 crédit) équilibrée à 136 722,34.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

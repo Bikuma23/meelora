@@ -183,8 +183,8 @@ async def _variance_txns(year, month, rows, max_rows=3, max_txn=25, summarize_th
     for src, tgt in amap.items():
         rev.setdefault(int(tgt), set()).add(int(src))
     by_acct = {}
-    for t in led["transactions"]:
-        by_acct.setdefault(t["account"], []).append(t)
+    for i, t in enumerate(led["transactions"]):
+        by_acct.setdefault(t["account"], []).append((i, t))
     result = {}
     for r in [r for r in rows if r.get("account") is not None][:max_rows]:
         acct = r.get("account")
@@ -196,16 +196,17 @@ async def _variance_txns(year, month, rows, max_rows=3, max_txn=25, summarize_th
             continue
         if len(rel) > summarize_threshold:
             groups = {}
-            for t in rel:
+            for _i, t in rel:
                 key = (t.get("description") or "—").strip().lower()[:60]
                 g = groups.setdefault(key, {"description": (t.get("description") or "—"), "count": 0, "total": 0.0})
                 g["count"] += 1; g["total"] = round(g["total"] + (t.get("amount") or 0), 2)
             summ = sorted(groups.values(), key=lambda x: abs(x["total"]), reverse=True)[:20]
             result[r["poste"]] = {"mode": "resume", "n_transactions": len(rel), "groupes": summ}
         else:
-            outset = _iqr_outlier_indices(rel)
-            enriched = [{"date": t.get("date"), "description": t.get("description"),
-                         "montant": t.get("amount"), "inhabituelle": (i in outset)} for i, t in enumerate(rel)]
+            amounts = [t.get("amount") or 0 for _i, t in rel]
+            outset = _iqr_outlier_indices([{"amount": a} for a in amounts])
+            enriched = [{"idx": gi, "date": t.get("date"), "description": t.get("description"),
+                         "montant": t.get("amount"), "inhabituelle": (k in outset)} for k, (gi, t) in enumerate(rel)]
             enriched.sort(key=lambda t: (not t["inhabituelle"], -abs(t["montant"] or 0)))
             result[r["poste"]] = {"mode": "detail", "n_transactions": len(rel), "transactions": enriched[:max_txn]}
     return result or None

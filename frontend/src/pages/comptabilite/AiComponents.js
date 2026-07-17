@@ -4,8 +4,56 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../components/ui/dialog";
 import { toast } from "sonner";
-import { FileText, Info, Sparkles, Wand2, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { FileText, Info, Sparkles, Wand2, ChevronDown, ChevronRight, AlertTriangle, ExternalLink } from "lucide-react";
 import { money, PeriodSelect } from "./shared";
+
+export function EntryDialog({ open, onOpenChange, year, month, index }) {
+  const [entry, setEntry] = useState(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (!open || index === null || index === undefined) { setEntry(null); return; }
+    setLoading(true);
+    api.acctLedgerEntry({ year, month, index }).then(setEntry).catch(() => setEntry(null)).finally(() => setLoading(false));
+  }, [open, year, month, index]);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="variance-entry-dialog" className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#0E9488]" /> Détail de l'écriture</DialogTitle>
+          <DialogDescription>{entry ? `${entry.date}${entry.numero ? ` · N° ${entry.numero}` : ""}${entry.type ? ` · ${entry.type}` : ""}` : "Chargement…"}</DialogDescription>
+        </DialogHeader>
+        {loading ? <p className="text-xs text-slate-400">Chargement de l'écriture…</p>
+          : !entry ? <p className="text-xs text-red-500">Écriture introuvable.</p>
+          : (
+          <div>
+            {entry.group_by === "date_description" && <p className="mb-2"><span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-600 text-amber-700">groupé par date + description (numéro absent des données importées)</span></p>}
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-400">
+                <th className="px-2 py-1 text-left font-600">Compte</th><th className="px-2 py-1 text-left font-600">Description</th>
+                <th className="px-2 py-1 text-right font-600">Débit</th><th className="px-2 py-1 text-right font-600">Crédit</th>
+              </tr></thead>
+              <tbody>
+                {(entry.lines || []).map((l) => (
+                  <tr key={l.idx} className={`border-b border-slate-50 ${l.idx === index ? "bg-[#0E9488]/10" : ""}`}>
+                    <td className="px-2 py-1 font-mono-data text-slate-600">{l.account}</td>
+                    <td className="px-2 py-1 text-slate-700">{l.description}</td>
+                    <td className="px-2 py-1 text-right font-mono-data text-slate-700">{l.debit ? money(l.debit) : ""}</td>
+                    <td className="px-2 py-1 text-right font-mono-data text-slate-700">{l.credit ? money(l.credit) : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr className="border-t border-slate-200 font-600">
+                <td className="px-2 py-1 text-slate-500" colSpan={2}>Total {entry.balanced ? "· équilibrée ✓" : "· déséquilibre ⚠"}</td>
+                <td className="px-2 py-1 text-right font-mono-data">{money(entry.total_debit)}</td>
+                <td className="px-2 py-1 text-right font-mono-data">{money(entry.total_credit)}</td>
+              </tr></tfoot>
+            </table>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function AiConfigDialog({ open, onOpenChange }) {
   const [cfg, setCfg] = useState(null);
@@ -94,6 +142,7 @@ export function VarianceCard({ year, month }) {
   const [openPoste, setOpenPoste] = useState(null);
   const [avail, setAvail] = useState(null);
   const [scenario, setScenario] = useState(() => localStorage.getItem(LS_SCENARIO_KEY) || "");
+  const [entryView, setEntryView] = useState({ open: false, index: null });
 
   useEffect(() => {
     setData(null); setOpenPoste(null); setAvail(null);
@@ -185,13 +234,20 @@ export function VarianceCard({ year, month }) {
                             </>
                           ) : (
                             <table className="w-full text-sm">
-                              <thead><tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-400"><th className="px-3 py-1.5 text-left font-600">Date</th><th className="px-3 py-1.5 text-left font-600">Description</th><th className="px-3 py-1.5 text-right font-600">Montant</th></tr></thead>
+                              <thead><tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-400"><th className="px-3 py-1.5 text-left font-600">Date</th><th className="px-3 py-1.5 text-left font-600">Description</th><th className="px-3 py-1.5 text-right font-600">Montant</th><th className="px-3 py-1.5 text-right font-600">Écriture</th></tr></thead>
                               <tbody>
                                 {(d.transactions || []).map((t, i) => (
                                   <tr key={i} className={`border-b border-slate-100 ${t.inhabituelle ? "bg-amber-50" : ""}`} data-testid={`ai-variance-txn-${poste}-${i}`}>
                                     <td className="px-3 py-1.5 font-mono-data text-slate-500">{t.date}</td>
                                     <td className="px-3 py-1.5 text-slate-700">{t.inhabituelle && <AlertTriangle size={11} className="mr-1 inline text-[#B45309]" />}{t.description}</td>
                                     <td className="px-3 py-1.5 text-right font-mono-data" style={{ color: (t.montant || 0) < 0 ? "#DC2626" : "#0E9488" }}>{money(t.montant)}</td>
+                                    <td className="px-3 py-1.5 text-right">
+                                      {t.idx !== undefined && t.idx !== null && (
+                                        <button onClick={() => setEntryView({ open: true, index: t.idx })} data-testid={`ai-variance-entry-btn-${poste}-${i}`}
+                                          title="Voir l'écriture dans le grand livre"
+                                          className="inline-flex items-center gap-1 text-[11px] font-600 text-[#063044] hover:underline"><ExternalLink size={12} /> Voir</button>
+                                      )}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -206,6 +262,7 @@ export function VarianceCard({ year, month }) {
             )}
           </>
         )}
+      <EntryDialog open={entryView.open} onOpenChange={(v) => setEntryView((p) => ({ ...p, open: v }))} year={year} month={month} index={entryView.index} />
     </div>
   );
 }
