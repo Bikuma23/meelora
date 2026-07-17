@@ -375,6 +375,14 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] Vérifié en anglais (capture EmployeeDetailDialog) : rendu intégral en anglais, compilation propre.
 - [x] Couverture i18n désormais complète sur les pages RH/Budget et leurs dialogues.
 
+## Grand livre détaillé — enrichissement IA (2026-07)
+- [x] Import mensuel **optionnel** du grand livre détaillé (.xlsx) dans la page Balance de vérification, lié à la même période (mois/année) que la BV. Modèle standard : N° de compte | Date | Description | Débit | Crédit (montant = débit − crédit).
+- [x] Endpoints : `POST /acct/ledger` (upload + agrégats par compte), `GET /acct/ledger/status`, `DELETE /acct/ledger` (bloqué si mois verrouillé), `GET /acct/ledger/template`. Collection `acct_ledger`. N'affecte **aucun** calcul existant (Bilan, P&L, KPI, budget vs réel).
+- [x] Remplaçable/supprimable tant que le mois n'est pas verrouillé (même logique que la BV). Non bloquant : rapports et variance fonctionnent normalement sans grand livre.
+- [x] **Filtrage déterministe (code, sans IA)** avant tout appel modèle : (1) agrégation par compte à l'import ; (2) détection d'aberrations par IQR sur les comptes en écart ; (3) transmission ciblée à l'IA des seules transactions des comptes en écart majeur (top 3 postes, ≤25 txns/poste, aberrantes priorisées) ; (4) résumé par description si >200 transactions pertinentes.
+- [x] `_ai_variance_ctx` inchangé côté logique ; l'endpoint variance injecte les transactions ciblées et renvoie `ledger_used`. Anomalies/chat/suggestion non modifiés.
+- [x] **Testé** (iteration_30, 100% backend+frontend) : CRUD, verrouillage (403), fichier invalide (400), non-régression Bilan/P&L, nettoyage. Vérifié manuellement : l'IA cite la transaction aberrante ciblée (« GÉANT -145000$ »).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
