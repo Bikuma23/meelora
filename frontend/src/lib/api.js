@@ -76,6 +76,7 @@ export const api = {
   acctUploadTemplate: (file) => { const fd = new FormData(); fd.append("file", file); return client.post("/acct/template", fd).then((r) => r.data); },
   acctUploadBV: (file, params) => { const fd = new FormData(); fd.append("file", file); return client.post("/acct/bv", fd, { params }).then((r) => r.data); },
   acctUploadLedger: (file, params) => { const fd = new FormData(); fd.append("file", file); return client.post("/acct/ledger", fd, { params }).then((r) => r.data); },
+  acctUploadLedgerAll: (file) => { const fd = new FormData(); fd.append("file", file); return client.post("/acct/ledger/import-all", fd).then((r) => r.data); },
   acctLedgerStatus: (params) => client.get("/acct/ledger/status", { params }).then((r) => r.data),
   acctDeleteLedger: (params) => client.delete("/acct/ledger", { params }).then((r) => r.data),
   acctLedgerTemplate: () => client.get("/acct/ledger/template", { responseType: "blob" }).then((r) => r.data),

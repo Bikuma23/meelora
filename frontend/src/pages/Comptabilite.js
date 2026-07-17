@@ -752,6 +752,22 @@ export function AcctBV() {
     try { await api.acctDeleteLedger({ year, month }); toast.success(`Grand livre ${MONTHS[month - 1]} ${year} supprimé`); loadLedger(); reload(); }
     catch (err) { toast.error(err.response?.data?.detail || "Suppression impossible"); }
   };
+  const onLedgerAll = async (e) => {
+    const f = e.target.files?.[0]; e.target.value = "";
+    if (!f) return;
+    setLedgerBusy(true);
+    try {
+      const r = await api.acctUploadLedgerAll(f);
+      const imp = r.imported || [];
+      if (imp.length) {
+        toast.success(`${imp.length} période(s) importée(s) : ${imp.map((x) => x.period).join(", ")}`);
+      } else {
+        toast.warning("Aucune période importée (tous les mois concernés sont verrouillés ou négligeables).");
+      }
+      if ((r.skipped_locked || []).length) toast.info(`${r.skipped_locked.length} mois ignoré(s) (verrouillés) : ${r.skipped_locked.map((x) => x.period).join(", ")}`);
+      loadLedger(); reload();
+    } catch (err) { toast.error(err.response?.data?.detail || "Import impossible"); } finally { setLedgerBusy(false); }
+  };
   const dlLedgerTemplate = async () => {
     try {
       const blob = await api.acctLedgerTemplate();
@@ -841,6 +857,12 @@ export function AcctBV() {
             <input type="file" accept=".xlsx" className="hidden" onChange={onLedger} disabled={ledgerBusy || selLocked} data-testid="acct-ledger-input" />
             <span className={`inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-600 ${ledgerBusy || selLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-slate-50"}`}>
               <Upload size={15} /> {ledgerBusy ? "Traitement…" : ledger?.imported ? "Remplacer le grand livre" : "Importer le grand livre (.xlsx)"}
+            </span>
+          </label>
+          <label className="inline-flex">
+            <input type="file" accept=".xlsx" className="hidden" onChange={onLedgerAll} disabled={ledgerBusy} data-testid="acct-ledger-all-input" />
+            <span className={`inline-flex items-center gap-2 rounded-lg border border-[#063044] px-4 py-2 text-sm font-600 text-[#063044] ${ledgerBusy ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-[#063044]/5"}`} title="Répartit automatiquement les transactions par mois (mois verrouillés ignorés)">
+              <Layers size={15} /> Importer toutes les périodes
             </span>
           </label>
           {ledger?.imported ? (

@@ -2143,8 +2143,61 @@ async def acct_upload_ledger(year: int, month: int, file: UploadFile = File(...)
     await log_action(user, "Créer", "Comptabilité", f"Upload grand livre détaillé {pk} — {len(txns)} transactions")
     return {"success": True, "period": pk, "transaction_count": len(txns), "account_count": len(totals)}
 
+def _ledger_account_totals(txns):
+    totals = {}
+    for t in txns:
+        g = totals.setdefault(t["account"], {"debit": 0.0, "credit": 0.0, "amount": 0.0, "count": 0})
+        g["debit"] = round(g["debit"] + t["debit"], 2)
+        g["credit"] = round(g["credit"] + t["credit"], 2)
+        g["amount"] = round(g["amount"] + t["amount"], 2)
+        g["count"] += 1
+    return {str(k): v for k, v in totals.items()}
+
+@api.post("/acct/ledger/import-all")
+async def acct_upload_ledger_all(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    content = await file.read()
+    try:
+        txns = _parse_ledger_xlsx(content)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Fichier de grand livre invalide (.xlsx attendu). En-têtes attendus : Compte, Date, Description, Débit, Crédit.")
+    if not txns:
+        raise HTTPException(status_code=400, detail="Aucune transaction détectée. Vérifiez les colonnes (Compte, Date, Débit, Crédit).")
+    groups = {}
+    for t in txns:
+        d = t.get("date") or ""
+        if len(d) >= 7 and d[4] == "-":
+            try:
+                y = int(d[:4]); m = int(d[5:7])
+            except ValueError:
+                continue
+            groups.setdefault((y, m), []).append(t)
+    now = datetime.now(timezone.utc).isoformat()
+    imported, skipped_locked, skipped_small = [], [], []
+    THRESH = 10
+    for (y, m), tl in sorted(groups.items()):
+        pk = _pkey(y, m)
+        if len(tl) < THRESH:
+            skipped_small.append({"period": pk, "count": len(tl)}); continue
+        period = await db.acct_periods.find_one({"_id": pk})
+        if period and period.get("locked"):
+            skipped_locked.append({"period": pk, "count": len(tl)}); continue
+        at = _ledger_account_totals(tl)
+        await db.acct_ledger.replace_one({"_id": pk}, {
+            "_id": pk, "year": y, "month": m, "transactions": tl,
+            "account_totals": at, "uploaded_at": now, "uploaded_by": user["email"],
+        }, upsert=True)
+        await db.acct_periods.update_one({"_id": pk}, {"$set": {
+            "_id": pk, "year": y, "month": m, "ledger_count": len(tl), "ledger_accounts": len(at),
+            "ledger_uploaded_at": now, "ledger_uploaded_by": user["email"],
+        }, "$setOnInsert": {"locked": False, "lock_history": []}}, upsert=True)
+        imported.append({"period": pk, "count": len(tl)})
+    await log_action(user, "Créer", "Comptabilité", f"Import grand livre (toutes périodes) — {len(imported)} mois, {len(txns)} transactions")
+    return {"success": True, "imported": imported, "skipped_locked": skipped_locked,
+            "skipped_small": skipped_small, "total_transactions": len(txns)}
+
 @api.get("/acct/ledger/status")
 async def acct_ledger_status(year: int, month: int, user: dict = Depends(get_current_user)):
+    pk = _pkey(year, month)
     pk = _pkey(year, month)
     doc = await db.acct_ledger.find_one({"_id": pk})
     if not doc:
