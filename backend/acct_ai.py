@@ -209,7 +209,7 @@ async def acct_ai_variance(year: int, month: int, user: dict = Depends(_get_user
         user_p += "\n\nTransactions détaillées ciblées (filtrage déterministe, non exhaustif) par poste en écart:\n" + _json.dumps(detail, ensure_ascii=False)
     try:
         txt = await ai_service.ai_complete(cfg, system, user_p, user["email"], max_tokens=600)
-        return {"available": True, "commentary": txt, "rows": rows, "ledger_used": bool(detail)}
+        return {"available": True, "commentary": txt, "rows": rows, "ledger_used": bool(detail), "detail": detail or {}}
     except ai_service.AINotConfigured as e:
         return {"available": False, "reason": str(e), "rows": rows}
     except ai_service.AIError as e:

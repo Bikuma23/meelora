@@ -382,6 +382,7 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Filtrage déterministe (code, sans IA)** avant tout appel modèle : (1) agrégation par compte à l'import ; (2) détection d'aberrations par IQR sur les comptes en écart ; (3) transmission ciblée à l'IA des seules transactions des comptes en écart majeur (top 3 postes, ≤25 txns/poste, aberrantes priorisées) ; (4) résumé par description si >200 transactions pertinentes.
 - [x] `_ai_variance_ctx` inchangé côté logique ; l'endpoint variance injecte les transactions ciblées et renvoie `ledger_used`. Anomalies/chat/suggestion non modifiés.
 - [x] **Testé** (iteration_30, 100% backend+frontend) : CRUD, verrouillage (403), fichier invalide (400), non-régression Bilan/P&L, nettoyage. Vérifié manuellement : l'IA cite la transaction aberrante ciblée (« GÉANT -145000$ »).
+- [x] **Panneau dépliable des transactions** sous le commentaire de variance IA : l'endpoint variance renvoie `detail` ; VarianceCard affiche par poste en écart un accordéon (badge « ⚠ N inhabituelles », table date/description/montant, lignes aberrantes surlignées, mode résumé si >200 txns). Vérifié visuellement.
 
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).

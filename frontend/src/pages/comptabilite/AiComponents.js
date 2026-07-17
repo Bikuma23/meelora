@@ -4,7 +4,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../components/ui/dialog";
 import { toast } from "sonner";
-import { FileText, Info, Sparkles, Wand2 } from "lucide-react";
+import { FileText, Info, Sparkles, Wand2, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import { money, PeriodSelect } from "./shared";
 
 export function AiConfigDialog({ open, onOpenChange }) {
@@ -84,12 +84,15 @@ export function AiConfigDialog({ open, onOpenChange }) {
 export function VarianceCard({ year, month }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [openPoste, setOpenPoste] = useState(null);
   const gen = async () => {
-    setLoading(true);
+    setLoading(true); setOpenPoste(null);
     try { setData(await api.acctAiVariance({ year, month })); }
     catch (e) { toast.error(e.response?.data?.detail || "Erreur IA"); }
     finally { setLoading(false); }
   };
+  const detail = data?.detail || {};
+  const postes = Object.keys(detail);
   return (
     <div className="card p-5" data-testid="ai-variance-card">
       <div className="mb-2 flex items-center justify-between">
@@ -99,7 +102,61 @@ export function VarianceCard({ year, month }) {
       {!data ? <p className="text-xs text-slate-400">Générez un commentaire des écarts réel vs budget les plus significatifs de la période.</p>
         : data.available === false ? <p className="text-xs text-amber-600" data-testid="ai-variance-unavailable">{data.reason || "Fonctionnalité IA non configurée."}</p>
         : data.empty ? <p className="text-xs text-slate-500">Aucun écart au-delà des seuils configurés pour cette période.</p>
-        : <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700" data-testid="ai-variance-text">{data.commentary}</p>}
+        : (
+          <>
+            <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700" data-testid="ai-variance-text">{data.commentary}</p>
+            {postes.length > 0 && (
+              <div className="mt-4 space-y-2 border-t border-slate-100 pt-3" data-testid="ai-variance-detail">
+                <p className="text-[11px] font-700 uppercase tracking-wider text-slate-400">Transactions détaillées (grand livre)</p>
+                {postes.map((poste) => {
+                  const d = detail[poste];
+                  const isOpen = openPoste === poste;
+                  const nOut = d.mode === "detail" ? (d.transactions || []).filter((t) => t.inhabituelle).length : 0;
+                  return (
+                    <div key={poste} className="rounded-lg border border-slate-200" data-testid={`ai-variance-detail-${poste}`}>
+                      <button onClick={() => setOpenPoste(isOpen ? null : poste)} data-testid={`ai-variance-toggle-${poste}`}
+                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-slate-50">
+                        <span className="flex items-center gap-2 text-sm font-600 text-slate-700">
+                          {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />} {poste}
+                        </span>
+                        <span className="flex items-center gap-2 text-[11px]">
+                          {nOut > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 font-700 text-[#B45309]"><AlertTriangle size={11} /> {nOut} inhabituelle{nOut > 1 ? "s" : ""}</span>}
+                          <span className="text-slate-400">{d.n_transactions} txn</span>
+                        </span>
+                      </button>
+                      {isOpen && (
+                        <div className="overflow-x-auto border-t border-slate-100">
+                          {d.mode === "resume" ? (
+                            <>
+                              <p className="px-3 py-2 text-[11px] text-slate-500">Résumé par description ({d.n_transactions} transactions)</p>
+                              <table className="w-full text-sm">
+                                <thead><tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-400"><th className="px-3 py-1.5 text-left font-600">Description</th><th className="px-3 py-1.5 text-right font-600">Nb</th><th className="px-3 py-1.5 text-right font-600">Total</th></tr></thead>
+                                <tbody>{(d.groupes || []).map((g, i) => (<tr key={i} className="border-b border-slate-100"><td className="px-3 py-1.5 text-slate-700">{g.description}</td><td className="px-3 py-1.5 text-right font-mono-data text-slate-500">{g.count}</td><td className="px-3 py-1.5 text-right font-mono-data">{money(g.total)}</td></tr>))}</tbody>
+                              </table>
+                            </>
+                          ) : (
+                            <table className="w-full text-sm">
+                              <thead><tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-400"><th className="px-3 py-1.5 text-left font-600">Date</th><th className="px-3 py-1.5 text-left font-600">Description</th><th className="px-3 py-1.5 text-right font-600">Montant</th></tr></thead>
+                              <tbody>
+                                {(d.transactions || []).map((t, i) => (
+                                  <tr key={i} className={`border-b border-slate-100 ${t.inhabituelle ? "bg-amber-50" : ""}`} data-testid={`ai-variance-txn-${poste}-${i}`}>
+                                    <td className="px-3 py-1.5 font-mono-data text-slate-500">{t.date}</td>
+                                    <td className="px-3 py-1.5 text-slate-700">{t.inhabituelle && <AlertTriangle size={11} className="mr-1 inline text-[#B45309]" />}{t.description}</td>
+                                    <td className="px-3 py-1.5 text-right font-mono-data" style={{ color: (t.montant || 0) < 0 ? "#DC2626" : "#0E9488" }}>{money(t.montant)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
     </div>
   );
 }
