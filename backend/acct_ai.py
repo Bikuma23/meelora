@@ -124,11 +124,69 @@ async def _ai_variance_ctx(year, month, amt_thr, pct_thr):
             continue
         pct = (abs(ec) / abs(bud) * 100) if bud else None
         if abs(ec) >= amt_thr or (pct is not None and pct >= pct_thr):
-            rows.append({"poste": ln["label"], "reel": round(v.get("reel") or 0, 2), "budget": round(bud or 0, 2),
+            rows.append({"poste": ln["label"], "account": ln.get("account"),
+                         "reel": round(v.get("reel") or 0, 2), "budget": round(bud or 0, 2),
                          "ecart": round(ec, 2), "ecart_pct": round(pct, 1) if pct is not None else None,
                          "ecart_ytd": round(v.get("ecart_ca_cum") or 0, 2)})
     rows.sort(key=lambda r: abs(r["ecart"]), reverse=True)
     return rows[:25]
+
+def _iqr_outlier_indices(txns):
+    """Détection d'aberrations par écart interquartile (déterministe, sans IA)."""
+    amts = sorted((t.get("amount") or 0) for t in txns)
+    n = len(amts)
+    if n < 4:
+        return set()
+    def pct(p):
+        idx = p * (n - 1); lo = int(idx); frac = idx - lo
+        return amts[lo] + (amts[min(lo + 1, n - 1)] - amts[lo]) * frac
+    q1, q3 = pct(0.25), pct(0.75)
+    iqr = q3 - q1
+    if iqr == 0:
+        return set()
+    lo, hi = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+    return {i for i, t in enumerate(txns) if (t.get("amount") or 0) < lo or (t.get("amount") or 0) > hi}
+
+async def _variance_txns(year, month, rows, max_rows=3, max_txn=25, summarize_threshold=200):
+    """Filtrage déterministe des transactions avant transmission à l'IA.
+    Ne renvoie QUE les transactions des comptes en écart majeur, priorisées par
+    aberration statistique puis par montant. Résume si > summarize_threshold lignes."""
+    pk = _pkey(year, month)
+    led = await db.acct_ledger.find_one({"_id": pk})
+    if not led or not led.get("transactions"):
+        return None
+    doc = await db.acct_account_map.find_one({"_id": "current"})
+    amap = (doc.get("map", {}) if doc else {})
+    rev = {}
+    for src, tgt in amap.items():
+        rev.setdefault(int(tgt), set()).add(int(src))
+    by_acct = {}
+    for t in led["transactions"]:
+        by_acct.setdefault(t["account"], []).append(t)
+    result = {}
+    for r in [r for r in rows if r.get("account") is not None][:max_rows]:
+        acct = r.get("account")
+        srcset = {int(acct)} | rev.get(int(acct), set())
+        rel = []
+        for s in srcset:
+            rel.extend(by_acct.get(s, []))
+        if not rel:
+            continue
+        if len(rel) > summarize_threshold:
+            groups = {}
+            for t in rel:
+                key = (t.get("description") or "—").strip().lower()[:60]
+                g = groups.setdefault(key, {"description": (t.get("description") or "—"), "count": 0, "total": 0.0})
+                g["count"] += 1; g["total"] = round(g["total"] + (t.get("amount") or 0), 2)
+            summ = sorted(groups.values(), key=lambda x: abs(x["total"]), reverse=True)[:20]
+            result[r["poste"]] = {"mode": "resume", "n_transactions": len(rel), "groupes": summ}
+        else:
+            outset = _iqr_outlier_indices(rel)
+            enriched = [{"date": t.get("date"), "description": t.get("description"),
+                         "montant": t.get("amount"), "inhabituelle": (i in outset)} for i, t in enumerate(rel)]
+            enriched.sort(key=lambda t: (not t["inhabituelle"], -abs(t["montant"] or 0)))
+            result[r["poste"]] = {"mode": "detail", "n_transactions": len(rel), "transactions": enriched[:max_txn]}
+    return result or None
 
 @router.post("/acct/ai/variance")
 async def acct_ai_variance(year: int, month: int, user: dict = Depends(_get_user)):
@@ -137,14 +195,21 @@ async def acct_ai_variance(year: int, month: int, user: dict = Depends(_get_user
     rows = await _ai_variance_ctx(year, month, amt, pct)
     if not rows:
         return {"available": True, "commentary": None, "rows": [], "empty": True}
+    detail = await _variance_txns(year, month, rows)
     system = ("Tu es un analyste financier. Commente UNIQUEMENT à partir des données d'écarts fournies (réel vs budget). "
               "N'invente aucun chiffre ni contexte. Rédige en français, 3 à 6 phrases concises, en citant les postes et montants les plus significatifs. "
               "Indique le sens de l'écart (dépassement/économie). Ne liste pas tout, priorise les écarts majeurs.")
+    if detail:
+        system += (" Des transactions détaillées (grand livre) filtrées par le système sont fournies pour les postes en plus gros écart. "
+                   "Utilise-les pour préciser si un écart provient d'une transaction ponctuelle inhabituelle (champ « inhabituelle=true ») "
+                   "plutôt que d'une dérive générale du compte. Ces transactions sont un échantillon ciblé, pas la liste exhaustive.")
     import json as _json
     user_p = f"Période {MONTHS_FR[month-1]} {year}. Seuils: {amt}$ ou {pct}%. Écarts significatifs (réel vs budget):\n{_json.dumps(rows, ensure_ascii=False)}"
+    if detail:
+        user_p += "\n\nTransactions détaillées ciblées (filtrage déterministe, non exhaustif) par poste en écart:\n" + _json.dumps(detail, ensure_ascii=False)
     try:
-        txt = await ai_service.ai_complete(cfg, system, user_p, user["email"], max_tokens=500)
-        return {"available": True, "commentary": txt, "rows": rows}
+        txt = await ai_service.ai_complete(cfg, system, user_p, user["email"], max_tokens=600)
+        return {"available": True, "commentary": txt, "rows": rows, "ledger_used": bool(detail)}
     except ai_service.AINotConfigured as e:
         return {"available": False, "reason": str(e), "rows": rows}
     except ai_service.AIError as e:

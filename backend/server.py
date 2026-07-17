@@ -1941,6 +1941,33 @@ def _unassigned(accounts, tmpl_accts, amap):
             if a["account"] not in tmpl_accts and str(a["account"]) not in amap
             and any(abs(a.get(f, 0.0)) > 0.005 for f in BV_FIELD_COLS)]
 
+# Grand livre détaillé : N° de compte | Date | Description | Débit | Crédit. Montant = débit - crédit.
+def _parse_ledger_xlsx(content):
+    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+    ws = wb["Grand livre détaillé"] if "Grand livre détaillé" in wb.sheetnames else wb.active
+    txns = []
+    for r in range(1, ws.max_row + 1):
+        a = ws.cell(r, 1).value
+        if not isinstance(a, (int, float)) or not float(a).is_integer():
+            continue  # ignore l'en-tête et les lignes non numériques
+        acct = int(a)
+        dv = ws.cell(r, 2).value
+        if isinstance(dv, datetime):
+            date_s = dv.date().isoformat()
+        elif dv is not None:
+            date_s = str(dv).strip()
+        else:
+            date_s = ""
+        desc = str(ws.cell(r, 3).value or "").strip()
+        dbt = ws.cell(r, 4).value; dbt = float(dbt) if isinstance(dbt, (int, float)) else 0.0
+        crd = ws.cell(r, 5).value; crd = float(crd) if isinstance(crd, (int, float)) else 0.0
+        amount = round(dbt - crd, 2)
+        if not desc and dbt == 0 and crd == 0:
+            continue
+        txns.append({"account": acct, "date": date_s, "description": desc,
+                     "debit": round(dbt, 2), "credit": round(crd, 2), "amount": amount})
+    return txns
+
 @api.post("/acct/template")
 async def acct_upload_template(file: UploadFile = File(...), user: dict = Depends(require_admin)):
     content = await file.read()
@@ -2035,8 +2062,86 @@ async def acct_delete_period(year: int, month: int, user: dict = Depends(require
         raise HTTPException(status_code=403, detail=f"Le mois {MONTHS_FR[month-1]} {year} est verrouillé — suppression impossible.")
     await db.acct_bv.delete_one({"_id": pk})
     await db.acct_periods.delete_one({"_id": pk})
+    await db.acct_ledger.delete_one({"_id": pk})
     await log_action(user, "Supprimer", "Comptabilité", f"Suppression BV {pk}")
     return {"success": True, "period": pk}
+
+LEDGER_HEADERS = ["N° de compte", "Date", "Description", "Débit", "Crédit"]
+
+@api.get("/acct/ledger/template")
+async def acct_ledger_template(user: dict = Depends(get_current_user)):
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Grand livre détaillé"
+    ws.append(LEDGER_HEADERS)
+    for c in ws[1]:
+        c.font = openpyxl.styles.Font(bold=True)
+    ws.append([61000, "2026-01-15", "Facture fournisseur ABC inc.", 1250.00, 0])
+    ws.append([61000, "2026-01-22", "Note de crédit fournisseur", 0, 300.00])
+    ws.append([40010, "2026-01-31", "Vente contrat #1042", 0, 18500.00])
+    for col, w in {"A": 14, "B": 14, "C": 42, "D": 14, "E": 14}.items():
+        ws.column_dimensions[col].width = w
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": "attachment; filename=modele_grand_livre_detaille.xlsx"})
+
+@api.post("/acct/ledger")
+async def acct_upload_ledger(year: int, month: int, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    pk = _pkey(year, month)
+    period = await db.acct_periods.find_one({"_id": pk})
+    if period and period.get("locked"):
+        raise HTTPException(status_code=403, detail=f"Le mois {MONTHS_FR[month-1]} {year} est verrouillé — aucun nouvel upload permis.")
+    content = await file.read()
+    try:
+        txns = _parse_ledger_xlsx(content)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Fichier de grand livre invalide (.xlsx attendu). Utilisez le modèle : N° de compte | Date | Description | Débit | Crédit.")
+    if not txns:
+        raise HTTPException(status_code=400, detail="Aucune transaction détectée. Colonnes attendues : N° de compte | Date | Description | Débit | Crédit.")
+    # Étape 1 (déterministe, sans IA) : agrégation par compte pour la période.
+    totals = {}
+    for t in txns:
+        g = totals.setdefault(t["account"], {"debit": 0.0, "credit": 0.0, "amount": 0.0, "count": 0})
+        g["debit"] = round(g["debit"] + t["debit"], 2)
+        g["credit"] = round(g["credit"] + t["credit"], 2)
+        g["amount"] = round(g["amount"] + t["amount"], 2)
+        g["count"] += 1
+    account_totals = {str(k): v for k, v in totals.items()}
+    now = datetime.now(timezone.utc).isoformat()
+    await db.acct_ledger.replace_one({"_id": pk}, {
+        "_id": pk, "year": int(year), "month": int(month), "transactions": txns,
+        "account_totals": account_totals,
+        "uploaded_at": now, "uploaded_by": user["email"],
+    }, upsert=True)
+    await db.acct_periods.update_one({"_id": pk}, {"$set": {
+        "_id": pk, "year": int(year), "month": int(month),
+        "ledger_count": len(txns), "ledger_accounts": len(totals),
+        "ledger_uploaded_at": now, "ledger_uploaded_by": user["email"],
+    }, "$setOnInsert": {"locked": False, "lock_history": []}}, upsert=True)
+    await log_action(user, "Créer", "Comptabilité", f"Upload grand livre détaillé {pk} — {len(txns)} transactions")
+    return {"success": True, "period": pk, "transaction_count": len(txns), "account_count": len(totals)}
+
+@api.get("/acct/ledger/status")
+async def acct_ledger_status(year: int, month: int, user: dict = Depends(get_current_user)):
+    pk = _pkey(year, month)
+    doc = await db.acct_ledger.find_one({"_id": pk})
+    if not doc:
+        return {"imported": False, "period": pk}
+    return {"imported": True, "period": pk, "transaction_count": len(doc.get("transactions", [])),
+            "uploaded_at": doc.get("uploaded_at"), "uploaded_by": doc.get("uploaded_by")}
+
+@api.delete("/acct/ledger")
+async def acct_delete_ledger(year: int, month: int, user: dict = Depends(get_current_user)):
+    pk = _pkey(year, month)
+    period = await db.acct_periods.find_one({"_id": pk})
+    if period and period.get("locked"):
+        raise HTTPException(status_code=403, detail=f"Le mois {MONTHS_FR[month-1]} {year} est verrouillé — suppression impossible.")
+    doc = await db.acct_ledger.find_one({"_id": pk})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Aucun grand livre détaillé pour ce mois")
+    await db.acct_ledger.delete_one({"_id": pk})
+    await db.acct_periods.update_one({"_id": pk}, {"$unset": {"ledger_count": "", "ledger_uploaded_at": "", "ledger_uploaded_by": ""}})
+    await log_action(user, "Supprimer", "Comptabilité", f"Suppression grand livre détaillé {pk}")
+    return {"success": True, "period": pk}
+
 
 @api.get("/acct/accounts")
 async def acct_accounts(user: dict = Depends(get_current_user)):

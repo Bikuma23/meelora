@@ -9,7 +9,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
-  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2,
+  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download,
 } from "lucide-react";
 import { MONTHS, money, moneyM, usePeriods, PeriodSelect } from "./comptabilite/shared";
 import { AiConfigDialog, VarianceCard, AiChatPanel, AnomaliesCard } from "./comptabilite/AiComponents";
@@ -700,8 +700,14 @@ export function AcctBV() {
   const [assignText, setAssignText] = useState({});
   const [suggesting, setSuggesting] = useState({});
   const [confirmDel, setConfirmDel] = useState(null);
+  const [ledger, setLedger] = useState(null);
+  const [ledgerBusy, setLedgerBusy] = useState(false);
   const loadTmpl = useCallback(() => api.acctGetTemplate().then(setTmpl).catch(() => {}), []);
   useEffect(() => { loadTmpl(); api.acctAccounts().then(setAccts).catch(() => {}); }, [loadTmpl]);
+  const loadLedger = useCallback(() => { api.acctLedgerStatus({ year, month }).then(setLedger).catch(() => setLedger(null)); }, [year, month]);
+  useEffect(() => { loadLedger(); }, [loadLedger, periods]);
+  const selPeriod = periods.find((p) => p.year === year && p.month === month);
+  const selLocked = !!selPeriod?.locked;
 
   const onTemplate = async (e) => {
     const f = e.target.files?.[0]; e.target.value = "";
@@ -731,6 +737,27 @@ export function AcctBV() {
     try { await api.acctDeletePeriod({ year: p.year, month: p.month }); toast.success(`BV ${MONTHS[p.month - 1]} ${p.year} supprimée`); reload(); }
     catch (err) { toast.error(err.response?.data?.detail || "Suppression impossible"); }
     finally { setConfirmDel(null); }
+  };
+  const onLedger = async (e) => {
+    const f = e.target.files?.[0]; e.target.value = "";
+    if (!f) return;
+    setLedgerBusy(true);
+    try {
+      const r = await api.acctUploadLedger(f, { year, month });
+      toast.success(`Grand livre ${MONTHS[month - 1]} ${year} importé — ${r.transaction_count} transactions`);
+      loadLedger(); reload();
+    } catch (err) { toast.error(err.response?.data?.detail || "Import impossible"); } finally { setLedgerBusy(false); }
+  };
+  const onDeleteLedger = async () => {
+    try { await api.acctDeleteLedger({ year, month }); toast.success(`Grand livre ${MONTHS[month - 1]} ${year} supprimé`); loadLedger(); reload(); }
+    catch (err) { toast.error(err.response?.data?.detail || "Suppression impossible"); }
+  };
+  const dlLedgerTemplate = async () => {
+    try {
+      const blob = await api.acctLedgerTemplate();
+      const url = URL.createObjectURL(blob); const a = document.createElement("a");
+      a.href = url; a.download = "modele_grand_livre_detaille.xlsx"; a.click(); URL.revokeObjectURL(url);
+    } catch { toast.error("Téléchargement du modèle échoué"); }
   };
   const saveAssignments = async () => {
     const clean = {};
@@ -801,6 +828,33 @@ export function AcctBV() {
             {!result.template_imported && <span className="text-amber-600">⚠ Aucun modèle importé — validation partielle</span>}
           </div>
         )}
+      </div>
+
+      <div className="card p-5" data-testid="acct-ledger-card">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 text-sm font-700"><FileText size={15} className="text-[#0E9488]" /> Grand livre détaillé <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-600 uppercase tracking-wide text-slate-500">Optionnel</span></h3>
+          <button onClick={dlLedgerTemplate} data-testid="acct-ledger-template-btn" className="inline-flex items-center gap-1.5 text-xs font-600 text-[#063044] hover:underline"><Download size={13} /> Modèle</button>
+        </div>
+        <p className="mb-3 text-xs text-slate-500">Import mensuel facultatif des transactions détaillées ({MONTHS[month - 1]} {year}) pour enrichir l'analyse de variance IA. N'affecte aucun calcul (Bilan, P&amp;L, KPI). Colonnes : N° de compte | Date | Description | Débit | Crédit.</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex">
+            <input type="file" accept=".xlsx" className="hidden" onChange={onLedger} disabled={ledgerBusy || selLocked} data-testid="acct-ledger-input" />
+            <span className={`inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-600 ${ledgerBusy || selLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-slate-50"}`}>
+              <Upload size={15} /> {ledgerBusy ? "Traitement…" : ledger?.imported ? "Remplacer le grand livre" : "Importer le grand livre (.xlsx)"}
+            </span>
+          </label>
+          {ledger?.imported ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-sm font-600 text-emerald-700" data-testid="acct-ledger-status">
+              <CheckCircle2 size={14} /> {ledger.transaction_count} transactions · {ledger.uploaded_at ? new Date(ledger.uploaded_at).toLocaleDateString("fr-CA") : ""}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-sm font-600 text-slate-500" data-testid="acct-ledger-status">Aucun grand livre pour ce mois</span>
+          )}
+          {ledger?.imported && !selLocked && (
+            <Button size="sm" variant="outline" data-testid="acct-ledger-delete-btn" onClick={onDeleteLedger} className="gap-1 border-red-200 text-red-600 hover:bg-red-50"><Trash2 size={13} /> Supprimer</Button>
+          )}
+          {selLocked && <span className="inline-flex items-center gap-1 text-xs text-red-600"><Lock size={13} /> Mois verrouillé</span>}
+        </div>
       </div>
 
       <div className="card overflow-hidden">
