@@ -1941,31 +1941,55 @@ def _unassigned(accounts, tmpl_accts, amap):
             if a["account"] not in tmpl_accts and str(a["account"]) not in amap
             and any(abs(a.get(f, 0.0)) > 0.005 for f in BV_FIELD_COLS)]
 
-# Grand livre détaillé : N° de compte | Date | Description | Débit | Crédit. Montant = débit - crédit.
-def _parse_ledger_xlsx(content):
+# Grand livre détaillé. Détection des colonnes par en-tête (compatible modèle standard
+# et export complet : Type|Période|Date|Numéro|Description|Compte|Description|Débit|Crédit).
+# Écritures en double partie : montant = débit - crédit. Filtrage par mois/année si fournis.
+def _parse_ledger_xlsx(content, year=None, month=None):
     wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
-    ws = wb["Grand livre détaillé"] if "Grand livre détaillé" in wb.sheetnames else wb.active
+    ws = wb.active
+    header_row = None; headers = []
+    for r in range(1, min(15, ws.max_row) + 1):
+        rh = [(str(ws.cell(r, c).value).strip().lower(), c) for c in range(1, ws.max_column + 1)
+              if isinstance(ws.cell(r, c).value, str) and str(ws.cell(r, c).value).strip()]
+        names = [h[0] for h in rh]
+        if any("compte" in n for n in names) and any(("bit" in n or "dit" in n) for n in names):
+            header_row = r; headers = rh; break
+    if header_row is None:
+        return []
+    def find(pred):
+        for name, c in headers:
+            if pred(name):
+                return c
+        return None
+    c_compte = find(lambda n: "compte" in n)
+    c_date = find(lambda n: "date" in n)
+    c_debit = find(lambda n: "débit" in n or "debit" in n)
+    c_credit = find(lambda n: "crédit" in n or "credit" in n)
+    desc_cols = sorted([c for name, c in headers if ("description" in name or "libell" in name)])
+    c_payee = next((c for c in desc_cols if c < (c_compte or 9999)), None)
+    c_acctname = next((c for c in desc_cols if c > (c_compte or 0)), None)
     txns = []
-    for r in range(1, ws.max_row + 1):
-        a = ws.cell(r, 1).value
-        if not isinstance(a, (int, float)) or not float(a).is_integer():
-            continue  # ignore l'en-tête et les lignes non numériques
-        acct = int(a)
-        dv = ws.cell(r, 2).value
+    for r in range(header_row + 1, ws.max_row + 1):
+        av = ws.cell(r, c_compte).value if c_compte else None
+        if not isinstance(av, (int, float)) or not float(av).is_integer():
+            continue
+        acct = int(av)
+        dv = ws.cell(r, c_date).value if c_date else None
         if isinstance(dv, datetime):
-            date_s = dv.date().isoformat()
-        elif dv is not None:
-            date_s = str(dv).strip()
+            dt = dv; date_s = dv.date().isoformat()
         else:
-            date_s = ""
-        desc = str(ws.cell(r, 3).value or "").strip()
-        dbt = ws.cell(r, 4).value; dbt = float(dbt) if isinstance(dbt, (int, float)) else 0.0
-        crd = ws.cell(r, 5).value; crd = float(crd) if isinstance(crd, (int, float)) else 0.0
-        amount = round(dbt - crd, 2)
-        if not desc and dbt == 0 and crd == 0:
+            dt = None; date_s = str(dv).strip() if dv is not None else ""
+        if year and month and dt is not None and not (dt.year == int(year) and dt.month == int(month)):
+            continue
+        payee = str(ws.cell(r, c_payee).value or "").strip() if c_payee else ""
+        acctname = str(ws.cell(r, c_acctname).value or "").strip() if c_acctname else ""
+        desc = payee or acctname
+        dbt = ws.cell(r, c_debit).value if c_debit else None; dbt = float(dbt) if isinstance(dbt, (int, float)) else 0.0
+        crd = ws.cell(r, c_credit).value if c_credit else None; crd = float(crd) if isinstance(crd, (int, float)) else 0.0
+        if dbt == 0 and crd == 0:
             continue
         txns.append({"account": acct, "date": date_s, "description": desc,
-                     "debit": round(dbt, 2), "credit": round(crd, 2), "amount": amount})
+                     "debit": round(dbt, 2), "credit": round(crd, 2), "amount": round(dbt - crd, 2)})
     return txns
 
 @api.post("/acct/template")
@@ -2066,18 +2090,18 @@ async def acct_delete_period(year: int, month: int, user: dict = Depends(require
     await log_action(user, "Supprimer", "Comptabilité", f"Suppression BV {pk}")
     return {"success": True, "period": pk}
 
-LEDGER_HEADERS = ["N° de compte", "Date", "Description", "Débit", "Crédit"]
+LEDGER_HEADERS = ["Type", "Période", "Date", "Numéro", "Description", "Compte", "Description", "Débit", "Crédit"]
 
 @api.get("/acct/ledger/template")
 async def acct_ledger_template(user: dict = Depends(get_current_user)):
-    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Grand livre détaillé"
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Transactions"
     ws.append(LEDGER_HEADERS)
     for c in ws[1]:
         c.font = openpyxl.styles.Font(bold=True)
-    ws.append([61000, "2026-01-15", "Facture fournisseur ABC inc.", 1250.00, 0])
-    ws.append([61000, "2026-01-22", "Note de crédit fournisseur", 0, 300.00])
-    ws.append([40010, "2026-01-31", "Vente contrat #1042", 0, 18500.00])
-    for col, w in {"A": 14, "B": 14, "C": 42, "D": 14, "E": 14}.items():
+    ws.append(["C", 1, "2026-01-02", 20126, "Shred-it", 1001060, "VISA - cartes de crédit", 0, 218.91])
+    ws.append(["C", 1, "2026-01-02", 20126, "Shred-it", 2002100, "Comptes à payer", 218.91, 0])
+    ws.append(["E", 1, "2026-01-15", 15012, "Facturation contrat #1042", 4504500, "Revenus - Service énergie", 0, 18500.00])
+    for col, w in {"A": 8, "B": 9, "C": 13, "D": 12, "E": 32, "F": 12, "G": 30, "H": 13, "I": 13}.items():
         ws.column_dimensions[col].width = w
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -2091,11 +2115,11 @@ async def acct_upload_ledger(year: int, month: int, file: UploadFile = File(...)
         raise HTTPException(status_code=403, detail=f"Le mois {MONTHS_FR[month-1]} {year} est verrouillé — aucun nouvel upload permis.")
     content = await file.read()
     try:
-        txns = _parse_ledger_xlsx(content)
+        txns = _parse_ledger_xlsx(content, year, month)
     except Exception:
-        raise HTTPException(status_code=400, detail="Fichier de grand livre invalide (.xlsx attendu). Utilisez le modèle : N° de compte | Date | Description | Débit | Crédit.")
+        raise HTTPException(status_code=400, detail="Fichier de grand livre invalide (.xlsx attendu). En-têtes attendus : Compte, Date, Description, Débit, Crédit.")
     if not txns:
-        raise HTTPException(status_code=400, detail="Aucune transaction détectée. Colonnes attendues : N° de compte | Date | Description | Débit | Crédit.")
+        raise HTTPException(status_code=400, detail=f"Aucune transaction pour {MONTHS_FR[month-1]} {year} dans ce fichier. Vérifiez le mois sélectionné et les colonnes (Compte, Date, Débit, Crédit).")
     # Étape 1 (déterministe, sans IA) : agrégation par compte pour la période.
     totals = {}
     for t in txns:

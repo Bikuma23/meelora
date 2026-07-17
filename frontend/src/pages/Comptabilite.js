@@ -835,7 +835,7 @@ export function AcctBV() {
           <h3 className="flex items-center gap-2 text-sm font-700"><FileText size={15} className="text-[#0E9488]" /> Grand livre détaillé <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-600 uppercase tracking-wide text-slate-500">Optionnel</span></h3>
           <button onClick={dlLedgerTemplate} data-testid="acct-ledger-template-btn" className="inline-flex items-center gap-1.5 text-xs font-600 text-[#063044] hover:underline"><Download size={13} /> Modèle</button>
         </div>
-        <p className="mb-3 text-xs text-slate-500">Import mensuel facultatif des transactions détaillées ({MONTHS[month - 1]} {year}) pour enrichir l'analyse de variance IA. N'affecte aucun calcul (Bilan, P&amp;L, KPI). Colonnes : N° de compte | Date | Description | Débit | Crédit.</p>
+        <p className="mb-3 text-xs text-slate-500">Import mensuel facultatif du rapport de transactions ({MONTHS[month - 1]} {year}) pour enrichir l'analyse de variance IA. N'affecte aucun calcul (Bilan, P&amp;L, KPI). Colonnes : Type | Période | Date | Numéro | Description | Compte | Débit | Crédit. Seules les transactions du mois sélectionné sont conservées (un rapport annuel complet est accepté).</p>
         <div className="flex flex-wrap items-center gap-3">
           <label className="inline-flex">
             <input type="file" accept=".xlsx" className="hidden" onChange={onLedger} disabled={ledgerBusy || selLocked} data-testid="acct-ledger-input" />
