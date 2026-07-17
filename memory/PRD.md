@@ -408,6 +408,12 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] Frontend déjà conforme : bouton « Assistant IA » (config) gaté `isAdmin` ; cartes IA (variance, chat, anomalies) visibles à tous.
 - [x] **Vérifié** (curl rôles + Playwright) : editor.test & user.test → variance/anomalies/chat POST = 200 ; config GET/PUT = 403 ; en tant que « user » l'UI génère l'analyse et le bouton config est masqué.
 
+## Débogage chat IA — contexte financier incomplet (2026-07)
+- [x] Symptôme : le chat répondait « information non disponible » pour créances/encaisse/fournisseurs/flux, alors que les totaux (ventes, actif CT, bénéfice net) fonctionnaient.
+- [x] Cause racine (PAS un fallback ni une erreur API) : `_ai_chat_ctx` ne gardait que les lignes `total`/`header` des rapports **sommaires** (lignes `data` détaillées exclues) et n'incluait **pas le flux de trésorerie**. Le modèle répondait donc correctement « absent » car la donnée n'était pas dans le prompt.
+- [x] Correctif : contexte enrichi avec bilan détaillé complet (actif/passif toutes lignes), P&L avec budget_ca, et flux de trésorerie (mois précédent → courant, via `_cashflow_data` injecté dans `init`). Prompt système invite au rapprochement des libellés équivalents. Message d'erreur IA reflète la vraie cause (« Erreur de connexion au service IA … »).
+- [x] **Vérifié** : réponses confrontées au Bilan réel juin 2026 — Comptes à recevoir 7 656 359,73 ; Encaisse 574 427,81 ; Fournisseurs 874 454,86 ; Flux exploitation -615 997,09 ; Actif CT 9 936 986,74. Toutes exactes.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

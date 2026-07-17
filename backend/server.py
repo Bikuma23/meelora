@@ -3010,7 +3010,7 @@ async def acct_cashflow_excel(open_year: int, open_month: int, close_year: int, 
 import acct_ai
 acct_ai.init(
     db=db, log_action=log_action, _acct_report=_acct_report, _kpi_data=_kpi_data,
-    _bilan_sommaire_data=_bilan_sommaire_data, _pnl_figures=_pnl_figures,
+    _bilan_sommaire_data=_bilan_sommaire_data, _pnl_figures=_pnl_figures, _cashflow_data=_cashflow_data,
     _pkey=_pkey, _add_months=_add_months, MONTHS_FR=MONTHS_FR, get_current_user=get_current_user,
 )
 api.include_router(acct_ai.router)

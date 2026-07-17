@@ -15,6 +15,7 @@ _acct_report = None
 _kpi_data = None
 _bilan_sommaire_data = None
 _pnl_figures = None
+_cashflow_data = None
 _pkey = None
 _add_months = None
 MONTHS_FR = None
@@ -23,13 +24,14 @@ _get_current_user = None
 
 def init(**kw):
     global db, log_action, _acct_report, _kpi_data, _bilan_sommaire_data
-    global _pnl_figures, _pkey, _add_months, MONTHS_FR, _get_current_user
+    global _pnl_figures, _cashflow_data, _pkey, _add_months, MONTHS_FR, _get_current_user
     db = kw["db"]
     log_action = kw["log_action"]
     _acct_report = kw["_acct_report"]
     _kpi_data = kw["_kpi_data"]
     _bilan_sommaire_data = kw["_bilan_sommaire_data"]
     _pnl_figures = kw["_pnl_figures"]
+    _cashflow_data = kw.get("_cashflow_data")
     _pkey = kw["_pkey"]
     _add_months = kw["_add_months"]
     MONTHS_FR = kw["MONTHS_FR"]
@@ -368,12 +370,51 @@ async def acct_ai_anomalies(year: int, month: int, user: dict = Depends(_get_use
     return result
 
 # ---- 3. Chat Q&A ----
+async def _cashflow_ctx(year, month):
+    """Flux de trésorerie du mois (ouverture = mois précédent -> clôture = mois courant), si disponible."""
+    if _cashflow_data is None:
+        return None
+    oy, om = _add_months(year, month, -1)
+    if not await db.acct_bv.find_one({"_id": _pkey(oy, om)}):
+        return None
+    try:
+        cf = await _cashflow_data(oy, om, year, month)
+    except Exception:
+        return None
+    return {
+        "periode": f"{cf.get('open_label')} -> {cf.get('close_label')}",
+        "benefice_net": cf.get("benefice_net"), "amortissement": cf.get("amortissement"),
+        "activites_exploitation": cf.get("exploitation_total"),
+        "fonds_de_roulement": cf.get("fdr"),
+        "activites_investissement": cf.get("investissement_total"), "detail_investissement": cf.get("investissement"),
+        "activites_financement": cf.get("financement_total"), "detail_financement": cf.get("financement"),
+        "variation_nette_encaisse": cf.get("variation_nette"),
+        "encaisse_ouverture": cf.get("encaisse_ouverture"), "encaisse_cloture": cf.get("encaisse_cloture"),
+    }
+
+
 async def _ai_chat_ctx(year, month):
     import json as _json
     kpi = await _kpi_data(year, month, with_trend=False)
     pnl = await _acct_report(year, month, "pnl_sommaire")
     bil = await _bilan_sommaire_data(year, month)
-    def pack(lines): return [{"poste": l["label"], "reel": l["values"].get("reel"), "cumulatif": l["values"].get("cumulatif")} for l in lines if l.get("kind") in ("total", "header")]
+
+    def pack_pnl(lines):
+        out = []
+        for l in lines:
+            if l.get("kind") not in ("data", "total", "header"):
+                continue
+            v = l.get("values", {})
+            row = {"poste": l["label"], "reel": v.get("reel"), "cumulatif": v.get("cumulatif")}
+            if v.get("bud_ca") is not None:
+                row["budget_ca"] = v.get("bud_ca")
+            out.append(row)
+        return out
+
+    def pack_bilan(side):
+        # inclut les lignes détaillées (data) ET les totaux/entêtes
+        return [{"poste": l["label"], "valeur": l["value"]} for l in side if l.get("label")]
+
     trend = []
     for k in range(5, -1, -1):
         hy, hm = _add_months(year, month, -k)
@@ -383,12 +424,16 @@ async def _ai_chat_ctx(year, month):
                 trend.append({"mois": f"{MONTHS_FR[hm-1]} {hy}", "ventes": p["sales"].get("reel"), "cogs": p["cogs"].get("reel"), "charges": p["charges"].get("reel")})
             except Exception:
                 pass
+    cashflow = await _cashflow_ctx(year, month)
     ctx = {
         "periode": f"{MONTHS_FR[month-1]} {year}",
         "kpi": {"DSO_jours": kpi["dso"]["value"], "DPO_jours": kpi["dpo"]["value"], "FDR": kpi["fdr"]["value"], "BFR": kpi["fdr"].get("bfr", {}).get("value")},
-        "etat_resultats": pack(pnl["lines"]),
-        "bilan_actif": [{"poste": l["label"], "valeur": l["value"]} for l in bil["actif"] if l.get("kind") in ("total", "header")],
-        "bilan_passif": [{"poste": l["label"], "valeur": l["value"]} for l in bil["passif"] if l.get("kind") in ("total", "header")],
+        "etat_resultats": pack_pnl(pnl["lines"]),
+        "bilan_actif": pack_bilan(bil["actif"]),
+        "bilan_passif": pack_bilan(bil["passif"]),
+        "bilan_total_actif": bil.get("total_actif"),
+        "bilan_total_passif": bil.get("total_passif"),
+        "flux_tresorerie": cashflow,
         "tendance_6_mois": trend,
     }
     return _json.dumps(ctx, ensure_ascii=False)
@@ -406,16 +451,20 @@ async def acct_ai_chat(body: AIChatBody, user: dict = Depends(_get_user)):
     if not st["configured"]:
         return {"available": False, "reason": "Fonctionnalité IA non configurée."}
     ctx = await _ai_chat_ctx(body.year, body.month)
-    system = ("Tu es l'assistant financier du module Comptabilité. Réponds en français UNIQUEMENT à partir des données JSON fournies "
-              "(bilan, état des résultats, flux, KPI, tendance). N'invente JAMAIS de chiffres. Si la question porte sur des données absentes du contexte, "
-              "dis clairement que l'information n'est pas disponible dans le module plutôt que de deviner. Sois concis et factuel.")
-    user_p = f"Contexte (données réelles du module):\n{ctx}\n\nQuestion: {body.question}"
+    system = ("Tu es l'assistant financier du module Comptabilité. Réponds en français en t'appuyant sur les données JSON fournies "
+              "(bilan détaillé actif/passif, état des résultats avec budget, flux de trésorerie, KPI, tendance 6 mois). "
+              "Les libellés du contexte peuvent différer légèrement de la question : rapproche les termes équivalents "
+              "(ex. « créances clients » ≈ « comptes clients / débiteurs », « encaisse » ≈ « trésorerie / caisse / banque », "
+              "« fournisseurs » ≈ « comptes fournisseurs / créditeurs »). Cite le libellé exact du contexte et le montant. "
+              "N'invente JAMAIS de chiffres. Ne réponds « information non disponible » QUE si, après avoir cherché tous les libellés équivalents, "
+              "la donnée est réellement absente du contexte. Sois concis et factuel.")
+    user_p = f"Contexte (données réelles du module, période {MONTHS_FR[body.month-1]} {body.year}):\n{ctx}\n\nQuestion: {body.question}"
     try:
         answer = await ai_service.ai_complete(cfg, system, user_p, user["email"], max_tokens=700)
     except ai_service.AINotConfigured as e:
         return {"available": False, "reason": str(e)}
     except ai_service.AIError as e:
-        return {"available": False, "reason": str(e)}
+        return {"available": False, "reason": f"Erreur de connexion au service IA : {e}. Vérifiez la configuration de l'assistant IA."}
     now = datetime.now(timezone.utc).isoformat()
     await db.acct_ai_chat.insert_one({"session_id": body.session_id, "user": user["email"], "q": body.question, "a": answer, "at": now})
     return {"available": True, "answer": answer}
