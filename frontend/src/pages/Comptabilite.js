@@ -9,7 +9,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
-  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download,
+  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download, Search,
 } from "lucide-react";
 import { MONTHS, money, moneyM, usePeriods, PeriodSelect } from "./comptabilite/shared";
 import { AiConfigDialog, VarianceCard, AiChatPanel, AnomaliesCard } from "./comptabilite/AiComponents";
@@ -684,6 +684,69 @@ export function AcctDashboard() {
 
 // ---------- Balance de vérification ----------
 
+function LedgerPreviewDialog({ open, onOpenChange, year, month }) {
+  const [q, setQ] = useState("");
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [skip, setSkip] = useState(0);
+  const LIMIT = 100;
+  useEffect(() => { if (!open) { setQ(""); setSkip(0); setData(null); } }, [open]);
+  useEffect(() => {
+    if (!open || !year || !month) return;
+    setLoading(true);
+    const h = setTimeout(() => {
+      api.acctLedgerTransactions({ year, month, q, skip, limit: LIMIT })
+        .then(setData).catch(() => setData(null)).finally(() => setLoading(false));
+    }, 300);
+    return () => clearTimeout(h);
+  }, [open, year, month, q, skip]);
+  const total = data?.total || 0;
+  const txns = data?.transactions || [];
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="ledger-preview-dialog" className="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#0E9488]" /> Grand livre — {month ? MONTHS[month - 1] : ""} {year}</DialogTitle>
+          <DialogDescription>{data ? `${(data.grand_total || 0).toLocaleString("fr-CA")} transactions · ${data.account_count} comptes` : "Chargement…"}</DialogDescription>
+        </DialogHeader>
+        <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+          <Search size={15} className="text-slate-400" />
+          <input data-testid="ledger-search" className="w-full bg-transparent text-sm outline-none" placeholder="Rechercher par compte ou description…"
+            value={q} onChange={(e) => { setSkip(0); setQ(e.target.value); }} />
+        </div>
+        <div className="flex-1 overflow-y-auto rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-slate-50"><tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-400">
+              <th className="px-3 py-2 text-left font-600">Date</th><th className="px-3 py-2 text-left font-600">Compte</th>
+              <th className="px-3 py-2 text-left font-600">Description</th><th className="px-3 py-2 text-right font-600">Montant</th>
+            </tr></thead>
+            <tbody data-testid="ledger-preview-rows">
+              {loading ? <tr><td colSpan={4} className="px-3 py-8 text-center text-slate-400">Chargement…</td></tr>
+                : txns.length === 0 ? <tr><td colSpan={4} className="px-3 py-8 text-center text-slate-400">Aucune transaction.</td></tr>
+                : txns.map((t, i) => (
+                  <tr key={i} className="border-b border-slate-100">
+                    <td className="px-3 py-1.5 font-mono-data text-slate-500">{t.date}</td>
+                    <td className="px-3 py-1.5 font-mono-data text-slate-600">{t.account}</td>
+                    <td className="px-3 py-1.5 text-slate-700">{t.description}</td>
+                    <td className="px-3 py-1.5 text-right font-mono-data" style={{ color: (t.amount || 0) < 0 ? "#DC2626" : "#0E9488" }}>{money(t.amount)}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex items-center justify-between text-xs text-slate-500">
+          <span data-testid="ledger-preview-total">{total.toLocaleString("fr-CA")} résultat(s)</span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" disabled={skip === 0} onClick={() => setSkip(Math.max(0, skip - LIMIT))}>Précédent</Button>
+            <span className="font-mono-data">{Math.floor(skip / LIMIT) + 1} / {Math.max(1, Math.ceil(total / LIMIT))}</span>
+            <Button size="sm" variant="outline" disabled={skip + LIMIT >= total} onClick={() => setSkip(skip + LIMIT)}>Suivant</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function AcctBV() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -702,6 +765,7 @@ export function AcctBV() {
   const [confirmDel, setConfirmDel] = useState(null);
   const [ledger, setLedger] = useState(null);
   const [ledgerBusy, setLedgerBusy] = useState(false);
+  const [ledgerPreview, setLedgerPreview] = useState({ open: false, year: null, month: null });
   const loadTmpl = useCallback(() => api.acctGetTemplate().then(setTmpl).catch(() => {}), []);
   useEffect(() => { loadTmpl(); api.acctAccounts().then(setAccts).catch(() => {}); }, [loadTmpl]);
   const loadLedger = useCallback(() => { api.acctLedgerStatus({ year, month }).then(setLedger).catch(() => setLedger(null)); }, [year, month]);
@@ -902,9 +966,11 @@ export function AcctBV() {
                   <td className="px-5 py-2.5 text-right font-mono-data" style={{ color: p.balanced ? "#0E9488" : "#DC2626" }}>{money(p.diff)}</td>
                   <td className="px-5 py-2.5 text-center" data-testid={`acct-period-ledger-${p.id}`}>
                     {p.ledger_count ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-600 text-emerald-700" title={`${p.ledger_count} transactions`}>
+                      <button onClick={() => setLedgerPreview({ open: true, year: p.year, month: p.month })} data-testid={`acct-period-ledger-btn-${p.id}`}
+                        title="Voir les transactions du mois"
+                        className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-600 text-emerald-700 transition-colors hover:bg-emerald-200">
                         <CheckCircle2 size={12} /> {p.ledger_count.toLocaleString("fr-CA")}
-                      </span>
+                      </button>
                     ) : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-5 py-2.5 text-xs text-slate-500">{p.last_upload_at ? new Date(p.last_upload_at).toLocaleString("fr-CA") : "—"}</td>
@@ -932,6 +998,8 @@ export function AcctBV() {
       </div>
 
       <AnomaliesCard periods={periods} />
+
+      <LedgerPreviewDialog open={ledgerPreview.open} onOpenChange={(v) => setLedgerPreview((p) => ({ ...p, open: v }))} year={ledgerPreview.year} month={ledgerPreview.month} />
 
       <AlertDialog open={!!confirmDel} onOpenChange={(v) => !v && setConfirmDel(null)}>
         <AlertDialogContent data-testid="acct-delete-confirm-dialog">

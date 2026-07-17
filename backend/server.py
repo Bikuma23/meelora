@@ -2195,6 +2195,21 @@ async def acct_upload_ledger_all(file: UploadFile = File(...), user: dict = Depe
     return {"success": True, "imported": imported, "skipped_locked": skipped_locked,
             "skipped_small": skipped_small, "total_transactions": len(txns)}
 
+@api.get("/acct/ledger/transactions")
+async def acct_ledger_transactions(year: int, month: int, q: str = "", skip: int = 0, limit: int = 100, user: dict = Depends(get_current_user)):
+    pk = _pkey(year, month)
+    doc = await db.acct_ledger.find_one({"_id": pk})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Aucun grand livre détaillé pour ce mois")
+    txns = doc.get("transactions", [])
+    ql = (q or "").strip().lower()
+    if ql:
+        txns = [t for t in txns if ql in str(t.get("account", "")).lower() or ql in (t.get("description") or "").lower()]
+    total = len(txns)
+    page = txns[skip:skip + min(limit, 500)]
+    return {"period": pk, "total": total, "skip": skip, "limit": limit, "transactions": page,
+            "account_count": len(doc.get("account_totals", {})), "grand_total": len(doc.get("transactions", []))}
+
 @api.get("/acct/ledger/status")
 async def acct_ledger_status(year: int, month: int, user: dict = Depends(get_current_user)):
     pk = _pkey(year, month)
