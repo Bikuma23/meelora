@@ -208,6 +208,39 @@ async def _variance_txns(year, month, rows, max_rows=3, max_txn=25, summarize_th
             result[r["poste"]] = {"mode": "detail", "n_transactions": len(rel), "transactions": enriched[:max_txn]}
     return result or None
 
+async def _ai_variance_compare_ctx(year, month, amt_thr, pct_thr, active):
+    """Contexte multi-scénarios : pour chaque poste significatif, écarts du réel face à
+    chaque scénario disponible (CA, Rév-1, Rév-2). 'active' = liste des scénarios ayant des données."""
+    pnl = await _acct_report(year, month, "pnl")
+    rows = []
+    for ln in pnl["lines"]:
+        if ln.get("kind") not in ("data", "total"):
+            continue
+        v = ln["values"]
+        scen_data = {}
+        max_ec = 0.0
+        for s in active:
+            f = VARIANCE_SCENARIOS[s]
+            ec = v.get(f["ecart"]); bud = v.get(f["bud"])
+            if ec is None:
+                continue
+            pct = (abs(ec) / abs(bud) * 100) if bud else None
+            scen_data[f["label"]] = {"budget": round(bud or 0, 2), "ecart": round(ec, 2),
+                                     "ecart_pct": round(pct, 1) if pct is not None else None}
+            max_ec = max(max_ec, abs(ec))
+        if not scen_data:
+            continue
+        keep = any((abs(d["ecart"]) >= amt_thr) or (d["ecart_pct"] is not None and d["ecart_pct"] >= pct_thr) for d in scen_data.values())
+        if not keep:
+            continue
+        rows.append({"poste": ln["label"], "account": ln.get("account"),
+                     "reel": round(v.get("reel") or 0, 2), "_max": max_ec, "scenarios": scen_data})
+    rows.sort(key=lambda r: r["_max"], reverse=True)
+    for r in rows:
+        r.pop("_max", None)
+    return rows[:25]
+
+
 @router.get("/acct/ai/variance/scenarios")
 async def acct_ai_variance_scenarios(year: int, month: int, user: dict = Depends(_get_user)):
     """Indique quels scénarios budgétaires disposent de données pour la période (pour l'UI)."""
@@ -217,11 +250,43 @@ async def acct_ai_variance_scenarios(year: int, month: int, user: dict = Depends
 
 @router.post("/acct/ai/variance")
 async def acct_ai_variance(year: int, month: int, scenario: str = "ca", user: dict = Depends(_get_user)):
+    cfg = await _ai_config()
+    amt = float(cfg.get("variance_threshold_amount", 10000)); pct = float(cfg.get("variance_threshold_pct", 10))
+
+    if scenario == "compare":
+        pnl = await _acct_report(year, month, "pnl")
+        active = [s for s in VARIANCE_SCENARIOS if _scenario_has_data(pnl, s)]
+        if len(active) < 2:
+            return {"available": True, "commentary": None, "rows": [], "empty": True, "scenario": scenario,
+                    "reason_empty": "La comparaison nécessite au moins deux scénarios budgétaires avec des données."}
+        rows = await _ai_variance_compare_ctx(year, month, amt, pct, active)
+        if not rows:
+            return {"available": True, "commentary": None, "rows": [], "empty": True, "scenario": scenario}
+        detail = await _variance_txns(year, month, rows)
+        labels = ", ".join(VARIANCE_SCENARIOS[s]["label"] for s in active)
+        system = ("Tu es un analyste financier. Compare le réel face à plusieurs révisions budgétaires (" + labels + "). "
+                  "Commente UNIQUEMENT à partir des données fournies, n'invente aucun chiffre. Rédige en français, 4 à 7 phrases concises. "
+                  "Mets en évidence : (1) les postes où l'écart se creuse ou se réduit d'une révision à l'autre (dérive budgétaire), "
+                  "(2) les écarts majeurs communs à tous les scénarios, (3) le sens (dépassement/économie). Priorise les postes les plus significatifs.")
+        if detail:
+            system += (" Des transactions détaillées (grand livre) filtrées par le système sont fournies pour les postes en plus gros écart ; "
+                       "utilise-les pour signaler une transaction ponctuelle inhabituelle (« inhabituelle=true ») plutôt qu'une dérive générale. Échantillon ciblé, non exhaustif.")
+        import json as _json
+        user_p = (f"Période {MONTHS_FR[month-1]} {year}. Comparaison multi-scénarios (réel vs {labels}). "
+                  f"Seuils: {amt}$ ou {pct}%. Écarts par poste et par scénario:\n{_json.dumps(rows, ensure_ascii=False)}")
+        if detail:
+            user_p += "\n\nTransactions détaillées ciblées (filtrage déterministe, non exhaustif) par poste en écart:\n" + _json.dumps(detail, ensure_ascii=False)
+        try:
+            txt = await ai_service.ai_complete(cfg, system, user_p, user["email"], max_tokens=700)
+            return {"available": True, "commentary": txt, "rows": rows, "ledger_used": bool(detail), "detail": detail or {}, "scenario": scenario, "compared": active}
+        except ai_service.AINotConfigured as e:
+            return {"available": False, "reason": str(e), "rows": rows, "scenario": scenario}
+        except ai_service.AIError as e:
+            return {"available": False, "reason": str(e), "rows": rows, "scenario": scenario}
+
     if scenario not in VARIANCE_SCENARIOS:
         scenario = "ca"
     scen = VARIANCE_SCENARIOS[scenario]
-    cfg = await _ai_config()
-    amt = float(cfg.get("variance_threshold_amount", 10000)); pct = float(cfg.get("variance_threshold_pct", 10))
     rows = await _ai_variance_ctx(year, month, amt, pct, scenario)
     if not rows:
         return {"available": True, "commentary": None, "rows": [], "empty": True, "scenario": scenario}

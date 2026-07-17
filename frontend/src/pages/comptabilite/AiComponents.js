@@ -108,13 +108,17 @@ export function VarianceCard({ year, month }) {
     finally { setLoading(false); }
   };
   const selectScenario = (scen) => {
-    if (loading || (avail && avail[scen] === false)) return;
+    if (loading) return;
+    if (scen === "compare") { if (!compareEnabled) return; }
+    else if (avail && avail[scen] === false) return;
     setScenario(scen);
     localStorage.setItem(LS_SCENARIO_KEY, scen);
     if (data) gen(scen); // changer de scénario régénère une analyse déjà présente
   };
   const detail = data?.detail || {};
   const postes = Object.keys(detail);
+  const compareEnabled = avail ? Object.values(avail).filter(Boolean).length >= 2 : true;
+  const scenLabel = scenario === "compare" ? "Comparaison" : VARIANCE_SCENARIOS.find((s) => s.id === scenario)?.label;
   return (
     <div className="card p-5" data-testid="ai-variance-card">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -135,11 +139,18 @@ export function VarianceCard({ year, month }) {
             </button>
           );
         })}
+        <span className="mx-1 h-4 w-px bg-slate-200" aria-hidden />
+        <button onClick={() => selectScenario("compare")} disabled={!compareEnabled || loading}
+          title={!compareEnabled ? "La comparaison nécessite au moins deux scénarios avec des données" : "Comparer le réel face à tous les scénarios disponibles"}
+          data-testid="ai-variance-scenario-compare"
+          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-600 transition-colors ${scenario === "compare" ? "border-[#0E9488] bg-[#0E9488] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488] hover:text-[#0E9488]"} ${(!compareEnabled || loading) ? "cursor-not-allowed opacity-40 hover:border-slate-300 hover:text-slate-600" : ""}`}>
+          <Sparkles size={12} /> Comparaison
+        </button>
       </div>
-      {!scenario ? <p className="text-xs text-slate-400" data-testid="ai-variance-hint">Choisissez un scénario budgétaire ci-dessus puis cliquez « Générer » pour commenter les écarts réel vs budget les plus significatifs.</p>
-        : !data ? <p className="text-xs text-slate-400">Cliquez « Générer » pour analyser les écarts réel vs {VARIANCE_SCENARIOS.find((s) => s.id === scenario)?.label} de la période.</p>
+      {!scenario ? <p className="text-xs text-slate-400" data-testid="ai-variance-hint">Choisissez un scénario budgétaire (ou « Comparaison ») ci-dessus puis cliquez « Générer » pour commenter les écarts réel vs budget les plus significatifs.</p>
+        : !data ? <p className="text-xs text-slate-400">Cliquez « Générer » pour {scenario === "compare" ? "comparer le réel face à tous les scénarios disponibles" : `analyser les écarts réel vs ${scenLabel}`} de la période.</p>
         : data.available === false ? <p className="text-xs text-amber-600" data-testid="ai-variance-unavailable">{data.reason || "Fonctionnalité IA non configurée."}</p>
-        : data.empty ? <p className="text-xs text-slate-500">Aucun écart au-delà des seuils configurés pour cette période.</p>
+        : data.empty ? <p className="text-xs text-slate-500" data-testid="ai-variance-empty">{data.reason_empty || "Aucun écart au-delà des seuils configurés pour cette période."}</p>
         : (
           <>
             <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700" data-testid="ai-variance-text">{data.commentary}</p>

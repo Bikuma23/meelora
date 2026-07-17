@@ -396,6 +396,12 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] Backend : `POST /acct/ai/variance` accepte `scenario` (`ca|rev1|rev2`) ; mappe vers les bons champs P&L (`bud_ca/ecart_ca`, `bud_rev1/ecart_rev1`, `bud_rev2/ecart_rev2` + cumulatifs). Aucune modification de la logique budget vs réel du Bilan/P&L.
 - [x] **Vérifié** (curl + Playwright) : scénarios juin 2026 → `{ca:true, rev1:true, rev2:false}` ; CA et Rév-1 produisent des budgets/écarts distincts ; Rév-2 bouton désactivé ; Générer activé après sélection ; bascule CA→Rév-1 régénère et cite les écarts Rév-1 exacts.
 
+## Comparaison multi-scénarios IA (2026-07)
+- [x] Bouton **Comparaison** dans `VarianceCard` (à côté des 3 scénarios) : l'IA commente en un seul rapport le réel vs tous les scénarios disponibles (CA/Rév-1/Rév-2) et la **dérive budgétaire** entre révisions.
+- [x] Backend : `POST /acct/ai/variance?scenario=compare` — contexte `_ai_variance_compare_ctx` (écarts par poste × scénario actif), réutilise le grand livre ciblé. Désactivé si < 2 scénarios avec données (`reason_empty`).
+- [x] Frontend : bouton désactivé si moins de 2 scénarios ; sélection mémorisée (localStorage) ; régénère si analyse déjà affichée.
+- [x] **Vérifié** (curl + Playwright) : juin 2026 compare `['ca','rev1']`, Rév-2 exclu ; l'IA cite la dérive -45,4 %→-60,9 % sur MARGE BRUTE - PROJETS.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
