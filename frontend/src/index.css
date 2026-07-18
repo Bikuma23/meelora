@@ -39,6 +39,11 @@ input, button, select, textarea, table, th, td { font-family: Calibri, Carlito, 
 
 /* Suptitre / overline façon accslegroupe */
 .overline { text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.7rem; font-weight: 600; color: #808080; text-decoration: none; }
+
+/* Surlignement de ligne au survol — tableaux du module Comptabilité */
+.acct-hover-rows tbody tr { transition: background-color 0.12s ease; }
+.acct-hover-rows tbody tr:hover { background-color: #F1F5F9; }
+.dark .acct-hover-rows tbody tr:hover { background-color: #1E293B; }
 .dark .overline { color: #94A3B8; }
 
 ::selection { background: #15AF97; color: #fff; }

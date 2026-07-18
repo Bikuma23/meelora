@@ -456,6 +456,12 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 ## Ajustements KPI + responsive (compléments 2026-07)
 - [x] Cartes KPI passées en pleine largeur (ruban) au-dessus de la grille 2 colonnes → valeurs jamais tronquées ; police réduite (text-xl). Breakpoints `lg` pour adaptation écran. Correctif overflow Masse salariale (`min-w-0` sur cellule graphique Comparatif). Axe X des mini-graphiques Projection corrigé (angle -35°, preserveStartEnd).
 
+## Ajustements P&L/Bilan : persistance, couleur, survol (2026-07)
+- [x] **Persistance affichage P&L** : la bascule État détaillé / Résultat sommaire est mémorisée (`localStorage acct.pnl.view`) ; hideZero et groupes masqués persistés par type de rapport.
+- [x] **Bouton commentaire** en vert de la palette (#0E9488) ; affiché uniquement au survol de la ligne (opacity 0 → group-hover:opacity-100) ou en permanence si la ligne possède déjà un ou plusieurs commentaires.
+- [x] **Surlignement de ligne au survol** (fond #F1F5F9, transition douce, dark #1E293B) sur tous les tableaux du module via classe `.acct-hover-rows` (Balance de vérification, Bilan, États des résultats, Flux de trésorerie, P&L budget vs réel). Rapports d'audit = placeholder sans tableau.
+- [x] **Vérifié** (Playwright) : opacité bouton 0→1 au survol, couleur rgb(14,148,136), fond ligne rgb(241,245,249) au survol, bascule P&L conservée après reload.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

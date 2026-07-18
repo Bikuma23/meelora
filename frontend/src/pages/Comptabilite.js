@@ -713,7 +713,7 @@ function LedgerPreviewDialog({ open, onOpenChange, year, month }) {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto rounded-lg border border-slate-200">
-          <table className="w-full text-sm">
+          <table className="acct-hover-rows w-full text-sm">
             <thead className="sticky top-0 bg-slate-50"><tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-400">
               <th className="w-6 px-2 py-2"></th>
               <th className="px-3 py-2 text-left font-600">Date</th><th className="px-3 py-2 text-left font-600">Compte</th>
@@ -748,7 +748,7 @@ function LedgerPreviewDialog({ open, onOpenChange, year, month }) {
                               <span>Date : <span className="font-mono-data text-slate-700">{entry.date}</span></span>
                               {entry.group_by === "date_description" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-600 text-amber-700" title="Regroupée par date + description (numéro d'écriture absent des données importées)">groupé par date + description</span>}
                             </div>
-                            <table className="w-full text-sm">
+                            <table className="acct-hover-rows w-full text-sm">
                               <thead><tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-400">
                                 <th className="px-2 py-1 text-left font-600">Compte</th><th className="px-2 py-1 text-left font-600">Description</th>
                                 <th className="px-2 py-1 text-right font-600">Débit</th><th className="px-2 py-1 text-right font-600">Crédit</th>
@@ -1003,7 +1003,7 @@ export function AcctBV() {
           })()}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="acct-hover-rows w-full text-sm">
             <thead><tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
               <th className="px-5 py-2.5 text-left font-600">Mois</th><th className="px-5 py-2.5 text-left font-600">Statut</th>
               <th className="px-5 py-2.5 text-right font-600">Comptes</th><th className="px-5 py-2.5 text-right font-600">Écart bilan</th>
@@ -1150,8 +1150,10 @@ function ReportView({ type, title }) {
   const [period, setPeriod] = useState("");
   const [rep, setRep] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [hideZero, setHideZero] = useState(false);
-  const [hiddenGroups, setHiddenGroups] = useState({});
+  const [hideZero, setHideZero] = useState(() => localStorage.getItem(`acct.report.${type}.hideZero`) === "1");
+  const [hiddenGroups, setHiddenGroups] = useState(() => { try { return JSON.parse(localStorage.getItem(`acct.report.${type}.groups`) || "{}"); } catch { return {}; } });
+  useEffect(() => { localStorage.setItem(`acct.report.${type}.hideZero`, hideZero ? "1" : "0"); }, [type, hideZero]);
+  useEffect(() => { localStorage.setItem(`acct.report.${type}.groups`, JSON.stringify(hiddenGroups)); }, [type, hiddenGroups]);
   const [commentCounts, setCommentCounts] = useState({});
   const [commentLine, setCommentLine] = useState(null);
   const reloadCounts = useCallback(() => {
@@ -1245,7 +1247,7 @@ function ReportView({ type, title }) {
         </div>
         {loading ? <p className="px-5 py-8 text-sm text-slate-500">Chargement…</p> : !rep ? <p className="px-5 py-8 text-sm text-slate-400">Sélectionnez une période avec une BV chargée.</p> : (
           <div className="overflow-auto max-h-[calc(100vh-230px)]">
-            <table className="w-full text-sm">
+            <table className="acct-hover-rows w-full text-sm">
               <thead>
                 {visibleGroups && (
                   <tr className="sticky top-0 z-20 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500">
@@ -1276,7 +1278,7 @@ function ReportView({ type, title }) {
                             <button type="button" data-testid={`acct-comment-btn-${ln.account}`}
                               onClick={() => setCommentLine({ account: ln.account, label: ln.label })}
                               title={cnt > 0 ? `${cnt} commentaire(s)` : "Ajouter un commentaire"}
-                              className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-700 transition-colors ${cnt > 0 ? "bg-[#0E9488]/12 text-[#0E9488] hover:bg-[#0E9488]/20" : "text-slate-300 opacity-0 hover:bg-slate-100 hover:text-slate-500 group-hover:opacity-100"}`}>
+                              className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-700 transition-opacity transition-colors ${cnt > 0 ? "bg-[#0E9488]/12 text-[#0E9488] hover:bg-[#0E9488]/20" : "text-[#0E9488]/70 opacity-0 hover:bg-[#0E9488]/10 hover:text-[#0E9488] focus:opacity-100 group-hover:opacity-100"}`}>
                               <MessageSquare size={12} />{cnt > 0 ? cnt : ""}
                             </button>
                           );
@@ -1428,10 +1430,11 @@ export function AcctBilan() {
 }
 
 export function AcctPnl() {
-  const [v, setV] = useState("detaille");
+  const [v, setV] = useState(() => localStorage.getItem("acct.pnl.view") || "detaille");
+  const setView = (val) => { setV(val); localStorage.setItem("acct.pnl.view", val); };
   return (
     <div className="space-y-4">
-      <ViewToggle value={v} onChange={setV} options={[{ value: "detaille", label: "État détaillé" }, { value: "sommaire", label: "Résultat sommaire" }]} />
+      <ViewToggle value={v} onChange={setView} options={[{ value: "detaille", label: "État détaillé" }, { value: "sommaire", label: "Résultat sommaire" }]} />
       {v === "detaille" ? <ReportView type="pnl" title="État des résultats" /> : <ReportView type="pnl_sommaire" title="Résultat sommaire" />}
     </div>
   );
@@ -1470,7 +1473,7 @@ function BilanSommaireView({ millions = false }) {
   const Side = ({ title, rows }) => (
     <div>
       <h4 className="mb-2 border-b-2 border-[#063044] pb-1.5 font-display text-sm font-800 uppercase tracking-wide text-[#063044]">{title}</h4>
-      <table className="w-full text-sm">
+      <table className="acct-hover-rows w-full text-sm">
         <tbody className="font-mono-data">
           {rows.map((l, i) => {
             const s = excelRowStyle(l);
@@ -1641,7 +1644,7 @@ function CashflowView() {
         </div>
         {loading ? <p className="px-5 py-8 text-sm text-slate-500">Chargement…</p> : !rep ? <p className="px-5 py-8 text-sm text-slate-400">Sélectionnez deux périodes différentes avec des BV chargées.</p> : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="acct-hover-rows w-full text-sm">
               <thead><tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
                 <th className="px-4 py-2.5 text-left font-600">Poste</th>
                 <th className="px-4 py-2.5 text-right font-600">Montant</th>
