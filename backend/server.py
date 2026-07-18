@@ -2909,15 +2909,34 @@ def _filter_rep_view(rep, cols, hide_zero):
                         if not (ln["kind"] == "data" and all(abs(ln["values"].get(k) or 0) < 0.005 for k in vc))]
     return rep
 
+def _row_view_style(ln, bold_totals=True):
+    """Réplique la logique frontale excelRowStyle : gras, fond, couleur police, bordures haut/bas."""
+    st = ln.get("style") or {}
+    is_dark = st.get("f") == "dark"
+    is_grey = st.get("f") == "grey"
+    bold = is_dark or is_grey or bool(st.get("b")) or (bold_totals and ln["kind"] == "total") or ln["kind"] == "header"
+    bg = "063044" if is_dark else ("EEF1F5" if is_grey else None)
+    if is_dark:
+        color = st.get("c") or "#FFFFFF"
+    elif st.get("c"):
+        color = st["c"]
+    elif ln["kind"] == "header":
+        color = "#063044"
+    else:
+        color = None
+    color = color[-6:].upper() if color else None
+    return {"bold": bold, "bg": bg, "color": color, "is_dark": is_dark,
+            "top": bool(st.get("t")), "bottom": bool(st.get("u"))}
+
 def _acct_excel(rep):
     wb = openpyxl.Workbook(); ws = wb.active
     ws.title = "Bilan" if rep["kind"] == "bilan" else "Résultats"
-    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     bold = Font(bold=True); title_f = Font(bold=True, size=14)
     fill = PatternFill("solid", fgColor="E2E8F0")
-    grey_fill = PatternFill("solid", fgColor="EEF1F5")
-    dark_fill = PatternFill("solid", fgColor="063044")
     nf = '#,##0.00;[Red](#,##0.00)'
+    bold_totals = "sommaire" not in rep["kind"]
+    border_col = "94A3B8"
     cols = rep["value_cols"]
     col_labels = {
         "mois": f"{rep['month_label']} {rep['year']}", "cumulatif": "Réel à date (cum.)",
@@ -2930,7 +2949,7 @@ def _acct_excel(rep):
     }
     if rep["kind"] == "bilan":
         col_labels["cumulatif"] = "Cumulatif"
-    ws.append([("BILAN" if rep["kind"] == "bilan" else "ÉTAT DES RÉSULTATS") + f" — {rep['month_label']} {rep['year']}"])
+    ws.append([("BILAN" if rep["kind"] == "bilan" else ("RÉSULTAT SOMMAIRE" if rep["kind"] == "pnl_sommaire" else "ÉTAT DES RÉSULTATS")) + f" — {rep['month_label']} {rep['year']}"])
     ws["A1"].font = title_f
     if not rep["locked"]:
         ws.append(["** DONNÉES PROVISOIRES (mois non verrouillé) **"])
@@ -2958,29 +2977,29 @@ def _acct_excel(rep):
     hcells[0].alignment = Alignment(horizontal="left")
     hcells[1].alignment = Alignment(horizontal="left")
     for ln in rep["lines"]:
-        st = ln.get("style") or {}
-        is_dark = st.get("f") == "dark"
-        is_grey = st.get("f") == "grey"
-        is_bold = is_dark or is_grey or bool(st.get("b")) or ln["kind"] in ("total", "header")
+        vs = _row_view_style(ln, bold_totals)
         row = [ln["account"] or "", ln["label"] or ""] + [ln["values"].get(k) for k in cols]
         ws.append(row)
         cells = ws[ws.max_row]
-        base_color = "FFFFFF" if is_dark else None
+        row_fill = PatternFill("solid", fgColor=vs["bg"]) if vs["bg"] else None
+        row_font = Font(bold=vs["bold"], color=vs["color"]) if (vs["bold"] or vs["color"]) else None
+        row_border = None
+        if vs["top"] or vs["bottom"]:
+            row_border = Border(top=Side(style="thin", color=border_col) if vs["top"] else None,
+                                bottom=Side(style="medium", color=border_col) if vs["bottom"] else None)
         for c in cells:
-            if is_bold:
-                c.font = Font(bold=True, color=base_color) if base_color else bold
-            elif base_color:
-                c.font = Font(color=base_color)
-            if is_dark:
-                c.fill = dark_fill
-            elif is_grey or ln["kind"] == "total":
-                c.fill = grey_fill
+            if row_font:
+                c.font = row_font
+            if row_fill:
+                c.fill = row_fill
+            if row_border:
+                c.border = row_border
         for i, k in enumerate(cols):
             cell = cells[2 + i]
             cell.number_format = nf
             cell.alignment = Alignment(horizontal="right")
             if k.startswith("ecart"):
-                cell.font = Font(bold=is_bold, italic=True, color=("FFFFFF" if is_dark else "64748B"))
+                cell.font = Font(bold=vs["bold"], italic=True, color=("FFFFFF" if vs["is_dark"] else "64748B"))
     ws.column_dimensions["A"].width = 12
     ws.column_dimensions["B"].width = 52
     for i in range(len(cols)):
@@ -3289,22 +3308,31 @@ def _acct_pdf(rep):
             ("ALIGN", (2, 0), (-1, 0), "CENTER"),
             ("LINEBELOW", (0, 0), (-1, 0), 0.4, grid),
         ] + span_ops
+    bold_totals = "sommaire" not in rep["kind"]
     for ln in rep["lines"]:
         ri = len(data)
-        st = ln.get("style") or {}
-        is_dark = st.get("f") == "dark"
-        bold = bool(st.get("b")) or ln["kind"] in ("total", "header") or st.get("f") in ("dark", "grey")
-        row = [str(ln["account"] or ""), Paragraph(str(ln["label"] or ""), cellb if bold else cell)]
+        vs = _row_view_style(ln, bold_totals)
+        is_dark = vs["is_dark"]
+        bold = vs["bold"]
+        desc_color = colors.white if is_dark else (colors.HexColor("#" + vs["color"]) if vs["color"] else colors.black)
+        desc_style = ParagraphStyle(f"d{ri}", parent=(cellb if bold else cell), textColor=desc_color)
+        row = [str(ln["account"] or ""), Paragraph(str(ln["label"] or ""), desc_style)]
         for k in cols:
             row.append(_pdf_money(ln["values"].get(k)))
         data.append(row)
         if is_dark:
             ops.append(("BACKGROUND", (0, ri), (-1, ri), NAVY))
             ops.append(("TEXTCOLOR", (0, ri), (-1, ri), colors.white))
-        elif st.get("f") == "grey" or ln["kind"] == "total":
-            ops.append(("BACKGROUND", (0, ri), (-1, ri), colors.HexColor("#EEF1F5")))
+        elif vs["bg"]:
+            ops.append(("BACKGROUND", (0, ri), (-1, ri), colors.HexColor("#" + vs["bg"])))
         if bold:
             ops.append(("FONTNAME", (0, ri), (-1, ri), "Helvetica-Bold"))
+        if not is_dark and vs["color"]:
+            ops.append(("TEXTCOLOR", (0, ri), (-1, ri), colors.HexColor("#" + vs["color"])))
+        if vs["top"]:
+            ops.append(("LINEABOVE", (0, ri), (-1, ri), 0.5, colors.HexColor("#94A3B8")))
+        if vs["bottom"]:
+            ops.append(("LINEBELOW", (0, ri), (-1, ri), 0.9, colors.HexColor("#94A3B8")))
         for ci, k in enumerate(cols):
             col_idx = 2 + ci
             v = ln["values"].get(k)

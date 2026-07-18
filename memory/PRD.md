@@ -480,6 +480,11 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Formatage visuel reproduit** : ligne d'en-tête de groupe (MOIS / CUMULATIF) fusionnée, colonnes d'écart en italique gris (rouge si négatif), lignes « dark » sur fond navy + texte blanc, lignes « grey »/totaux sur fond gris, en-têtes/totaux en gras, négatifs entre parenthèses en rouge. Appliqué à `_acct_excel` et `_acct_pdf`.
 - [x] **Vérifié** : PDF filtré (2 colonnes + hide_zero) = 26 Ko vs 105 Ko complet ; extraction confirme 2 colonnes valeur, en-tête de groupe MOIS/CUMULATIF présent, lignes zéro masquées ; Excel filtré valide. Aucune erreur console front.
 
+## Fidélité export sommaire + bouton Exporter unifié (2026-07-18b)
+- [x] **Formatage sommaire fidèle** : nouveau helper backend `_row_view_style(ln, bold_totals)` répliquant `excelRowStyle` du front. Le P&L sommaire utilise `bold_totals=False` (les totaux ne sont gras que si le style Excel le prévoit), fonds « dark » navy/« grey », couleur de police par ligne, bordures haut/bas (t/u), colonnes d'écart en italique gris/rouge. Appliqué à `_acct_excel` et `_acct_pdf`. Titre Excel « RÉSULTAT SOMMAIRE » pour le sommaire.
+- [x] **Bouton « Exporter » unifié** : composant `ExportMenu` (DropdownMenu) remplaçant les 2 boutons PDF/Excel séparés sur les 3 vues (États des résultats, Bilan sommaire, Flux de trésorerie). Sous-menu PDF / Excel au clic.
+- [x] **Vérifié** : exports sommaire PDF (7,6 Ko) et Excel (8,3 Ko) valides ; dropdown s'ouvre avec items PDF/Excel ; téléchargement déclenché depuis la vue sommaire (`resultats_2026-06.xlsx`).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

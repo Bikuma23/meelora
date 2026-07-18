@@ -14,6 +14,28 @@ import {
 import { MONTHS, money, moneyM, usePeriods, PeriodSelect } from "./comptabilite/shared";
 import { AiConfigDialog, VarianceCard, AiChatPanel, AnomaliesCard } from "./comptabilite/AiComponents";
 import { PresentationButton } from "../components/PresentationButton";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "../components/ui/dropdown-menu";
+
+// Bouton unique « Exporter » avec sous-menu PDF / Excel
+function ExportMenu({ onPdf, onExcel, disabled, className = "", testid = "acct-export" }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" disabled={disabled} data-testid={`${testid}-menu`} className={`gap-2 ${className}`}>
+          <Download size={15} /> Exporter <ChevronDown size={14} className="opacity-80" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem data-testid={`${testid}-pdf`} onClick={onPdf} className="cursor-pointer gap-2">
+          <FileText size={15} className="text-[#063044]" /> PDF
+        </DropdownMenuItem>
+        <DropdownMenuItem data-testid={`${testid}-excel`} onClick={onExcel} className="cursor-pointer gap-2">
+          <FileSpreadsheet size={15} className="text-[#0E9488]" /> Excel
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 
 // ---------- Dashboard ----------
@@ -1241,8 +1263,7 @@ function ReportView({ type, title }) {
         </div>
         <div className="flex items-center gap-2">
           <PresentationButton />
-          <Button size="sm" variant="outline" onClick={exportPdf} disabled={!rep} data-testid="acct-export-pdf" className="gap-2 border-[#063044]/30 text-[#063044] hover:bg-[#063044]/5"><FileText size={15} /> PDF</Button>
-          <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-export-excel" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
+          <ExportMenu onPdf={exportPdf} onExcel={exportExcel} disabled={!rep} testid="acct-export" className="bg-[#0E9488] hover:bg-[#0E9488]/90" />
         </div>
       </div>
       {rep && !rep.locked && (
@@ -1544,8 +1565,7 @@ function BilanSommaireView({ millions = false }) {
         <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId="acct-bilansom" />
         <div className="flex items-center gap-2">
           <PresentationButton />
-          <Button size="sm" variant="outline" onClick={exportPdf} disabled={!rep} data-testid="acct-bilansom-export-pdf" className="gap-2 border-[#063044]/30 text-[#063044] hover:bg-[#063044]/5"><FileText size={15} /> PDF</Button>
-          <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-bilansom-export" className="gap-2 bg-[#063044] hover:bg-[#063044]/90"><FileSpreadsheet size={15} /> Excel</Button>
+          <ExportMenu onPdf={exportPdf} onExcel={exportExcel} disabled={!rep} testid="acct-bilansom-export" className="bg-[#063044] hover:bg-[#063044]/90" />
         </div>
       </div>
       {rep && !rep.locked && (
@@ -1664,8 +1684,7 @@ function CashflowView() {
         </div>
         <div className="flex items-center gap-2">
           <PresentationButton />
-          <Button size="sm" variant="outline" onClick={exportPdf} disabled={!rep} data-testid="acct-cashflow-export-pdf" className="gap-2 border-[#063044]/30 text-[#063044] hover:bg-[#063044]/5"><FileText size={15} /> PDF</Button>
-          <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-cashflow-export" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
+          <ExportMenu onPdf={exportPdf} onExcel={exportExcel} disabled={!rep} testid="acct-cashflow-export" className="bg-[#0E9488] hover:bg-[#0E9488]/90" />
         </div>
       </div>
       <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs text-sky-800" data-testid="acct-cashflow-hint">
