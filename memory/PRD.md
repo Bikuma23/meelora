@@ -439,6 +439,13 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] Fiabilité : `acctProjections` déplacé dans l'effet lié à la période (évite la course à l'auth au montage). Blueprint dans `/app/design_guidelines.json`.
 - [x] **Vérifié** (Playwright, 1920px) : toutes les sections rendent (KPI, indicateurs, 4 projections, 2 graphiques, IA).
 
+## Ajustements dashboard + mode présentation (2026-07)
+- [x] Cartes KPI : valeurs non tronquées (text-3xl→text-2xl + truncate/title, paddings réduits) ; suppression du soulignement « overline » sur les titres (collision classe Tailwind `.overline` → `text-decoration:none` dans index.css).
+- [x] Suppression des tuiles « Verrouillé » et « Balancé » du dashboard ; carte « N nouveau(x) compte(s) non affecté(s) » déplacée dans **Balance de vérification**, à droite sur la ligne de l'en-tête « Périodes ».
+- [x] Suppression des compteurs d'en-tête du dashboard (« X comptes », « Y périodes »).
+- [x] **Mode Présentation / plein écran** : bouton « Présentation » (dashboard) → `requestFullscreen` + masque la barre latérale et l'en-tête (event `acct-presentation` écouté par Layout), bouton flottant « Quitter » (+ sortie via Échap synchronisée sur `fullscreenchange`).
+- [x] **Vérifié** (Playwright) : valeurs KPI complètes, titres propres, tuiles retirées, carte nouveaux comptes dans BV, compteurs retirés, présentation masque sidebar/header.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

@@ -38,7 +38,7 @@ input, button, select, textarea, table, th, td { font-family: Calibri, Carlito, 
 .font-900{font-weight:800}
 
 /* Suptitre / overline façon accslegroupe */
-.overline { text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.7rem; font-weight: 600; color: #808080; }
+.overline { text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.7rem; font-weight: 600; color: #808080; text-decoration: none; }
 .dark .overline { color: #94A3B8; }
 
 ::selection { background: #15AF97; color: #fff; }

@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
 import { useLang } from "../context/LanguageContext";
 import {
-  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight,
+  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight, Minimize2,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
@@ -203,6 +203,7 @@ function LayoutInner() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [avatarColor, setAvatarColor] = useState("#F8A942");
+  const [presentation, setPresentation] = useState(false);
   const page = PAGES[active];
   const Active = page.comp;
   const go = (k) => { setActive(k); setMobileOpen(false); };
@@ -211,13 +212,21 @@ function LayoutInner() {
     window.addEventListener("acct-navigate", handler);
     return () => window.removeEventListener("acct-navigate", handler);
   }, []);
+  useEffect(() => {
+    const ph = (e) => setPresentation(!!e.detail);
+    const fh = () => { if (!document.fullscreenElement) setPresentation(false); };
+    window.addEventListener("acct-presentation", ph);
+    document.addEventListener("fullscreenchange", fh);
+    return () => { window.removeEventListener("acct-presentation", ph); document.removeEventListener("fullscreenchange", fh); };
+  }, []);
+  const exitPresentation = () => { try { document.exitFullscreen?.(); } catch (e) { /* ignore */ } setPresentation(false); };
   const roleMeta = { admin: { label: "Admin", c: "#063044", t: "#93B4FF" }, editor: { label: "Éditeur", c: "#0E9488", t: "#5EEAD4" }, user: { label: "Utilisateur", c: "#64748B", t: "#94A3B8" } }[user?.role] || { label: "Utilisateur", c: "#64748B", t: "#94A3B8" };
   useEffect(() => { api.getPreferences().then((p) => { applyTheme(p?.theme); if (p?.avatar_color) setAvatarColor(p.avatar_color); }).catch(() => {}); }, []);
 
   return (
     <div className="flex min-h-screen bg-[#F4F6F8]">
       {mobileOpen && <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setMobileOpen(false)} data-testid="sidebar-overlay" />}
-      <aside className={`fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-white/10 bg-[#063044] px-3 py-4 transition-transform duration-200 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      <aside className={`fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-white/10 bg-[#063044] px-3 py-4 transition-transform duration-200 ${presentation ? "-translate-x-full" : "lg:translate-x-0"} ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="mb-6 flex items-center justify-between gap-2.5 px-2">
           <div className="flex items-center gap-2.5">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F8A942]">
@@ -277,7 +286,8 @@ function LayoutInner() {
         </div>
       </aside>
 
-      <div className="flex-1 lg:ml-64">
+      <div className={`flex-1 ${presentation ? "" : "lg:ml-64"}`}>
+        {!presentation && (
         <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/80 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-2.5">
             <button className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden" onClick={() => setMobileOpen(true)} data-testid="sidebar-open-btn"><Menu size={22} /></button>
@@ -292,7 +302,14 @@ function LayoutInner() {
             {!active.startsWith("acct_") && <YearControls />}
           </div>
         </header>
-        <main className="p-4 sm:p-6 lg:p-8">
+        )}
+        {presentation && (
+          <button onClick={exitPresentation} data-testid="presentation-exit-btn" title="Quitter le mode présentation"
+            className="fixed right-4 top-4 z-50 inline-flex items-center gap-1.5 rounded-full bg-[#063044] px-3 py-1.5 text-xs font-600 text-white shadow-lg hover:bg-[#063044]/90">
+            <Minimize2 size={14} /> Quitter
+          </button>
+        )}
+        <main className={presentation ? "p-3" : "p-4 sm:p-6 lg:p-8"}>
           <Active />
         </main>
       </div>

@@ -9,7 +9,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
-  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download, Search, ChevronDown, ChevronRight,
+  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download, Search, ChevronDown, ChevronRight, Maximize,
 } from "lucide-react";
 import { MONTHS, money, moneyM, usePeriods, PeriodSelect } from "./comptabilite/shared";
 import { AiConfigDialog, VarianceCard, AiChatPanel, AnomaliesCard } from "./comptabilite/AiComponents";
@@ -47,13 +47,13 @@ function KpiCard({ label, value, series, idx, positiveIsGood = true, icon: Icon,
   const up = delta != null && delta >= 0;
   const good = delta == null ? true : (up === positiveIsGood);
   return (
-    <div className="card card-hover relative overflow-hidden p-5 pl-6" data-testid={testid}>
+    <div className="card card-hover relative overflow-hidden p-4 pl-5" data-testid={testid}>
       <span className="absolute left-0 top-0 h-full w-1 bg-[#15AF97]" />
-      <div className="flex items-start justify-between">
-        <span className="overline">{label}</span>
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#15AF97]/10 text-[#15AF97]"><Icon size={18} /></span>
+      <div className="flex items-start justify-between gap-2">
+        <span className="overline leading-tight">{label}</span>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#15AF97]/10 text-[#15AF97]"><Icon size={16} /></span>
       </div>
-      <p className="font-display mt-3 text-3xl font-700 tracking-tight text-[#063044]">{money(value)}</p>
+      <p className="font-display mt-2 truncate text-2xl font-700 tracking-tight text-[#063044]" title={money(value)}>{money(value)}</p>
       <div className="mt-1 flex items-center gap-1.5 text-xs font-600" style={{ color: delta == null ? "#94A3B8" : (good ? "#10B981" : "#EF4444") }}>
         {delta != null && (up ? <TrendingUp size={14} /> : <TrendingDown size={14} />)}
         {delta != null ? `${up ? "+" : ""}${delta.toFixed(1)}% vs période préc.` : "Aucune donnée antérieure"}
@@ -479,7 +479,6 @@ export function AcctDashboard() {
   }, [period]);
   if (!d) return <p className="text-sm text-slate-500">Chargement…</p>;
   const sel = periods.find((p) => p.id === period);
-  const newCount = Array.isArray(sel?.new_accounts) ? sel.new_accounts.length : (sel?.new_accounts ?? 0);
   const chartData = summary?.categories?.map((c) => ({
     name: c.label, "Réel": c.values.reel, "Budget CA": c.values.bud_ca, "Budget Rév-1": c.values.bud_rev1,
   })) || [];
@@ -508,6 +507,16 @@ export function AcctDashboard() {
     { key: "cogs", title: "COGS (coût des marchandises vendues)", color: "#808080", testid: "proj-cogs", note: "Coût des marchandises vendues, mensuel." },
   ];
   const openKpi = (type) => setKpiDialog({ open: true, type });
+  const togglePresentation = () => {
+    const el = document.documentElement;
+    if (!document.fullscreenElement) {
+      try { el.requestFullscreen?.(); } catch (e) { /* ignore */ }
+      window.dispatchEvent(new CustomEvent("acct-presentation", { detail: true }));
+    } else {
+      try { document.exitFullscreen?.(); } catch (e) { /* ignore */ }
+      window.dispatchEvent(new CustomEvent("acct-presentation", { detail: false }));
+    }
+  };
   return (
     <div className="space-y-3" data-testid="acct-dashboard">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -515,9 +524,11 @@ export function AcctDashboard() {
           <span className="text-sm font-600 text-slate-500">Période affichée :</span>
           <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId="acct-dash" />
         </div>
-        <div className="flex items-center gap-4 text-xs text-slate-400">
-          <span className="inline-flex items-center gap-1.5"><FileSpreadsheet size={13} /> {d.template_imported ? `${d.template_accounts} comptes` : "Modèle non importé"}</span>
-          <span className="inline-flex items-center gap-1.5"><Layers size={13} /> {d.period_count} périodes</span>
+        <div className="flex items-center gap-3 text-xs text-slate-400">
+          <button onClick={togglePresentation} data-testid="presentation-btn" title="Mode plein écran / présentation"
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 font-600 text-slate-500 hover:bg-slate-50">
+            <Maximize size={13} className="text-[#0E9488]" /> Présentation
+          </button>
           {isAdmin && (
             <button onClick={() => setAiDialog(true)} data-testid="ai-config-btn" title="Configuration de l'assistant IA"
               className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 font-600 text-slate-500 hover:bg-slate-50">
@@ -539,22 +550,7 @@ export function AcctDashboard() {
             </div>
           )}
 
-          {sel ? (
-            <div className="grid gap-3 sm:grid-cols-3" data-testid="acct-dashboard-latest">
-              <div className={`card flex items-center justify-between p-3 ${sel.locked ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"}`}>
-                <div><div className="flex items-center gap-1.5">{sel.locked ? <Lock size={14} className="text-red-600" /> : <Unlock size={14} className="text-amber-600" />}<span className="text-xs font-700">{sel.locked ? "Verrouillé" : "Non verrouillé"}</span></div>
-                  <p className="mt-0.5 text-[11px] text-slate-500">{sel.locked ? "Données finales" : "Provisoires"}</p></div>
-              </div>
-              <div className={`card flex items-center justify-between p-3 ${sel.balanced ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"}`}>
-                <div><div className="flex items-center gap-1.5">{sel.balanced ? <CheckCircle2 size={14} className="text-emerald-600" /> : <AlertTriangle size={14} className="text-red-600" />}<span className="text-xs font-700">{sel.balanced ? "Balancé" : "Déséquilibre"}</span></div>
-                  <p className="mt-0.5 text-[11px] text-slate-500">Écart : {money(sel.diff)}</p></div>
-              </div>
-              <div className="card flex items-center justify-between p-3">
-                <div><div className="flex items-center gap-1.5"><Info size={14} className="text-slate-500" /><span className="text-xs font-700">{newCount} nouveau(x) compte(s)</span></div>
-                  <p className="mt-0.5 text-[11px] text-slate-500">non affecté(s)</p></div>
-              </div>
-            </div>
-          ) : <p className="text-sm text-slate-400">Aucune période — uploadez une balance de vérification.</p>}
+          {!sel && <p className="text-sm text-slate-400">Aucune période — uploadez une balance de vérification.</p>}
 
           {proj && !proj.insufficient && (
             <div className="space-y-2" data-testid="acct-projections">
@@ -1005,7 +1001,19 @@ export function AcctBV() {
       </div>
 
       <div className="card overflow-hidden">
-        <div className="border-b border-slate-200 px-5 py-3"><h3 className="text-sm font-700">Périodes</h3></div>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
+          <h3 className="text-sm font-700">Périodes</h3>
+          {(() => {
+            const latest = periods[0];
+            const nc = Array.isArray(latest?.new_accounts) ? latest.new_accounts.length : (latest?.new_accounts ?? 0);
+            return (
+              <span data-testid="acct-bv-new-accounts" className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-600 ${nc > 0 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}
+                title={latest ? `Dernier upload : ${MONTHS[latest.month - 1]} ${latest.year}` : ""}>
+                <Info size={13} /> {nc} nouveau(x) compte(s) non affecté(s)
+              </span>
+            );
+          })()}
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
