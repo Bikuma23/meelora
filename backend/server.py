@@ -2890,6 +2890,35 @@ async def acct_projections(user: dict = Depends(get_current_user)):
             "dso": dso, "dpo": dpo, "lag_in_months": lag_in, "lag_out_months": lag_out}
 
 
+_PNL_PCT_LABELS = {
+    "Matériels Projets/Revenus Projets", "Sous-traitance projets/Revenus Projets",
+    "Coût main d'œuvre direct projets/Revenus Projets", "FGF projets/Revenus Projets",
+    "Marge Brute - Projet - %", "Marge très brute - Projets",
+    "Matériel Services vs Revenus Services", "Sous-traitance Services vs Revenus Services",
+    "Salaires Services vs Revenus Services", "Marge Brute - Service %", "Marge Brute Globale - %",
+}
+
+def _pnl_detail_adjust(rep):
+    """P&L détaillé : retire les lignes « Réel vs Budget » et marque les lignes de ratio (+ ligne sous BAIIA) en pourcentage."""
+    rep = dict(rep)
+    lines = [dict(ln) for ln in rep["lines"] if (ln.get("label") or "").strip() != "Réel vs Budget"]
+    baiia_idx = next((i for i, l in enumerate(lines) if "BAIIA" in (l.get("label") or "")), -1)
+    for i, ln in enumerate(lines):
+        if (ln.get("label") or "").strip() in _PNL_PCT_LABELS or (baiia_idx >= 0 and i == baiia_idx + 1):
+            ln["_pct"] = True
+    rep["lines"] = lines
+    return rep
+
+def _pdf_pct(v):
+    if v is None or v == "":
+        return ""
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    return f"{v * 100:,.1f}".replace(",", " ").replace(".", ",") + " %"
+
+
 def _filter_rep_view(rep, cols, hide_zero):
     """Filtre un rapport (bilan/pnl) pour refléter l'affichage écran : colonnes visibles + masquage des soldes zéro."""
     rep = dict(rep)
@@ -2978,13 +3007,14 @@ def _acct_excel(rep):
     hcells[1].alignment = Alignment(horizontal="left")
     for ln in rep["lines"]:
         vs = _row_view_style(ln, bold_totals)
+        is_pct = bool(ln.get("_pct"))
         row = [ln["account"] or "", ln["label"] or ""] + [ln["values"].get(k) for k in cols]
         ws.append(row)
         cells = ws[ws.max_row]
-        row_fill = PatternFill("solid", fgColor=vs["bg"]) if vs["bg"] else None
-        row_font = Font(bold=vs["bold"], color=vs["color"]) if (vs["bold"] or vs["color"]) else None
+        row_fill = None if is_pct else (PatternFill("solid", fgColor=vs["bg"]) if vs["bg"] else None)
+        row_font = Font(bold=False, italic=True, color="0E9488") if is_pct else (Font(bold=vs["bold"], color=vs["color"]) if (vs["bold"] or vs["color"]) else None)
         row_border = None
-        if vs["top"] or vs["bottom"]:
+        if not is_pct and (vs["top"] or vs["bottom"]):
             row_border = Border(top=Side(style="thin", color=border_col) if vs["top"] else None,
                                 bottom=Side(style="medium", color=border_col) if vs["bottom"] else None)
         for c in cells:
@@ -2996,10 +3026,14 @@ def _acct_excel(rep):
                 c.border = row_border
         for i, k in enumerate(cols):
             cell = cells[2 + i]
-            cell.number_format = nf
             cell.alignment = Alignment(horizontal="right")
-            if k.startswith("ecart"):
-                cell.font = Font(bold=vs["bold"], italic=True, color=("FFFFFF" if vs["is_dark"] else "64748B"))
+            if is_pct:
+                cell.number_format = '0.0%'
+                cell.font = Font(bold=False, italic=True, color="0E9488")
+            else:
+                cell.number_format = nf
+                if k.startswith("ecart"):
+                    cell.font = Font(bold=vs["bold"], italic=True, color=("FFFFFF" if vs["is_dark"] else "64748B"))
     ws.column_dimensions["A"].width = 12
     ws.column_dimensions["B"].width = 52
     for i in range(len(cols)):
@@ -3016,6 +3050,8 @@ async def acct_report_excel(type: str, year: int, month: int, cols: str = "", hi
     if type not in ("bilan", "pnl", "pnl_sommaire"):
         raise HTTPException(status_code=400, detail="Type invalide")
     rep = await _acct_report(year, month, type)
+    if type == "pnl":
+        rep = _pnl_detail_adjust(rep)
     rep = _filter_rep_view(rep, cols, hide_zero)
     buf = _acct_excel(rep)
     fname = f"{'bilan' if type=='bilan' else ('resultats_sommaire' if type=='pnl_sommaire' else 'resultats')}_{_pkey(year, month)}.xlsx"
@@ -3309,17 +3345,30 @@ def _acct_pdf(rep):
             ("LINEBELOW", (0, 0), (-1, 0), 0.4, grid),
         ] + span_ops
     bold_totals = "sommaire" not in rep["kind"]
+    GREEN = colors.HexColor("#0E9488")
     for ln in rep["lines"]:
         ri = len(data)
         vs = _row_view_style(ln, bold_totals)
         is_dark = vs["is_dark"]
-        bold = vs["bold"]
-        desc_color = colors.white if is_dark else (colors.HexColor("#" + vs["color"]) if vs["color"] else colors.black)
+        is_pct = bool(ln.get("_pct"))
+        bold = False if is_pct else vs["bold"]
+        if is_pct:
+            desc_color = GREEN
+        elif is_dark:
+            desc_color = colors.white
+        else:
+            desc_color = colors.HexColor("#" + vs["color"]) if vs["color"] else colors.black
         desc_style = ParagraphStyle(f"d{ri}", parent=(cellb if bold else cell), textColor=desc_color)
+        if is_pct:
+            desc_style = ParagraphStyle(f"dp{ri}", parent=cell, fontName="Helvetica-Oblique", textColor=GREEN)
         row = [str(ln["account"] or ""), Paragraph(str(ln["label"] or ""), desc_style)]
         for k in cols:
-            row.append(_pdf_money(ln["values"].get(k)))
+            row.append(_pdf_pct(ln["values"].get(k)) if is_pct else _pdf_money(ln["values"].get(k)))
         data.append(row)
+        if is_pct:
+            ops.append(("TEXTCOLOR", (0, ri), (-1, ri), GREEN))
+            ops.append(("FONTNAME", (0, ri), (-1, ri), "Helvetica-Oblique"))
+            continue
         if is_dark:
             ops.append(("BACKGROUND", (0, ri), (-1, ri), NAVY))
             ops.append(("TEXTCOLOR", (0, ri), (-1, ri), colors.white))
@@ -3501,6 +3550,8 @@ async def acct_report_pdf(type: str, year: int, month: int, cols: str = "", hide
     if type not in ("bilan", "pnl", "pnl_sommaire"):
         raise HTTPException(status_code=400, detail="Type invalide")
     rep = await _acct_report(year, month, type)
+    if type == "pnl":
+        rep = _pnl_detail_adjust(rep)
     rep = _filter_rep_view(rep, cols, hide_zero)
     buf = _acct_pdf(rep)
     fname = f"{'bilan' if type=='bilan' else ('resultats_sommaire' if type=='pnl_sommaire' else 'resultats')}_{_pkey(year, month)}.pdf"

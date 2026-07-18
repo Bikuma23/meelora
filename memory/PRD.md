@@ -491,6 +491,10 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Vérifié** (Playwright) : 0 ligne « Réel vs Budget », ratios et ligne post-BAIIA en vert italique « x,x % ».
 - Note : exports PDF/Excel inchangés pour ces lignes (affichage écran seulement).
 
+## Exports P&L détaillé alignés (2026-07-18d)
+- [x] Les exports **PDF et Excel** du P&L détaillé appliquent désormais les mêmes ajustements que l'écran : lignes « Réel vs Budget » retirées ; lignes de ratio + ligne sous BAIIA affichées en pourcentage (Excel format `0.0%`, PDF « x,x % »), police non-grasse, italique, verte (#0E9488). Backend : `_pnl_detail_adjust` + marqueur `_pct` géré dans `_acct_excel`/`_acct_pdf` (appliqué uniquement pour `type == "pnl"`).
+- [x] **Vérifié** : xlsx (0 ligne « Réel vs Budget » ; ratios `0.0%`, italique, couleur 0E9488, non gras) ; pdf (aucune ligne « Réel vs Budget », ratios en « x,x % »).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
