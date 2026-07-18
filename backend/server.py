@@ -2285,6 +2285,83 @@ async def acct_ledger_entry(year: int, month: int, index: int, user: dict = Depe
             "lines": lines, "total_debit": total_debit, "total_credit": total_credit,
             "balanced": abs(total_debit - total_credit) < 0.01}
 
+
+# ---- Commentaires sur les lignes du P&L / Bilan ----
+def _comment_out(d):
+    return {"id": str(d["_id"]), "report": d["report"], "account": d["account"], "text": d["text"],
+            "author": d["author"], "author_name": d.get("author_name") or d["author"],
+            "year": d["year"], "month": d["month"], "month_label": MONTHS_FR[d["month"] - 1],
+            "created_at": d["created_at"], "updated_at": d.get("updated_at")}
+
+
+@api.get("/acct/line-comments")
+async def acct_line_comments(report: str, account: int, user: dict = Depends(get_current_user)):
+    docs = await db.acct_line_comments.find({"report": report, "account": account}).sort("created_at", 1).to_list(1000)
+    return [_comment_out(d) for d in docs]
+
+
+@api.get("/acct/line-comments/counts")
+async def acct_line_comment_counts(report: str, user: dict = Depends(get_current_user)):
+    rows = await db.acct_line_comments.aggregate(
+        [{"$match": {"report": report}}, {"$group": {"_id": "$account", "count": {"$sum": 1}}}]
+    ).to_list(10000)
+    return {"counts": {str(r["_id"]): r["count"] for r in rows}}
+
+
+class LineCommentBody(BaseModel):
+    report: str
+    account: int
+    text: str
+    year: int
+    month: int
+
+
+class LineCommentEdit(BaseModel):
+    text: str
+
+
+@api.post("/acct/line-comments")
+async def acct_add_line_comment(body: LineCommentBody, user: dict = Depends(get_current_user)):
+    if body.report not in ("pnl", "bilan"):
+        raise HTTPException(status_code=400, detail="Rapport invalide")
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Commentaire vide")
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {"_id": ObjectId(), "report": body.report, "account": body.account, "text": text[:2000],
+           "author": user["email"], "author_name": user.get("name") or user["email"],
+           "year": body.year, "month": body.month, "created_at": now}
+    await db.acct_line_comments.insert_one(doc)
+    await log_action(user, "Ajouter", "Commentaire", f"{body.report} · compte {body.account}")
+    return _comment_out(doc)
+
+
+@api.put("/acct/line-comments/{cid}")
+async def acct_edit_line_comment(cid: str, body: LineCommentEdit, user: dict = Depends(get_current_user)):
+    doc = await db.acct_line_comments.find_one({"_id": _oid(cid)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Commentaire introuvable")
+    if doc["author"] != user["email"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Seul l'auteur ou un administrateur peut modifier ce commentaire")
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Commentaire vide")
+    await db.acct_line_comments.update_one({"_id": doc["_id"]}, {"$set": {"text": text[:2000], "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return _comment_out({**doc, "text": text[:2000], "updated_at": datetime.now(timezone.utc).isoformat()})
+
+
+@api.delete("/acct/line-comments/{cid}")
+async def acct_del_line_comment(cid: str, user: dict = Depends(get_current_user)):
+    doc = await db.acct_line_comments.find_one({"_id": _oid(cid)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Commentaire introuvable")
+    if doc["author"] != user["email"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Seul l'auteur ou un administrateur peut supprimer ce commentaire")
+    await db.acct_line_comments.delete_one({"_id": doc["_id"]})
+    return {"ok": True}
+
+
+
 @api.get("/acct/ledger/status")
 async def acct_ledger_status(year: int, month: int, user: dict = Depends(get_current_user)):
     pk = _pkey(year, month)

@@ -9,7 +9,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
-  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download, Search, ChevronDown, ChevronRight,
+  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download, Search, ChevronDown, ChevronRight, MessageSquare, Pencil, Send,
 } from "lucide-react";
 import { MONTHS, money, moneyM, usePeriods, PeriodSelect } from "./comptabilite/shared";
 import { AiConfigDialog, VarianceCard, AiChatPanel, AnomaliesCard } from "./comptabilite/AiComponents";
@@ -1144,11 +1144,20 @@ function excelCellColor(s, val, ecart) {
 
 function ReportView({ type, title }) {
   const { periods } = usePeriods();
+  const { user } = useAuth();
+  const canEdit = user && (user.role === "admin" || user.role === "editor");
+  const commentKey = type.includes("bilan") ? "bilan" : "pnl";
   const [period, setPeriod] = useState("");
   const [rep, setRep] = useState(null);
   const [loading, setLoading] = useState(false);
   const [hideZero, setHideZero] = useState(false);
   const [hiddenGroups, setHiddenGroups] = useState({});
+  const [commentCounts, setCommentCounts] = useState({});
+  const [commentLine, setCommentLine] = useState(null);
+  const reloadCounts = useCallback(() => {
+    api.acctLineCommentCounts({ report: commentKey }).then((r) => setCommentCounts(r.counts || {})).catch(() => {});
+  }, [commentKey]);
+  useEffect(() => { reloadCounts(); }, [reloadCounts]);
   useEffect(() => {
     if (!periods.length) return;
     const f = sessionStorage.getItem("acct_focus_period");
@@ -1161,6 +1170,7 @@ function ReportView({ type, title }) {
     setLoading(true); setRep(null);
     api.acctReport({ type, year: y, month: m }).then(setRep).catch((e) => toast.error(e.response?.data?.detail || "Rapport indisponible")).finally(() => setLoading(false));
   }, [period, type]);
+
 
   const exportExcel = async () => {
     const [y, m] = period.split("-").map(Number);
@@ -1218,7 +1228,10 @@ function ReportView({ type, title }) {
             </div>
           )}
         </div>
-        <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-export-excel" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
+        <div className="flex items-center gap-2">
+          <PresentationButton />
+          <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-export-excel" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
+        </div>
       </div>
       {rep && !rep.locked && (
         <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-600 text-amber-700" data-testid="acct-provisional-banner">
@@ -1252,9 +1265,24 @@ function ReportView({ type, title }) {
                   const s = excelRowStyle(ln, !type.includes("sommaire"));
                   return (
                   <tr key={ln.row} data-testid={`acct-line-${ln.row}`}
-                    className={`border-b border-slate-50 ${s.cls}`} style={{ background: s.bg }}>
+                    className={`group border-b border-slate-50 ${s.cls}`} style={{ background: s.bg }}>
                     <td className="px-4 py-1.5 text-left" style={{ color: s.isDark ? "#94A3B8" : "#94A3B8" }}>{ln.account || ""}</td>
-                    <td className={`px-4 py-1.5 text-left font-sans ${s.headerDefault ? "text-[#063044]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`} style={{ color: s.headerDefault ? undefined : (s.color || undefined) }}>{ln.label}</td>
+                    <td className={`px-4 py-1.5 text-left font-sans ${s.headerDefault ? "text-[#063044]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`} style={{ color: s.headerDefault ? undefined : (s.color || undefined) }}>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span>{ln.label}</span>
+                        {ln.kind === "data" && ln.account && (() => {
+                          const cnt = commentCounts[String(ln.account)] || 0;
+                          return (
+                            <button type="button" data-testid={`acct-comment-btn-${ln.account}`}
+                              onClick={() => setCommentLine({ account: ln.account, label: ln.label })}
+                              title={cnt > 0 ? `${cnt} commentaire(s)` : "Ajouter un commentaire"}
+                              className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-700 transition-colors ${cnt > 0 ? "bg-[#0E9488]/12 text-[#0E9488] hover:bg-[#0E9488]/20" : "text-slate-300 opacity-0 hover:bg-slate-100 hover:text-slate-500 group-hover:opacity-100"}`}>
+                              <MessageSquare size={12} />{cnt > 0 ? cnt : ""}
+                            </button>
+                          );
+                        })()}
+                      </span>
+                    </td>
                     {visibleCols.map((k) => (
                       <td key={k} className={`px-4 py-1.5 text-right ${isEcart(k) ? "italic" : ""} ${showSep(k) ? "border-l-2 border-slate-200" : ""}`} style={{ color: excelCellColor(s, ln.values[k], isEcart(k)) }}>{ln.kind === "header" ? "" : money(ln.values[k])}</td>
                     ))}
@@ -1266,7 +1294,111 @@ function ReportView({ type, title }) {
           </div>
         )}
       </div>
+      <LineCommentDialog
+        open={!!commentLine}
+        onOpenChange={(v) => { if (!v) setCommentLine(null); }}
+        report={commentKey}
+        account={commentLine?.account}
+        lineLabel={commentLine?.label}
+        period={period}
+        canEdit={canEdit}
+        currentEmail={user?.email}
+        isAdmin={user?.role === "admin"}
+        onChanged={reloadCounts}
+      />
     </div>
+  );
+}
+
+function LineCommentDialog({ open, onOpenChange, report, account, lineLabel, period, canEdit, currentEmail, isAdmin, onChanged }) {
+  const [comments, setComments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [y, m] = (period || "-").split("-").map(Number);
+  const load = useCallback(() => {
+    if (!account) return;
+    setLoading(true);
+    api.acctLineComments({ report, account }).then(setComments).catch(() => setComments([])).finally(() => setLoading(false));
+  }, [report, account]);
+  useEffect(() => { if (open && account) { setText(""); setEditId(null); load(); } }, [open, account, load]);
+  const add = async () => {
+    const t = text.trim(); if (!t) return;
+    setSaving(true);
+    try {
+      await api.acctAddLineComment({ report, account, text: t, year: y, month: m });
+      setText(""); load(); onChanged?.();
+    } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+    finally { setSaving(false); }
+  };
+  const saveEdit = async (id) => {
+    const t = editText.trim(); if (!t) return;
+    try { await api.acctEditLineComment(id, { text: t }); setEditId(null); load(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+  };
+  const del = async (id) => {
+    try { await api.acctDeleteLineComment(id); load(); onChanged?.(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+  };
+  const curLabel = (y && m) ? `${MONTHS[m - 1]} ${y}` : "";
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="line-comment-dialog" className="flex max-h-[85vh] max-w-lg flex-col overflow-hidden">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><MessageSquare size={16} className="text-[#0E9488]" /> Commentaires</DialogTitle>
+          <DialogDescription>{lineLabel} · compte {account} {curLabel ? `— période ${curLabel}` : ""}</DialogDescription>
+        </DialogHeader>
+        <div className="flex-1 space-y-2 overflow-y-auto pr-1" data-testid="line-comment-list">
+          {loading ? <p className="text-xs text-slate-400">Chargement…</p>
+            : comments.length === 0 ? <p className="text-xs text-slate-400">Aucun commentaire pour cette ligne.</p>
+            : comments.map((c) => {
+              const isCurrent = c.year === y && c.month === m;
+              const mine = c.author === currentEmail;
+              return (
+                <div key={c.id} data-testid={`line-comment-${c.id}`} className={`rounded-lg border p-2.5 ${isCurrent ? "border-[#0E9488]/40 bg-[#0E9488]/5" : "border-slate-200 bg-white"}`}>
+                  <div className="mb-1 flex items-center justify-between gap-2 text-[11px]">
+                    <span className="font-700 text-slate-600">{c.author_name}</span>
+                    <span className="flex items-center gap-2 text-slate-400">
+                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-600 ${isCurrent ? "bg-[#0E9488]/15 text-[#0E9488]" : "bg-slate-100 text-slate-500"}`}>{c.month_label} {c.year}</span>
+                      {c.updated_at && <span className="italic">modifié</span>}
+                    </span>
+                  </div>
+                  {editId === c.id ? (
+                    <div className="space-y-1.5">
+                      <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-200 p-2 text-sm outline-none focus:border-[#0E9488]" />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => saveEdit(c.id)} className="h-7 bg-[#063044] text-xs hover:bg-[#063044]/90">Enregistrer</Button>
+                        <Button size="sm" variant="outline" onClick={() => setEditId(null)} className="h-7 text-xs">Annuler</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="whitespace-pre-wrap text-sm text-slate-700">{c.text}</p>
+                      {canEdit && (mine || isAdmin) && (
+                        <div className="mt-1 flex gap-3 text-[11px]">
+                          <button onClick={() => { setEditId(c.id); setEditText(c.text); }} data-testid={`line-comment-edit-${c.id}`} className="inline-flex items-center gap-1 text-slate-400 hover:text-[#0E9488]"><Pencil size={11} /> Modifier</button>
+                          <button onClick={() => del(c.id)} data-testid={`line-comment-del-${c.id}`} className="inline-flex items-center gap-1 text-slate-400 hover:text-red-500"><Trash2 size={11} /> Supprimer</button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+        </div>
+        {canEdit ? (
+          <div className="mt-2 border-t border-slate-100 pt-2">
+            <textarea data-testid="line-comment-input" value={text} onChange={(e) => setText(e.target.value)} rows={2}
+              placeholder={`Ajouter un commentaire pour ${curLabel}…`} className="w-full rounded-lg border border-slate-200 p-2 text-sm outline-none focus:border-[#0E9488]" />
+            <div className="mt-1.5 flex justify-end">
+              <Button size="sm" onClick={add} disabled={saving || !text.trim()} data-testid="line-comment-add" className="gap-1.5 bg-[#0E9488] hover:bg-[#0E9488]/90"><Send size={14} /> {saving ? "Envoi…" : "Commenter"}</Button>
+            </div>
+          </div>
+        ) : <p className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-400">Lecture seule — seuls les éditeurs et administrateurs peuvent commenter.</p>}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1360,7 +1492,10 @@ function BilanSommaireView({ millions = false }) {
     <div className="space-y-4" data-testid="acct-bilan-sommaire">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId="acct-bilansom" />
-        <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-bilansom-export" className="gap-2 bg-[#063044] hover:bg-[#063044]/90"><FileSpreadsheet size={15} /> Excel</Button>
+        <div className="flex items-center gap-2">
+          <PresentationButton />
+          <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-bilansom-export" className="gap-2 bg-[#063044] hover:bg-[#063044]/90"><FileSpreadsheet size={15} /> Excel</Button>
+        </div>
       </div>
       {rep && !rep.locked && (
         <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-600 text-amber-700">
@@ -1466,7 +1601,10 @@ function CashflowView() {
             <div className="mt-1"><PeriodSelect periods={periods} value={closeP} onChange={setCloseP} testId="acct-cf-close" /></div>
           </div>
         </div>
-        <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-cashflow-export" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
+        <div className="flex items-center gap-2">
+          <PresentationButton />
+          <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-cashflow-export" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
+        </div>
       </div>
       <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs text-sky-800" data-testid="acct-cashflow-hint">
         <Info size={15} className="mt-0.5 shrink-0" /> Méthode indirecte. Pour un flux « depuis le début de l'exercice », choisissez comme ouverture la BV de fin d'exercice précédent. Les variations = solde de clôture − solde d'ouverture.

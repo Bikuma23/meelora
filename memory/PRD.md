@@ -446,6 +446,16 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Mode Présentation / plein écran** : bouton « Présentation » (dashboard) → `requestFullscreen` + masque la barre latérale et l'en-tête (event `acct-presentation` écouté par Layout), bouton flottant « Quitter » (+ sortie via Échap synchronisée sur `fullscreenchange`).
 - [x] **Vérifié** (Playwright) : valeurs KPI complètes, titres propres, tuiles retirées, carte nouveaux comptes dans BV, compteurs retirés, présentation masque sidebar/header.
 
+## Commentaires sur les lignes P&L / Bilan + bouton Présentation généralisé (2026-07)
+- [x] **Commentaires par ligne** (P&L & Bilan) : fil horodaté avec auteur, **par période** mais affichant aussi les commentaires des autres mois (période courante surlignée). Uniquement sur les lignes de données (compte). Écriture réservée aux **éditeurs/admins** (middleware `write_guard`), lecture pour tous ; modification/suppression par l'auteur ou un admin.
+- [x] Backend : collection `acct_line_comments` (clé report+compte) ; endpoints `GET /acct/line-comments`, `GET /acct/line-comments/counts`, `POST`, `PUT /{id}`, `DELETE /{id}`.
+- [x] Frontend : icône commentaire + badge de compteur sur chaque ligne de données du `ReportView` ; `LineCommentDialog` (fil + ajout/édition/suppression). Comptes rechargés à l'ouverture du rapport.
+- [x] **Bouton Présentation** ajouté aux tables Comptabilité : Bilan (détaillé + sommaire), États des résultats (détaillé + sommaire), Flux de trésorerie — **exclu de Balance de vérification** (composant partagé `PresentationButton`). Ajouté aussi au dashboard Masse salariale.
+- [x] **Vérifié** (curl + Playwright) : add/list/counts/edit/delete OK ; user POST=403, GET=200 ; UI P&L : dialogue s'ouvre (compte 4504035, Juin 2026), commentaire affiché avec auteur + badge période, badge compteur sur la ligne, bouton Présentation présent.
+
+## Ajustements KPI + responsive (compléments 2026-07)
+- [x] Cartes KPI passées en pleine largeur (ruban) au-dessus de la grille 2 colonnes → valeurs jamais tronquées ; police réduite (text-xl). Breakpoints `lg` pour adaptation écran. Correctif overflow Masse salariale (`min-w-0` sur cellule graphique Comparatif). Axe X des mini-graphiques Projection corrigé (angle -35°, preserveStartEnd).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
