@@ -56,8 +56,8 @@ export default function Login() {
           <div className="max-w-md border border-white/20 p-8">
             <p className="overline mb-4 text-white/70">{t("Plateforme financière")}</p>
             <h2 className="font-display text-4xl font-300 leading-[1.15] text-white">
-              {t("Pilotez votre")}<br />{t("masse salariale en étant")}{" "}
-              <span className="font-400 underline decoration-[#15AF97] decoration-2 underline-offset-4">{t("bien outillé")}</span>.
+              {t("De la paie au bilan,")}<br />{t("tout au")}{" "}
+              <span className="font-400 underline decoration-[#15AF97] decoration-2 underline-offset-4">{t("même endroit")}</span>.
             </h2>
           </div>
           <div className="mt-8 space-y-3">
