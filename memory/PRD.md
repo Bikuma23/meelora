@@ -429,6 +429,16 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] Backend : `_variance_txns` attache l'`idx` (index original du grand livre) à chaque transaction détaillée.
 - [x] **Vérifié** (curl + Playwright) : fév. 2026 — clic « Voir » sur « Consommation matériel projet février 2026 » → écriture à 3 lignes (5005000 débit / 5505000 + 1001200 crédit) équilibrée à 136 722,34.
 
+## Grand livre — filtre « Inhabituelles » (2026-07)
+- [x] Toggle « Inhabituelles (N) » dans `LedgerPreviewDialog` : affiche uniquement les transactions atypiques (aberrations IQR **par compte**, déterministe) ; chaque ligne inhabituelle porte un triangle ambre. Param backend `unusual_only` + `unusual_total` dans `/acct/ledger/transactions` (helper `_ledger_unusual_idx`).
+- [x] **Vérifié** (Playwright) : fév. 2026 → 708 transactions inhabituelles sur 4820, filtrage OK.
+
+## Refonte visuelle dashboard Comptabilité (2026-07)
+- [x] Layout dense 2 colonnes (grille xl:grid-cols-12) inspiré du modèle Cryptobase, **sans changer les KPI ni la palette** : colonne principale (col-span-8/9) = 4 KPI + 3 tuiles statut + Projection 12 mois (4 mini-graphiques) + Réel vs Budget & Évolution côte à côte ; sidebar (col-span-4/3) = Indicateurs (DSO/DPO/FDR-BFR) + Variance IA + Chat IA.
+- [x] Densification : paddings/gaps réduits (p-3/gap-3), hauteurs de graphiques réduites (ProjChart 250→150, graphiques principaux 320/300→230), en-têtes de section compacts. Passage d'environ 5-6 écrans verticaux à ~1,3.
+- [x] Fiabilité : `acctProjections` déplacé dans l'effet lié à la période (évite la course à l'auth au montage). Blueprint dans `/app/design_guidelines.json`.
+- [x] **Vérifié** (Playwright, 1920px) : toutes les sections rendent (KPI, indicateurs, 4 projections, 2 graphiques, IA).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

@@ -395,20 +395,18 @@ function TaxSettingsDialog({ open, onOpenChange, current, onSaved }) {
 
 function ProjChart({ title, data, color, note, onOpen, testid }) {
   return (
-    <div className="card p-5" data-testid={testid}>
+    <div className="card p-3" data-testid={testid}>
       <div className="mb-1 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-700">{title}</h3>
-        <button onClick={onOpen} data-testid={`${testid}-detail`} className="inline-flex items-center gap-1 rounded-full bg-[#F8A942]/15 px-2 py-0.5 text-[10px] font-700 uppercase tracking-wide text-[#B45309] hover:bg-[#F8A942]/25">Projection · détail</button>
+        <h3 className="text-xs font-700">{title}</h3>
+        <button onClick={onOpen} data-testid={`${testid}-detail`} className="inline-flex items-center gap-1 rounded-full bg-[#F8A942]/15 px-2 py-0.5 text-[9px] font-700 uppercase tracking-wide text-[#B45309] hover:bg-[#F8A942]/25">Détail</button>
       </div>
-      <p className="mb-3 text-xs text-slate-400">{note}</p>
-      <div style={{ width: "100%", height: 250 }}>
+      <div style={{ width: "100%", height: 150 }}>
         <ResponsiveContainer>
-          <LineChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 0 }} onClick={onOpen}>
+          <LineChart data={data} margin={{ top: 5, right: 8, left: -12, bottom: 0 }} onClick={onOpen}>
             <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-            <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={1} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={64} />
+            <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={1} />
+            <YAxis tick={{ fontSize: 9 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={40} />
             <Tooltip formatter={(v) => money(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
             <Line type="monotone" dataKey="reel" name="Réel" stroke={color} strokeWidth={2.2} dot={{ r: 2 }} connectNulls />
             <Line type="monotone" dataKey="projete" name="Projeté" stroke={color} strokeWidth={2} strokeDasharray="5 4" dot={{ r: 2 }} connectNulls />
           </LineChart>
@@ -464,7 +462,7 @@ export function AcctDashboard() {
   const [taxDialog, setTaxDialog] = useState(false);
   const [aiDialog, setAiDialog] = useState(false);
   const [taxFactor, setTaxFactor] = useState(1.14975);
-  useEffect(() => { api.acctDashboard().then(setD).catch(() => {}); api.acctTrend().then(setTrend).catch(() => {}); api.acctProjections().then(setProj).catch(() => {}); api.acctSettings().then((s) => setTaxFactor(s.tax_factor)).catch(() => {}); }, []);
+  useEffect(() => { api.acctDashboard().then(setD).catch(() => {}); api.acctTrend().then(setTrend).catch(() => {}); api.acctSettings().then((s) => setTaxFactor(s.tax_factor)).catch(() => {}); }, []);
   useEffect(() => { if (periods.length && !periods.some((p) => p.id === period)) setPeriod(periods[0].id); }, [periods, period]);
   const reloadKpi = useCallback(() => {
     if (!period) return;
@@ -477,6 +475,7 @@ export function AcctDashboard() {
     const [y, m] = period.split("-").map(Number);
     api.acctSummary({ year: y, month: m }).then(setSummary).catch(() => setSummary(null));
     api.acctKpis({ year: y, month: m }).then(setKpi).catch(() => setKpi(null));
+    api.acctProjections().then(setProj).catch(() => setProj(null));
   }, [period]);
   if (!d) return <p className="text-sm text-slate-500">Chargement…</p>;
   const sel = periods.find((p) => p.id === period);
@@ -510,7 +509,7 @@ export function AcctDashboard() {
   ];
   const openKpi = (type) => setKpiDialog({ open: true, type });
   return (
-    <div className="space-y-6" data-testid="acct-dashboard">
+    <div className="space-y-3" data-testid="acct-dashboard">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-600 text-slate-500">Période affichée :</span>
@@ -528,151 +527,148 @@ export function AcctDashboard() {
         </div>
       </div>
 
-      {cur && (
-        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4" data-testid="acct-kpi-grid">
-          <KpiCard label="Revenus (cumulatif)" value={cur.revenus_cumulatif} series={revSeries} idx={idx} positiveIsGood icon={Wallet} testid="kpi-revenus" />
-          <KpiCard label="COGS (cumulatif)" value={cur.cogs_cumulatif} series={cogsSeries} idx={idx} positiveIsGood={false} icon={Receipt} testid="kpi-cogs" />
-          <KpiCard label="BAIIA (cumulatif)" value={cur.baiia_cumulatif} series={baiiaSeries} idx={idx} positiveIsGood icon={BarChart3} testid="kpi-baiia" />
-          <KpiCard label="Bénéfice net (cumulatif)" value={cur.benefice_cumulatif} series={benSeries} idx={idx} positiveIsGood icon={PiggyBank} testid="kpi-benefice" />
-        </div>
-      )}
+      <div className="grid gap-3 xl:grid-cols-12">
+        {/* ===== Colonne principale ===== */}
+        <div className="flex min-w-0 flex-col gap-3 xl:col-span-8 2xl:col-span-9">
+          {cur && (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="acct-kpi-grid">
+              <KpiCard label="Revenus (cumulatif)" value={cur.revenus_cumulatif} series={revSeries} idx={idx} positiveIsGood icon={Wallet} testid="kpi-revenus" />
+              <KpiCard label="COGS (cumulatif)" value={cur.cogs_cumulatif} series={cogsSeries} idx={idx} positiveIsGood={false} icon={Receipt} testid="kpi-cogs" />
+              <KpiCard label="BAIIA (cumulatif)" value={cur.baiia_cumulatif} series={baiiaSeries} idx={idx} positiveIsGood icon={BarChart3} testid="kpi-baiia" />
+              <KpiCard label="Bénéfice net (cumulatif)" value={cur.benefice_cumulatif} series={benSeries} idx={idx} positiveIsGood icon={PiggyBank} testid="kpi-benefice" />
+            </div>
+          )}
 
-      {kpi && (
-        <div className="space-y-2" data-testid="acct-indicators">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-700 text-slate-700">Indicateurs — {kpi.month_label} {kpi.year}</h3>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setTaxDialog(true)} data-testid="tax-settings-btn" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-600 text-slate-500 hover:bg-slate-50" title="Taux de taxe DSO/DPO">
-                <Scale size={12} /> Taxe {taxFactor}
-              </button>
+          {sel ? (
+            <div className="grid gap-3 sm:grid-cols-3" data-testid="acct-dashboard-latest">
+              <div className={`card flex items-center justify-between p-3 ${sel.locked ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"}`}>
+                <div><div className="flex items-center gap-1.5">{sel.locked ? <Lock size={14} className="text-red-600" /> : <Unlock size={14} className="text-amber-600" />}<span className="text-xs font-700">{sel.locked ? "Verrouillé" : "Non verrouillé"}</span></div>
+                  <p className="mt-0.5 text-[11px] text-slate-500">{sel.locked ? "Données finales" : "Provisoires"}</p></div>
+              </div>
+              <div className={`card flex items-center justify-between p-3 ${sel.balanced ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"}`}>
+                <div><div className="flex items-center gap-1.5">{sel.balanced ? <CheckCircle2 size={14} className="text-emerald-600" /> : <AlertTriangle size={14} className="text-red-600" />}<span className="text-xs font-700">{sel.balanced ? "Balancé" : "Déséquilibre"}</span></div>
+                  <p className="mt-0.5 text-[11px] text-slate-500">Écart : {money(sel.diff)}</p></div>
+              </div>
+              <div className="card flex items-center justify-between p-3">
+                <div><div className="flex items-center gap-1.5"><Info size={14} className="text-slate-500" /><span className="text-xs font-700">{newCount} nouveau(x) compte(s)</span></div>
+                  <p className="mt-0.5 text-[11px] text-slate-500">non affecté(s)</p></div>
+              </div>
+            </div>
+          ) : <p className="text-sm text-slate-400">Aucune période — uploadez une balance de vérification.</p>}
+
+          {proj && !proj.insufficient && (
+            <div className="space-y-2" data-testid="acct-projections">
+              <div className="flex flex-wrap items-center gap-2">
+                <TrendingUp size={15} className="text-[#0E9488]" />
+                <h3 className="text-xs font-700 uppercase tracking-wider text-slate-500">Projection 12 mois</h3>
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#F8A942]/15 px-2 py-0.5 text-[9px] font-700 uppercase tracking-wide text-[#B45309]">Statistique · {proj.n_base} mois</span>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
+                {projSeries.map((s) => (
+                  <ProjChart key={s.key} testid={s.testid} title={s.title} color={s.color} note={s.note}
+                    data={projChart(s.key)} onOpen={() => setProjDialog({ open: true, series: s })} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="grid gap-3 xl:grid-cols-2">
+            {chartData.length > 0 && (
+              <div className="card p-4" data-testid="acct-dashboard-chart">
+                <h3 className="mb-0.5 text-xs font-700 uppercase tracking-wider text-slate-500">Réel vs Budget — {summary.month_label} {summary.year}</h3>
+                <p className="mb-2 text-[11px] text-slate-400">Revenus, dépenses et bénéfice net vs budgets.</p>
+                <div style={{ width: "100%", height: 230 }}>
+                  <ResponsiveContainer>
+                    <BarChart data={chartData} margin={{ top: 5, right: 5, left: -12, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 9 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={44} />
+                      <Tooltip formatter={(v) => money(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="Réel" fill="#063044" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Budget CA" fill="#F8A942" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Budget Rév-1" fill="#808080" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+            {trendData.length > 1 && (
+              <div className="card p-4" data-testid="acct-dashboard-trend">
+                <h3 className="mb-0.5 text-xs font-700 uppercase tracking-wider text-slate-500">Évolution du bénéfice net</h3>
+                <p className="mb-2 text-[11px] text-slate-400">Mensuel et cumulatif (exercice à date).</p>
+                <div style={{ width: "100%", height: 230 }}>
+                  <ResponsiveContainer>
+                    <LineChart data={trendData} margin={{ top: 5, right: 8, left: -12, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 9 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={44} />
+                      <Tooltip formatter={(v) => money(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Line type="monotone" dataKey="Bénéfice net (mois)" stroke="#063044" strokeWidth={2} dot={{ r: 2 }} />
+                      <Line type="monotone" dataKey="Bénéfice net (cumulatif)" stroke="#F8A942" strokeWidth={2} dot={{ r: 2 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ===== Colonne latérale ===== */}
+        <div className="flex min-w-0 flex-col gap-3 xl:col-span-4 2xl:col-span-3 xl:border-l xl:border-slate-200 xl:pl-3">
+          {kpi && (
+            <div className="space-y-2" data-testid="acct-indicators">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-xs font-700 uppercase tracking-wider text-slate-500">Indicateurs — {kpi.month_label} {kpi.year}</h3>
+                <button onClick={() => setTaxDialog(true)} data-testid="tax-settings-btn" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-600 text-slate-500 hover:bg-slate-50" title="Taux de taxe DSO/DPO">
+                  <Scale size={11} /> Taxe {taxFactor}
+                </button>
+              </div>
               {!kpi.locked && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-600 text-amber-700" data-testid="kpi-provisional-banner">
-                  <AlertTriangle size={13} /> Données provisoires — mois non verrouillé
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[11px] font-600 text-amber-700" data-testid="kpi-provisional-banner">
+                  <AlertTriangle size={12} /> Données provisoires — mois non verrouillé
                 </span>
               )}
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <DsoCard kpi={kpi} provisional={!kpi.locked} onOpen={() => openKpi("dso")} onSaved={reloadKpi} />
-            <DpoCard kpi={kpi} provisional={!kpi.locked} onOpen={() => openKpi("dpo")} onSaved={reloadKpi} />
-            <button data-testid="indicator-fdr" onClick={kpi.fdr.available ? () => openKpi("fdr") : undefined} disabled={!kpi.fdr.available}
-              className={`card group relative flex flex-col gap-2 p-5 text-left transition-shadow sm:col-span-2 xl:col-span-1 ${kpi.fdr.available ? "cursor-pointer hover:shadow-md" : "cursor-default opacity-90"}`}>
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-700 uppercase tracking-wide text-slate-500">Fonds de roulement / BFR</span>
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#063044]/8 text-[#063044]"><Scale size={16} /></span>
+              <div className="flex flex-col gap-2">
+                <DsoCard kpi={kpi} provisional={!kpi.locked} onOpen={() => openKpi("dso")} onSaved={reloadKpi} />
+                <DpoCard kpi={kpi} provisional={!kpi.locked} onOpen={() => openKpi("dpo")} onSaved={reloadKpi} />
+                <button data-testid="indicator-fdr" onClick={kpi.fdr.available ? () => openKpi("fdr") : undefined} disabled={!kpi.fdr.available}
+                  className={`card group relative flex flex-col gap-2 p-4 text-left transition-shadow ${kpi.fdr.available ? "cursor-pointer hover:shadow-md" : "cursor-default opacity-90"}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-700 uppercase tracking-wide text-slate-500">Fonds de roulement / BFR</span>
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#063044]/8 text-[#063044]"><Scale size={16} /></span>
+                  </div>
+                  {!kpi.fdr.available ? (
+                    <div className="flex items-start gap-1.5 py-1 text-xs text-amber-600" data-testid="indicator-fdr-unavailable"><AlertTriangle size={14} className="mt-0.5 shrink-0" /><span>{kpi.fdr.reason}</span></div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <span className="text-[10px] font-700 uppercase tracking-wide text-slate-400">FDR</span>
+                        <p className="font-mono-data text-lg font-800 text-[#063044]" data-testid="indicator-fdr-value">{money(kpi.fdr.value)}</p>
+                        <span className="font-mono-data text-[11px] font-600 text-slate-500">Ratio {kpi.fdr.ratio ?? "—"}</span>
+                        <div className="mt-1"><TrendBadge testid="trend-fdr" trend={kpi.trend?.fdr} higherIsBetter={true} unit="money" /></div>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-700 uppercase tracking-wide text-slate-400">BFR</span>
+                        <p className="font-mono-data text-lg font-800 text-[#0E9488]" data-testid="indicator-bfr-value">{kpi.fdr.bfr?.available ? money(kpi.fdr.bfr.value) : "—"}</p>
+                        <span className="font-mono-data text-[11px] font-600 text-slate-500">Cycle opérationnel</span>
+                        {kpi.fdr.bfr?.available && <div className="mt-1"><TrendBadge testid="trend-bfr" trend={kpi.trend?.bfr} higherIsBetter={false} unit="money" /></div>}
+                      </div>
+                    </div>
+                  )}
+                  <span className="text-[11px] leading-snug text-slate-400">Retenues contractuelles exclues : <span className="font-mono-data text-slate-500">{money(kpi.fdr.retenues)}</span></span>
+                  {!kpi.locked && kpi.fdr.available && <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-700 text-amber-700"><AlertTriangle size={11} /> Provisoire</span>}
+                  {kpi.fdr.available && <span className="text-[11px] font-600 text-[#0E9488] opacity-0 transition-opacity group-hover:opacity-100">Voir le détail →</span>}
+                </button>
               </div>
-              {!kpi.fdr.available ? (
-                <div className="flex items-start gap-1.5 py-1 text-xs text-amber-600" data-testid="indicator-fdr-unavailable"><AlertTriangle size={14} className="mt-0.5 shrink-0" /><span>{kpi.fdr.reason}</span></div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <span className="text-[10px] font-700 uppercase tracking-wide text-slate-400">FDR</span>
-                    <p className="font-mono-data text-xl font-800 text-[#063044]" data-testid="indicator-fdr-value">{money(kpi.fdr.value)}</p>
-                    <span className="font-mono-data text-[11px] font-600 text-slate-500">Ratio {kpi.fdr.ratio ?? "—"}</span>
-                    <div className="mt-1"><TrendBadge testid="trend-fdr" trend={kpi.trend?.fdr} higherIsBetter={true} unit="money" /></div>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-700 uppercase tracking-wide text-slate-400">BFR</span>
-                    <p className="font-mono-data text-xl font-800 text-[#0E9488]" data-testid="indicator-bfr-value">{kpi.fdr.bfr?.available ? money(kpi.fdr.bfr.value) : "—"}</p>
-                    <span className="font-mono-data text-[11px] font-600 text-slate-500">Cycle opérationnel</span>
-                    {kpi.fdr.bfr?.available && <div className="mt-1"><TrendBadge testid="trend-bfr" trend={kpi.trend?.bfr} higherIsBetter={false} unit="money" /></div>}
-                  </div>
-                </div>
-              )}
-              <span className="text-[11px] leading-snug text-slate-400">Retenues contractuelles exclues : <span className="font-mono-data text-slate-500">{money(kpi.fdr.retenues)}</span></span>
-              {!kpi.locked && kpi.fdr.available && <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-700 text-amber-700"><AlertTriangle size={11} /> Provisoire</span>}
-              {kpi.fdr.available && <span className="text-[11px] font-600 text-[#0E9488] opacity-0 transition-opacity group-hover:opacity-100">Voir le détail →</span>}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {proj && !proj.insufficient && (
-        <div className="space-y-2" data-testid="acct-projections">
-          <div className="flex items-center gap-2">
-            <TrendingUp size={16} className="text-[#0E9488]" />
-            <h3 className="text-sm font-700 text-slate-700">Projection 12 mois</h3>
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#F8A942]/15 px-2 py-0.5 text-[10px] font-700 uppercase tracking-wide text-[#B45309]">Projection statistique</span>
-          </div>
-          <p className="text-xs text-slate-400">Tendance des {proj.n_base} derniers mois verrouillés (régression linéaire) — trait plein = réel, pointillé = projeté. Ce n'est pas un budget saisi manuellement.</p>
-          <div className="grid gap-4 lg:grid-cols-2">
-            {projSeries.map((s) => (
-              <ProjChart key={s.key} testid={s.testid} title={s.title} color={s.color} note={s.note}
-                data={projChart(s.key)} onOpen={() => setProjDialog({ open: true, series: s })} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {sel ? (
-        <div className="card p-5" data-testid="acct-dashboard-latest">
-          <h3 className="mb-4 text-sm font-700">Statut — {MONTHS[sel.month - 1]} {sel.year}</h3>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className={`rounded-xl border p-4 ${sel.locked ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"}`}>
-              <div className="flex items-center gap-2">{sel.locked ? <Lock size={16} className="text-red-600" /> : <Unlock size={16} className="text-amber-600" />}
-                <span className="text-sm font-700">{sel.locked ? "Verrouillé" : "Non verrouillé"}</span></div>
-              <p className="mt-1 text-xs text-slate-500">{sel.locked ? "Données finales" : "Données provisoires"}</p>
             </div>
-            <div className={`rounded-xl border p-4 ${sel.balanced ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"}`}>
-              <div className="flex items-center gap-2">{sel.balanced ? <CheckCircle2 size={16} className="text-emerald-600" /> : <AlertTriangle size={16} className="text-red-600" />}
-                <span className="text-sm font-700">{sel.balanced ? "Balancé" : "Déséquilibre"}</span></div>
-              <p className="mt-1 text-xs text-slate-500">Écart bilan : {money(sel.diff)}</p>
-            </div>
-            <div className="rounded-xl border border-slate-200 p-4">
-              <div className="flex items-center gap-2"><Info size={16} className="text-slate-500" /><span className="text-sm font-700">{newCount} nouveau(x) compte(s)</span></div>
-              <p className="mt-1 text-xs text-slate-500">non affecté(s) à cet upload</p>
-            </div>
-          </div>
-        </div>
-      ) : <p className="text-sm text-slate-400">Aucune période — uploadez une balance de vérification.</p>}
+          )}
 
-      {chartData.length > 0 && (
-        <div className="card p-5" data-testid="acct-dashboard-chart">
-          <h3 className="mb-1 text-sm font-700">Réel vs Budget — {summary.month_label} {summary.year}</h3>
-          <p className="mb-4 text-xs text-slate-400">Revenus, dépenses et bénéfice net du mois comparés aux budgets.</p>
-          <div style={{ width: "100%", height: 320 }}>
-            <ResponsiveContainer>
-              <BarChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={70} />
-                <Tooltip formatter={(v) => money(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Réel" fill="#063044" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Budget CA" fill="#F8A942" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Budget Rév-1" fill="#808080" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {period && <VarianceCard year={Number(period.split("-")[0])} month={Number(period.split("-")[1])} />}
+          {period && <AiChatPanel year={Number(period.split("-")[0])} month={Number(period.split("-")[1])} />}
         </div>
-      )}
-
-      {trendData.length > 1 && (
-        <div className="card p-5" data-testid="acct-dashboard-trend">
-          <h3 className="mb-1 text-sm font-700">Évolution du bénéfice net</h3>
-          <p className="mb-4 text-xs text-slate-400">Trajectoire sur les mois chargés — mensuel et cumulatif (exercice à date).</p>
-          <div style={{ width: "100%", height: 300 }}>
-            <ResponsiveContainer>
-              <LineChart data={trendData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={70} />
-                <Tooltip formatter={(v) => money(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="Bénéfice net (mois)" stroke="#063044" strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="Bénéfice net (cumulatif)" stroke="#F8A942" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      {period && (
-        <div className="grid gap-4 lg:grid-cols-2" data-testid="acct-ai-section">
-          <VarianceCard year={Number(period.split("-")[0])} month={Number(period.split("-")[1])} />
-          <AiChatPanel year={Number(period.split("-")[0])} month={Number(period.split("-")[1])} />
-        </div>
-      )}
+      </div>
 
       <KpiDetailDialog open={kpiDialog.open} onOpenChange={(v) => setKpiDialog((p) => ({ ...p, open: v }))} type={kpiDialog.type} kpi={kpi} />
       <ProjectionDetailDialog open={projDialog.open} onOpenChange={(v) => setProjDialog((p) => ({ ...p, open: v }))} series={projDialog.series} proj={proj} />
