@@ -2890,12 +2890,34 @@ async def acct_projections(user: dict = Depends(get_current_user)):
             "dso": dso, "dpo": dpo, "lag_in_months": lag_in, "lag_out_months": lag_out}
 
 
+def _filter_rep_view(rep, cols, hide_zero):
+    """Filtre un rapport (bilan/pnl) pour refléter l'affichage écran : colonnes visibles + masquage des soldes zéro."""
+    rep = dict(rep)
+    if cols:
+        wanted = [c for c in cols.split(",") if c in rep["value_cols"]]
+        if wanted:
+            rep["value_cols"] = wanted
+            if rep.get("col_groups"):
+                gs = [dict(g, keys=[k for k in g["keys"] if k in wanted]) for g in rep["col_groups"]]
+                rep["col_groups"] = [g for g in gs if g["keys"]]
+            if rep.get("col_toggle_groups"):
+                tg = [dict(g, keys=[k for k in g["keys"] if k in wanted]) for g in rep["col_toggle_groups"]]
+                rep["col_toggle_groups"] = [g for g in tg if g["keys"]]
+    if hide_zero:
+        vc = rep["value_cols"]
+        rep["lines"] = [ln for ln in rep["lines"]
+                        if not (ln["kind"] == "data" and all(abs(ln["values"].get(k) or 0) < 0.005 for k in vc))]
+    return rep
+
 def _acct_excel(rep):
     wb = openpyxl.Workbook(); ws = wb.active
     ws.title = "Bilan" if rep["kind"] == "bilan" else "Résultats"
     from openpyxl.styles import Font, PatternFill, Alignment
     bold = Font(bold=True); title_f = Font(bold=True, size=14)
     fill = PatternFill("solid", fgColor="E2E8F0")
+    grey_fill = PatternFill("solid", fgColor="EEF1F5")
+    dark_fill = PatternFill("solid", fgColor="063044")
+    nf = '#,##0.00;[Red](#,##0.00)'
     cols = rep["value_cols"]
     col_labels = {
         "mois": f"{rep['month_label']} {rep['year']}", "cumulatif": "Réel à date (cum.)",
@@ -2914,32 +2936,59 @@ def _acct_excel(rep):
         ws.append(["** DONNÉES PROVISOIRES (mois non verrouillé) **"])
         ws[f"A{ws.max_row}"].font = Font(bold=True, color="B45309")
     ws.append([])
+    groups = rep.get("col_groups")
+    if groups:
+        ws.append(["", ""] + ["" for _ in cols])
+        grow = ws.max_row
+        for g in groups:
+            gk = [k for k in g["keys"] if k in cols]
+            if not gk:
+                continue
+            idxs = [cols.index(k) for k in gk]
+            c0, c1 = 3 + min(idxs), 3 + max(idxs)
+            if c1 > c0:
+                ws.merge_cells(start_row=grow, start_column=c0, end_row=grow, end_column=c1)
+            cell = ws.cell(grow, c0); cell.value = g["label"]
+            cell.font = bold; cell.alignment = Alignment(horizontal="center"); cell.fill = fill
     header = ["Compte", "Description"] + [col_labels.get(k, k) for k in cols]
     ws.append(header)
-    for c in ws[ws.max_row]:
-        c.font = bold; c.fill = fill
+    hcells = ws[ws.max_row]
+    for c in hcells:
+        c.font = bold; c.fill = fill; c.alignment = Alignment(horizontal="center", wrap_text=True)
+    hcells[0].alignment = Alignment(horizontal="left")
+    hcells[1].alignment = Alignment(horizontal="left")
     for ln in rep["lines"]:
-        row = [ln["account"] or "", ln["label"] or ""] + [ln["values"][k] for k in cols]
+        st = ln.get("style") or {}
+        is_dark = st.get("f") == "dark"
+        is_grey = st.get("f") == "grey"
+        is_bold = is_dark or is_grey or bool(st.get("b")) or ln["kind"] in ("total", "header")
+        row = [ln["account"] or "", ln["label"] or ""] + [ln["values"].get(k) for k in cols]
         ws.append(row)
         cells = ws[ws.max_row]
-        if ln["kind"] in ("total", "header"):
-            for c in cells:
-                c.font = bold
-            if ln["kind"] == "total":
-                for c in cells:
-                    c.fill = fill
-        for i in range(len(cols)):
+        base_color = "FFFFFF" if is_dark else None
+        for c in cells:
+            if is_bold:
+                c.font = Font(bold=True, color=base_color) if base_color else bold
+            elif base_color:
+                c.font = Font(color=base_color)
+            if is_dark:
+                c.fill = dark_fill
+            elif is_grey or ln["kind"] == "total":
+                c.fill = grey_fill
+        for i, k in enumerate(cols):
             cell = cells[2 + i]
-            cell.number_format = '#,##0.00;[Red](#,##0.00)'
+            cell.number_format = nf
             cell.alignment = Alignment(horizontal="right")
+            if k.startswith("ecart"):
+                cell.font = Font(bold=is_bold, italic=True, color=("FFFFFF" if is_dark else "64748B"))
     ws.column_dimensions["A"].width = 12
     ws.column_dimensions["B"].width = 52
     for i in range(len(cols)):
-        ws.column_dimensions[openpyxl.utils.get_column_letter(3 + i)].width = 18
+        ws.column_dimensions[openpyxl.utils.get_column_letter(3 + i)].width = 16
     buf = io.BytesIO(); wb.save(buf); buf.seek(0); return buf
 
 @api.get("/acct/report/excel")
-async def acct_report_excel(type: str, year: int, month: int, user: dict = Depends(get_current_user)):
+async def acct_report_excel(type: str, year: int, month: int, cols: str = "", hide_zero: bool = False, user: dict = Depends(get_current_user)):
     if type == "bilan_sommaire":
         rep = await _bilan_sommaire_data(year, month)
         buf = _bilan_sommaire_excel(rep)
@@ -2948,6 +2997,7 @@ async def acct_report_excel(type: str, year: int, month: int, user: dict = Depen
     if type not in ("bilan", "pnl", "pnl_sommaire"):
         raise HTTPException(status_code=400, detail="Type invalide")
     rep = await _acct_report(year, month, type)
+    rep = _filter_rep_view(rep, cols, hide_zero)
     buf = _acct_excel(rep)
     fname = f"{'bilan' if type=='bilan' else ('resultats_sommaire' if type=='pnl_sommaire' else 'resultats')}_{_pkey(year, month)}.xlsx"
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -3201,17 +3251,44 @@ def _acct_pdf(rep):
     el = [Paragraph(f"{heading} — {rep['month_label']} {rep['year']}", title),
           Paragraph(f"Généré le {datetime.now().strftime('%Y-%m-%d %H:%M')}" + ("" if rep["locked"] else " · DONNÉES PROVISOIRES (mois non verrouillé)"), sub),
           Spacer(1, 5)]
+    grid = colors.HexColor("#E2E8F0")
+    groups = rep.get("col_groups")
+    data = []
+    span_ops = []
+    hri = 0
+    if groups:
+        grp = ["", ""] + ["" for _ in cols]
+        for g in groups:
+            gk = [k for k in g["keys"] if k in cols]
+            if not gk:
+                continue
+            idxs = [cols.index(k) for k in gk]
+            c0, c1 = 2 + min(idxs), 2 + max(idxs)
+            grp[c0] = g["label"]
+            if c1 > c0:
+                span_ops.append(("SPAN", (c0, 0), (c1, 0)))
+        data.append(grp)
+        hri = 1
     header = ["Compte", "Description"] + [col_labels.get(k, k) for k in cols]
-    data = [header]
+    data.append(header)
     ops = [
-        ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 6), ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
-        ("ALIGN", (0, 0), (0, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E2E8F0")),
+        ("FONTSIZE", (0, 0), (-1, -1), 6),
+        ("ALIGN", (2, 0), (-1, -1), "RIGHT"), ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, hri), (-1, -1), 0.25, grid),
         ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
+        ("BACKGROUND", (0, hri), (-1, hri), NAVY), ("TEXTCOLOR", (0, hri), (-1, hri), colors.white),
+        ("FONTNAME", (0, hri), (-1, hri), "Helvetica-Bold"),
+        ("ALIGN", (0, hri), (1, hri), "LEFT"),
     ]
+    if groups:
+        ops += [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E2E8F0")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("ALIGN", (2, 0), (-1, 0), "CENTER"),
+            ("LINEBELOW", (0, 0), (-1, 0), 0.4, grid),
+        ] + span_ops
     for ln in rep["lines"]:
         ri = len(data)
         st = ln.get("style") or {}
@@ -3229,18 +3306,25 @@ def _acct_pdf(rep):
         if bold:
             ops.append(("FONTNAME", (0, ri), (-1, ri), "Helvetica-Bold"))
         for ci, k in enumerate(cols):
+            col_idx = 2 + ci
             v = ln["values"].get(k)
+            neg = False
             try:
-                if v is not None and float(v) < -0.004:
-                    ops.append(("TEXTCOLOR", (2 + ci, ri), (2 + ci, ri), colors.HexColor("#FCA5A5") if is_dark else RED))
+                neg = v is not None and float(v) < -0.004
             except (TypeError, ValueError):
-                pass
+                neg = False
+            if k.startswith("ecart"):
+                ops.append(("FONTNAME", (col_idx, ri), (col_idx, ri), "Helvetica-BoldOblique" if bold else "Helvetica-Oblique"))
+                if not neg and not is_dark:
+                    ops.append(("TEXTCOLOR", (col_idx, ri), (col_idx, ri), colors.HexColor("#64748B")))
+            if neg:
+                ops.append(("TEXTCOLOR", (col_idx, ri), (col_idx, ri), colors.HexColor("#FCA5A5") if is_dark else RED))
     ncols = len(cols)
     avail = 281.0
     acct_w, desc_w = 13.0, 46.0
     val_w = max(11.0, (avail - acct_w - desc_w) / max(1, ncols))
     col_widths = [acct_w * mm, desc_w * mm] + [val_w * mm] * ncols
-    tbl = Table(data, colWidths=col_widths, repeatRows=1)
+    tbl = Table(data, colWidths=col_widths, repeatRows=hri + 1)
     tbl.setStyle(TableStyle(ops))
     el.append(tbl)
     buf = io.BytesIO()
@@ -3380,7 +3464,7 @@ def _cashflow_pdf(rep):
     return buf
 
 @api.get("/acct/report/pdf")
-async def acct_report_pdf(type: str, year: int, month: int, user: dict = Depends(get_current_user)):
+async def acct_report_pdf(type: str, year: int, month: int, cols: str = "", hide_zero: bool = False, user: dict = Depends(get_current_user)):
     if type == "bilan_sommaire":
         rep = await _bilan_sommaire_data(year, month)
         buf = _bilan_sommaire_pdf(rep)
@@ -3389,6 +3473,7 @@ async def acct_report_pdf(type: str, year: int, month: int, user: dict = Depends
     if type not in ("bilan", "pnl", "pnl_sommaire"):
         raise HTTPException(status_code=400, detail="Type invalide")
     rep = await _acct_report(year, month, type)
+    rep = _filter_rep_view(rep, cols, hide_zero)
     buf = _acct_pdf(rep)
     fname = f"{'bilan' if type=='bilan' else ('resultats_sommaire' if type=='pnl_sommaire' else 'resultats')}_{_pkey(year, month)}.pdf"
     return StreamingResponse(buf, media_type="application/pdf",

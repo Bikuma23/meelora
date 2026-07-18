@@ -1177,7 +1177,7 @@ function ReportView({ type, title }) {
   const exportExcel = async () => {
     const [y, m] = period.split("-").map(Number);
     try {
-      const blob = await api.acctReportExcel({ type, year: y, month: m });
+      const blob = await api.acctReportExcel({ type, year: y, month: m, cols: visibleCols.join(","), hide_zero: hideZero });
       const url = URL.createObjectURL(blob); const a = document.createElement("a");
       a.href = url; a.download = `${type === "bilan" ? "bilan" : "resultats"}_${period}.xlsx`; a.click(); URL.revokeObjectURL(url);
       toast.success("Export téléchargé");
@@ -1186,7 +1186,7 @@ function ReportView({ type, title }) {
   const exportPdf = async () => {
     const [y, m] = period.split("-").map(Number);
     try {
-      const blob = await api.acctReportPdf({ type, year: y, month: m });
+      const blob = await api.acctReportPdf({ type, year: y, month: m, cols: visibleCols.join(","), hide_zero: hideZero });
       const url = URL.createObjectURL(blob); const a = document.createElement("a");
       a.href = url; a.download = `${type === "bilan" ? "bilan" : "resultats"}_${period}.pdf`; a.click(); URL.revokeObjectURL(url);
       toast.success("PDF téléchargé");

@@ -475,6 +475,11 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
   - Frontend : `api.acctReportPdf`, `api.acctCashflowPdf` ; handlers `exportPdf` dans les 3 vues.
 - [x] **Vérifié** : les 5 PDF renvoient HTTP 200 / application/pdf (%PDF-1.4), contenu correct (titres, sections, montants, parenthèses négatives), boutons présents en DOM.
 
+## Export PDF/Excel fidèle à l'écran (2026-07-18)
+- [x] **Colonnes & filtres respectés** : les exports PDF et Excel du Bilan / États des résultats (détaillé + sommaire) reçoivent désormais `cols` (colonnes visibles selon les bascules de groupes) et `hide_zero` (masquage des comptes à solde zéro). Backend : `_filter_rep_view(rep, cols, hide_zero)`.
+- [x] **Formatage visuel reproduit** : ligne d'en-tête de groupe (MOIS / CUMULATIF) fusionnée, colonnes d'écart en italique gris (rouge si négatif), lignes « dark » sur fond navy + texte blanc, lignes « grey »/totaux sur fond gris, en-têtes/totaux en gras, négatifs entre parenthèses en rouge. Appliqué à `_acct_excel` et `_acct_pdf`.
+- [x] **Vérifié** : PDF filtré (2 colonnes + hide_zero) = 26 Ko vs 105 Ko complet ; extraction confirme 2 colonnes valeur, en-tête de groupe MOIS/CUMULATIF présent, lignes zéro masquées ; Excel filtré valide. Aucune erreur console front.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
