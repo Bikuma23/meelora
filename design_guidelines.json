@@ -1,116 +1,69 @@
 {
-  "theme_and_mode": {
-    "app_type": "hybrid_fullstack",
-    "industry": "Technical Corporate / Financial Dashboard",
-    "default_mode": "light",
-    "supported_modes": ["light", "dark"]
-  },
-  "typography": {
-    "headings": {
-      "family": "Montserrat, Poppins, sans-serif",
-      "weight": "300 (Light) to 400 (Regular)",
-      "usage": "H1, H2, H3, large titles, and stylistic overlines",
-      "instruction": "Headings must be elegant and fine. Use font-light (300) for large page titles. Ensure tracking is slightly loose for uppercase overlines."
-    },
-    "body_and_tables": {
-      "family": "Calibri, Carlito, 'Segoe UI', sans-serif",
-      "weight": "400 (Regular) to 700 (Bold)",
-      "usage": "All body text, financial tables, forms, buttons, and dense UI elements",
-      "instruction": "CRITICAL: The body and all financial tables MUST remain in Calibri (non-negotiable). Do NOT use Montserrat for dense data."
-    },
-    "scales": {
-      "h1_hero": "text-5xl lg:text-6xl font-light tracking-tight text-[#063044] dark:text-white",
-      "h2_section": "text-3xl lg:text-4xl font-light text-[#063044] dark:text-white",
-      "h3_card": "text-xl font-normal text-[#063044] dark:text-white",
-      "overline": "text-xs font-medium uppercase tracking-[0.2em] text-[#808080] dark:text-gray-400",
-      "body": "text-sm text-[#063044] dark:text-gray-200",
-      "table_text": "text-sm text-[#063044] dark:text-gray-200"
-    }
+  "project_context": {
+    "app_type": "dashboard",
+    "theme": "light",
+    "intent": "Redesign layout for maximum density and minimal vertical scrolling (Cryptobase style), keeping all existing KPIs, metrics, and exact color palette."
   },
   "colors": {
-    "primary": {
-      "name": "Navy",
-      "hex": "#063044",
-      "usage": "Large titles, text, secondary buttons, active sidebar items, table grand totals."
+    "primary": "#063044",
+    "accent": "#0E9488",
+    "amber": "#F8A942",
+    "amber_dark": "#B45309",
+    "grey": "#808080",
+    "success": "#10B981",
+    "danger": "#EF4444",
+    "background": "slate-50",
+    "card_bg": "#ffffff",
+    "border": "slate-200"
+  },
+  "typography": {
+    "font_family": "Inter, system-ui, sans-serif",
+    "section_titles": "text-xs font-semibold uppercase tracking-wider text-slate-500",
+    "kpi_values": "text-base 2xl:text-lg font-bold text-[#063044] leading-none",
+    "labels": "text-[10px] md:text-xs text-[#808080]",
+    "inputs": "text-sm text-slate-800"
+  },
+  "layouts": {
+    "dashboard_container": "h-screen w-full bg-slate-50 flex flex-col p-2 md:p-3 overflow-hidden",
+    "header": "flex-none h-12 md:h-14 bg-white border border-slate-200 rounded-md shadow-sm mb-3 px-4 flex items-center justify-between",
+    "main_grid": "flex-1 grid grid-cols-1 xl:grid-cols-12 gap-3 min-h-0 overflow-y-auto xl:overflow-hidden",
+    "left_panel": "xl:col-span-8 2xl:col-span-9 flex flex-col gap-3 min-h-0 overflow-y-auto pr-0 xl:pr-1",
+    "right_panel": "xl:col-span-4 2xl:col-span-3 flex flex-col gap-3 min-h-0 overflow-y-auto xl:border-l xl:border-slate-200 xl:pl-3",
+    "metrics_ribbon": "grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2 flex-none",
+    "projections_grid": "grid grid-cols-2 xl:grid-cols-4 gap-2 flex-none",
+    "main_charts_grid": "grid grid-cols-1 xl:grid-cols-2 gap-3 flex-1 min-h-[250px] md:min-h-[300px]",
+    "indicateurs_stack": "flex flex-col gap-2 flex-none",
+    "ai_variance_card": "flex-none",
+    "ai_chat_card": "flex-1 min-h-[300px] flex flex-col"
+  },
+  "component_instructions": {
+    "cards": {
+      "general": "Use shadcn Card. Override padding to `p-2` or `p-3` (e.g., `<CardContent className='p-3'>`). Reduce border radius to `rounded-md` and use `shadow-sm`.",
+      "status_tiles": "Extremely compact, flex-row items-center gap-2, col-span-1 in the metrics_ribbon.",
+      "kpi_cards": "Compact flex-col or flex-row. Value, sparkline, and trend badge must fit tightly. col-span-1 in the metrics_ribbon.",
+      "indicateur_cards": "Placed in the right_panel. Ensure the inline input ('montant en litige') is visible without wrapping awkwardly. Use compact form fields."
     },
-    "secondary": {
-      "name": "Teal",
-      "hex": "#15AF97",
-      "usage": "Primary CTA buttons, thin vertical separator lines, active state accents."
+    "charts": {
+      "projections": "Set parent container height to `h-32` or `h-36`. Use Recharts ResponsiveContainer. Minimal axes.",
+      "main_charts": "Set parent container to `h-full`. Recharts margin: { top: 5, right: 5, bottom: 0, left: -20 }. Tick fonts text-[10px]. Hide vertical grid lines.",
+      "general": "Do not change calculations or content. Just reduce visual whitespace."
     },
-    "accent": {
-      "name": "Golden Orange",
-      "hex": "#F8A942",
-      "usage": "Badges, alerts, warning states, sparkline highlights."
-    },
-    "neutral": {
-      "name": "Gray",
-      "hex": "#808080",
-      "usage": "Overlines, secondary text, table subtotals."
-    },
-    "backgrounds": {
-      "light": "#F9FAFB",
-      "card_light": "#FFFFFF",
-      "dark": "#0B1120",
-      "card_dark": "#111827"
+    "ai_section": {
+      "chat": "Make the chat area scrollable (`overflow-y-auto`) and occupy remaining vertical space (`flex-1`) in the right panel."
     }
   },
   "visual_enhancers": {
-    "hero_overlay": "bg-[#063044]/80 dark:bg-[#063044]/90",
-    "thin_borders": "border border-white/20",
-    "vertical_separators": "border-l-2 border-[#15AF97]",
-    "card_shadows": "shadow-sm",
-    "corner_radius": "rounded-md"
-  },
-  "components": {
-    "login_hero": {
-      "structure": "Split screen. Left: 50% width on desktop. Right: 50% width form.",
-      "left_panel": "Full-frame image with heavy dark corporate overlay (bg-[#063044]/80). Inside, a thin border box (border-white/20 p-8 or p-12). Contains an overline 'CARRIÈRES', a large thin H1 title with a keyword highlighted/underlined in #15AF97.",
-      "image_url": "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwxfHxjb3Jwb3JhdGUlMjBidWlsZGluZyUyMGh2YWMlMjBwcm9mZXNzaW9uYWxzfGVufDB8fHx8MTc4NDA3NjM0MXww&ixlib=rb-4.1.0&q=85"
-    },
-    "buttons": {
-      "primary": "bg-[#15AF97] hover:bg-[#15AF97]/90 text-white rounded-md px-4 py-2 font-body font-medium transition-colors",
-      "secondary": "bg-[#063044] hover:bg-[#063044]/90 text-white rounded-md px-4 py-2 font-body transition-colors",
-      "outline": "border border-[#063044] text-[#063044] dark:border-white dark:text-white hover:bg-[#063044] hover:text-white dark:hover:bg-white dark:hover:text-[#063044] rounded-md px-4 py-2 font-body transition-colors"
-    },
-    "cards": {
-      "kpi": "bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-100 dark:border-gray-700 p-6. Top accent border or left accent line in #15AF97.",
-      "dashboard_sections": "Use very light gray background for the main dashboard area. Cards are clean white. Use fine vertical lines (border-l border-[#15AF97] pl-4) to separate key columns or stats."
-    },
-    "financial_tables": {
-      "instruction": "Do NOT redefine logic of rows. Keep body in Calibri. Harmonize containers with clean white backgrounds, minimal borders. Subtotals row: text-[#808080] dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50. Grand totals row: bg-[#063044] text-white font-bold.",
-      "container": "rounded-md border border-gray-200 overflow-hidden"
-    },
-    "sidebar": {
-      "layout": "Fixed left sidebar. 2 main groups: 'Masse salariale', 'Comptabilité'.",
-      "active_item": "bg-[#063044]/5 text-[#063044] dark:bg-[#15AF97]/10 dark:text-[#15AF97] border-r-2 border-[#15AF97] font-medium"
-    },
-    "page_headers": {
-      "layout": "Flex container, generous padding (pt-8 pb-4). Includes uppercase overline (#808080), large thin title (#063044), and optional subtitle."
-    }
-  },
-  "layouts_and_spacing": {
-    "general": "Generous whitespace. Avoid cramped elements. Use p-6, p-8, and p-12 for section paddings.",
-    "dashboard_grid": "Bento style or dense grid for KPI cards (gap-6), but maintain breathable padding inside cards.",
-    "alignment": "Left-align form labels, table headers (except numbers), and section titles. Center-align only inside specific bounded cards if appropriate."
-  },
-  "motion": {
-    "hover_states": "Subtle opacity or background color shifts. No heavy transforms. Use transition-colors duration-200.",
-    "table_rows": "hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-  },
-  "accessibility": {
-    "contrast": "Ensure #063044 and #15AF97 maintain at least 4.5:1 ratio against light backgrounds. Use white text strictly inside teal and navy buttons.",
-    "testing": "All interactive and key informational elements MUST include a data-testid attribute in kebab-case."
+    "borders": "Use subtle 1px borders (border-slate-200) instead of heavy shadows for separation.",
+    "hover_states": "Add subtle background shifts (e.g., hover:bg-slate-50) to clickable cards like the Indicateurs."
   },
   "universal_guidelines_for_main_agent": [
-    "Prioritize using pre-existing Shadcn components from src/components/ui.",
-    "Use standard Tailwind classes. Include dark mode variants (dark:bg-..., dark:text-...).",
-    "Never apply transition: all globally. Apply to specific interactive elements.",
-    "Create depth with subtle layered elements, minimal shadow-sm, and clean borders. Avoid messy gradients.",
-    "Never use purely transparent backgrounds where text overlaps images. Always use an overlay or glassmorphism.",
-    "Do NOT center align the app container. Respect left-aligned reading flows.",
-    "For the login page, create a beautiful corporate split screen. Replicate the reference site hero feeling on the left panel. The right panel has the login form.",
-    "Use Poppins or Montserrat for titles, and ONLY use Calibri for the body text, tables, inputs, and standard UI.",
-    "Remember to apply data-testid to elements to facilitate testing."
+    "HARD CONSTRAINT: DO NOT change existing colors. Use exactly #063044, #0E9488, #F8A942, #B45309, #808080, #10B981, #EF4444.",
+    "HARD CONSTRAINT: DO NOT change KPI contents, logic, or metrics.",
+    "Maximize horizontal space. The Left Panel handles 7 small top-row metrics, 4 small projection charts, and 2 larger main charts.",
+    "The Right Panel acts as a fixed sidebar for the 3 Indicateurs, AI Variance, and AI Chat, maximizing vertical utility.",
+    "Remove large paddings (gap-6, p-6). Replace with gap-2/gap-3 and p-2/p-3 to achieve the dense 'Cryptobase' aesthetic.",
+    "All interactive elements MUST include a `data-testid` attribute (e.g., `data-testid='period-selector'`).",
+    "Ensure layout is responsive: stacks on mobile, multi-column strictly on xl/2xl viewports.",
+    "Do NOT use transparent backgrounds on containers having content underneath. All Cards must be bg-white."
   ]
 }

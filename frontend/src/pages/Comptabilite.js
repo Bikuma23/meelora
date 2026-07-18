@@ -692,18 +692,19 @@ function LedgerPreviewDialog({ open, onOpenChange, year, month }) {
   const [openIdx, setOpenIdx] = useState(null);
   const [entry, setEntry] = useState(null);
   const [entryLoading, setEntryLoading] = useState(false);
+  const [unusualOnly, setUnusualOnly] = useState(false);
   const LIMIT = 100;
-  useEffect(() => { if (!open) { setQ(""); setSkip(0); setData(null); setOpenIdx(null); setEntry(null); } }, [open]);
-  useEffect(() => { setOpenIdx(null); setEntry(null); }, [skip, q]);
+  useEffect(() => { if (!open) { setQ(""); setSkip(0); setData(null); setOpenIdx(null); setEntry(null); setUnusualOnly(false); } }, [open]);
+  useEffect(() => { setOpenIdx(null); setEntry(null); }, [skip, q, unusualOnly]);
   useEffect(() => {
     if (!open || !year || !month) return;
     setLoading(true);
     const h = setTimeout(() => {
-      api.acctLedgerTransactions({ year, month, q, skip, limit: LIMIT })
+      api.acctLedgerTransactions({ year, month, q, unusual_only: unusualOnly, skip, limit: LIMIT })
         .then(setData).catch(() => setData(null)).finally(() => setLoading(false));
     }, 300);
     return () => clearTimeout(h);
-  }, [open, year, month, q, skip]);
+  }, [open, year, month, q, skip, unusualOnly]);
   const toggleEntry = (t) => {
     if (openIdx === t.idx) { setOpenIdx(null); setEntry(null); return; }
     setOpenIdx(t.idx); setEntry(null); setEntryLoading(true);
@@ -719,10 +720,17 @@ function LedgerPreviewDialog({ open, onOpenChange, year, month }) {
           <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#0E9488]" /> Grand livre — {month ? MONTHS[month - 1] : ""} {year}</DialogTitle>
           <DialogDescription>{data ? `${(data.grand_total || 0).toLocaleString("fr-CA")} transactions · ${data.account_count} comptes — cliquez une ligne pour voir l'écriture` : "Chargement…"}</DialogDescription>
         </DialogHeader>
-        <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
-          <Search size={15} className="text-slate-400" />
-          <input data-testid="ledger-search" className="w-full bg-transparent text-sm outline-none" placeholder="Rechercher par compte ou description…"
-            value={q} onChange={(e) => { setSkip(0); setQ(e.target.value); }} />
+        <div className="flex items-center gap-2">
+          <div className="flex flex-1 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+            <Search size={15} className="text-slate-400" />
+            <input data-testid="ledger-search" className="w-full bg-transparent text-sm outline-none" placeholder="Rechercher par compte ou description…"
+              value={q} onChange={(e) => { setSkip(0); setQ(e.target.value); }} />
+          </div>
+          <button data-testid="ledger-unusual-toggle" onClick={() => { setSkip(0); setUnusualOnly((v) => !v); }}
+            title="Afficher uniquement les transactions atypiques (aberrations statistiques IQR par compte)"
+            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-2 text-xs font-600 transition-colors ${unusualOnly ? "border-[#B45309] bg-amber-50 text-[#B45309]" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
+            <AlertTriangle size={14} /> Inhabituelles{data?.unusual_total ? ` (${data.unusual_total.toLocaleString("fr-CA")})` : ""}
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto rounded-lg border border-slate-200">
           <table className="w-full text-sm">
@@ -743,7 +751,7 @@ function LedgerPreviewDialog({ open, onOpenChange, year, month }) {
                     <td className="px-2 py-1.5 text-slate-400">{isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
                     <td className="px-3 py-1.5 font-mono-data text-slate-500">{t.date}</td>
                     <td className="px-3 py-1.5 font-mono-data text-slate-600">{t.account}</td>
-                    <td className="px-3 py-1.5 text-slate-700">{t.description}</td>
+                    <td className="px-3 py-1.5 text-slate-700">{t.unusual && <AlertTriangle size={11} className="mr-1 inline text-[#B45309]" />}{t.description}</td>
                     <td className="px-3 py-1.5 text-right font-mono-data" style={{ color: (t.amount || 0) < 0 ? "#DC2626" : "#0E9488" }}>{money(t.amount)}</td>
                   </tr>
                   {isOpen && (

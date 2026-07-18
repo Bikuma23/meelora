@@ -2208,21 +2208,49 @@ async def acct_upload_ledger_all(file: UploadFile = File(...), user: dict = Depe
     return {"success": True, "imported": imported, "skipped_locked": skipped_locked,
             "skipped_small": skipped_small, "total_transactions": len(txns)}
 
+def _ledger_unusual_idx(txns):
+    """Indices des transactions atypiques (aberrations IQR par compte, déterministe)."""
+    by_acct = {}
+    for i, t in enumerate(txns):
+        by_acct.setdefault(t.get("account"), []).append((i, t.get("amount") or 0))
+    unusual = set()
+    for acct, items in by_acct.items():
+        amts = sorted(a for _i, a in items)
+        n = len(amts)
+        if n < 4:
+            continue
+        def pct(p):
+            k = p * (n - 1); lo = int(k); frac = k - lo
+            return amts[lo] + (amts[min(lo + 1, n - 1)] - amts[lo]) * frac
+        q1, q3 = pct(0.25), pct(0.75)
+        iqr = q3 - q1
+        if iqr == 0:
+            continue
+        lo_b, hi_b = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+        for gi, a in items:
+            if a < lo_b or a > hi_b:
+                unusual.add(gi)
+    return unusual
+
+
 @api.get("/acct/ledger/transactions")
-async def acct_ledger_transactions(year: int, month: int, q: str = "", skip: int = 0, limit: int = 100, user: dict = Depends(get_current_user)):
+async def acct_ledger_transactions(year: int, month: int, q: str = "", unusual_only: bool = False, skip: int = 0, limit: int = 100, user: dict = Depends(get_current_user)):
     pk = _pkey(year, month)
     doc = await db.acct_ledger.find_one({"_id": pk})
     if not doc:
         raise HTTPException(status_code=404, detail="Aucun grand livre détaillé pour ce mois")
     all_txns = doc.get("transactions", [])
-    indexed = [{**t, "idx": i} for i, t in enumerate(all_txns)]
+    unusual = _ledger_unusual_idx(all_txns)
+    indexed = [{**t, "idx": i, "unusual": (i in unusual)} for i, t in enumerate(all_txns)]
     ql = (q or "").strip().lower()
     if ql:
         indexed = [t for t in indexed if ql in str(t.get("account", "")).lower() or ql in (t.get("description") or "").lower()]
+    if unusual_only:
+        indexed = [t for t in indexed if t["unusual"]]
     total = len(indexed)
     page = indexed[skip:skip + min(limit, 500)]
     return {"period": pk, "total": total, "skip": skip, "limit": limit, "transactions": page,
-            "account_count": len(doc.get("account_totals", {})), "grand_total": len(all_txns)}
+            "account_count": len(doc.get("account_totals", {})), "grand_total": len(all_txns), "unusual_total": len(unusual)}
 
 
 @api.get("/acct/ledger/entry")
