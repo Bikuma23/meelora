@@ -1183,6 +1183,15 @@ function ReportView({ type, title }) {
       toast.success("Export téléchargé");
     } catch (e) { toast.error(e.response?.data?.detail || "Export impossible"); }
   };
+  const exportPdf = async () => {
+    const [y, m] = period.split("-").map(Number);
+    try {
+      const blob = await api.acctReportPdf({ type, year: y, month: m });
+      const url = URL.createObjectURL(blob); const a = document.createElement("a");
+      a.href = url; a.download = `${type === "bilan" ? "bilan" : "resultats"}_${period}.pdf`; a.click(); URL.revokeObjectURL(url);
+      toast.success("PDF téléchargé");
+    } catch (e) { toast.error(e.response?.data?.detail || "Export impossible"); }
+  };
   const colLabel = (k) => ({
     reel: rep ? `Réel ${rep.month_label}` : "Réel", cumulatif: "Réel à date",
     bud_rev2: "Bud. Rév-2", ecart_rev2: "Écart Rév-2", bud_rev1: "Bud. Rév-1",
@@ -1232,6 +1241,7 @@ function ReportView({ type, title }) {
         </div>
         <div className="flex items-center gap-2">
           <PresentationButton />
+          <Button size="sm" variant="outline" onClick={exportPdf} disabled={!rep} data-testid="acct-export-pdf" className="gap-2 border-[#063044]/30 text-[#063044] hover:bg-[#063044]/5"><FileText size={15} /> PDF</Button>
           <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-export-excel" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
         </div>
       </div>
@@ -1246,7 +1256,7 @@ function ReportView({ type, title }) {
           {rep && <span className={`inline-flex items-center gap-1 text-xs font-600 ${rep.balanced ? "text-emerald-600" : "text-red-600"}`}>{rep.balanced ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}{rep.balanced ? "Balancé" : "Déséquilibre"}</span>}
         </div>
         {loading ? <p className="px-5 py-8 text-sm text-slate-500">Chargement…</p> : !rep ? <p className="px-5 py-8 text-sm text-slate-400">Sélectionnez une période avec une BV chargée.</p> : (
-          <div className="overflow-auto max-h-[calc(100vh-230px)]">
+          <div className="overflow-auto max-h-[calc(100vh-230px)] pl-px">
             <table className="acct-hover-rows w-full text-sm">
               <thead>
                 {visibleGroups && (
@@ -1497,6 +1507,15 @@ function BilanSommaireView({ millions = false }) {
       toast.success("Export téléchargé");
     } catch (e) { toast.error(e.response?.data?.detail || "Export impossible"); }
   };
+  const exportPdf = async () => {
+    const [y, m] = period.split("-").map(Number);
+    try {
+      const blob = await api.acctReportPdf({ type: "bilan_sommaire", year: y, month: m });
+      const url = URL.createObjectURL(blob); const a = document.createElement("a");
+      a.href = url; a.download = `bilan_sommaire_${period}.pdf`; a.click(); URL.revokeObjectURL(url);
+      toast.success("PDF téléchargé");
+    } catch (e) { toast.error(e.response?.data?.detail || "Export impossible"); }
+  };
 
   const Side = ({ title, rows }) => (
     <div>
@@ -1525,6 +1544,7 @@ function BilanSommaireView({ millions = false }) {
         <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId="acct-bilansom" />
         <div className="flex items-center gap-2">
           <PresentationButton />
+          <Button size="sm" variant="outline" onClick={exportPdf} disabled={!rep} data-testid="acct-bilansom-export-pdf" className="gap-2 border-[#063044]/30 text-[#063044] hover:bg-[#063044]/5"><FileText size={15} /> PDF</Button>
           <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-bilansom-export" className="gap-2 bg-[#063044] hover:bg-[#063044]/90"><FileSpreadsheet size={15} /> Excel</Button>
         </div>
       </div>
@@ -1595,6 +1615,16 @@ function CashflowView() {
       toast.success("Export téléchargé");
     } catch (e) { toast.error(e.response?.data?.detail || "Export impossible"); }
   };
+  const exportPdf = async () => {
+    const [oy, om] = openP.split("-").map(Number);
+    const [cy, cm] = closeP.split("-").map(Number);
+    try {
+      const blob = await api.acctCashflowPdf({ open_year: oy, open_month: om, close_year: cy, close_month: cm });
+      const url = URL.createObjectURL(blob); const a = document.createElement("a");
+      a.href = url; a.download = `flux_tresorerie_${openP}_${closeP}.pdf`; a.click(); URL.revokeObjectURL(url);
+      toast.success("PDF téléchargé");
+    } catch (e) { toast.error(e.response?.data?.detail || "Export impossible"); }
+  };
 
   const waterfall = rep ? (() => {
     let run = rep.encaisse_ouverture;
@@ -1634,6 +1664,7 @@ function CashflowView() {
         </div>
         <div className="flex items-center gap-2">
           <PresentationButton />
+          <Button size="sm" variant="outline" onClick={exportPdf} disabled={!rep} data-testid="acct-cashflow-export-pdf" className="gap-2 border-[#063044]/30 text-[#063044] hover:bg-[#063044]/5"><FileText size={15} /> PDF</Button>
           <Button size="sm" onClick={exportExcel} disabled={!rep} data-testid="acct-cashflow-export" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
         </div>
       </div>

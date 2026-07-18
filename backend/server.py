@@ -3159,6 +3159,250 @@ async def acct_cashflow_excel(open_year: int, open_month: int, close_year: int, 
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                              headers={"Content-Disposition": f"attachment; filename={fname}"})
 
+# ---------------------------------------------------------------------------
+# Export PDF des rapports comptables (Bilan / Résultats / Bilan sommaire / Flux)
+# ---------------------------------------------------------------------------
+def _pdf_money(v):
+    if v is None or v == "":
+        return ""
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    neg = v < -0.004
+    s = f"{abs(v):,.2f}".replace(",", " ").replace(".", ",")
+    return f"({s})" if neg else s
+
+def _acct_pdf(rep):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    cols = rep["value_cols"]
+    col_labels = {
+        "mois": f"{rep['month_label']} {rep['year']}", "cumulatif": "Réel à date",
+        "reel": f"Réel {rep['month_label']}", "bud_rev2": "Bud. Rév-2", "ecart_rev2": "Écart Rév-2",
+        "bud_rev1": "Bud. Rév-1", "ecart_rev1": "Écart Rév-1", "bud_ca": "Bud. CA",
+        "ecart_ca": "Écart CA", "reel_prec": "Réel an. préc.",
+        "bud_rev2_cum": "Bud. Rév-2", "ecart_rev2_cum": "Écart Rév-2",
+        "bud_rev1_cum": "Bud. Rév-1", "ecart_rev1_cum": "Écart Rév-1",
+        "bud_ca_cum": "Bud. CA", "ecart_ca_cum": "Écart CA", "prec_cum": "Cumul. an. préc.",
+    }
+    if rep["kind"] == "bilan":
+        col_labels["cumulatif"] = "Cumulatif"
+    NAVY = colors.HexColor("#063044"); RED = colors.HexColor("#DC2626")
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle("t", parent=styles["Title"], textColor=NAVY, fontSize=13)
+    sub = ParagraphStyle("s", parent=styles["Normal"], textColor=colors.HexColor("#64748B"), fontSize=8)
+    cell = ParagraphStyle("c", parent=styles["Normal"], fontSize=6, leading=7)
+    cellb = ParagraphStyle("cb", parent=cell, fontName="Helvetica-Bold")
+    heading = "BILAN" if rep["kind"] == "bilan" else ("RÉSULTAT SOMMAIRE" if rep["kind"] == "pnl_sommaire" else "ÉTAT DES RÉSULTATS")
+    el = [Paragraph(f"{heading} — {rep['month_label']} {rep['year']}", title),
+          Paragraph(f"Généré le {datetime.now().strftime('%Y-%m-%d %H:%M')}" + ("" if rep["locked"] else " · DONNÉES PROVISOIRES (mois non verrouillé)"), sub),
+          Spacer(1, 5)]
+    header = ["Compte", "Description"] + [col_labels.get(k, k) for k in cols]
+    data = [header]
+    ops = [
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 6), ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E2E8F0")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
+    ]
+    for ln in rep["lines"]:
+        ri = len(data)
+        st = ln.get("style") or {}
+        is_dark = st.get("f") == "dark"
+        bold = bool(st.get("b")) or ln["kind"] in ("total", "header") or st.get("f") in ("dark", "grey")
+        row = [str(ln["account"] or ""), Paragraph(str(ln["label"] or ""), cellb if bold else cell)]
+        for k in cols:
+            row.append(_pdf_money(ln["values"].get(k)))
+        data.append(row)
+        if is_dark:
+            ops.append(("BACKGROUND", (0, ri), (-1, ri), NAVY))
+            ops.append(("TEXTCOLOR", (0, ri), (-1, ri), colors.white))
+        elif st.get("f") == "grey" or ln["kind"] == "total":
+            ops.append(("BACKGROUND", (0, ri), (-1, ri), colors.HexColor("#EEF1F5")))
+        if bold:
+            ops.append(("FONTNAME", (0, ri), (-1, ri), "Helvetica-Bold"))
+        for ci, k in enumerate(cols):
+            v = ln["values"].get(k)
+            try:
+                if v is not None and float(v) < -0.004:
+                    ops.append(("TEXTCOLOR", (2 + ci, ri), (2 + ci, ri), colors.HexColor("#FCA5A5") if is_dark else RED))
+            except (TypeError, ValueError):
+                pass
+    ncols = len(cols)
+    avail = 281.0
+    acct_w, desc_w = 13.0, 46.0
+    val_w = max(11.0, (avail - acct_w - desc_w) / max(1, ncols))
+    col_widths = [acct_w * mm, desc_w * mm] + [val_w * mm] * ncols
+    tbl = Table(data, colWidths=col_widths, repeatRows=1)
+    tbl.setStyle(TableStyle(ops))
+    el.append(tbl)
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=10 * mm, bottomMargin=8 * mm, leftMargin=8 * mm, rightMargin=8 * mm)
+    doc.build(el)
+    buf.seek(0)
+    return buf
+
+def _bilan_sommaire_pdf(rep):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    NAVY = colors.HexColor("#063044"); RED = colors.HexColor("#DC2626")
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle("t", parent=styles["Title"], textColor=NAVY, fontSize=13)
+    sub = ParagraphStyle("s", parent=styles["Normal"], textColor=colors.HexColor("#64748B"), fontSize=8)
+    cell = ParagraphStyle("c", parent=styles["Normal"], fontSize=8, leading=10)
+    cellb = ParagraphStyle("cb", parent=cell, fontName="Helvetica-Bold")
+    a, p = rep["actif"], rep["passif"]
+    el = [Paragraph(f"BILAN SOMMAIRE — {rep['month_label']} {rep['year']}", title),
+          Paragraph(f"Généré le {datetime.now().strftime('%Y-%m-%d %H:%M')}" + ("" if rep["locked"] else " · DONNÉES PROVISOIRES"), sub),
+          Spacer(1, 6)]
+    data = [["ACTIF", "", "PASSIF ET CAPITAUX", ""]]
+    ops = [
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E2E8F0")),
+        ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("ALIGN", (3, 0), (3, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.6, NAVY),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]
+
+    def bold_of(li):
+        return bool(li and (li.get("kind") in ("total", "header") or (li.get("style") or {}).get("b")))
+
+    for i in range(max(len(a), len(p))):
+        ri = len(data)
+        la = a[i] if i < len(a) else None
+        lp = p[i] if i < len(p) else None
+        la_b, lp_b = bold_of(la), bold_of(lp)
+        row = [
+            Paragraph((la["label"] if la else "") or "", cellb if la_b else cell),
+            _pdf_money(la["value"]) if la and la.get("value") is not None else "",
+            Paragraph((lp["label"] if lp else "") or "", cellb if lp_b else cell),
+            _pdf_money(lp["value"]) if lp and lp.get("value") is not None else "",
+        ]
+        data.append(row)
+        for li, vci in ((la, 1), (lp, 3)):
+            if li and li.get("value") is not None:
+                try:
+                    if float(li["value"]) < -0.004:
+                        ops.append(("TEXTCOLOR", (vci, ri), (vci, ri), RED))
+                except (TypeError, ValueError):
+                    pass
+    tbl = Table(data, colWidths=[95 * mm, 40 * mm, 95 * mm, 40 * mm])
+    tbl.setStyle(TableStyle(ops))
+    el.append(tbl)
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=12 * mm, bottomMargin=10 * mm, leftMargin=8 * mm, rightMargin=8 * mm)
+    doc.build(el)
+    buf.seek(0)
+    return buf
+
+def _cashflow_pdf(rep):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    NAVY = colors.HexColor("#063044"); RED = colors.HexColor("#DC2626")
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle("t", parent=styles["Title"], textColor=NAVY, fontSize=13)
+    sub = ParagraphStyle("s", parent=styles["Normal"], textColor=colors.HexColor("#64748B"), fontSize=8)
+    el = [Paragraph("ÉTAT DES FLUX DE TRÉSORERIE", title),
+          Paragraph(f"Du {rep['open_label']} au {rep['close_label']} (méthode indirecte)" + ("" if rep["locked"] else " · DONNÉES PROVISOIRES"), sub),
+          Spacer(1, 6)]
+    data = []
+    ops = [
+        ("FONTSIZE", (0, 0), (-1, -1), 8), ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5), ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.25, colors.HexColor("#E2E8F0")),
+    ]
+
+    def add(label, value=None, kind=None, indent=False):
+        ri = len(data)
+        lbl = ("     " if indent else "") + label
+        data.append([lbl, _pdf_money(value) if value is not None else ""])
+        if kind == "section":
+            ops.append(("BACKGROUND", (0, ri), (-1, ri), colors.HexColor("#F1F5F9")))
+            ops.append(("FONTNAME", (0, ri), (-1, ri), "Helvetica-Bold"))
+        elif kind == "subtotal":
+            ops.append(("BACKGROUND", (0, ri), (-1, ri), colors.HexColor("#E2E8F0")))
+            ops.append(("FONTNAME", (0, ri), (-1, ri), "Helvetica-Bold"))
+        elif kind == "net":
+            ops.append(("FONTNAME", (0, ri), (-1, ri), "Helvetica-Bold"))
+            ops.append(("LINEABOVE", (0, ri), (-1, ri), 0.8, NAVY))
+        if value is not None:
+            try:
+                if float(value) < -0.004:
+                    ops.append(("TEXTCOLOR", (1, ri), (1, ri), RED))
+            except (TypeError, ValueError):
+                pass
+
+    add("ACTIVITÉS D'EXPLOITATION", None, "section")
+    add("Bénéfice net (perte nette)", rep["benefice_net"], indent=True)
+    if abs(rep["amortissement"]) >= 0.005:
+        add("Amortissement", rep["amortissement"], indent=True)
+    if rep["fdr"]:
+        add("Variation des éléments hors caisse du fonds de roulement :")
+        for l in rep["fdr"]:
+            add(l["label"], l["value"], indent=True)
+    add("Flux liés aux activités d'exploitation", rep["exploitation_total"], "subtotal")
+    add("ACTIVITÉS D'INVESTISSEMENT", None, "section")
+    for l in rep["investissement"]:
+        add(l["label"], l["value"], indent=True)
+    add("Flux liés aux activités d'investissement", rep["investissement_total"], "subtotal")
+    add("ACTIVITÉS DE FINANCEMENT", None, "section")
+    for l in rep["financement"]:
+        add(l["label"], l["value"], indent=True)
+    add("Flux liés aux activités de financement", rep["financement_total"], "subtotal")
+    add("VARIATION NETTE DE LA TRÉSORERIE", rep["variation_nette"], "net")
+    add("Encaisse à l'ouverture", rep["encaisse_ouverture"], indent=True)
+    add("Encaisse à la clôture", rep["encaisse_cloture"], "subtotal")
+    tbl = Table(data, colWidths=[135 * mm, 45 * mm])
+    tbl.setStyle(TableStyle(ops))
+    el.append(tbl)
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=14 * mm, bottomMargin=12 * mm, leftMargin=15 * mm, rightMargin=15 * mm)
+    doc.build(el)
+    buf.seek(0)
+    return buf
+
+@api.get("/acct/report/pdf")
+async def acct_report_pdf(type: str, year: int, month: int, user: dict = Depends(get_current_user)):
+    if type == "bilan_sommaire":
+        rep = await _bilan_sommaire_data(year, month)
+        buf = _bilan_sommaire_pdf(rep)
+        return StreamingResponse(buf, media_type="application/pdf",
+                                 headers={"Content-Disposition": f"attachment; filename=bilan_sommaire_{_pkey(year, month)}.pdf"})
+    if type not in ("bilan", "pnl", "pnl_sommaire"):
+        raise HTTPException(status_code=400, detail="Type invalide")
+    rep = await _acct_report(year, month, type)
+    buf = _acct_pdf(rep)
+    fname = f"{'bilan' if type=='bilan' else ('resultats_sommaire' if type=='pnl_sommaire' else 'resultats')}_{_pkey(year, month)}.pdf"
+    return StreamingResponse(buf, media_type="application/pdf",
+                             headers={"Content-Disposition": f"attachment; filename={fname}"})
+
+@api.get("/acct/cashflow/pdf")
+async def acct_cashflow_pdf(open_year: int, open_month: int, close_year: int, close_month: int, user: dict = Depends(get_current_user)):
+    rep = await _cashflow_data(open_year, open_month, close_year, close_month)
+    buf = _cashflow_pdf(rep)
+    fname = f"flux_tresorerie_{rep['open_period']}_{rep['close_period']}.pdf"
+    return StreamingResponse(buf, media_type="application/pdf",
+                             headers={"Content-Disposition": f"attachment; filename={fname}"})
+
+
 import acct_ai
 acct_ai.init(
     db=db, log_action=log_action, _acct_report=_acct_report, _kpi_data=_kpi_data,

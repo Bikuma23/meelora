@@ -467,6 +467,14 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Mémorisation de la dernière page visitée** : `Layout.js` initialise `active` depuis `localStorage acct:lastPage` (validé contre PAGES) et le persiste à chaque changement de page. Restauration confirmée après rechargement.
 - [x] **Vérifié** (Playwright) : bloc Q-P encadré vert + espace 2 lignes visible ; navigation Flux de trésorerie → reload → page restaurée.
 
+## Espace bord Q-P + Export PDF (2026-07-18)
+- [x] **Q-P encadrement** : espace de 1px ajouté à gauche du cadre vert des lignes « Q-P DES RÉSULTATS » (`pl-px` sur le conteneur scrollable de `ReportView`) pour symétrie gauche/droite.
+- [x] **Export PDF** des rapports comptables : nouveaux boutons « PDF » (à côté de « Excel ») sur Bilan, États des résultats (détaillé + sommaire), Bilan sommaire et Flux de trésorerie.
+  - Backend : `_pdf_money`, `_acct_pdf`, `_bilan_sommaire_pdf`, `_cashflow_pdf` (reportlab, paysage A4 pour les tableaux larges, portrait pour le flux). Négatifs entre parenthèses en rouge, totaux/en-têtes gras, lignes « dark » sur fond navy.
+  - Endpoints : `GET /api/acct/report/pdf` (type=bilan|pnl|pnl_sommaire|bilan_sommaire), `GET /api/acct/cashflow/pdf`.
+  - Frontend : `api.acctReportPdf`, `api.acctCashflowPdf` ; handlers `exportPdf` dans les 3 vues.
+- [x] **Vérifié** : les 5 PDF renvoient HTTP 200 / application/pdf (%PDF-1.4), contenu correct (titres, sections, montants, parenthèses négatives), boutons présents en DOM.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
