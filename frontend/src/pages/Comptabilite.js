@@ -1303,7 +1303,7 @@ function ReportView({ type, title }) {
                   const s = excelRowStyle(ln, !type.includes("sommaire"));
                   const isQp = qpIdxs.indexOf(i) >= 0;
                   const qpB = (pos) => {
-                    if (!isQp) return "";
+                    if (!isQp || pos === "none") return "";
                     let c = "border-[#0E9488] ";
                     if (pos === "first") c += "border-l ";
                     if (pos === "last") c += "border-r ";
@@ -1316,8 +1316,8 @@ function ReportView({ type, title }) {
                   <tr key={ln.row} data-testid={`acct-line-${ln.row}`}
                     className={`group ${isQp ? "" : "border-b border-slate-50"} ${s.cls}`}
                     style={{ background: isQp ? "transparent" : s.bg, fontWeight: isQp ? 400 : undefined, fontSize: isQp ? "0.72rem" : undefined }}>
-                    <td className={`px-4 py-1.5 text-left ${qpB("first")}`} style={{ color: s.isDark ? "#94A3B8" : "#94A3B8" }}>{ln.account || ""}</td>
-                    <td className={`px-4 py-1.5 text-left font-sans ${qpB("mid")} ${s.headerDefault ? "text-[#063044]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`} style={{ color: s.headerDefault ? undefined : (s.color || undefined) }}>
+                    <td className={`px-4 py-1.5 text-left ${qpB("none")}`} style={{ color: s.isDark ? "#94A3B8" : "#94A3B8" }}>{ln.account || ""}</td>
+                    <td className={`px-4 py-1.5 text-left font-sans ${qpB("first")} ${s.headerDefault ? "text-[#063044]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`} style={{ color: s.headerDefault ? undefined : (s.color || undefined) }}>
                       <span className="inline-flex items-center gap-1.5">
                         <span>{ln.label}</span>
                         {ln.kind === "data" && ln.account && (() => {
