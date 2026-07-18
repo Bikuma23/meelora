@@ -485,6 +485,12 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Bouton « Exporter » unifié** : composant `ExportMenu` (DropdownMenu) remplaçant les 2 boutons PDF/Excel séparés sur les 3 vues (États des résultats, Bilan sommaire, Flux de trésorerie). Sous-menu PDF / Excel au clic.
 - [x] **Vérifié** : exports sommaire PDF (7,6 Ko) et Excel (8,3 Ko) valides ; dropdown s'ouvre avec items PDF/Excel ; téléchargement déclenché depuis la vue sommaire (`resultats_2026-06.xlsx`).
 
+## P&L détaillé — ratios en % + nettoyage (2026-07-18c)
+- [x] **Lignes « Réel vs Budget » supprimées** du P&L détaillé uniquement (type `pnl`, filtre sur label).
+- [x] **Lignes de ratio en pourcentage** (Matériels/Sous-traitance/Main d'œuvre/FGF Projets, Marge Brute Projet %, Marge très brute Projets, ratios Services, Marge Brute Service %, Marge Brute Globale %) + **la ligne sous BAIIA** : affichées en % (val×100), police non-gras, italique, couleur verte palette #0E9488. Implémenté côté frontend `ReportView` (scopé à `type === "pnl"`).
+- [x] **Vérifié** (Playwright) : 0 ligne « Réel vs Budget », ratios et ligne post-BAIIA en vert italique « x,x % ».
+- Note : exports PDF/Excel inchangés pour ces lignes (affichage écran seulement).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

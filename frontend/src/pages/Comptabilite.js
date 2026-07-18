@@ -1232,7 +1232,19 @@ function ReportView({ type, title }) {
     .map((g) => ({ ...g, keys: g.keys.filter((k) => !hiddenKeys.has(k)) }))
     .filter((g) => g.keys.length > 0);
   const showSep = (k) => k === "cumulatif" && visibleGroups && visibleGroups.length > 1;
-  const visibleLines = rep ? rep.lines.filter((ln) => !(hideZero && ln.kind === "data" && visibleCols.every((k) => Math.abs(ln.values[k] || 0) < 0.005))) : [];
+  const isDetailedPnl = type === "pnl";
+  const PCT_LABELS = new Set([
+    "Matériels Projets/Revenus Projets", "Sous-traitance projets/Revenus Projets",
+    "Coût main d'œuvre direct projets/Revenus Projets", "FGF projets/Revenus Projets",
+    "Marge Brute - Projet - %", "Marge très brute - Projets",
+    "Matériel Services vs Revenus Services", "Sous-traitance Services vs Revenus Services",
+    "Salaires Services vs Revenus Services", "Marge Brute - Service %", "Marge Brute Globale - %",
+  ]);
+  const pctFmt = (v) => (v == null || isNaN(v)) ? "" : (v * 100).toLocaleString("fr-CA", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %";
+  const baseLines = rep ? (isDetailedPnl ? rep.lines.filter((ln) => (ln.label || "").trim() !== "Réel vs Budget") : rep.lines) : [];
+  const visibleLines = baseLines.filter((ln) => !(hideZero && ln.kind === "data" && visibleCols.every((k) => Math.abs(ln.values[k] || 0) < 0.005)));
+  const baiiaIdx = isDetailedPnl ? visibleLines.findIndex((l) => (l.label || "").includes("BAIIA")) : -1;
+  const isPctLine = (ln, i) => isDetailedPnl && (PCT_LABELS.has((ln.label || "").trim()) || (baiiaIdx >= 0 && i === baiiaIdx + 1));
 
   if (!periods.length) return <NoPeriodsState testId={`acct-no-periods-${type}`} />;
 
@@ -1312,12 +1324,13 @@ function ReportView({ type, title }) {
                     return c;
                   };
                   const lastColIdx = visibleCols.length - 1;
+                  const isPct = isPctLine(ln, i);
                   const row = (
                   <tr key={ln.row} data-testid={`acct-line-${ln.row}`}
                     className={`group ${isQp ? "" : "border-b border-slate-50"} ${s.cls}`}
-                    style={{ background: isQp ? "transparent" : s.bg, fontWeight: isQp ? 400 : undefined, fontSize: isQp ? "0.72rem" : undefined }}>
+                    style={{ background: isQp ? "transparent" : s.bg, fontWeight: (isQp || isPct) ? 400 : undefined, fontStyle: isPct ? "italic" : undefined, fontSize: isQp ? "0.72rem" : undefined }}>
                     <td className={`px-4 py-1.5 text-left ${qpB("none")}`} style={{ color: s.isDark ? "#94A3B8" : "#94A3B8" }}>{ln.account || ""}</td>
-                    <td className={`px-4 py-1.5 text-left font-sans ${qpB("first")} ${s.headerDefault ? "text-[#063044]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`} style={{ color: s.headerDefault ? undefined : (s.color || undefined) }}>
+                    <td className={`px-4 py-1.5 text-left font-sans ${qpB("first")} ${s.headerDefault ? "text-[#063044]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`} style={{ color: isPct ? "#0E9488" : (s.headerDefault ? undefined : (s.color || undefined)) }}>
                       <span className="inline-flex items-center gap-1.5">
                         <span>{ln.label}</span>
                         {ln.kind === "data" && ln.account && (() => {
@@ -1334,7 +1347,7 @@ function ReportView({ type, title }) {
                       </span>
                     </td>
                     {visibleCols.map((k, ci) => (
-                      <td key={k} className={`px-4 py-1.5 text-right ${qpB(ci === lastColIdx ? "last" : "mid")} ${isEcart(k) ? "italic" : ""} ${!isQp && showSep(k) ? "border-l-2 border-slate-200" : ""}`} style={{ color: excelCellColor(s, ln.values[k], isEcart(k)) }}>{ln.kind === "header" ? "" : money(ln.values[k])}</td>
+                      <td key={k} className={`px-4 py-1.5 text-right ${qpB(ci === lastColIdx ? "last" : "mid")} ${(isEcart(k) || isPct) ? "italic" : ""} ${!isQp && showSep(k) ? "border-l-2 border-slate-200" : ""}`} style={{ color: isPct ? "#0E9488" : excelCellColor(s, ln.values[k], isEcart(k)) }}>{ln.kind === "header" ? "" : (isPct ? pctFmt(ln.values[k]) : money(ln.values[k]))}</td>
                     ))}
                   </tr>
                   );
