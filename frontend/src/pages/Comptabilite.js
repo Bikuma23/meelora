@@ -9,10 +9,11 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
-  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download, Search, ChevronDown, ChevronRight, Maximize,
+  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download, Search, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { MONTHS, money, moneyM, usePeriods, PeriodSelect } from "./comptabilite/shared";
 import { AiConfigDialog, VarianceCard, AiChatPanel, AnomaliesCard } from "./comptabilite/AiComponents";
+import { PresentationButton } from "../components/PresentationButton";
 
 
 // ---------- Dashboard ----------
@@ -53,7 +54,7 @@ function KpiCard({ label, value, series, idx, positiveIsGood = true, icon: Icon,
         <span className="overline leading-tight">{label}</span>
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#15AF97]/10 text-[#15AF97]"><Icon size={16} /></span>
       </div>
-      <p className="font-display mt-2 truncate text-2xl font-700 tracking-tight text-[#063044]" title={money(value)}>{money(value)}</p>
+      <p className="font-display mt-2 truncate text-xl font-700 tracking-tight text-[#063044]" title={money(value)}>{money(value)}</p>
       <div className="mt-1 flex items-center gap-1.5 text-xs font-600" style={{ color: delta == null ? "#94A3B8" : (good ? "#10B981" : "#EF4444") }}>
         {delta != null && (up ? <TrendingUp size={14} /> : <TrendingDown size={14} />)}
         {delta != null ? `${up ? "+" : ""}${delta.toFixed(1)}% vs période préc.` : "Aucune donnée antérieure"}
@@ -400,12 +401,12 @@ function ProjChart({ title, data, color, note, onOpen, testid }) {
         <h3 className="text-xs font-700">{title}</h3>
         <button onClick={onOpen} data-testid={`${testid}-detail`} className="inline-flex items-center gap-1 rounded-full bg-[#F8A942]/15 px-2 py-0.5 text-[9px] font-700 uppercase tracking-wide text-[#B45309] hover:bg-[#F8A942]/25">Détail</button>
       </div>
-      <div style={{ width: "100%", height: 150 }}>
+      <div style={{ width: "100%", height: 165 }}>
         <ResponsiveContainer>
-          <LineChart data={data} margin={{ top: 5, right: 8, left: -12, bottom: 0 }} onClick={onOpen}>
+          <LineChart data={data} margin={{ top: 5, right: 8, left: -12, bottom: 4 }} onClick={onOpen}>
             <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-            <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={1} />
-            <YAxis tick={{ fontSize: 9 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={40} />
+            <XAxis dataKey="name" tick={{ fontSize: 8 }} interval="preserveStartEnd" minTickGap={8} angle={-35} textAnchor="end" height={30} tickMargin={2} />
+            <YAxis tick={{ fontSize: 8 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={38} />
             <Tooltip formatter={(v) => money(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
             <Line type="monotone" dataKey="reel" name="Réel" stroke={color} strokeWidth={2.2} dot={{ r: 2 }} connectNulls />
             <Line type="monotone" dataKey="projete" name="Projeté" stroke={color} strokeWidth={2} strokeDasharray="5 4" dot={{ r: 2 }} connectNulls />
@@ -507,16 +508,6 @@ export function AcctDashboard() {
     { key: "cogs", title: "COGS (coût des marchandises vendues)", color: "#808080", testid: "proj-cogs", note: "Coût des marchandises vendues, mensuel." },
   ];
   const openKpi = (type) => setKpiDialog({ open: true, type });
-  const togglePresentation = () => {
-    const el = document.documentElement;
-    if (!document.fullscreenElement) {
-      try { el.requestFullscreen?.(); } catch (e) { /* ignore */ }
-      window.dispatchEvent(new CustomEvent("acct-presentation", { detail: true }));
-    } else {
-      try { document.exitFullscreen?.(); } catch (e) { /* ignore */ }
-      window.dispatchEvent(new CustomEvent("acct-presentation", { detail: false }));
-    }
-  };
   return (
     <div className="space-y-3" data-testid="acct-dashboard">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -525,10 +516,7 @@ export function AcctDashboard() {
           <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId="acct-dash" />
         </div>
         <div className="flex items-center gap-3 text-xs text-slate-400">
-          <button onClick={togglePresentation} data-testid="presentation-btn" title="Mode plein écran / présentation"
-            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 font-600 text-slate-500 hover:bg-slate-50">
-            <Maximize size={13} className="text-[#0E9488]" /> Présentation
-          </button>
+          <PresentationButton />
           {isAdmin && (
             <button onClick={() => setAiDialog(true)} data-testid="ai-config-btn" title="Configuration de l'assistant IA"
               className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 font-600 text-slate-500 hover:bg-slate-50">
@@ -538,18 +526,18 @@ export function AcctDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-12">
-        {/* ===== Colonne principale ===== */}
-        <div className="flex min-w-0 flex-col gap-3 xl:col-span-8 2xl:col-span-9">
-          {cur && (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="acct-kpi-grid">
-              <KpiCard label="Revenus (cumulatif)" value={cur.revenus_cumulatif} series={revSeries} idx={idx} positiveIsGood icon={Wallet} testid="kpi-revenus" />
-              <KpiCard label="COGS (cumulatif)" value={cur.cogs_cumulatif} series={cogsSeries} idx={idx} positiveIsGood={false} icon={Receipt} testid="kpi-cogs" />
-              <KpiCard label="BAIIA (cumulatif)" value={cur.baiia_cumulatif} series={baiiaSeries} idx={idx} positiveIsGood icon={BarChart3} testid="kpi-baiia" />
-              <KpiCard label="Bénéfice net (cumulatif)" value={cur.benefice_cumulatif} series={benSeries} idx={idx} positiveIsGood icon={PiggyBank} testid="kpi-benefice" />
-            </div>
-          )}
+      {cur && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="acct-kpi-grid">
+          <KpiCard label="Revenus (cumulatif)" value={cur.revenus_cumulatif} series={revSeries} idx={idx} positiveIsGood icon={Wallet} testid="kpi-revenus" />
+          <KpiCard label="COGS (cumulatif)" value={cur.cogs_cumulatif} series={cogsSeries} idx={idx} positiveIsGood={false} icon={Receipt} testid="kpi-cogs" />
+          <KpiCard label="BAIIA (cumulatif)" value={cur.baiia_cumulatif} series={baiiaSeries} idx={idx} positiveIsGood icon={BarChart3} testid="kpi-baiia" />
+          <KpiCard label="Bénéfice net (cumulatif)" value={cur.benefice_cumulatif} series={benSeries} idx={idx} positiveIsGood icon={PiggyBank} testid="kpi-benefice" />
+        </div>
+      )}
 
+      <div className="grid gap-3 lg:grid-cols-12">
+        {/* ===== Colonne principale ===== */}
+        <div className="flex min-w-0 flex-col gap-3 lg:col-span-8 2xl:col-span-9">
           {!sel && <p className="text-sm text-slate-400">Aucune période — uploadez une balance de vérification.</p>}
 
           {proj && !proj.insufficient && (
@@ -559,7 +547,7 @@ export function AcctDashboard() {
                 <h3 className="text-xs font-700 uppercase tracking-wider text-slate-500">Projection 12 mois</h3>
                 <span className="inline-flex items-center gap-1 rounded-full bg-[#F8A942]/15 px-2 py-0.5 text-[9px] font-700 uppercase tracking-wide text-[#B45309]">Statistique · {proj.n_base} mois</span>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 {projSeries.map((s) => (
                   <ProjChart key={s.key} testid={s.testid} title={s.title} color={s.color} note={s.note}
                     data={projChart(s.key)} onOpen={() => setProjDialog({ open: true, series: s })} />
@@ -568,7 +556,7 @@ export function AcctDashboard() {
             </div>
           )}
 
-          <div className="grid gap-3 xl:grid-cols-2">
+          <div className="grid gap-3 lg:grid-cols-2">
             {chartData.length > 0 && (
               <div className="card p-4" data-testid="acct-dashboard-chart">
                 <h3 className="mb-0.5 text-xs font-700 uppercase tracking-wider text-slate-500">Réel vs Budget — {summary.month_label} {summary.year}</h3>
@@ -612,7 +600,7 @@ export function AcctDashboard() {
         </div>
 
         {/* ===== Colonne latérale ===== */}
-        <div className="flex min-w-0 flex-col gap-3 xl:col-span-4 2xl:col-span-3 xl:border-l xl:border-slate-200 xl:pl-3">
+        <div className="flex min-w-0 flex-col gap-3 lg:col-span-4 2xl:col-span-3 lg:border-l lg:border-slate-200 lg:pl-3">
           {kpi && (
             <div className="space-y-2" data-testid="acct-indicators">
               <div className="flex flex-wrap items-center justify-between gap-2">

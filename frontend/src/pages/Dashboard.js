@@ -8,6 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
 import { Users, DollarSign, Wallet, TrendingUp, Calendar, PieChart as PieIcon, BarChart3, Layers, Scale } from "lucide-react";
+import { PresentationButton } from "../components/PresentationButton";
 
 const NAVY = "#063044", TEAL = "#15AF97", ORANGE = "#F8A942", GREY = "#808080";
 const BLUE = NAVY, VIOLET = TEAL;
@@ -84,7 +85,10 @@ export default function Dashboard() {
             </Select>
           </div>
         </div>
-        <span className="font-mono-data text-xs text-slate-500">{b ? `${b.kpis.headcount} ${t("entrée(s) affichée(s)")}` : "…"}</span>
+        <div className="flex items-center gap-3">
+          <span className="font-mono-data text-xs text-slate-500">{b ? `${b.kpis.headcount} ${t("entrée(s) affichée(s)")}` : "…"}</span>
+          <PresentationButton />
+        </div>
       </div>
 
       {cmp && <Comparatif cmp={cmp} />}
@@ -121,7 +125,7 @@ function Comparatif({ cmp }) {
             </div>
           ))}
         </div>
-        <div>
+        <div className="min-w-0">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={chart} margin={{ left: 4, right: 8 }} barGap={3}>
               <CartesianGrid stroke="#EEF2F7" vertical={false} />
