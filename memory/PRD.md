@@ -462,6 +462,11 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Surlignement de ligne au survol** (fond #F1F5F9, transition douce, dark #1E293B) sur tous les tableaux du module via classe `.acct-hover-rows` (Balance de vérification, Bilan, États des résultats, Flux de trésorerie, P&L budget vs réel). Rapports d'audit = placeholder sans tableau.
 - [x] **Vérifié** (Playwright) : opacité bouton 0→1 au survol, couleur rgb(14,148,136), fond ligne rgb(241,245,249) au survol, bascule P&L conservée après reload.
 
+## Finition mise en forme P&L + mémorisation page (2026-07-18)
+- [x] **Bas de l'État des résultats** : 2 lignes vides insérées avant le bloc « Q-P DES RÉSULTATS » (2× spacer `<tr>` h-6). Les lignes Q-P s'affichent en texte plus petit (0.72rem), non gras (fontWeight 400), encadrées d'un fin bord vert/teal (#0E9488) englobant tout le bloc. Appliqué dans `ReportView` de `Comptabilite.js`.
+- [x] **Mémorisation de la dernière page visitée** : `Layout.js` initialise `active` depuis `localStorage acct:lastPage` (validé contre PAGES) et le persiste à chaque changement de page. Restauration confirmée après rechargement.
+- [x] **Vérifié** (Playwright) : bloc Q-P encadré vert + espace 2 lignes visible ; navigation Flux de trésorerie → reload → page restaurée.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

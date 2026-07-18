@@ -1310,7 +1310,8 @@ function ReportView({ type, title }) {
                   if (i === qpFirst) {
                     return (
                       <Fragment key={`qpwrap-${ln.row}`}>
-                        <tr aria-hidden="true"><td colSpan={totalCols} className="h-7"></td></tr>
+                        <tr aria-hidden="true"><td colSpan={totalCols} className="h-6"></td></tr>
+                        <tr aria-hidden="true"><td colSpan={totalCols} className="h-6"></td></tr>
                         {row}
                       </Fragment>
                     );

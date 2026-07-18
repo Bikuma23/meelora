@@ -199,7 +199,10 @@ export default function Layout() {
 function LayoutInner() {
   const { user, logout } = useAuth();
   const { t } = useLang();
-  const [active, setActive] = useState("dashboard");
+  const [active, setActive] = useState(() => {
+    try { const s = localStorage.getItem("acct:lastPage"); if (s && PAGES[s]) return s; } catch (e) { /* ignore */ }
+    return "dashboard";
+  });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [avatarColor, setAvatarColor] = useState("#F8A942");
@@ -207,6 +210,7 @@ function LayoutInner() {
   const page = PAGES[active];
   const Active = page.comp;
   const go = (k) => { setActive(k); setMobileOpen(false); };
+  useEffect(() => { try { localStorage.setItem("acct:lastPage", active); } catch (e) { /* ignore */ } }, [active]);
   useEffect(() => {
     const handler = (e) => { if (e.detail) { setActive(e.detail); setMobileOpen(false); } };
     window.addEventListener("acct-navigate", handler);
