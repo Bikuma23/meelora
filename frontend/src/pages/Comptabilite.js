@@ -1263,13 +1263,30 @@ function ReportView({ type, title }) {
                 {visibleCols.map((k) => <th key={k} className={`bg-white px-4 py-2.5 text-right font-600 ${isEcart(k) ? "text-slate-500" : ""} ${showSep(k) ? "border-l-2 border-slate-200" : ""}`}>{colLabel(k)}</th>)}
               </tr></thead>
               <tbody className="font-mono-data">
-                {visibleLines.map((ln) => {
+                {(() => {
+                  const isPnl = type.includes("pnl");
+                  const qpIdxs = isPnl ? visibleLines.map((l, i) => ({ l, i })).filter((x) => (x.l.label || "").toUpperCase().includes("Q-P DES")).map((x) => x.i) : [];
+                  const qpFirst = qpIdxs[0]; const qpLast = qpIdxs[qpIdxs.length - 1];
+                  const totalCols = 2 + visibleCols.length;
+                  return visibleLines.map((ln, i) => {
                   const s = excelRowStyle(ln, !type.includes("sommaire"));
-                  return (
+                  const isQp = qpIdxs.indexOf(i) >= 0;
+                  const qpB = (pos) => {
+                    if (!isQp) return "";
+                    let c = "border-[#0E9488] ";
+                    if (pos === "first") c += "border-l ";
+                    if (pos === "last") c += "border-r ";
+                    if (i === qpFirst) c += "border-t ";
+                    if (i === qpLast) c += "border-b ";
+                    return c;
+                  };
+                  const lastColIdx = visibleCols.length - 1;
+                  const row = (
                   <tr key={ln.row} data-testid={`acct-line-${ln.row}`}
-                    className={`group border-b border-slate-50 ${s.cls}`} style={{ background: s.bg }}>
-                    <td className="px-4 py-1.5 text-left" style={{ color: s.isDark ? "#94A3B8" : "#94A3B8" }}>{ln.account || ""}</td>
-                    <td className={`px-4 py-1.5 text-left font-sans ${s.headerDefault ? "text-[#063044]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`} style={{ color: s.headerDefault ? undefined : (s.color || undefined) }}>
+                    className={`group ${isQp ? "" : "border-b border-slate-50"} ${s.cls}`}
+                    style={{ background: isQp ? "transparent" : s.bg, fontWeight: isQp ? 400 : undefined, fontSize: isQp ? "0.72rem" : undefined }}>
+                    <td className={`px-4 py-1.5 text-left ${qpB("first")}`} style={{ color: s.isDark ? "#94A3B8" : "#94A3B8" }}>{ln.account || ""}</td>
+                    <td className={`px-4 py-1.5 text-left font-sans ${qpB("mid")} ${s.headerDefault ? "text-[#063044]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`} style={{ color: s.headerDefault ? undefined : (s.color || undefined) }}>
                       <span className="inline-flex items-center gap-1.5">
                         <span>{ln.label}</span>
                         {ln.kind === "data" && ln.account && (() => {
@@ -1285,12 +1302,22 @@ function ReportView({ type, title }) {
                         })()}
                       </span>
                     </td>
-                    {visibleCols.map((k) => (
-                      <td key={k} className={`px-4 py-1.5 text-right ${isEcart(k) ? "italic" : ""} ${showSep(k) ? "border-l-2 border-slate-200" : ""}`} style={{ color: excelCellColor(s, ln.values[k], isEcart(k)) }}>{ln.kind === "header" ? "" : money(ln.values[k])}</td>
+                    {visibleCols.map((k, ci) => (
+                      <td key={k} className={`px-4 py-1.5 text-right ${qpB(ci === lastColIdx ? "last" : "mid")} ${isEcart(k) ? "italic" : ""} ${!isQp && showSep(k) ? "border-l-2 border-slate-200" : ""}`} style={{ color: excelCellColor(s, ln.values[k], isEcart(k)) }}>{ln.kind === "header" ? "" : money(ln.values[k])}</td>
                     ))}
                   </tr>
                   );
-                })}
+                  if (i === qpFirst) {
+                    return (
+                      <Fragment key={`qpwrap-${ln.row}`}>
+                        <tr aria-hidden="true"><td colSpan={totalCols} className="h-7"></td></tr>
+                        {row}
+                      </Fragment>
+                    );
+                  }
+                  return row;
+                  });
+                })()}
               </tbody>
             </table>
           </div>
