@@ -619,6 +619,8 @@ export function AcctDashboard() {
               </div>
             )}
           </div>
+          {period && <VarianceCard year={Number(period.split("-")[0])} month={Number(period.split("-")[1])} />}
+          {period && <AiChatPanel year={Number(period.split("-")[0])} month={Number(period.split("-")[1])} />}
         </div>
 
         {/* ===== Colonne latérale ===== */}
@@ -671,8 +673,6 @@ export function AcctDashboard() {
             </div>
           )}
 
-          {period && <VarianceCard year={Number(period.split("-")[0])} month={Number(period.split("-")[1])} />}
-          {period && <AiChatPanel year={Number(period.split("-")[0])} month={Number(period.split("-")[1])} />}
         </div>
       </div>
 

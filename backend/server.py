@@ -276,6 +276,9 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
     aug_ccq = hypo["augmentation_ccq"]
     aug_autres = hypo["augmentation_autres"]
     is_actuel = scenario == "actuel"
+    if not is_actuel and year:
+        _ikey = f"{int(year)}:{scenario}"
+        employees = [e for e in employees if _ikey not in (e.get("inactive_scenarios") or [])]
 
     def _garde_on(e):
         _, o, _ = _emp_scn(e, year, scenario)
@@ -790,6 +793,8 @@ async def save_override(eid: str, payload: OverridePayload, year: Optional[int] 
         upd["$set"] = sets
     if unsets:
         upd["$unset"] = unsets
+    if ov:
+        upd["$pull"] = {"inactive_scenarios": f"{int(year)}:{scenario}"}
     if upd:
         await db.employees.update_one({"_id": _oid(eid)}, upd)
     await log_action(user, "Modifier", "Budget", f"Fiche {SCEN_LABEL.get(scenario, scenario)} {year} — {emp['name']}")
@@ -865,6 +870,70 @@ async def _active_year():
     s = await db.settings.find_one({"key": "app"})
     return int((s or {}).get("active_year", DEFAULT_YEAR))
 
+async def _fetch_qc_rates(year):
+    """Best-effort : récupère en ligne les taux employeur publiés par Revenu Québec / RQAP pour l'année.
+    Retourne {code:{"rate":float,"ceiling":float}} (possiblement partiel). Vide si échec réseau/parsing."""
+    import re
+    out = {}
+    try:
+        import httpx
+    except Exception:
+        return out
+    y = int(year)
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; BudgetSalairesPro/1.0)"}
+
+    def _num(s):
+        return float(s.replace("\u00a0", "").replace(" ", "").replace(",", "."))
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, headers=headers) as cx:
+            try:
+                r = await cx.get("https://www.rqap.gouv.qc.ca/fr/a-propos-du-regime/cotisations-et-revenu-maximal-assurable")
+                if r.status_code == 200:
+                    html = r.text
+                    rr = {}
+                    m_rate = re.search(rf"{y}[\s\S]{{0,600}}?employeur[\s\S]{{0,120}}?(\d[\d\s\u00a0]*,\d+)\s*%", html, re.I)
+                    m_max = re.search(r"maximal\s+assurable[\s\S]{0,200}?(\d[\d\s\u00a0]{4,})\s*\$", html, re.I)
+                    if m_rate:
+                        rr["rate"] = round(_num(m_rate.group(1)) / 100, 6)
+                    if m_max:
+                        rr["ceiling"] = round(_num(m_max.group(1)), 0)
+                    if rr:
+                        out["RQAP"] = rr
+            except Exception:
+                pass
+    except Exception:
+        return out
+    return out
+
+async def _apply_qc_rates(newh, year):
+    """Met à jour les charges sociales (sauf CSST) selon les taux Revenu Québec de l'année et lève
+    le drapeau de révision (message rouge dans Hypothèses jusqu'à ce que l'utilisateur enregistre)."""
+    fetched = await _fetch_qc_rates(year)
+    updated = []
+    for c in newh.get("charges", []):
+        code = c.get("code")
+        if code == "CSST":
+            continue
+        f = fetched.get(code)
+        if not f:
+            continue
+        if "rate" in f and abs(f["rate"] - (c.get("rate") or 0)) > 1e-9:
+            c["rate"] = f["rate"]
+            if code not in updated:
+                updated.append(code)
+        if f.get("ceiling") and abs(f["ceiling"] - (c.get("ceiling") or 0)) > 0.5:
+            c["ceiling"] = f["ceiling"]
+            if code not in updated:
+                updated.append(code)
+    newh["rates_changed"] = True
+    if updated:
+        newh["rates_note"] = f"Les taux de charges sociales {year} ({', '.join(updated)}) ont été mis à jour automatiquement selon Revenu Québec. Vérifiez les valeurs puis cliquez sur Enregistrer pour les appliquer."
+    else:
+        newh["rates_note"] = f"Récupération automatique des taux de Revenu Québec pour {year} incomplète : les taux de l'année précédente ont été reportés. Vérifiez-les puis cliquez sur Enregistrer."
+    return newh
+
+
 @api.get("/years")
 async def list_years(user: dict = Depends(get_current_user)):
     docs = await db.hypotheses.find().to_list(1000)
@@ -889,6 +958,7 @@ async def create_year(payload: YearCreate, user: dict = Depends(get_current_user
     newh = {k: v for k, v in src.items() if k != "_id"}
     newh["key"] = _hkey(ny); newh["year"] = ny
     _apply_working_days(newh, ny)
+    await _apply_qc_rates(newh, ny)
     await db.hypotheses.insert_one(newh)
     # Report : le scénario source de l'année précédente devient le salaire actuel de la nouvelle année.
     depts = await db.departments.find().to_list(1000)
@@ -921,6 +991,8 @@ async def update_hypotheses(payload: dict, year: Optional[int] = None, user: dic
     if user.get("role") != "admin" and await _year_locked(year):
         raise HTTPException(status_code=403, detail=f"Un budget {year} est verrouillé. Seul un administrateur peut modifier les hypothèses.")
     payload["key"] = _hkey(year); payload["year"] = int(year)
+    payload["rates_changed"] = False
+    payload["rates_note"] = ""
     await db.hypotheses.update_one({"key": _hkey(year)}, {"$set": payload}, upsert=True)
     await log_action(user, "Modifier", "Hypothèses", f"Taux & paramètres {year}")
     doc = await db.hypotheses.find_one({"key": _hkey(year)})
@@ -990,20 +1062,25 @@ def _has_scenario_entry(e, year, scenario):
 async def budget_no_entry(year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
     """Employés actifs sans budget saisi (aucun override) pour l'année + scénario donnés."""
     year = year or await _active_year()
+    key = f"{int(year)}:{scenario}"
     emps = await db.employees.find(_active_q()).sort("employee_number", 1).to_list(2000)
     out = [{"id": str(e["_id"]), "employee_number": e["employee_number"], "name": e["name"],
-            "department": e.get("department", "")} for e in emps if not _has_scenario_entry(e, year, scenario)]
+            "department": e.get("department", "")} for e in emps
+           if not _has_scenario_entry(e, year, scenario) and key not in (e.get("inactive_scenarios") or [])]
     return {"year": year, "scenario": scenario, "employees": out, "count": len(out)}
 
 @api.post("/budget/inactivate-no-entry")
 async def inactivate_no_entry(year: Optional[int] = None, scenario: str = "ca", user: dict = Depends(get_current_user)):
-    """Inactive tous les employés actifs sans budget saisi pour l'année + scénario donnés."""
+    """Inactive (pour CETTE année + CE scénario uniquement) les employés actifs sans budget saisi.
+    L'historique des autres scénarios/années est conservé."""
     year = year or await _active_year()
+    key = f"{int(year)}:{scenario}"
     emps = await db.employees.find(_active_q()).to_list(2000)
-    ids = [e["_id"] for e in emps if not _has_scenario_entry(e, year, scenario)]
+    ids = [e["_id"] for e in emps
+           if not _has_scenario_entry(e, year, scenario) and key not in (e.get("inactive_scenarios") or [])]
     for _id in ids:
-        await db.employees.update_one({"_id": _id}, {"$set": {"active": False}})
-    await log_action(user, "Modifier", "Employé", f"Inactivation auto — {len(ids)} employé(s) sans budget {SCEN_LABEL.get(scenario, scenario)} {year}")
+        await db.employees.update_one({"_id": _id}, {"$addToSet": {"inactive_scenarios": key}})
+    await log_action(user, "Modifier", "Employé", f"Inactivation {SCEN_LABEL.get(scenario, scenario)} {year} — {len(ids)} employé(s) sans budget (scénario uniquement)")
     return {"success": True, "inactivated": len(ids)}
 
 # ---------------------------------------------------------------------------

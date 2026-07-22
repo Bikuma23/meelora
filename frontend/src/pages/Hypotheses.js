@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useLang } from "../context/LanguageContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { Save, HardHat, Briefcase, ShieldCheck, Settings2 } from "lucide-react";
+import { Save, HardHat, Briefcase, ShieldCheck, Settings2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 const MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
@@ -29,7 +29,7 @@ export default function Hypotheses() {
 
   const save = async () => {
     setSaving(true);
-    try { await api.updateHypotheses(h, year); toast.success(`${t("Hypothèses")} ${year} ${t("enregistrées")}`); }
+    try { const doc = await api.updateHypotheses(h, year); setH(doc); toast.success(`${t("Hypothèses")} ${year} ${t("enregistrées")}`); }
     catch { toast.error(t("Erreur d'enregistrement")); } finally { setSaving(false); }
   };
 
@@ -52,6 +52,15 @@ export default function Hypotheses() {
 
   return (
     <div className="space-y-5" data-testid="hypotheses-page">
+      {h.rates_changed && (
+        <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700" data-testid="rates-changed-banner">
+          <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-700">{t("Taux de charges sociales modifiés")}</p>
+            <p className="mt-0.5 text-[13px] leading-snug">{h.rates_note || t("Les taux ont été mis à jour automatiquement. Cliquez sur Enregistrer pour les appliquer.")}</p>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">{t("Paramètres pour")} <b className="text-slate-800">{h.year}</b> {t("— alimentent tous les calculs budgétaires")}</p>
         {isAdmin && <Button data-testid="save-hypotheses-btn" onClick={save} disabled={saving} className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90"><Save size={16} /> {saving ? t("Enregistrement…") : t("Enregistrer")}</Button>}

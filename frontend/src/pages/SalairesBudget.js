@@ -13,6 +13,7 @@ import { Pencil, Lock, Unlock, ShieldCheck, TrendingUp, ChevronUp, ChevronDown, 
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "../components/ui/alert-dialog";
 import { EditableCell } from "../components/EditableCell";
+import { PresentationButton } from "../components/PresentationButton";
 
 const SCENARIOS = [["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 const LABEL = Object.fromEntries(SCENARIOS);
@@ -207,6 +208,7 @@ export default function SalairesBudget() {
           ))}
         </div>
         <div className="flex items-center gap-3">
+          <PresentationButton />
           {locked && (
             <span className="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-xs font-700 text-red-600" data-testid="lock-badge">
               <Lock size={13} /> {t("Verrouillé")}{lockInfo?.locked_by ? ` · ${lockInfo.locked_by}${lockInfo.locked_at ? " le " + new Date(lockInfo.locked_at).toLocaleDateString("fr-CA") : ""}` : ""}

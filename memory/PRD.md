@@ -495,6 +495,13 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] Les exports **PDF et Excel** du P&L détaillé appliquent désormais les mêmes ajustements que l'écran : lignes « Réel vs Budget » retirées ; lignes de ratio + ligne sous BAIIA affichées en pourcentage (Excel format `0.0%`, PDF « x,x % »), police non-grasse, italique, verte (#0E9488). Backend : `_pnl_detail_adjust` + marqueur `_pct` géré dans `_acct_excel`/`_acct_pdf` (appliqué uniquement pour `type == "pnl"`).
 - [x] **Vérifié** : xlsx (0 ligne « Réel vs Budget » ; ratios `0.0%`, italique, couleur 0E9488, non gras) ; pdf (aucune ligne « Réel vs Budget », ratios en « x,x % »).
 
+## 4 fonctionnalités : cartes IA, taux QC auto, présentation budget, inactivation par scénario (2026-07-22)
+- [x] **#1 Cartes IA déplacées** : « Analyse de variance (IA) » et « Questions sur les données (IA) » passent dans la colonne principale (gauche), sous les graphiques du tableau de bord Comptabilité (`Comptabilite.js`).
+- [x] **#2 Taux Revenu Québec auto** : à la création d'une nouvelle année, `_apply_qc_rates` tente une récupération en ligne (`_fetch_qc_rates` via httpx, best-effort sur RQAP ; repli sur report de l'année précédente si échec réseau/parsing) et met à jour toutes les charges **sauf CSST** (taux + max assurable). Drapeau `rates_changed` + `rates_note` → bannière rouge dans Hypothèses ; l'enregistrement efface la bannière et applique les taux (`update_hypotheses` force `rates_changed=False`). NOTE : le scraping live est best-effort (à vérifier par l'utilisateur).
+- [x] **#3 Bouton Présentation** ajouté dans l'en-tête de Salaires & Budget (`PresentationButton`).
+- [x] **#4 Inactivation par scénario** : « Inactiver sans budget » n'affecte plus que l'année+scénario courant via `inactive_scenarios: ["{year}:{scenario}"]` (plus de `active:false` global). `compute_budget` filtre par scénario ; `save_override` réactive (`$pull`) l'employé pour le scénario lors d'une saisie. Historique conservé dans les autres scénarios/années.
+- [x] **Vérifié** : filtrage scénario (ca=122, revue2 avec 1 inactif=121, ca conserve 122, employé reste actif global) ; bannière rouge Hypothèses ; cartes IA à gauche ; bouton Présentation budget (captures).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
