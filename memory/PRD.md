@@ -502,6 +502,11 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **#4 Inactivation par scénario** : « Inactiver sans budget » n'affecte plus que l'année+scénario courant via `inactive_scenarios: ["{year}:{scenario}"]` (plus de `active:false` global). `compute_budget` filtre par scénario ; `save_override` réactive (`$pull`) l'employé pour le scénario lors d'une saisie. Historique conservé dans les autres scénarios/années.
 - [x] **Vérifié** : filtrage scénario (ca=122, revue2 avec 1 inactif=121, ca conserve 122, employé reste actif global) ; bannière rouge Hypothèses ; cartes IA à gauche ; bouton Présentation budget (captures).
 
+## Journal avant→après + aperçu taux (2026-07-22b)
+- [x] **Journal — valeurs avant/après** : `log_action` accepte un tableau `changes`. `update_hypotheses` (`_diff_hypotheses`) et `update_employee` (`_diff_employee`) calculent le diff (taux, max assurable, exemptions, classes de sécurité, paramètres scalaires ; nom, département, salaire, vacances, actif, etc.). Affichage dans `Journal.js` : ancienne valeur barrée (rouge) → nouvelle (vert).
+- [x] **Bannière taux — aperçu ancien→nouveau** : `_apply_qc_rates` stocke `rates_diff` ; la bannière rouge d'Hypothèses liste chaque taux modifié (ancien → nouveau). Effacé à l'enregistrement.
+- [x] **Vérifié** : roundtrip Hypothèses (RRQ Taux 6,4%→6,5%, max 74 600$→75 600$, REER 5%→5,5%) enregistré et affiché dans le Journal ; `_diff_employee` testé en isolation.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

@@ -58,6 +58,18 @@ export default function Hypotheses() {
           <div>
             <p className="font-700">{t("Taux de charges sociales modifiés")}</p>
             <p className="mt-0.5 text-[13px] leading-snug">{h.rates_note || t("Les taux ont été mis à jour automatiquement. Cliquez sur Enregistrer pour les appliquer.")}</p>
+            {Array.isArray(h.rates_diff) && h.rates_diff.length > 0 && (
+              <ul className="mt-2 flex flex-col gap-1" data-testid="rates-diff-list">
+                {h.rates_diff.map((c, i) => (
+                  <li key={i} className="flex flex-wrap items-center gap-1.5 text-[12px]">
+                    <span className="font-600">{c.label} :</span>
+                    <span className="rounded bg-white px-1.5 py-0.5 font-mono-data line-through decoration-red-300">{c.old}</span>
+                    <span>→</span>
+                    <span className="rounded bg-white px-1.5 py-0.5 font-mono-data font-700 text-emerald-700">{c.new}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}

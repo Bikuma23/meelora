@@ -81,13 +81,96 @@ async def require_admin(user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
     return user
 
-async def log_action(user, action, entity, label, details=""):
+async def log_action(user, action, entity, label, details="", changes=None):
     await db.journal.insert_one({
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "user_email": user.get("email", "système"),
         "user_name": user.get("name", ""),
         "action": action, "entity": entity, "label": label, "details": details,
+        "changes": changes or [],
     })
+
+def _fmt_pct(v):
+    try:
+        return (f"{float(v) * 100:.4g}").replace(".", ",") + " %"
+    except (TypeError, ValueError):
+        return str(v)
+
+def _fmt_money(v):
+    try:
+        return f"{float(v):,.0f}".replace(",", " ") + " $"
+    except (TypeError, ValueError):
+        return str(v)
+
+def _fmt_kind(v, kind):
+    if v is None or v == "":
+        return "—"
+    if kind == "pct":
+        return _fmt_pct(v)
+    if kind == "money":
+        return _fmt_money(v)
+    if kind == "bool":
+        return "Oui" if v else "Non"
+    return str(v)
+
+_HYPO_PARAMS = [
+    ("ccq_rate", "Avantages CCQ", "pct"), ("prime_halo_rate", "Prime HALO", "pct"),
+    ("reer_rate", "REER", "pct"), ("assurance_annuelle", "Assurance ($/an)", "money"),
+    ("alloc_securite_montant", "Alloc. sécurité ($/an)", "money"),
+    ("prime_garde_cout_unitaire", "Garde — coût unitaire", "money"),
+    ("prime_garde_nb_annuel", "Garde — nb/an", "num"),
+    ("augmentation_ccq", "Augmentation CCQ", "pct"), ("augmentation_autres", "Augmentation standard", "pct"),
+    ("csst_max_assurable", "CSST max. assurable", "money"),
+]
+
+def _diff_hypotheses(old, new):
+    ch = []
+    oldc = {c["code"]: c for c in (old.get("charges") or [])}
+    for c in (new.get("charges") or []):
+        o = oldc.get(c["code"]) or {}
+        if abs(float(c.get("rate", 0) or 0) - float(o.get("rate", 0) or 0)) > 1e-9:
+            ch.append({"label": f"{c['code']} · Taux", "old": _fmt_pct(o.get("rate", 0)), "new": _fmt_pct(c.get("rate", 0))})
+        if abs(float(c.get("ceiling", 0) or 0) - float(o.get("ceiling", 0) or 0)) > 0.5:
+            ch.append({"label": f"{c['code']} · Max. assurable", "old": _fmt_money(o.get("ceiling", 0)), "new": _fmt_money(c.get("ceiling", 0))})
+        if abs(float(c.get("exemption", 0) or 0) - float(o.get("exemption", 0) or 0)) > 0.5:
+            ch.append({"label": f"{c['code']} · Exemption", "old": _fmt_money(o.get("exemption", 0)), "new": _fmt_money(c.get("exemption", 0))})
+    olds = {c["code"]: c for c in (old.get("security_classes") or [])}
+    for c in (new.get("security_classes") or []):
+        o = olds.get(c.get("code"))
+        if o is None:
+            ch.append({"label": f"Classe séc. {c.get('code')} (ajoutée)", "old": "—", "new": _fmt_pct(c.get("rate", 0))})
+        elif abs(float(c.get("rate", 0) or 0) - float(o.get("rate", 0) or 0)) > 1e-9:
+            ch.append({"label": f"Classe séc. {c['code']} · Taux", "old": _fmt_pct(o.get("rate", 0)), "new": _fmt_pct(c.get("rate", 0))})
+    for key, lbl, kind in _HYPO_PARAMS:
+        if key in new and key in old:
+            try:
+                if abs(float(new[key]) - float(old[key])) > (1e-9 if kind == "pct" else 0.005):
+                    ch.append({"label": lbl, "old": _fmt_kind(old[key], kind), "new": _fmt_kind(new[key], kind)})
+            except (TypeError, ValueError):
+                pass
+    return ch
+
+_EMP_DIFF_FIELDS = [
+    ("name", "Nom", "str"), ("department", "Département", "str"), ("title", "Titre", "str"),
+    ("employment_type", "Type", "str"), ("current_annual_salary", "Salaire annuel", "money"),
+    ("vacation_rate", "Taux vacances", "pct"), ("security_class", "Classe séc.", "str"),
+    ("active", "Actif", "bool"), ("hire_date", "Embauche", "str"), ("end_date", "Fin d'emploi", "str"),
+    ("prime_type", "Prime", "str"), ("sex_at_birth", "Sexe", "str"),
+]
+
+def _diff_employee(old, new):
+    ch = []
+    for key, lbl, kind in _EMP_DIFF_FIELDS:
+        ov, nv = old.get(key), new.get(key)
+        same = (ov == nv)
+        if kind in ("money", "pct") and ov is not None and nv is not None:
+            try:
+                same = abs(float(ov) - float(nv)) < (1e-9 if kind == "pct" else 0.005)
+            except (TypeError, ValueError):
+                same = (ov == nv)
+        if not same:
+            ch.append({"label": lbl, "old": _fmt_kind(ov, kind), "new": _fmt_kind(nv, kind)})
+    return ch
 
 # ---------------------------------------------------------------------------
 # Config / seed data
@@ -731,10 +814,12 @@ async def update_employee(eid: str, payload: EmployeeBase, user: dict = Depends(
         raise HTTPException(status_code=403, detail="Un budget est verrouillé. Seul un administrateur peut modifier les employés.")
     if not await db.departments.find_one({"code": payload.department}):
         raise HTTPException(status_code=400, detail=f"Département '{payload.department}' inexistant")
-    res = await db.employees.update_one({"_id": _oid(eid)}, {"$set": payload.model_dump()})
-    if res.matched_count == 0:
+    old = await db.employees.find_one({"_id": _oid(eid)})
+    if not old:
         raise HTTPException(status_code=404, detail="Employé introuvable")
-    await log_action(user, "Modifier", "Employé", payload.name)
+    newd = payload.model_dump()
+    await db.employees.update_one({"_id": _oid(eid)}, {"$set": newd})
+    await log_action(user, "Modifier", "Employé", payload.name, changes=_diff_employee(old, newd))
     u = await db.employees.find_one({"_id": _oid(eid)})
     u["id"] = str(u.pop("_id"))
     return u
@@ -911,6 +996,7 @@ async def _apply_qc_rates(newh, year):
     le drapeau de révision (message rouge dans Hypothèses jusqu'à ce que l'utilisateur enregistre)."""
     fetched = await _fetch_qc_rates(year)
     updated = []
+    diffs = []
     for c in newh.get("charges", []):
         code = c.get("code")
         if code == "CSST":
@@ -919,14 +1005,17 @@ async def _apply_qc_rates(newh, year):
         if not f:
             continue
         if "rate" in f and abs(f["rate"] - (c.get("rate") or 0)) > 1e-9:
+            diffs.append({"label": f"{code} · Taux", "old": _fmt_pct(c.get("rate", 0)), "new": _fmt_pct(f["rate"])})
             c["rate"] = f["rate"]
             if code not in updated:
                 updated.append(code)
         if f.get("ceiling") and abs(f["ceiling"] - (c.get("ceiling") or 0)) > 0.5:
+            diffs.append({"label": f"{code} · Max. assurable", "old": _fmt_money(c.get("ceiling", 0)), "new": _fmt_money(f["ceiling"])})
             c["ceiling"] = f["ceiling"]
             if code not in updated:
                 updated.append(code)
     newh["rates_changed"] = True
+    newh["rates_diff"] = diffs
     if updated:
         newh["rates_note"] = f"Les taux de charges sociales {year} ({', '.join(updated)}) ont été mis à jour automatiquement selon Revenu Québec. Vérifiez les valeurs puis cliquez sur Enregistrer pour les appliquer."
     else:
@@ -990,11 +1079,14 @@ async def update_hypotheses(payload: dict, year: Optional[int] = None, user: dic
     year = year or payload.get("year") or await _active_year()
     if user.get("role") != "admin" and await _year_locked(year):
         raise HTTPException(status_code=403, detail=f"Un budget {year} est verrouillé. Seul un administrateur peut modifier les hypothèses.")
+    old = await db.hypotheses.find_one({"key": _hkey(year)}) or {}
     payload["key"] = _hkey(year); payload["year"] = int(year)
     payload["rates_changed"] = False
     payload["rates_note"] = ""
+    payload["rates_diff"] = []
+    changes = _diff_hypotheses(old, payload)
     await db.hypotheses.update_one({"key": _hkey(year)}, {"$set": payload}, upsert=True)
-    await log_action(user, "Modifier", "Hypothèses", f"Taux & paramètres {year}")
+    await log_action(user, "Modifier", "Hypothèses", f"Taux & paramètres {year}", changes=changes)
     doc = await db.hypotheses.find_one({"key": _hkey(year)})
     doc.pop("_id", None)
     return doc

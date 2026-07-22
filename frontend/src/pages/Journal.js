@@ -29,7 +29,7 @@ export default function Journal() {
             const st = ACTION_STYLE[e.action] || { bg: "#e2e8f0", color: "#475569", icon: ScrollText };
             const Icon = st.icon;
             return (
-              <li key={e.id} className="flex items-center gap-4 border-b border-slate-100 px-5 py-3.5 last:border-0" data-testid="journal-entry">
+              <li key={e.id} className="flex items-start gap-4 border-b border-slate-100 px-5 py-3.5 last:border-0" data-testid="journal-entry">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ background: st.bg, color: st.color }}>
                   <Icon size={16} />
                 </span>
@@ -39,7 +39,19 @@ export default function Journal() {
                     <span className="text-slate-500"> · {t(e.entity)}</span>
                     <span className="font-600"> — {e.label}</span>
                   </p>
-                  <p className="text-[11px] text-slate-400">{e.user_name || e.user_email}</p>
+                  {Array.isArray(e.changes) && e.changes.length > 0 && (
+                    <ul className="mt-1.5 flex flex-col gap-1" data-testid="journal-changes">
+                      {e.changes.map((c, i) => (
+                        <li key={i} className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                          <span className="font-600 text-slate-500">{c.label} :</span>
+                          <span className="rounded bg-red-50 px-1.5 py-0.5 font-mono-data text-red-600 line-through decoration-red-300">{c.old}</span>
+                          <span className="text-slate-400">→</span>
+                          <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-mono-data font-600 text-emerald-700">{c.new}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="mt-0.5 text-[11px] text-slate-400">{e.user_name || e.user_email}</p>
                 </div>
                 <span className="shrink-0 font-mono-data text-xs text-slate-400">{fmtDate(e.timestamp)}</span>
               </li>
