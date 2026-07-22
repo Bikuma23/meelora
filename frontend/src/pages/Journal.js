@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { useLang } from "../context/LanguageContext";
-import { ScrollText, Plus, Pencil, Trash2 } from "lucide-react";
+import { ScrollText, Plus, Pencil, Trash2, Download } from "lucide-react";
 
 const ACTION_STYLE = {
   "Créer": { bg: "#F8A9421a", color: "#0E9488", icon: Plus },
@@ -12,20 +12,58 @@ const ACTION_STYLE = {
 export default function Journal() {
   const { t, lang } = useLang();
   const [entries, setEntries] = useState(null);
+  const [entityFilter, setEntityFilter] = useState("");
+  const [userFilter, setUserFilter] = useState("");
   useEffect(() => { api.getJournal().then(setEntries); }, []);
   const fmtDate = (iso) => {
     try { return new Date(iso).toLocaleString(lang === "en" ? "en-CA" : "fr-CA", { dateStyle: "medium", timeStyle: "short" }); }
     catch { return iso; }
   };
+  const entityOptions = useMemo(() => [...new Set((entries || []).map((e) => e.entity).filter(Boolean))].sort(), [entries]);
+  const userOptions = useMemo(() => [...new Set((entries || []).map((e) => e.user_name || e.user_email).filter(Boolean))].sort(), [entries]);
+  const filtered = useMemo(() => (entries || []).filter((e) =>
+    (!entityFilter || e.entity === entityFilter) && (!userFilter || (e.user_name || e.user_email) === userFilter)
+  ), [entries, entityFilter, userFilter]);
+
+  const exportCsv = () => {
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const rows = [["Date", "Utilisateur", "Action", "Entité", "Élément", "Changements"]];
+    filtered.forEach((e) => {
+      const ch = (Array.isArray(e.changes) ? e.changes : []).map((c) => `${c.label}: ${c.old} -> ${c.new}`).join(" | ");
+      rows.push([fmtDate(e.timestamp), e.user_name || e.user_email, t(e.action), t(e.entity), e.label, ch]);
+    });
+    const csv = "\uFEFF" + rows.map((r) => r.map(esc).join(";")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    const a = document.createElement("a"); a.href = url; a.download = `journal_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url);
+  };
+
   if (!entries) return <p className="font-mono-data text-sm text-slate-500">{t("Chargement…")}</p>;
 
   return (
     <div className="space-y-4" data-testid="journal-page">
-      <p className="text-sm text-slate-500"><b className="text-slate-800">{entries.length}</b> {t("modification(s) enregistrée(s)")}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-slate-500"><b className="text-slate-800">{filtered.length}</b> {t("modification(s) enregistrée(s)")}{(entityFilter || userFilter) ? ` / ${entries.length}` : ""}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={entityFilter} onChange={(e) => setEntityFilter(e.target.value)} data-testid="journal-filter-entity"
+            className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+            <option value="">{t("Toutes les entités")}</option>
+            {entityOptions.map((o) => <option key={o} value={o}>{t(o)}</option>)}
+          </select>
+          <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)} data-testid="journal-filter-user"
+            className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+            <option value="">{t("Tous les utilisateurs")}</option>
+            {userOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+          <button onClick={exportCsv} disabled={!filtered.length} data-testid="journal-export-csv"
+            className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#0E9488] px-3 text-sm font-600 text-white transition-colors hover:bg-[#0E9488]/90 disabled:cursor-not-allowed disabled:opacity-40">
+            <Download size={15} /> {t("Exporter")}
+          </button>
+        </div>
+      </div>
       <div className="card overflow-hidden">
-        {entries.length === 0 && <p className="p-8 text-center text-sm text-slate-500">{t("Aucune activité pour le moment.")}</p>}
+        {filtered.length === 0 && <p className="p-8 text-center text-sm text-slate-500">{t("Aucune activité pour le moment.")}</p>}
         <ul>
-          {entries.map((e) => {
+          {filtered.map((e) => {
             const st = ACTION_STYLE[e.action] || { bg: "#e2e8f0", color: "#475569", icon: ScrollText };
             const Icon = st.icon;
             return (

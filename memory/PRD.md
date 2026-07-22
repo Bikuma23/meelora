@@ -507,6 +507,11 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Bannière taux — aperçu ancien→nouveau** : `_apply_qc_rates` stocke `rates_diff` ; la bannière rouge d'Hypothèses liste chaque taux modifié (ancien → nouveau). Effacé à l'enregistrement.
 - [x] **Vérifié** : roundtrip Hypothèses (RRQ Taux 6,4%→6,5%, max 74 600$→75 600$, REER 5%→5,5%) enregistré et affiché dans le Journal ; `_diff_employee` testé en isolation.
 
+## Variance multi-scénarios + filtres Journal (2026-07-22c)
+- [x] **Analyse de variance (IA) — sélection individuelle** : les chips de scénarios (CA, Rév-1, Rév-2) sont désormais multi-sélectionnables (coche). 1 sélectionné = analyse simple ; ≥2 = comparaison (badge « Comparaison (n) »). Backend `acct_ai_variance` accepte `scenarios=` (liste) et restreint la comparaison aux scénarios choisis ayant des données. Persisté en localStorage.
+- [x] **Journal — filtres + export** : filtres par entité et par utilisateur, bouton « Exporter » (CSV avec BOM, séparateur `;`, incluant le détail avant→après). `Journal.js`.
+- [x] **Vérifié** : backend compare `ca,rev1` → `compared:['ca','rev1']` (25 lignes) ; rev2 sans données correctement exclu ; UI multi-select + badge ; filtre Journal Hypothèses = 3/300.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

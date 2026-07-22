@@ -4,7 +4,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../components/ui/dialog";
 import { toast } from "sonner";
-import { FileText, Info, Sparkles, Wand2, ChevronDown, ChevronRight, AlertTriangle, ExternalLink } from "lucide-react";
+import { FileText, Info, Sparkles, Wand2, ChevronDown, ChevronRight, AlertTriangle, ExternalLink, Check } from "lucide-react";
 import { money, PeriodSelect } from "./shared";
 
 export function EntryDialog({ open, onOpenChange, year, month, index }) {
@@ -134,14 +134,19 @@ const VARIANCE_SCENARIOS = [
   { id: "rev1", label: "Budget Rév-1" },
   { id: "rev2", label: "Budget Rév-2" },
 ];
-const LS_SCENARIO_KEY = "acct.ai.variance.scenario";
+const LS_SCENARIO_KEY = "acct.ai.variance.scenarios";
 
 export function VarianceCard({ year, month }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [openPoste, setOpenPoste] = useState(null);
   const [avail, setAvail] = useState(null);
-  const [scenario, setScenario] = useState(() => localStorage.getItem(LS_SCENARIO_KEY) || "");
+  const [selected, setSelected] = useState(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem(LS_SCENARIO_KEY) || "[]");
+      return Array.isArray(s) ? s.filter((x) => VARIANCE_SCENARIOS.some((v) => v.id === x)) : [];
+    } catch { return []; }
+  });
   const [entryView, setEntryView] = useState({ open: false, index: null });
 
   useEffect(() => {
@@ -149,55 +154,56 @@ export function VarianceCard({ year, month }) {
     api.acctAiVarianceScenarios({ year, month }).then((r) => setAvail(r.scenarios || {})).catch(() => setAvail({}));
   }, [year, month]);
 
-  const gen = async (scen) => {
-    if (!scen) return;
+  const genParams = () => (selected.length === 1 ? { scenario: selected[0] } : { scenario: "compare", scenarios: selected.join(",") });
+  const gen = async () => {
+    if (!selected.length) return;
     setLoading(true); setOpenPoste(null);
-    try { setData(await api.acctAiVariance({ year, month, scenario: scen })); }
+    try { setData(await api.acctAiVariance({ year, month, ...genParams() })); }
     catch (e) { toast.error(e.response?.data?.detail || "Erreur IA"); }
     finally { setLoading(false); }
   };
-  const selectScenario = (scen) => {
+  const toggleScenario = (id) => {
     if (loading) return;
-    if (scen === "compare") { if (!compareEnabled) return; }
-    else if (avail && avail[scen] === false) return;
-    setScenario(scen);
-    localStorage.setItem(LS_SCENARIO_KEY, scen);
-    if (data) gen(scen); // changer de scénario régénère une analyse déjà présente
+    if (avail && avail[id] === false) return;
+    setSelected((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      localStorage.setItem(LS_SCENARIO_KEY, JSON.stringify(next));
+      return next;
+    });
   };
+  useEffect(() => {
+    if (data && selected.length) gen();
+    else if (!selected.length) setData(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected]);
   const detail = data?.detail || {};
   const postes = Object.keys(detail);
-  const compareEnabled = avail ? Object.values(avail).filter(Boolean).length >= 2 : true;
-  const scenLabel = scenario === "compare" ? "Comparaison" : VARIANCE_SCENARIOS.find((s) => s.id === scenario)?.label;
+  const isCompare = selected.length >= 2;
+  const scenLabel = selected.length === 1 ? VARIANCE_SCENARIOS.find((s) => s.id === selected[0])?.label : "les scénarios sélectionnés";
   return (
     <div className="card p-5" data-testid="ai-variance-card">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-sm font-700 text-slate-700"><FileText size={15} className="text-[#0E9488]" /> Analyse de variance (IA)</h3>
-        <Button size="sm" onClick={() => gen(scenario)} disabled={loading || !scenario} data-testid="ai-variance-btn" className="bg-[#063044] hover:bg-[#063044]/90">{loading ? "Analyse…" : "Générer"}</Button>
+        <Button size="sm" onClick={gen} disabled={loading || !selected.length} data-testid="ai-variance-btn" className="bg-[#063044] hover:bg-[#063044]/90">{loading ? "Analyse…" : "Générer"}</Button>
       </div>
       <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="ai-variance-scenarios">
-        <span className="text-[11px] font-700 uppercase tracking-wider text-slate-400">Scénario budgétaire :</span>
+        <span className="text-[11px] font-700 uppercase tracking-wider text-slate-400">Scénarios budgétaires :</span>
         {VARIANCE_SCENARIOS.map((s) => {
           const hasData = avail ? avail[s.id] !== false : true;
-          const active = scenario === s.id;
+          const active = selected.includes(s.id);
           return (
-            <button key={s.id} onClick={() => selectScenario(s.id)} disabled={!hasData || loading}
-              title={!hasData ? "Aucune donnée pour ce scénario sur cette période" : undefined}
-              data-testid={`ai-variance-scenario-${s.id}`}
-              className={`rounded-full border px-3 py-1 text-xs font-600 transition-colors ${active ? "border-[#063044] bg-[#063044] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488] hover:text-[#0E9488]"} ${(!hasData || loading) ? "cursor-not-allowed opacity-40 hover:border-slate-300 hover:text-slate-600" : ""}`}>
-              {s.label}
+            <button key={s.id} onClick={() => toggleScenario(s.id)} disabled={!hasData || loading}
+              title={!hasData ? "Aucune donnée pour ce scénario sur cette période" : "Cliquez pour inclure ou exclure ce scénario"}
+              data-testid={`ai-variance-scenario-${s.id}`} aria-pressed={active}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-600 transition-colors ${active ? "border-[#063044] bg-[#063044] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488] hover:text-[#0E9488]"} ${(!hasData || loading) ? "cursor-not-allowed opacity-40 hover:border-slate-300 hover:text-slate-600" : ""}`}>
+              {active && <Check size={12} />}{s.label}
             </button>
           );
         })}
-        <span className="mx-1 h-4 w-px bg-slate-200" aria-hidden />
-        <button onClick={() => selectScenario("compare")} disabled={!compareEnabled || loading}
-          title={!compareEnabled ? "La comparaison nécessite au moins deux scénarios avec des données" : "Comparer le réel face à tous les scénarios disponibles"}
-          data-testid="ai-variance-scenario-compare"
-          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-600 transition-colors ${scenario === "compare" ? "border-[#0E9488] bg-[#0E9488] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488] hover:text-[#0E9488]"} ${(!compareEnabled || loading) ? "cursor-not-allowed opacity-40 hover:border-slate-300 hover:text-slate-600" : ""}`}>
-          <Sparkles size={12} /> Comparaison
-        </button>
+        {isCompare && <span className="inline-flex items-center gap-1 rounded-full bg-[#0E9488]/10 px-2.5 py-1 text-[11px] font-700 text-[#0E9488]" data-testid="ai-variance-compare-badge"><Sparkles size={12} /> Comparaison ({selected.length})</span>}
       </div>
-      {!scenario ? <p className="text-xs text-slate-400" data-testid="ai-variance-hint">Choisissez un scénario budgétaire (ou « Comparaison ») ci-dessus puis cliquez « Générer » pour commenter les écarts réel vs budget les plus significatifs.</p>
-        : !data ? <p className="text-xs text-slate-400">Cliquez « Générer » pour {scenario === "compare" ? "comparer le réel face à tous les scénarios disponibles" : `analyser les écarts réel vs ${scenLabel}`} de la période.</p>
+      {!selected.length ? <p className="text-xs text-slate-400" data-testid="ai-variance-hint">Sélectionnez un ou plusieurs scénarios budgétaires ci-dessus (2 scénarios ou plus = comparaison), puis cliquez « Générer » pour commenter les écarts réel vs budget les plus significatifs.</p>
+        : !data ? <p className="text-xs text-slate-400">Cliquez « Générer » pour {isCompare ? "comparer le réel face aux scénarios sélectionnés" : `analyser les écarts réel vs ${scenLabel}`} de la période.</p>
         : data.available === false ? <p className="text-xs text-amber-600" data-testid="ai-variance-unavailable">{data.reason || "Fonctionnalité IA non configurée."}</p>
         : data.empty ? <p className="text-xs text-slate-500" data-testid="ai-variance-empty">{data.reason_empty || "Aucun écart au-delà des seuils configurés pour cette période."}</p>
         : (

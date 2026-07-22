@@ -252,13 +252,16 @@ async def acct_ai_variance_scenarios(year: int, month: int, user: dict = Depends
 
 
 @router.post("/acct/ai/variance")
-async def acct_ai_variance(year: int, month: int, scenario: str = "ca", user: dict = Depends(_get_user)):
+async def acct_ai_variance(year: int, month: int, scenario: str = "ca", scenarios: str = "", user: dict = Depends(_get_user)):
     cfg = await _ai_config()
     amt = float(cfg.get("variance_threshold_amount", 10000)); pct = float(cfg.get("variance_threshold_pct", 10))
+    sel = [s for s in scenarios.split(",") if s in VARIANCE_SCENARIOS] if scenarios else []
 
     if scenario == "compare":
         pnl = await _acct_report(year, month, "pnl")
         active = [s for s in VARIANCE_SCENARIOS if _scenario_has_data(pnl, s)]
+        if sel:
+            active = [s for s in active if s in sel]
         if len(active) < 2:
             return {"available": True, "commentary": None, "rows": [], "empty": True, "scenario": scenario,
                     "reason_empty": "La comparaison nécessite au moins deux scénarios budgétaires avec des données."}
