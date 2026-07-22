@@ -1178,6 +1178,7 @@ function ReportView({ type, title }) {
   useEffect(() => { localStorage.setItem(`acct.report.${type}.groups`, JSON.stringify(hiddenGroups)); }, [type, hiddenGroups]);
   const [commentCounts, setCommentCounts] = useState({});
   const [commentLine, setCommentLine] = useState(null);
+  const [aiOpen, setAiOpen] = useState(false);
   const reloadCounts = useCallback(() => {
     api.acctLineCommentCounts({ report: commentKey }).then((r) => setCommentCounts(r.counts || {})).catch(() => {});
   }, [commentKey]);
@@ -1276,6 +1277,9 @@ function ReportView({ type, title }) {
         <div className="flex items-center gap-2">
           <PresentationButton />
           <ExportMenu onPdf={exportPdf} onExcel={exportExcel} disabled={!rep} testid="acct-export" className="bg-[#0E9488] hover:bg-[#0E9488]/90" />
+          {type.includes("pnl") && period && (
+            <Button size="sm" onClick={() => setAiOpen(true)} data-testid="acct-report-ai-btn" className="gap-2 bg-[#063044] hover:bg-[#063044]/90"><Sparkles size={15} /> IA</Button>
+          )}
         </div>
       </div>
       {rep && !rep.locked && (
@@ -1380,6 +1384,20 @@ function ReportView({ type, title }) {
         isAdmin={user?.role === "admin"}
         onChanged={reloadCounts}
       />
+      {type.includes("pnl") && period && (
+        <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+          <DialogContent data-testid="acct-report-ai-dialog" className="max-h-[90vh] max-w-3xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><Sparkles size={18} className="text-[#0E9488]" /> Analyse IA — {title}</DialogTitle>
+              <DialogDescription className="text-xs">Analyse des variances et questions sur les données pour la période sélectionnée.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <VarianceCard year={Number(period.split("-")[0])} month={Number(period.split("-")[1])} />
+              <AiChatPanel year={Number(period.split("-")[0])} month={Number(period.split("-")[1])} />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

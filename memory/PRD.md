@@ -512,6 +512,11 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Journal — filtres + export** : filtres par entité et par utilisateur, bouton « Exporter » (CSV avec BOM, séparateur `;`, incluant le détail avant→après). `Journal.js`.
 - [x] **Vérifié** : backend compare `ca,rev1` → `compared:['ca','rev1']` (25 lignes) ; rev2 sans données correctement exclu ; UI multi-select + badge ; filtre Journal Hypothèses = 3/300.
 
+## Bouton IA dans États des résultats + seuil affiché (2026-07-22d)
+- [x] **Bouton « IA »** ajouté dans la barre d'outils des États des résultats (après « Exporter »), visible uniquement pour le P&L (détaillé + sommaire). Ouvre une popup « Analyse IA — {titre} » contenant la carte **Analyse de variance (IA)** (multi-sélection de scénarios) et **Questions sur les données (IA)** — identiques au Tableau de bord, câblées sur la période courante.
+- [x] **Seuil de déclenchement affiché** dans chaque carte de variance : « écart ≥ {montant} $ ou ≥ {pct} % (configurable dans les réglages IA) ». Le backend `acct_ai_variance_scenarios` renvoie désormais `thresholds`.
+- [x] **Vérifié** : bouton IA présent ; popup avec les deux cartes ; endpoint thresholds (2 000 $ / 5 %) affiché dans la carte.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

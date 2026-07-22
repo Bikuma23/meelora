@@ -141,6 +141,7 @@ export function VarianceCard({ year, month }) {
   const [loading, setLoading] = useState(false);
   const [openPoste, setOpenPoste] = useState(null);
   const [avail, setAvail] = useState(null);
+  const [thr, setThr] = useState(null);
   const [selected, setSelected] = useState(() => {
     try {
       const s = JSON.parse(localStorage.getItem(LS_SCENARIO_KEY) || "[]");
@@ -150,8 +151,8 @@ export function VarianceCard({ year, month }) {
   const [entryView, setEntryView] = useState({ open: false, index: null });
 
   useEffect(() => {
-    setData(null); setOpenPoste(null); setAvail(null);
-    api.acctAiVarianceScenarios({ year, month }).then((r) => setAvail(r.scenarios || {})).catch(() => setAvail({}));
+    setData(null); setOpenPoste(null); setAvail(null); setThr(null);
+    api.acctAiVarianceScenarios({ year, month }).then((r) => { setAvail(r.scenarios || {}); setThr(r.thresholds || null); }).catch(() => setAvail({}));
   }, [year, month]);
 
   const genParams = () => (selected.length === 1 ? { scenario: selected[0] } : { scenario: "compare", scenarios: selected.join(",") });
@@ -202,6 +203,7 @@ export function VarianceCard({ year, month }) {
         })}
         {isCompare && <span className="inline-flex items-center gap-1 rounded-full bg-[#0E9488]/10 px-2.5 py-1 text-[11px] font-700 text-[#0E9488]" data-testid="ai-variance-compare-badge"><Sparkles size={12} /> Comparaison ({selected.length})</span>}
       </div>
+      {thr && <p className="mb-2 text-[11px] text-slate-400" data-testid="ai-variance-threshold">Seuil de déclenchement : écart ≥ <span className="font-600 text-slate-500">{money(thr.amount)} $</span> ou ≥ <span className="font-600 text-slate-500">{thr.pct} %</span> (configurable dans les réglages IA)</p>}
       {!selected.length ? <p className="text-xs text-slate-400" data-testid="ai-variance-hint">Sélectionnez un ou plusieurs scénarios budgétaires ci-dessus (2 scénarios ou plus = comparaison), puis cliquez « Générer » pour commenter les écarts réel vs budget les plus significatifs.</p>
         : !data ? <p className="text-xs text-slate-400">Cliquez « Générer » pour {isCompare ? "comparer le réel face aux scénarios sélectionnés" : `analyser les écarts réel vs ${scenLabel}`} de la période.</p>
         : data.available === false ? <p className="text-xs text-amber-600" data-testid="ai-variance-unavailable">{data.reason || "Fonctionnalité IA non configurée."}</p>

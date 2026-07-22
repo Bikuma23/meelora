@@ -247,8 +247,11 @@ async def _ai_variance_compare_ctx(year, month, amt_thr, pct_thr, active):
 @router.get("/acct/ai/variance/scenarios")
 async def acct_ai_variance_scenarios(year: int, month: int, user: dict = Depends(_get_user)):
     """Indique quels scénarios budgétaires disposent de données pour la période (pour l'UI)."""
+    cfg = await _ai_config()
     pnl = await _acct_report(year, month, "pnl")
-    return {"scenarios": {s: _scenario_has_data(pnl, s) for s in VARIANCE_SCENARIOS}}
+    return {"scenarios": {s: _scenario_has_data(pnl, s) for s in VARIANCE_SCENARIOS},
+            "thresholds": {"amount": float(cfg.get("variance_threshold_amount", 10000)),
+                           "pct": float(cfg.get("variance_threshold_pct", 10))}}
 
 
 @router.post("/acct/ai/variance")
