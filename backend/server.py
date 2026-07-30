@@ -2749,6 +2749,13 @@ REV_MONTH_KEY = {"ca": "bud_ca", "rev1": "bud_rev1", "rev2": "bud_rev2"}
 REV_CUM_KEY = {"ca": "bud_ca_cum", "rev1": "bud_rev1_cum", "rev2": "bud_rev2_cum"}
 REV_LABEL = {"ca": "CA", "rev1": "REV-1", "rev2": "REV-2"}
 
+BUDGET_MANAGERS_SEED = [
+    {"name": "RH", "email": "", "accounts": ["8006600", "8006610", "8006630", "8006640", "8006645", "8006650", "8006655", "8006660", "8006665", "8006670", "8006675"], "active": True},
+    {"name": "TI", "email": "", "accounts": ["7006500", "7006410", "7006510", "7006520", "7006530", "7006540", "7006550", "7006560", "7006565", "7005500", "7006400", "7505500", "5005500", "5505500", "5995500", "6005500", "8505500", "8005500", "9005500"], "active": True},
+    {"name": "MARKETING", "email": "", "accounts": ["8506720", "8506721", "8506722", "8506723", "8506730", "8506731", "8506732", "8506733", "8506734", "8506740", "8506741", "8506742", "8506743", "8506750", "8506751", "8506752", "8506753", "8506754", "8506755", "8506756", "8506760", "8506761", "8506762", "8506763", "8507000", "8507001", "8507002", "8507003"], "active": True},
+    {"name": "FGF", "email": "", "accounts": ["5005210", "5505210", "5995210", "9005210", "5995050", "5995060", "5995070", "5995080", "5995100", "5995110", "5995140", "5995150", "5995160", "5995220", "5995230", "5995240", "5995500", "5996400", "5996410", "5996420", "5996430", "5996440", "5996450", "5997000", "5997115", "5997120", "5997125"], "active": True},
+]
+
 async def _by_manager_data(manager_id, year, month, rev="rev1"):
     """Reproduit le modèle « Suivi Budget frais d'exploitation - <responsable> » :
     No GL | Désignation | Réel (Cumulatif) | Budget (à date) | Budget (Annuel) | Écart | Notes.
@@ -2765,13 +2772,17 @@ async def _by_manager_data(manager_id, year, month, rev="rev1"):
     accts = [str(a).strip() for a in (mgr.get("accounts") or []) if str(a).strip()]
     acct_set = set(accts)
     by_acct = {str(ln.get("account") or ""): ln for ln in rep["lines"]}
+    # Notes par compte pour cette période (partagées entre rapports, éditables par tous).
+    notes = {}
+    async for nd in db.acct_manager_notes.find({"year": int(year), "month": int(month), "account": {"$in": accts}}):
+        notes[str(nd["account"])] = nd.get("text", "")
     lines = []
     tot = {"reel": 0.0, "budget": 0.0, "annuel": 0.0, "ecart": 0.0}
     for a in accts:
         ln = by_acct.get(a)
         if not ln:
             lines.append({"account": a, "label": "(compte absent du P&L)", "reel": 0.0,
-                          "budget": 0.0, "annuel": 0.0, "ecart": 0.0})
+                          "budget": 0.0, "annuel": 0.0, "ecart": 0.0, "note": notes.get(a, "")})
             continue
         v = ln.get("values") or {}
         reel = round(v.get("cumulatif") or 0.0, 2)
@@ -2779,7 +2790,7 @@ async def _by_manager_data(manager_id, year, month, rev="rev1"):
         annuel = round((v.get(mon_key) or 0.0) * 12, 2)
         ecart = round(annuel - reel, 2)
         lines.append({"account": a, "label": ln.get("label") or "", "reel": reel,
-                      "budget": budget, "annuel": annuel, "ecart": ecart})
+                      "budget": budget, "annuel": annuel, "ecart": ecart, "note": notes.get(a, "")})
         tot["reel"] += reel; tot["budget"] += budget; tot["annuel"] += annuel; tot["ecart"] += ecart
     for k in tot:
         tot[k] = round(tot[k], 2)
@@ -2791,6 +2802,28 @@ async def _by_manager_data(manager_id, year, month, rev="rev1"):
 @api.get("/acct/report/by-manager")
 async def acct_report_by_manager(manager_id: str, year: int, month: int, rev: str = "rev1", user: dict = Depends(get_current_user)):
     return await _by_manager_data(manager_id, year, month, rev)
+
+class ManagerNote(BaseModel):
+    year: int
+    month: int
+    account: str
+    text: str = ""
+
+@api.put("/acct/report/by-manager/note")
+async def save_manager_note(payload: ManagerNote, user: dict = Depends(get_current_user)):
+    """Note par compte + période (éditable par tout utilisateur connecté). Réapparaît au rechargement du mois."""
+    key = f"{int(payload.year):04d}-{int(payload.month):02d}-{str(payload.account).strip()}"
+    text = (payload.text or "").strip()
+    if not text:
+        await db.acct_manager_notes.delete_one({"_id": key})
+    else:
+        await db.acct_manager_notes.update_one(
+            {"_id": key},
+            {"$set": {"year": int(payload.year), "month": int(payload.month),
+                      "account": str(payload.account).strip(), "text": text,
+                      "updated_by": user.get("email"), "updated_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True)
+    return {"success": True, "account": str(payload.account).strip(), "text": text}
 
 def _mgr_col_headers(data):
     y = data["year"]; ml = data["month_label"]; rl = data["rev_label"]
@@ -2821,6 +2854,7 @@ async def acct_report_by_manager_excel(manager_id: str, year: int, month: int, r
         for j, key in enumerate(("reel", "budget", "annuel", "ecart")):
             c = ws.cell(row=r, column=5 + j, value=ln[key]); c.number_format = money_fmt
             if ln[key] < 0: c.font = S.Font(color="FFDC2626")
+        nc = ws.cell(row=r, column=10, value=ln.get("note", "")); nc.alignment = S.Alignment(wrap_text=True, vertical="top")
         r += 1
     r += 1
     ws.cell(row=r, column=1, value=f"TOTAL - {data['manager']['name'].upper()}")
@@ -2867,6 +2901,7 @@ async def acct_report_by_manager_pdf(manager_id: str, year: int, month: int, rev
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTSIZE", (0, 0), (-1, -1), 8),
         ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
+        ("ALIGN", (-1, 0), (-1, -1), "LEFT"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CBD5E1")),
         ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
@@ -2875,7 +2910,8 @@ async def acct_report_by_manager_pdf(manager_id: str, year: int, month: int, rev
     ri = 1
     for ln in data["lines"]:
         vals = [ln["reel"], ln["budget"], ln["annuel"], ln["ecart"]]
-        rows.append([str(ln["account"]), Paragraph(ln["label"], cellS)] + [fmt(v) for v in vals] + [""])
+        note_p = Paragraph(ln.get("note", "") or "", cellS)
+        rows.append([str(ln["account"]), Paragraph(ln["label"], cellS)] + [fmt(v) for v in vals] + [note_p])
         for ci, v in enumerate(vals):
             if v < 0: style_cmds.append(("TEXTCOLOR", (2 + ci, ri), (2 + ci, ri), RED))
         ri += 1
@@ -3969,7 +4005,8 @@ api.include_router(acct_ai.router)
 app.include_router(api)
 
 WRITE_ALLOW_ALL = {"/api/auth/login", "/api/auth/logout", "/api/me/preferences", "/api/acct/bv", "/api/acct/account-map",
-                   "/api/acct/ai/variance", "/api/acct/ai/anomalies", "/api/acct/ai/chat", "/api/acct/ai/suggest-mapping"}
+                   "/api/acct/ai/variance", "/api/acct/ai/anomalies", "/api/acct/ai/chat", "/api/acct/ai/suggest-mapping",
+                   "/api/acct/report/by-manager/note"}
 
 def _is_admin_only_path(path: str) -> bool:
     return (path.startswith("/api/users")
@@ -4057,6 +4094,11 @@ async def startup():
                 e = dict(e); e["employee_number"] = n; n += 1
                 await db.employees.insert_one(e)
         await db.settings.update_one({"key": "app"}, {"$set": {"employees_seeded": True}}, upsert=True)
+    # Seed des responsables budgétaires (RH, TI, MARKETING, FGF) — une seule fois.
+    if not (app_settings and app_settings.get("budget_managers_seeded")):
+        if await db.acct_budget_managers.count_documents({}) == 0:
+            await db.acct_budget_managers.insert_many([dict(m) for m in BUDGET_MANAGERS_SEED])
+        await db.settings.update_one({"key": "app"}, {"$set": {"budget_managers_seeded": True}}, upsert=True)
 
 @app.on_event("shutdown")
 async def shutdown():

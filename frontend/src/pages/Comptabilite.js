@@ -1724,6 +1724,27 @@ function PnlMonthlyView() {
   );
 }
 
+function NoteCell({ value, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [txt, setTxt] = useState(value || "");
+  useEffect(() => { setTxt(value || ""); }, [value]);
+  const commit = () => { setEditing(false); if ((txt || "") !== (value || "")) onSave(txt || ""); };
+  if (editing) {
+    return (
+      <textarea autoFocus value={txt} onChange={(e) => setTxt(e.target.value)} onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commit(); } if (e.key === "Escape") { setTxt(value || ""); setEditing(false); } }}
+        rows={2} data-testid="acct-note-input"
+        className="w-full min-w-[180px] rounded border border-[#0E9488] px-2 py-1 text-xs focus:outline-none" />
+    );
+  }
+  return (
+    <button type="button" onClick={() => setEditing(true)} data-testid="acct-note-cell"
+      className={`w-full min-w-[160px] rounded px-2 py-1 text-left text-xs transition-colors hover:bg-[#0E9488]/5 ${value ? "text-slate-600" : "text-slate-300 italic"}`}>
+      {value || "Ajouter une note…"}
+    </button>
+  );
+}
+
 function ByManagerView() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -1755,6 +1776,13 @@ function ByManagerView() {
       a.href = url; a.download = `suivi_budget_${rep?.manager?.name || "responsable"}_${period}.${kind === "pdf" ? "pdf" : "xlsx"}`.replace(/\s+/g, "_"); a.click(); URL.revokeObjectURL(url);
       toast.success(kind === "pdf" ? "PDF téléchargé" : "Export téléchargé");
     } catch (e) { toast.error(e.response?.data?.detail || "Export impossible"); }
+  };
+
+  const saveNote = async (account, text) => {
+    const [y, m] = period.split("-").map(Number);
+    setRep((r) => r ? { ...r, lines: r.lines.map((l) => l.account === account ? { ...l, note: text } : l) } : r);
+    try { await api.acctSaveManagerNote({ year: y, month: m, account, text }); toast.success("Note enregistrée"); }
+    catch (e) { toast.error("Note non enregistrée"); }
   };
 
   const REVS = [{ value: "rev1", label: "Budget Rév-1" }, { value: "ca", label: "Budget CA" }, { value: "rev2", label: "Budget Rév-2" }];
@@ -1821,7 +1849,7 @@ function ByManagerView() {
                         <td className="px-3 py-1.5 text-right">{cell(ln.budget)}</td>
                         <td className="px-3 py-1.5 text-right">{cell(ln.annuel)}</td>
                         <td className="px-3 py-1.5 text-right">{cell(ln.ecart)}</td>
-                        <td className="px-3 py-1.5 text-left font-sans text-slate-400"></td>
+                        <td className="px-2 py-1 text-left"><NoteCell value={ln.note} onSave={(t) => saveNote(ln.account, t)} /></td>
                       </tr>
                     ))}
                     <tr className="border-t-2 border-slate-300 bg-[#eef1f5] font-700 text-[#063044]" data-testid="acct-bymanager-total">

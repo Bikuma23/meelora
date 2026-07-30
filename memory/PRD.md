@@ -545,6 +545,14 @@ Refonte du hub selon nouvelles demandes + modèle Excel « par responsable » fo
 - [x] Vérifié testing_agent iteration_32 : backend 5/5 + frontend 100 % (valeurs RH conformes au fichier, ordre onglets, sidebar, bascule détail/sommaire, masquer zéro, exports, sécurité CRUD admin-only). Collection `acct_budget_managers` laissée vide.
 - [ ] **Phase 3 (à venir)** : colonne « Notes et commentaires » éditable par les responsables ; **synchro/envoi OneDrive-SharePoint via Microsoft Graph** (nécessite app Azure AD — à confirmer avec l'utilisateur).
 
+## Rapports par responsable — Notes éditables + seed des responsables (2026-07-30e)
+- [x] **Responsables budgétaires pré-remplis** (seed unique, flag `budget_managers_seeded`) selon les fichiers Excel fournis : **RH** (11 cptes), **TI** (19), **MARKETING** (28), **FGF** (27). Chaque groupe mappe ses numéros de compte exacts.
+- [x] **Colonne « Notes et commentaires » éditable** dans le rapport par responsable : clic sur une cellule → zone de texte (Ctrl/Cmd+Entrée ou blur = enregistrer, Échap = annuler), placeholder « Ajouter une note… ». Notes **enregistrées par compte + période** (collection `acct_manager_notes`, clé `YYYY-MM-<compte>`) → réapparaissent au rechargement du même mois. Note vide = suppression.
+- [x] **Éditables par tous les utilisateurs connectés** (admin/éditeur/utilisateur) : endpoint `PUT /api/acct/report/by-manager/note` ajouté à `WRITE_ALLOW_ALL`. Vérifié : un compte « user » peut enregistrer une note.
+- [x] **Notes incluses dans les exports** PDF (colonne alignée à gauche) et Excel (colonne J, retour à la ligne).
+- [x] Vérifié : seed (4 responsables), note enregistrée par user + attachée au rapport + exports 200 + suppression, UI d'édition inline avec toast « Note enregistrée » (curl + captures).
+- [ ] **Reporté (phase ultérieure, confirmé utilisateur)** : bouton « Envoyer par courriel » (PDF du suivi au responsable) — nécessite un fournisseur d'email (Resend/SendGrid) + clé API.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
