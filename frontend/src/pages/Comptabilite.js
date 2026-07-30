@@ -9,7 +9,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
-  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download, Search, ChevronDown, ChevronRight, MessageSquare, Pencil, Send,
+  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download, Search, ChevronDown, ChevronRight, MessageSquare, Pencil, Send, Settings2,
 } from "lucide-react";
 import { MONTHS, money, moneyM, usePeriods, PeriodSelect } from "./comptabilite/shared";
 import { AiConfigDialog, VarianceCard, AiChatPanel, AnomaliesCard } from "./comptabilite/AiComponents";

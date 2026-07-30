@@ -1,0 +1,28 @@
+{
+  "summary": "Rapports hub (Comptabilité) tested end-to-end. Backend: 3/3 hub-specific tests pass (test_reports_hub.py) — GET /api/acct/report/pnl-monthly?year=2026 returns 12 months + total on non-header lines and no total on headers; CRUD /api/acct/budget-managers admin-only (POST/PUT/DELETE => 403 for editor/user, 200 for admin); GET /api/acct/report/by-manager filters lines to the manager's accounts only (verified line accounts subset). Frontend: hub loads at Comptabilité > Rapports with 5 type buttons (bilan, pnl, cashflow, monthly, manager) — data-testid=`acct-reports-type-manager` (NOT 'by-manager' as noted in request). PnlMonthlyView shows 15 cols (Compte, Description, JAN..DÉC, TOTAL) and 443 rows; PROJETS/SERVICE header rows have empty amount cells (verified). ByManagerView allows admin to open Manage dialog, create a manager (TEST_UI_Resp, 2 accounts), it appears in the select as 'TEST_UI_Resp (2 cptes)'. Regression: Bilan, État des résultats and Flux de trésorerie all render without errors when switched via the hub type bar. Test manager cleaned from DB.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_reports_hub.py",
+    "/app/test_reports/pytest/reports_hub.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Data-testid for 'Par responsable budgétaire' is `acct-reports-type-manager` (value='manager') — the review_request called it 'by-manager'. Not a bug, but worth aligning docs.",
+    "server.py is ~3932 lines — as noted in prior iterations, split Comptabilité endpoints into a dedicated module.",
+    "list_budget_managers uses str(d['_id']) rather than excluding _id — handled correctly, no ObjectId leak.",
+    "In ByManagerView (Comptabilite.js), when period changes to a locked/older period with no manager selected, no fallback message; UI already covered by 'Sélectionnez un responsable' placeholder — acceptable."
+  ],
+  "updated_files": ["/app/backend/tests/test_reports_hub.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@accslegro.com/admin123 (verified). editor.test@accslegro.com/editor123 and user.test@accslegro.com/user123 were NOT pre-seeded in this env — test auto-creates them via POST /api/users if missing (admin session).",
+  "seed_data_creation": "Test users editor.test and user.test may have been created if missing (idempotent). Test budget manager TEST_UI_Resp was created via UI then deleted via API cleanup. Final state: acct_budget_managers collection empty.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The by-manager type button uses value='manager' (data-testid=acct-reports-type-manager). Monthly view has 12 month columns + TOTAL; headers rows (kind='header') correctly omit the total field. To test by-manager UI selection, use `page.select_option('[data-testid=acct-bymanager-select]', <mgr_id>)` — the option value is the manager id, not the name.",
+  "rca of the issue": "N/A — feature works as designed."
+}
