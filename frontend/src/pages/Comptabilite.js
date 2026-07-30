@@ -1287,18 +1287,18 @@ function ReportView({ type, title }) {
           {rep && <span className={`inline-flex items-center gap-1 text-xs font-600 ${rep.balanced ? "text-emerald-600" : "text-red-600"}`}>{rep.balanced ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}{rep.balanced ? "Balancé" : "Déséquilibre"}</span>}
         </div>
         {loading ? <p className="px-5 py-8 text-sm text-slate-500">Chargement…</p> : !rep ? <p className="px-5 py-8 text-sm text-slate-400">Sélectionnez une période avec une BV chargée.</p> : (
-          <div className="overflow-auto max-h-[calc(100vh-230px)] pl-px">
+          <div className="overflow-x-auto pl-px lg:overflow-auto lg:max-h-[calc(100vh-230px)]">
             <table className="acct-hover-rows w-full text-sm">
               <thead>
                 {visibleGroups && (
-                  <tr className="sticky top-0 z-20 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500">
+                  <tr className="z-20 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500 lg:sticky lg:top-0">
                     <th className="bg-white px-4 py-1.5" colSpan={2}></th>
                     {visibleGroups.map((g, gi) => (
                       <th key={g.label} colSpan={g.keys.length} className={`bg-white px-4 py-1.5 text-center font-700 text-slate-600 ${gi > 0 ? "border-l-2 border-slate-200" : ""}`}>{g.label}</th>
                     ))}
                   </tr>
                 )}
-                <tr className={`sticky z-20 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400 ${visibleGroups ? "top-[30px]" : "top-0"}`}>
+                <tr className={`z-20 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400 lg:sticky ${visibleGroups ? "lg:top-[30px]" : "lg:top-0"}`}>
                 <th className="bg-white px-4 py-2.5 text-left font-600">Compte</th>
                 <th className="bg-white px-4 py-2.5 text-left font-600">Description</th>
                 {visibleCols.map((k) => <th key={k} className={`bg-white px-4 py-2.5 text-right font-600 ${isEcart(k) ? "text-slate-500" : ""} ${showSep(k) ? "border-l-2 border-slate-200" : ""}`}>{colLabel(k)}</th>)}

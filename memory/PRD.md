@@ -523,6 +523,9 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **#4** Boutons **Présentation, Exporter, IA** passés en icône seule (sans texte) pour réduire leur taille (`PresentationButton`, `ExportMenu`, bouton IA).
 - [x] **#3** Adaptation portrait : barre d'outils des rapports en `flex-wrap` (plus de débordement horizontal), boutons compacts. La structure reste responsive (menu latéral en tiroir + hamburger sous `lg`, grilles `grid-cols-1` qui s'empilent). NOTE : rendu vérifié en desktop ; l'outil de capture force une largeur desktop, le vrai portrait mobile n'a pas pu être capturé.
 
+## Correctif portrait P&L (2026-07-30b)
+- [x] Le conteneur de table du P&L/Bilan (ReportView) passe de `overflow-auto max-h-[calc(100vh-230px)]` (scroll interne + en-têtes sticky) à `overflow-x-auto` naturel en mobile, et conserve le comportement sticky/scroll desktop via `lg:`. Les en-têtes de groupe/colonnes deviennent non-sticky sous `lg`. Le P&L s'affiche désormais comme les autres tables (BV, Flux) en portrait. Vérifié desktop OK.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
