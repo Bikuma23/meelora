@@ -517,6 +517,12 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 - [x] **Seuil de déclenchement affiché** dans chaque carte de variance : « écart ≥ {montant} $ ou ≥ {pct} % (configurable dans les réglages IA) ». Le backend `acct_ai_variance_scenarios` renvoie désormais `thresholds`.
 - [x] **Vérifié** : bouton IA présent ; popup avec les deux cartes ; endpoint thresholds (2 000 $ / 5 %) affiché dans la carte.
 
+## Nettoyage import GL + boutons compacts + responsive (2026-07-30)
+- [x] **#1** Bouton « Importer le grand livre (.xlsx) » (mensuel) supprimé de la carte Grand livre détaillé ; « Importer toutes les périodes » conservé.
+- [x] **#2** Texte « Colonnes : Type | Période | Date | Numéro | Description | Compte | Débit | Crédit » retiré de la description de la carte Grand livre.
+- [x] **#4** Boutons **Présentation, Exporter, IA** passés en icône seule (sans texte) pour réduire leur taille (`PresentationButton`, `ExportMenu`, bouton IA).
+- [x] **#3** Adaptation portrait : barre d'outils des rapports en `flex-wrap` (plus de débordement horizontal), boutons compacts. La structure reste responsive (menu latéral en tiroir + hamburger sous `lg`, grilles `grid-cols-1` qui s'empilent). NOTE : rendu vérifié en desktop ; l'outil de capture force une largeur desktop, le vrai portrait mobile n'a pas pu être capturé.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

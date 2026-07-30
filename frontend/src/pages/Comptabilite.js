@@ -21,8 +21,8 @@ function ExportMenu({ onPdf, onExcel, disabled, className = "", testid = "acct-e
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="sm" disabled={disabled} data-testid={`${testid}-menu`} className={`gap-2 ${className}`}>
-          <Download size={15} /> Exporter <ChevronDown size={14} className="opacity-80" />
+        <Button size="sm" disabled={disabled} data-testid={`${testid}-menu`} title="Exporter" className={`px-2.5 ${className}`}>
+          <Download size={15} />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
@@ -982,14 +982,8 @@ export function AcctBV() {
           <h3 className="flex items-center gap-2 text-sm font-700"><FileText size={15} className="text-[#0E9488]" /> Grand livre détaillé <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-600 uppercase tracking-wide text-slate-500">Optionnel</span></h3>
           <button onClick={dlLedgerTemplate} data-testid="acct-ledger-template-btn" className="inline-flex items-center gap-1.5 text-xs font-600 text-[#063044] hover:underline"><Download size={13} /> Modèle</button>
         </div>
-        <p className="mb-3 text-xs text-slate-500">Import mensuel facultatif du rapport de transactions ({MONTHS[month - 1]} {year}) pour enrichir l'analyse de variance IA. N'affecte aucun calcul (Bilan, P&amp;L, KPI). Colonnes : Type | Période | Date | Numéro | Description | Compte | Débit | Crédit. Seules les transactions du mois sélectionné sont conservées (un rapport annuel complet est accepté).</p>
+        <p className="mb-3 text-xs text-slate-500">Import mensuel facultatif du rapport de transactions ({MONTHS[month - 1]} {year}) pour enrichir l'analyse de variance IA. N'affecte aucun calcul (Bilan, P&amp;L, KPI). Seules les transactions du mois sélectionné sont conservées (un rapport annuel complet est accepté).</p>
         <div className="flex flex-wrap items-center gap-3">
-          <label className="inline-flex">
-            <input type="file" accept=".xlsx" className="hidden" onChange={onLedger} disabled={ledgerBusy || selLocked} data-testid="acct-ledger-input" />
-            <span className={`inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-600 ${ledgerBusy || selLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-slate-50"}`}>
-              <Upload size={15} /> {ledgerBusy ? "Traitement…" : ledger?.imported ? "Remplacer le grand livre" : "Importer le grand livre (.xlsx)"}
-            </span>
-          </label>
           <label className="inline-flex">
             <input type="file" accept=".xlsx" className="hidden" onChange={onLedgerAll} disabled={ledgerBusy} data-testid="acct-ledger-all-input" />
             <span className={`inline-flex items-center gap-2 rounded-lg border border-[#063044] px-4 py-2 text-sm font-600 text-[#063044] ${ledgerBusy ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-[#063044]/5"}`} title="Répartit automatiquement les transactions par mois (mois verrouillés ignorés)">
@@ -1252,7 +1246,7 @@ function ReportView({ type, title }) {
   return (
     <div className="space-y-4" data-testid={`acct-report-${type}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId={`acct-${type}`} />
           <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600" data-testid="acct-hidezero-label">
             <input type="checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} data-testid="acct-hidezero-toggle" className="h-4 w-4 rounded border-slate-300" />
@@ -1278,7 +1272,7 @@ function ReportView({ type, title }) {
           <PresentationButton />
           <ExportMenu onPdf={exportPdf} onExcel={exportExcel} disabled={!rep} testid="acct-export" className="bg-[#0E9488] hover:bg-[#0E9488]/90" />
           {type.includes("pnl") && period && (
-            <Button size="sm" onClick={() => setAiOpen(true)} data-testid="acct-report-ai-btn" className="gap-2 bg-[#063044] hover:bg-[#063044]/90"><Sparkles size={15} /> IA</Button>
+            <Button size="sm" onClick={() => setAiOpen(true)} data-testid="acct-report-ai-btn" title="Analyse IA" className="px-2.5 bg-[#063044] hover:bg-[#063044]/90"><Sparkles size={15} /></Button>
           )}
         </div>
       </div>

@@ -13,8 +13,8 @@ export function PresentationButton({ className = "" }) {
   };
   return (
     <button onClick={toggle} data-testid="presentation-btn" title="Mode plein écran / présentation"
-      className={`inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 text-xs font-600 text-slate-500 hover:bg-slate-50 ${className}`}>
-      <Maximize size={13} className="text-[#0E9488]" /> Présentation
+      className={`inline-flex items-center justify-center rounded-full border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 ${className}`}>
+      <Maximize size={15} className="text-[#0E9488]" />
     </button>
   );
 }
