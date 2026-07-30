@@ -526,6 +526,15 @@ Nouveau module (menu latéral « Comptabilité ») générant Bilan + États des
 ## Correctif portrait P&L (2026-07-30b)
 - [x] Le conteneur de table du P&L/Bilan (ReportView) passe de `overflow-auto max-h-[calc(100vh-230px)]` (scroll interne + en-têtes sticky) à `overflow-x-auto` naturel en mobile, et conserve le comportement sticky/scroll desktop via `lg:`. Les en-têtes de groupe/colonnes deviennent non-sticky sous `lg`. Le P&L s'affiche désormais comme les autres tables (BV, Flux) en portrait. Vérifié desktop OK.
 
+## Hub « Rapports » — Phase 1 (2026-07-30c)
+Transformation de l'ancien menu « Rapports d'audit » (placeholder) en **hub central « Rapports »** (menu latéral Comptabilité, sous-titre « Génération centralisée »).
+- [x] **Barre de types** (`AcctReports`, data-testid `acct-reports-type-<value>`) : Bilan · État des résultats · Flux de trésorerie · **Résultats mensuels (colonnes)** · **Par responsable budgétaire**. Type mémorisé dans `localStorage` (`acct.reports.type`).
+- [x] **Résultats mensuels** (`PnlMonthlyView`, `GET /api/acct/report/pnl-monthly?year=`) : P&L réutilisé par mois → 12 colonnes (JAN..DÉC) + colonne **Total**, styles Excel repris, colonnes des mois non verrouillés marquées « * » + bannière provisoire. Lignes d'en-tête sans montants.
+- [x] **Par responsable budgétaire** (`ByManagerView`, `GET /api/acct/report/by-manager?manager_id=&year=&month=`) : P&L limité aux comptes mappés à un responsable, mêmes colonnes budget/écart que le P&L. **CRUD responsables** (`acct_budget_managers` : name/email/accounts/active) via `ManagersDialog` — endpoints `GET/POST/PUT/DELETE /api/acct/budget-managers` **admin-only** (403 editor/user).
+- [x] Correctif : import `Settings2` (lucide-react) manquant dans `Comptabilite.js` (crash ByManagerView).
+- [x] Vérifié testing_agent iteration_31 : backend 3/3 + frontend 100 % (hub 5 types, P&L mensuel 12 mois+Total, CRUD responsables admin-only, filtrage par comptes, régression Bilan/P&L/Flux OK). Collection `acct_budget_managers` laissée vide.
+- [ ] **Phase 2 (à venir)** : modèle Excel « État de résultat par responsable » (mise en page finale, à fournir par l'utilisateur) ; **synchro OneDrive/SharePoint via Microsoft Graph** (nécessite enregistrement d'app Azure AD — à confirmer avec l'utilisateur avant de démarrer).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
