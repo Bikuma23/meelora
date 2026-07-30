@@ -2669,6 +2669,96 @@ async def acct_report(type: str, year: int, month: int, user: dict = Depends(get
         raise HTTPException(status_code=400, detail="Type invalide")
     return await _acct_report(year, month, type)
 
+@api.get("/acct/report/pnl-monthly")
+async def acct_pnl_monthly(year: int, user: dict = Depends(get_current_user)):
+    """État des résultats avec chaque mois de l'année en colonne. Réutilise le moteur P&L par mois."""
+    months = list(range(1, 13))
+    per = {p["month"]: p for p in await db.acct_periods.find({"year": int(year)}).to_list(200)}
+    reports = {}
+    for m in months:
+        try:
+            reports[m] = await _acct_report(year, m, "pnl")
+        except HTTPException:
+            reports[m] = None
+    base = next((r for r in reports.values() if r), None)
+    if not base:
+        return {"year": int(year), "months": [], "lines": [], "empty": True}
+    out_lines = []
+    for i, ln in enumerate(base["lines"]):
+        vals = {}
+        for m in months:
+            r = reports[m]
+            v = 0.0
+            if r and i < len(r["lines"]):
+                v = r["lines"][i]["values"].get("reel") or 0.0
+            vals[str(m)] = v
+        if ln["kind"] != "header":
+            vals["total"] = round(sum(vals[str(m)] for m in months), 2)
+        out_lines.append({"account": ln["account"], "label": ln["label"], "kind": ln["kind"],
+                          "style": ln.get("style"), "values": vals})
+    month_meta = [{"month": m, "label": MONTHS_FR[m - 1], "short": MONTHS[m - 1],
+                   "locked": bool(per.get(m, {}).get("locked")), "has_data": reports[m] is not None} for m in months]
+    return {"year": int(year), "months": month_meta, "lines": out_lines, "empty": False}
+
+# ---------------------------------------------------------------------------
+# Responsables budgétaires (mapping responsable -> comptes) + rapport par responsable
+# ---------------------------------------------------------------------------
+class BudgetManager(BaseModel):
+    name: str
+    email: str = ""
+    accounts: List[str] = []
+    active: bool = True
+
+@api.get("/acct/budget-managers")
+async def list_budget_managers(user: dict = Depends(get_current_user)):
+    docs = await db.acct_budget_managers.find().sort("name", 1).to_list(500)
+    return [{"id": str(d["_id"]), "name": d.get("name", ""), "email": d.get("email", ""),
+             "accounts": d.get("accounts", []), "active": d.get("active", True)} for d in docs]
+
+@api.post("/acct/budget-managers")
+async def create_budget_manager(payload: BudgetManager, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
+    doc = payload.model_dump()
+    res = await db.acct_budget_managers.insert_one(dict(doc))
+    await log_action(user, "Créer", "Responsable budgétaire", payload.name)
+    return {"id": str(res.inserted_id), **payload.model_dump()}
+
+@api.put("/acct/budget-managers/{mid}")
+async def update_budget_manager(mid: str, payload: BudgetManager, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
+    r = await db.acct_budget_managers.update_one({"_id": _oid(mid)}, {"$set": payload.model_dump()})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Responsable introuvable")
+    await log_action(user, "Modifier", "Responsable budgétaire", payload.name)
+    return {"id": mid, **payload.model_dump()}
+
+@api.delete("/acct/budget-managers/{mid}")
+async def delete_budget_manager(mid: str, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
+    d = await db.acct_budget_managers.find_one({"_id": _oid(mid)})
+    await db.acct_budget_managers.delete_one({"_id": _oid(mid)})
+    await log_action(user, "Supprimer", "Responsable budgétaire", (d or {}).get("name", mid))
+    return {"success": True}
+
+@api.get("/acct/report/by-manager")
+async def acct_report_by_manager(manager_id: str, year: int, month: int, user: dict = Depends(get_current_user)):
+    """État des résultats limité aux comptes d'un responsable, avec comparatif budget (mêmes value_cols que le P&L)."""
+    mgr = await db.acct_budget_managers.find_one({"_id": _oid(manager_id)})
+    if not mgr:
+        raise HTTPException(status_code=404, detail="Responsable introuvable")
+    rep = await _acct_report(year, month, "pnl")
+    accts = set(str(a) for a in (mgr.get("accounts") or []))
+    lines = [ln for ln in rep["lines"] if str(ln.get("account") or "") in accts]
+    return {"manager": {"id": manager_id, "name": mgr.get("name", ""), "email": mgr.get("email", "")},
+            "year": int(year), "month": int(month), "month_label": rep["month_label"], "locked": rep["locked"],
+            "value_cols": rep["value_cols"], "col_groups": rep.get("col_groups"),
+            "lines": lines, "accounts": sorted(accts)}
+
+
+
 @api.get("/acct/dashboard")
 async def acct_dashboard(user: dict = Depends(get_current_user)):
     tmpl = await db.acct_template.find_one({"_id": "current"})

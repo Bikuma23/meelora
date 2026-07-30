@@ -1625,7 +1625,214 @@ export function AcctComingSoon({ label }) {
 }
 
 export function AcctCashflow() { return <CashflowView />; }
-export function AcctAudit() { return <AcctComingSoon label="Rapports d'audit" />; }
+export function AcctReports() {
+  const [type, setType] = useState(() => localStorage.getItem("acct.reports.type") || "pnl");
+  const set = (v) => { setType(v); localStorage.setItem("acct.reports.type", v); };
+  const TYPES = [
+    { value: "bilan", label: "Bilan" },
+    { value: "pnl", label: "État des résultats" },
+    { value: "cashflow", label: "Flux de trésorerie" },
+    { value: "monthly", label: "Résultats mensuels (colonnes)" },
+    { value: "manager", label: "Par responsable budgétaire" },
+  ];
+  return (
+    <div className="space-y-4" data-testid="acct-reports-page">
+      <div className="flex flex-wrap gap-2" data-testid="acct-reports-typebar">
+        {TYPES.map((tp) => (
+          <button key={tp.value} onClick={() => set(tp.value)} data-testid={`acct-reports-type-${tp.value}`}
+            className={`rounded-full border px-3.5 py-1.5 text-sm font-600 transition-colors ${type === tp.value ? "border-[#063044] bg-[#063044] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488] hover:text-[#0E9488]"}`}>
+            {tp.label}
+          </button>
+        ))}
+      </div>
+      {type === "bilan" ? <AcctBilan />
+        : type === "pnl" ? <AcctPnl />
+        : type === "cashflow" ? <AcctCashflow />
+        : type === "monthly" ? <PnlMonthlyView />
+        : <ByManagerView />}
+    </div>
+  );
+}
+
+function PnlMonthlyView() {
+  const { periods } = usePeriods();
+  const years = [...new Set(periods.map((p) => p.year))].sort((a, b) => b - a);
+  const [year, setYear] = useState(null);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => { if (years.length && !year) setYear(years[0]); }, [years, year]);
+  useEffect(() => { if (!year) return; setLoading(true); api.acctPnlMonthly({ year }).then(setData).catch(() => setData(null)).finally(() => setLoading(false)); }, [year]);
+  if (!periods.length) return <NoPeriodsState testId="acct-no-periods-monthly" />;
+  const months = data?.months || [];
+  const hasProvisional = months.some((m) => m.has_data && !m.locked);
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-500">Année :</span>
+          <select value={year || ""} onChange={(e) => setYear(Number(e.target.value))} data-testid="acct-monthly-year"
+            className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <PresentationButton />
+      </div>
+      {hasProvisional && <p className="text-xs text-amber-600" data-testid="acct-monthly-provisional">⚠ Les colonnes marquées « * » sont des mois non verrouillés (données provisoires).</p>}
+      <div className="card overflow-x-auto">
+        {loading ? <p className="p-8 text-center text-sm text-slate-500">Chargement…</p>
+          : !data || data.empty ? <p className="p-8 text-center text-sm text-slate-400">Aucune donnée pour {year}.</p>
+          : <table className="acct-hover-rows w-full text-sm" data-testid="acct-monthly-table">
+              <thead>
+                <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2 text-left">Compte</th>
+                  <th className="px-3 py-2 text-left">Description</th>
+                  {months.map((m) => <th key={m.month} className={`px-3 py-2 text-right ${!m.locked && m.has_data ? "text-amber-600" : ""}`}>{m.short}{!m.locked && m.has_data ? " *" : ""}</th>)}
+                  <th className="px-3 py-2 text-right font-700 text-[#063044]">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.lines.map((ln, i) => {
+                  const s = excelRowStyle(ln, true);
+                  return (
+                    <tr key={i} className={`border-b border-slate-50 ${s.cls}`} style={{ background: s.bg, color: s.color }}>
+                      <td className="px-3 py-1.5 text-left text-slate-400">{ln.account || ""}</td>
+                      <td className={`px-3 py-1.5 text-left ${s.headerDefault ? "text-[#063044]" : ""}`}>{ln.label}</td>
+                      {months.map((m) => <td key={m.month} className="px-3 py-1.5 text-right">{ln.kind === "header" ? "" : money(ln.values[String(m.month)])}</td>)}
+                      <td className="px-3 py-1.5 text-right font-700">{ln.kind === "header" ? "" : money(ln.values.total)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>}
+      </div>
+    </div>
+  );
+}
+
+function ByManagerView() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const { periods } = usePeriods();
+  const [managers, setManagers] = useState([]);
+  const [mid, setMid] = useState("");
+  const [period, setPeriod] = useState("");
+  const [rep, setRep] = useState(null);
+  const [manageOpen, setManageOpen] = useState(false);
+  const load = () => api.acctBudgetManagers().then((r) => setManagers(r || []));
+  useEffect(() => { load(); }, []);
+  useEffect(() => { if (periods.length && !period) setPeriod(periods[0].id); }, [periods, period]);
+  useEffect(() => {
+    if (mid && period) { const [y, m] = period.split("-").map(Number); api.acctReportByManager({ manager_id: mid, year: y, month: m }).then(setRep).catch(() => setRep(null)); }
+    else setRep(null);
+  }, [mid, period]);
+  const isEcart = (k) => k.startsWith("ecart");
+  const colLabel = (k) => ({ reel: "Réel", bud_rev2: "Bud. Rév-2", ecart_rev2: "Écart Rév-2", bud_rev1: "Bud. Rév-1", ecart_rev1: "Écart Rév-1", bud_ca: "Bud. CA", ecart_ca: "Écart CA" }[k] || k);
+  return (
+    <div className="space-y-4" data-testid="acct-bymanager-view">
+      <div className="card p-3 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="mb-1 block text-[11px] font-600 uppercase tracking-wider text-slate-400">Responsable budgétaire</label>
+          <select value={mid} onChange={(e) => setMid(e.target.value)} data-testid="acct-bymanager-select"
+            className="h-9 min-w-[220px] rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+            <option value="">— Choisir —</option>
+            {managers.map((m) => <option key={m.id} value={m.id}>{m.name}{m.accounts?.length ? ` (${m.accounts.length} cptes)` : ""}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-[11px] font-600 uppercase tracking-wider text-slate-400">Période</label>
+          <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId="acct-bymanager" />
+        </div>
+        {isAdmin && <Button size="sm" variant="outline" onClick={() => setManageOpen(true)} data-testid="acct-bymanager-manage" className="gap-2"><Settings2 size={15} /> Gérer les responsables</Button>}
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-500" data-testid="acct-bymanager-note">
+        Phase 1 : structure de données et comparatif budget. La mise en page finale (modèle Excel) et l'envoi/synchronisation OneDrive seront ajoutés une fois le modèle fourni.
+      </div>
+
+      {!mid ? <p className="p-6 text-center text-sm text-slate-400">Sélectionnez un responsable budgétaire pour afficher son état de résultats.</p>
+        : !rep ? <p className="p-6 text-center text-sm text-slate-400">Aucune donnée pour cette sélection.</p>
+        : (
+          <div className="card overflow-x-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
+              <p className="text-sm font-700 text-slate-700">{rep.manager.name} — {rep.month_label} {rep.year}{!rep.locked ? " · provisoire" : ""}</p>
+              <p className="text-xs text-slate-400">{rep.accounts.length} compte(s) · {rep.manager.email || "aucun courriel"}</p>
+            </div>
+            {rep.lines.length === 0 ? <p className="p-6 text-center text-sm text-slate-400">Aucun compte mappé à ce responsable (à définir dans « Gérer les responsables »).</p>
+              : <table className="acct-hover-rows w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
+                      <th className="px-3 py-2 text-left">Compte</th>
+                      <th className="px-3 py-2 text-left">Description</th>
+                      {rep.value_cols.map((k) => <th key={k} className="px-3 py-2 text-right">{colLabel(k)}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rep.lines.map((ln, i) => (
+                      <tr key={i} className="border-b border-slate-50">
+                        <td className="px-3 py-1.5 text-left text-slate-400">{ln.account || ""}</td>
+                        <td className="px-3 py-1.5 text-left">{ln.label}</td>
+                        {rep.value_cols.map((k) => <td key={k} className={`px-3 py-1.5 text-right ${isEcart(k) ? "italic text-slate-500" : ""}`}>{money(ln.values[k])}</td>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>}
+          </div>
+        )}
+
+      {isAdmin && <ManagersDialog open={manageOpen} onOpenChange={setManageOpen} managers={managers} onChanged={load} />}
+    </div>
+  );
+}
+
+function ManagersDialog({ open, onOpenChange, managers, onChanged }) {
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ name: "", email: "", accounts: "" });
+  const startNew = () => { setEditing("new"); setForm({ name: "", email: "", accounts: "" }); };
+  const startEdit = (m) => { setEditing(m.id); setForm({ name: m.name, email: m.email || "", accounts: (m.accounts || []).join(", ") }); };
+  const save = async () => {
+    const body = { name: form.name.trim(), email: form.email.trim(), accounts: form.accounts.split(",").map((s) => s.trim()).filter(Boolean), active: true };
+    if (!body.name) { toast.error("Nom requis"); return; }
+    try {
+      if (editing === "new") await api.acctCreateBudgetManager(body);
+      else await api.acctUpdateBudgetManager(editing, body);
+      toast.success("Responsable enregistré"); setEditing(null); onChanged();
+    } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+  };
+  const del = async (m) => { try { await api.acctDeleteBudgetManager(m.id); toast.success("Supprimé"); onChanged(); } catch (e) { toast.error("Erreur"); } };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="acct-managers-dialog" className="max-h-[85vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Responsables budgétaires</DialogTitle>
+          <DialogDescription className="text-xs">Associez chaque responsable à sa liste de comptes (codes séparés par des virgules) et à son courriel.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          {managers.map((m) => (
+            <div key={m.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2" data-testid={`acct-manager-row-${m.id}`}>
+              <div className="min-w-0"><p className="text-sm font-600 text-slate-700">{m.name}</p><p className="truncate text-xs text-slate-400">{m.email || "—"} · {(m.accounts || []).length} compte(s)</p></div>
+              <div className="flex gap-1">
+                <button onClick={() => startEdit(m)} data-testid={`acct-manager-edit-${m.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100"><Pencil size={15} /></button>
+                <button onClick={() => del(m)} data-testid={`acct-manager-del-${m.id}`} className="rounded p-1.5 text-red-500 hover:bg-red-50"><Trash2 size={15} /></button>
+              </div>
+            </div>
+          ))}
+          {managers.length === 0 && <p className="py-3 text-center text-sm text-slate-400">Aucun responsable défini.</p>}
+        </div>
+        {editing ? (
+          <div className="space-y-2 rounded-lg border border-[#0E9488]/30 bg-[#0E9488]/5 p-3" data-testid="acct-manager-form">
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nom du responsable" data-testid="acct-manager-name" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0E9488] focus:outline-none" />
+            <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Courriel" data-testid="acct-manager-email" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0E9488] focus:outline-none" />
+            <textarea value={form.accounts} onChange={(e) => setForm({ ...form, accounts: e.target.value })} placeholder="Comptes (ex : 4000, 4100, 5000)" data-testid="acct-manager-accounts" rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0E9488] focus:outline-none" />
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="outline" onClick={() => setEditing(null)}>Annuler</Button>
+              <Button size="sm" onClick={save} data-testid="acct-manager-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">Enregistrer</Button>
+            </div>
+          </div>
+        ) : <Button size="sm" onClick={startNew} data-testid="acct-manager-new" className="gap-2 bg-[#063044] hover:bg-[#063044]/90"><Plus size={15} /> Nouveau responsable</Button>}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ---------- Flux de trésorerie (méthode indirecte) ----------
 function CashflowView() {

@@ -21,7 +21,7 @@ import Journal from "../pages/Journal";
 import UsersPage from "../pages/Users";
 import Preferences from "../pages/Preferences";
 import { applyTheme } from "../lib/theme";
-import { AcctDashboard, AcctBV, AcctBilan, AcctPnl, AcctCashflow, AcctAudit } from "../pages/Comptabilite";
+import { AcctDashboard, AcctBV, AcctBilan, AcctPnl, AcctCashflow, AcctReports } from "../pages/Comptabilite";
 import { Calculator, Landmark, ClipboardList, Wallet, FileBarChart } from "lucide-react";
 
 const PAGES = {
@@ -39,7 +39,7 @@ const PAGES = {
   acct_bilan: { title: "Bilan", sub: "État de situation financière", comp: AcctBilan },
   acct_pnl: { title: "État des résultats", sub: "P&L du mois", comp: AcctPnl },
   acct_cashflow: { title: "Flux de trésorerie", sub: "Méthode indirecte", comp: AcctCashflow },
-  acct_audit: { title: "Rapports d'audit", sub: "À venir", comp: AcctAudit },
+  acct_audit: { title: "Rapports", sub: "Génération centralisée", comp: AcctReports },
 };
 
 const NAV_ACCT = [
@@ -48,7 +48,7 @@ const NAV_ACCT = [
   { key: "acct_bilan", label: "Bilan", sub: "État de situation", icon: Landmark },
   { key: "acct_pnl", label: "États des résultats", sub: "P&L", icon: FileBarChart },
   { key: "acct_cashflow", label: "Flux de trésorerie", sub: "Méthode indirecte", icon: Wallet },
-  { key: "acct_audit", label: "Rapports d'audit", sub: "À venir", icon: FileText },
+  { key: "acct_audit", label: "Rapports", sub: "Génération centralisée", icon: FileText },
 ];
 
 const NAV_GROUP = [
