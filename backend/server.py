@@ -19,6 +19,7 @@ import logging
 import bcrypt
 import jwt
 import io
+import asyncio
 import openpyxl
 from accounting import ReportEngine
 
@@ -2750,10 +2751,10 @@ REV_CUM_KEY = {"ca": "bud_ca_cum", "rev1": "bud_rev1_cum", "rev2": "bud_rev2_cum
 REV_LABEL = {"ca": "CA", "rev1": "REV-1", "rev2": "REV-2"}
 
 BUDGET_MANAGERS_SEED = [
-    {"name": "RH", "email": "", "accounts": ["8006600", "8006610", "8006630", "8006640", "8006645", "8006650", "8006655", "8006660", "8006665", "8006670", "8006675"], "active": True},
-    {"name": "TI", "email": "", "accounts": ["7006500", "7006410", "7006510", "7006520", "7006530", "7006540", "7006550", "7006560", "7006565", "7005500", "7006400", "7505500", "5005500", "5505500", "5995500", "6005500", "8505500", "8005500", "9005500"], "active": True},
-    {"name": "MARKETING", "email": "", "accounts": ["8506720", "8506721", "8506722", "8506723", "8506730", "8506731", "8506732", "8506733", "8506734", "8506740", "8506741", "8506742", "8506743", "8506750", "8506751", "8506752", "8506753", "8506754", "8506755", "8506756", "8506760", "8506761", "8506762", "8506763", "8507000", "8507001", "8507002", "8507003"], "active": True},
-    {"name": "FGF", "email": "", "accounts": ["5005210", "5505210", "5995210", "9005210", "5995050", "5995060", "5995070", "5995080", "5995100", "5995110", "5995140", "5995150", "5995160", "5995220", "5995230", "5995240", "5995500", "5996400", "5996410", "5996420", "5996430", "5996440", "5996450", "5997000", "5997115", "5997120", "5997125"], "active": True},
+    {"name": "RH", "email": "bbindanda@accslegroupe.ca", "accounts": ["8006600", "8006610", "8006630", "8006640", "8006645", "8006650", "8006655", "8006660", "8006665", "8006670", "8006675"], "active": True},
+    {"name": "TI", "email": "bbindanda@accslegroupe.ca", "accounts": ["7006500", "7006410", "7006510", "7006520", "7006530", "7006540", "7006550", "7006560", "7006565", "7005500", "7006400", "7505500", "5005500", "5505500", "5995500", "6005500", "8505500", "8005500", "9005500"], "active": True},
+    {"name": "MARKETING", "email": "bbindanda@accslegroupe.ca", "accounts": ["8506720", "8506721", "8506722", "8506723", "8506730", "8506731", "8506732", "8506733", "8506734", "8506740", "8506741", "8506742", "8506743", "8506750", "8506751", "8506752", "8506753", "8506754", "8506755", "8506756", "8506760", "8506761", "8506762", "8506763", "8507000", "8507001", "8507002", "8507003"], "active": True},
+    {"name": "FGF", "email": "bbindanda@accslegroupe.ca", "accounts": ["5005210", "5505210", "5995210", "9005210", "5995050", "5995060", "5995070", "5995080", "5995100", "5995110", "5995140", "5995150", "5995160", "5995220", "5995230", "5995240", "5995500", "5996400", "5996410", "5996420", "5996430", "5996440", "5996450", "5997000", "5997115", "5997120", "5997125"], "active": True},
 ]
 
 async def _by_manager_data(manager_id, year, month, rev="rev1"):
@@ -2871,9 +2872,8 @@ async def acct_report_by_manager_excel(manager_id: str, year: int, month: int, r
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                              headers={"Content-Disposition": f"attachment; filename={fn}"})
 
-@api.get("/acct/report/by-manager/pdf")
-async def acct_report_by_manager_pdf(manager_id: str, year: int, month: int, rev: str = "rev1", user: dict = Depends(get_current_user)):
-    data = await _by_manager_data(manager_id, year, month, rev)
+def _build_manager_pdf(data):
+    """Construit le PDF « Suivi Budget » et renvoie (bytes, filename)."""
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.units import mm
@@ -2922,8 +2922,89 @@ async def acct_report_by_manager_pdf(manager_id: str, year: int, month: int, rev
     tbl = Table(rows, colWidths=col_w, repeatRows=1); tbl.setStyle(TableStyle(style_cmds))
     elems.append(tbl)
     doc.build(elems); buf.seek(0)
-    fn = f"suivi_budget_{data['manager']['name']}_{_pkey(year, month)}.pdf".replace(" ", "_")
-    return StreamingResponse(buf, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={fn}"})
+    fn = f"suivi_budget_{data['manager']['name']}_{_pkey(data['year'], data['month'])}.pdf".replace(" ", "_")
+    return buf.getvalue(), fn
+
+@api.get("/acct/report/by-manager/pdf")
+async def acct_report_by_manager_pdf(manager_id: str, year: int, month: int, rev: str = "rev1", user: dict = Depends(get_current_user)):
+    data = await _by_manager_data(manager_id, year, month, rev)
+    pdf_bytes, fn = _build_manager_pdf(data)
+    return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={fn}"})
+
+# ---------------------------------------------------------------------------
+# Envoi par courriel des rapports « par responsable » (Resend)
+# ---------------------------------------------------------------------------
+def _email_configured():
+    return bool(os.environ.get("RESEND_API_KEY"))
+
+async def _send_manager_report_email(mgr_doc, year, month, rev="rev1"):
+    """Génère le PDF et l'envoie au responsable. Renvoie (ok: bool, message: str)."""
+    email = (mgr_doc.get("email") or "").strip()
+    name = mgr_doc.get("name", "")
+    if not email:
+        return False, f"{name} : aucun courriel renseigné"
+    if not _email_configured():
+        return False, "Service d'email non configuré (clé Resend manquante)"
+    data = await _by_manager_data(str(mgr_doc["_id"]), year, month, rev)
+    pdf_bytes, fn = _build_manager_pdf(data)
+    ml = data["month_label"]
+    subject = f"Suivi budgétaire {name} — {ml} {year}"
+    html = (
+        f"<div style=\"font-family:Arial,sans-serif;color:#1e293b;font-size:14px;line-height:1.5\">"
+        f"<p>Bonjour,</p>"
+        f"<p>Veuillez trouver ci-joint votre <strong>suivi des frais d'exploitation — {name}</strong> "
+        f"pour la période de <strong>{ml} {year}</strong> (réel cumulatif vs budget {data['rev_label']}).</p>"
+        f"<p>Ce rapport est généré automatiquement à la clôture du mois. "
+        f"N'hésitez pas à nous transmettre vos commentaires.</p>"
+        f"<p style=\"color:#64748b;font-size:12px;margin-top:24px\">ACCSL Groupe — Plateforme financière</p>"
+        f"</div>"
+    )
+    import resend
+    resend.api_key = os.environ["RESEND_API_KEY"]
+    params = {
+        "from": os.environ.get("SENDER_EMAIL", "onboarding@resend.dev"),
+        "to": [email],
+        "subject": subject,
+        "html": html,
+        "attachments": [{"filename": fn, "content": list(pdf_bytes)}],
+    }
+    try:
+        res = await asyncio.to_thread(resend.Emails.send, params)
+        await log_action({"email": "système"}, "Envoyer", "Rapport responsable", f"{name} → {email} ({_pkey(year, month)})")
+        return True, f"{name} → {email}"
+    except Exception as e:
+        logger.error(f"Resend échec ({name}): {e}")
+        return False, f"{name} : échec d'envoi ({str(e)[:120]})"
+
+@api.get("/acct/email/status")
+async def acct_email_status(user: dict = Depends(get_current_user)):
+    return {"configured": _email_configured(), "sender": os.environ.get("SENDER_EMAIL", "")}
+
+@api.post("/acct/report/by-manager/email")
+async def email_manager_report(manager_id: str, year: int, month: int, rev: str = "rev1", user: dict = Depends(get_current_user)):
+    mgr = await db.acct_budget_managers.find_one({"_id": _oid(manager_id)})
+    if not mgr:
+        raise HTTPException(status_code=404, detail="Responsable introuvable")
+    if not _email_configured():
+        raise HTTPException(status_code=400, detail="Service d'email non configuré. Un administrateur doit renseigner la clé Resend.")
+    ok, msg = await _send_manager_report_email(mgr, year, month, rev)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"success": True, "message": msg}
+
+@api.post("/acct/report/by-manager/email-all")
+async def email_all_manager_reports(year: int, month: int, rev: str = "rev1", user: dict = Depends(get_current_user)):
+    if not _email_configured():
+        raise HTTPException(status_code=400, detail="Service d'email non configuré. Un administrateur doit renseigner la clé Resend.")
+    mgrs = await db.acct_budget_managers.find({"active": {"$ne": False}}).sort("name", 1).to_list(500)
+    sent, failed, skipped = [], [], []
+    for m in mgrs:
+        if not (m.get("email") or "").strip():
+            skipped.append(m.get("name", "")); continue
+        ok, msg = await _send_manager_report_email(m, year, month, rev)
+        (sent if ok else failed).append(msg)
+    return {"success": True, "sent": sent, "failed": failed, "skipped": skipped,
+            "summary": f"{len(sent)} envoyé(s), {len(failed)} échec(s), {len(skipped)} sans courriel"}
 
 
 

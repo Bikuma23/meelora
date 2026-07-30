@@ -833,6 +833,10 @@ export function AcctBV() {
   const [ledger, setLedger] = useState(null);
   const [ledgerBusy, setLedgerBusy] = useState(false);
   const [ledgerPreview, setLedgerPreview] = useState({ open: false, year: null, month: null });
+  const [sendDialog, setSendDialog] = useState({ open: false, year: null, month: null });
+  const [emailCfg, setEmailCfg] = useState({ configured: false });
+  const [sending, setSending] = useState(false);
+  useEffect(() => { api.acctEmailStatus().then(setEmailCfg).catch(() => {}); }, []);
   const loadTmpl = useCallback(() => api.acctGetTemplate().then(setTmpl).catch(() => {}), []);
   useEffect(() => { loadTmpl(); api.acctAccounts().then(setAccts).catch(() => {}); }, [loadTmpl]);
   const loadLedger = useCallback(() => { api.acctLedgerStatus({ year, month }).then(setLedger).catch(() => setLedger(null)); }, [year, month]);
@@ -861,8 +865,25 @@ export function AcctBV() {
     } catch (err) { toast.error(err.response?.data?.detail || "Upload impossible"); } finally { setBusy(false); }
   };
   const toggleLock = async (p) => {
-    try { await api.acctLock({ year: p.year, month: p.month, locked: !p.locked }); toast.success(!p.locked ? "Mois verrouillé" : "Mois déverrouillé"); reload(); }
+    const willLock = !p.locked;
+    try {
+      await api.acctLock({ year: p.year, month: p.month, locked: willLock });
+      toast.success(willLock ? "Mois verrouillé" : "Mois déverrouillé");
+      reload();
+      if (willLock && isAdmin) setSendDialog({ open: true, year: p.year, month: p.month });
+    }
     catch (err) { toast.error(err.response?.data?.detail || "Action impossible"); }
+  };
+  const sendAllReports = async () => {
+    const { year: y, month: m } = sendDialog;
+    setSending(true);
+    try {
+      const r = await api.acctEmailAllManagers({ year: y, month: m, rev: "rev1" });
+      toast.success(r.summary || "Rapports envoyés");
+      if (r.failed?.length) toast.warning(`Échecs : ${r.failed.join(" · ")}`);
+      setSendDialog({ open: false, year: null, month: null });
+    } catch (e) { toast.error(e.response?.data?.detail || "Envoi impossible"); }
+    finally { setSending(false); }
   };
   const deletePeriod = async (p) => {
     try { await api.acctDeletePeriod({ year: p.year, month: p.month }); toast.success(`BV ${MONTHS[p.month - 1]} ${p.year} supprimée`); reload(); }
@@ -1073,6 +1094,30 @@ export function AcctBV() {
       <AnomaliesCard periods={periods} />
 
       <LedgerPreviewDialog open={ledgerPreview.open} onOpenChange={(v) => setLedgerPreview((p) => ({ ...p, open: v }))} year={ledgerPreview.year} month={ledgerPreview.month} />
+
+      <Dialog open={sendDialog.open} onOpenChange={(v) => !v && setSendDialog({ open: false, year: null, month: null })}>
+        <DialogContent data-testid="acct-sendreports-dialog" className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Mois verrouillé — envoyer les rapports ?</DialogTitle>
+            <DialogDescription>
+              {sendDialog.year ? `La période ${MONTHS[sendDialog.month - 1]} ${sendDialog.year} est verrouillée. ` : ""}
+              Vous pouvez envoyer automatiquement le rapport « Suivi budgétaire » (PDF) à chaque responsable budgétaire ayant un courriel renseigné. Vous pourrez aussi les renvoyer individuellement depuis « Rapports › Par responsable budgétaire ».
+            </DialogDescription>
+          </DialogHeader>
+          {!emailCfg.configured && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700" data-testid="acct-email-notconfigured">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" /> Le service d'envoi de courriels n'est pas encore configuré. Un administrateur doit renseigner la clé Resend (backend) pour activer l'envoi.
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSendDialog({ open: false, year: null, month: null })} data-testid="acct-sendreports-later">Plus tard</Button>
+            <Button onClick={sendAllReports} disabled={!emailCfg.configured || sending} data-testid="acct-sendreports-all" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90">
+              <Send size={15} /> {sending ? "Envoi…" : "Envoyer à tous les responsables"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
       <AlertDialog open={!!confirmDel} onOpenChange={(v) => !v && setConfirmDel(null)}>
         <AlertDialogContent data-testid="acct-delete-confirm-dialog">
@@ -1756,9 +1801,11 @@ function ByManagerView() {
   const [rep, setRep] = useState(null);
   const [loading, setLoading] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
+  const [emailCfg, setEmailCfg] = useState({ configured: false });
+  const [emailing, setEmailing] = useState(false);
   const setRevision = (v) => { setRev(v); localStorage.setItem("acct.bymanager.rev", v); };
   const load = () => api.acctBudgetManagers().then((r) => setManagers(r || []));
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); api.acctEmailStatus().then(setEmailCfg).catch(() => {}); }, []);
   useEffect(() => { if (periods.length && !period) setPeriod(periods[0].id); }, [periods, period]);
   useEffect(() => {
     if (mid && period) {
@@ -1783,6 +1830,16 @@ function ByManagerView() {
     setRep((r) => r ? { ...r, lines: r.lines.map((l) => l.account === account ? { ...l, note: text } : l) } : r);
     try { await api.acctSaveManagerNote({ year: y, month: m, account, text }); toast.success("Note enregistrée"); }
     catch (e) { toast.error("Note non enregistrée"); }
+  };
+
+  const sendOne = async () => {
+    const [y, m] = period.split("-").map(Number);
+    setEmailing(true);
+    try {
+      const r = await api.acctEmailManager({ manager_id: mid, year: y, month: m, rev });
+      toast.success(r.message ? `Envoyé : ${r.message}` : "Rapport envoyé");
+    } catch (e) { toast.error(e.response?.data?.detail || "Envoi impossible"); }
+    finally { setEmailing(false); }
   };
 
   const REVS = [{ value: "rev1", label: "Budget Rév-1" }, { value: "ca", label: "Budget CA" }, { value: "rev2", label: "Budget Rév-2" }];
@@ -1814,6 +1871,13 @@ function ByManagerView() {
         </div>
         <div className="flex items-center gap-2">
           {mid && rep && <ExportMenu onPdf={() => doExport("pdf")} onExcel={() => doExport("excel")} disabled={!rep} testid="acct-bymanager-export" className="bg-[#0E9488] hover:bg-[#0E9488]/90" />}
+          {mid && rep && (
+            <Button size="sm" onClick={sendOne} disabled={emailing || !emailCfg.configured}
+              title={emailCfg.configured ? `Envoyer par courriel à ${rep.manager.email || "(aucun courriel)"}` : "Service d'email non configuré"}
+              data-testid="acct-bymanager-email" className="gap-2 bg-[#063044] hover:bg-[#063044]/90">
+              <Send size={15} /> {emailing ? "Envoi…" : "Envoyer"}
+            </Button>
+          )}
           {isAdmin && <Button size="sm" variant="outline" onClick={() => setManageOpen(true)} data-testid="acct-bymanager-manage" className="gap-2"><Settings2 size={15} /> Gérer les responsables</Button>}
         </div>
       </div>

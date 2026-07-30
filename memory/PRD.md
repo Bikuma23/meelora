@@ -553,6 +553,14 @@ Refonte du hub selon nouvelles demandes + modèle Excel « par responsable » fo
 - [x] Vérifié : seed (4 responsables), note enregistrée par user + attachée au rapport + exports 200 + suppression, UI d'édition inline avec toast « Note enregistrée » (curl + captures).
 - [ ] **Reporté (phase ultérieure, confirmé utilisateur)** : bouton « Envoyer par courriel » (PDF du suivi au responsable) — nécessite un fournisseur d'email (Resend/SendGrid) + clé API.
 
+## Envoi des rapports par courriel aux responsables (2026-07-30f)
+- [x] **Au verrouillage d'un mois** (Balance de vérification, admin) : un dialogue « Mois verrouillé — envoyer les rapports ? » propose l'**envoi automatique du PDF « Suivi budgétaire »** à tous les responsables ayant un courriel (`acct-sendreports-dialog`, boutons « Plus tard » / « Envoyer à tous les responsables »). Récap toast (envoyés / échecs / sans courriel).
+- [x] **Envoi individuel** : bouton **« Envoyer »** dans « Rapports › Par responsable budgétaire » (`acct-bymanager-email`) → envoie le PDF au responsable sélectionné pour la période/budget affichés.
+- [x] **Intégration Resend** (playbook) : `resend>=2.0.0`, envoi non-bloquant (`asyncio.to_thread`), PDF joint (contenu en octets). Endpoints `POST /acct/report/by-manager/email`, `/email-all`, `GET /acct/email/status`. Courriel HTML standard FR (objet « Suivi budgétaire <nom> — <mois> <année> » + PDF joint).
+- [x] **Dégradation gracieuse** : si `RESEND_API_KEY` absent → boutons désactivés + note « service non configuré » ; endpoints renvoient 400 clair. Vérifié (curl status `configured:false`, envoi → 400 ; captures dialogue verrouillage + bouton Envoyer).
+- [x] Les 4 responsables (RH/TI/MARKETING/FGF) pré-remplis avec le courriel `bbindanda@accslegroupe.ca` (modifiable via « Gérer les responsables »).
+- [ ] **À FAIRE pour activer l'envoi réel** : renseigner `RESEND_API_KEY` (clé re_… du compte Resend) et `SENDER_EMAIL` (domaine expéditeur vérifié) dans `backend/.env`, puis `sudo supervisorctl restart backend`. En mode test Resend, seuls les destinataires vérifiés reçoivent les courriels.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
