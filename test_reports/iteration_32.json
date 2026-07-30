@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 32 — Rapports hub refonte (Phase 2) validé end-to-end. Backend (test_reports_hub_v2.py, 5/5 pass): (a) /acct/report/pnl-monthly variant=detail vs sommaire → 443 vs 23 lignes; (b) hide-zero est client-side, réponse contient bien des lignes à zéro; (c) by-manager RH June 2026 rev1 → Formation 8006600 réel=23760.04, budget cum=27498.00, annuel=54996.00; TOTAL réel=76073.86, budget=78156.00; (d) rev switch rev1/ca/rev2 → 200 ok; (e) exports PDF (%PDF- + content-type pdf) et Excel (PK + spreadsheet). Frontend (Playwright, admin): sidebar Comptabilité = ['Tableau de bord','Balance de vérification','Rapports','Journal'] — les anciens Bilan/États résultats/Flux ne sont PLUS présents ✓. Hub tabs ordre exact: Bilan, État des résultats, Résultats mensuels, Flux de trésorerie, Par responsable budgétaire ✓. Chacun ouvre sa vue sans erreur. Résultats mensuels 2026: 12 mois (JAN..DÉC) + TOTAL, détail=439 lignes, sommaire=23 lignes, Hide-zero réduit 439→291 (en détaillé). Par responsable: création UI de RH avec 11 comptes (8006600..8006675), sélection + Juin 2026 + Budget Rév-1 → titre 'Suivi Budget frais d'exploitation - RH', colonnes exactes 'No GL | Désignation | Réel Juin 2026 (Cumulatif) | Budget REV-1 2026 (Juin 2026) | Budget REV-1 2026 (Annuel) | Écart Budget Mois vs Annuel | Notes et commentaires' ✓; ligne 8006600 Formation - RH = 23 760,04 / 27 498,00 / 54 996,00 ✓; TOTAL - RH = 76 073,86 / 78 156,00 / 156 312,00 / 80 238,14 ✓; négatifs en rouge/parenthèses (ex: (396,00), (1 120,97)) ✓. Rev switch dynamise le libellé de colonne (REV-1 / CA / REV-2). Export PDF (suivi_budget_RH_2026-06.pdf) et Excel (.xlsx) téléchargés OK. Nettoyage: gestionnaire RH supprimé via UI + API confirme collection vide.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_reports_hub_v2.py",
+    "/app/test_reports/pytest/reports_hub_v2.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Comptabilite.js dépasse 2000 lignes — envisager de découper Reports/PnlMonthlyView/ByManagerView/ManagersDialog dans des fichiers séparés.",
+    "En sommaire (Résultats mensuels), la ligne 'Réel vs Budget' est filtrée conditionnellement — logique inverse (!isSommaire): confirmer que c'est intentionnel; la comparaison ligne.label.trim() est fragile aux traductions.",
+    "server.py ~3900+ lignes, endpoints acct devraient être extraits dans un module dédié (récurrent).",
+    "Warning console récurrent 'Recharts width(-1) height(-1)' lorsqu'on switch vers Bilan/Flux via hub — visuellement non bloquant, mais indique un problème de layout initial (containers avec dimensions 0 au 1er render)."
+  ],
+  "updated_files": ["/app/backend/tests/test_reports_hub_v2.py"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100%"},
+  "test_credentials": "admin@accslegro.com/admin123 utilisé pour toutes les vérifications UI. editor.test/user.test utilisés pour l'auth-guard backend (créés si absents).",
+  "seed_data_creation": "Gestionnaire de test 'RH' créé via UI, puis supprimé. Collection acct_budget_managers = [] à la fin (vérifié via curl).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Sélecteurs Playwright confirmés: [data-testid=acct-reports-typebar] contient 5 boutons (bilan, pnl, monthly, cashflow, manager). Résultats mensuels utilise ViewToggle avec [data-testid=acct-view-detail]/[data-testid=acct-view-sommaire]. Par responsable: header re-libellé selon rev — 'BUDGET REV-1 2026 (JUIN 2026)' / 'BUDGET CA 2026 (JUIN 2026)' / 'BUDGET REV-2 2026 (JUIN 2026)'. Export menu = [data-testid=acct-bymanager-export-menu] puis -pdf/-excel. Le PeriodSelect de by-manager n'expose pas de data-testid direct — utiliser les selects sous-jacents ou laisser la valeur par défaut (juin 2026 est la plus récente et se sélectionne automatiquement).",
+  "rca of the issue": "N/A — toutes les demandes de la refonte Phase 2 (réordonnancement onglets, renommage 'Résultats mensuels', bascule détaillé/sommaire, case masquer zéro, refonte 'Par responsable' + exports PDF/Excel, retrait items sidebar) sont conformes au spec."
+}

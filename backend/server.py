@@ -2670,14 +2670,16 @@ async def acct_report(type: str, year: int, month: int, user: dict = Depends(get
     return await _acct_report(year, month, type)
 
 @api.get("/acct/report/pnl-monthly")
-async def acct_pnl_monthly(year: int, user: dict = Depends(get_current_user)):
-    """État des résultats avec chaque mois de l'année en colonne. Réutilise le moteur P&L par mois."""
+async def acct_pnl_monthly(year: int, variant: str = "detail", user: dict = Depends(get_current_user)):
+    """État des résultats avec chaque mois de l'année en colonne. Réutilise le moteur P&L par mois.
+    variant: 'detail' (Resultats internes) ou 'sommaire' (Resultats sommaires)."""
+    kind = "pnl_sommaire" if variant == "sommaire" else "pnl"
     months = list(range(1, 13))
     per = {p["month"]: p for p in await db.acct_periods.find({"year": int(year)}).to_list(200)}
     reports = {}
     for m in months:
         try:
-            reports[m] = await _acct_report(year, m, "pnl")
+            reports[m] = await _acct_report(year, m, kind)
         except HTTPException:
             reports[m] = None
     base = next((r for r in reports.values() if r), None)
@@ -2743,19 +2745,149 @@ async def delete_budget_manager(mid: str, user: dict = Depends(get_current_user)
     await log_action(user, "Supprimer", "Responsable budgétaire", (d or {}).get("name", mid))
     return {"success": True}
 
-@api.get("/acct/report/by-manager")
-async def acct_report_by_manager(manager_id: str, year: int, month: int, user: dict = Depends(get_current_user)):
-    """État des résultats limité aux comptes d'un responsable, avec comparatif budget (mêmes value_cols que le P&L)."""
+REV_MONTH_KEY = {"ca": "bud_ca", "rev1": "bud_rev1", "rev2": "bud_rev2"}
+REV_CUM_KEY = {"ca": "bud_ca_cum", "rev1": "bud_rev1_cum", "rev2": "bud_rev2_cum"}
+REV_LABEL = {"ca": "CA", "rev1": "REV-1", "rev2": "REV-2"}
+
+async def _by_manager_data(manager_id, year, month, rev="rev1"):
+    """Reproduit le modèle « Suivi Budget frais d'exploitation - <responsable> » :
+    No GL | Désignation | Réel (Cumulatif) | Budget (à date) | Budget (Annuel) | Écart | Notes.
+    Réel cum = P&L cumulatif ; Budget à date = P&L budget cumulatif ; Annuel = budget mensuel × 12 ;
+    Écart = Annuel − Réel cumulatif (budget annuel restant)."""
+    if rev not in REV_CUM_KEY:
+        rev = "rev1"
     mgr = await db.acct_budget_managers.find_one({"_id": _oid(manager_id)})
     if not mgr:
         raise HTTPException(status_code=404, detail="Responsable introuvable")
     rep = await _acct_report(year, month, "pnl")
-    accts = set(str(a) for a in (mgr.get("accounts") or []))
-    lines = [ln for ln in rep["lines"] if str(ln.get("account") or "") in accts]
+    cum_key = REV_CUM_KEY[rev]
+    mon_key = REV_MONTH_KEY[rev]
+    accts = [str(a).strip() for a in (mgr.get("accounts") or []) if str(a).strip()]
+    acct_set = set(accts)
+    by_acct = {str(ln.get("account") or ""): ln for ln in rep["lines"]}
+    lines = []
+    tot = {"reel": 0.0, "budget": 0.0, "annuel": 0.0, "ecart": 0.0}
+    for a in accts:
+        ln = by_acct.get(a)
+        if not ln:
+            lines.append({"account": a, "label": "(compte absent du P&L)", "reel": 0.0,
+                          "budget": 0.0, "annuel": 0.0, "ecart": 0.0})
+            continue
+        v = ln.get("values") or {}
+        reel = round(v.get("cumulatif") or 0.0, 2)
+        budget = round(v.get(cum_key) or 0.0, 2)
+        annuel = round((v.get(mon_key) or 0.0) * 12, 2)
+        ecart = round(annuel - reel, 2)
+        lines.append({"account": a, "label": ln.get("label") or "", "reel": reel,
+                      "budget": budget, "annuel": annuel, "ecart": ecart})
+        tot["reel"] += reel; tot["budget"] += budget; tot["annuel"] += annuel; tot["ecart"] += ecart
+    for k in tot:
+        tot[k] = round(tot[k], 2)
     return {"manager": {"id": manager_id, "name": mgr.get("name", ""), "email": mgr.get("email", "")},
-            "year": int(year), "month": int(month), "month_label": rep["month_label"], "locked": rep["locked"],
-            "value_cols": rep["value_cols"], "col_groups": rep.get("col_groups"),
-            "lines": lines, "accounts": sorted(accts)}
+            "year": int(year), "month": int(month), "month_label": rep["month_label"],
+            "rev": rev, "rev_label": REV_LABEL[rev], "locked": rep["locked"],
+            "lines": lines, "total": tot, "accounts": accts}
+
+@api.get("/acct/report/by-manager")
+async def acct_report_by_manager(manager_id: str, year: int, month: int, rev: str = "rev1", user: dict = Depends(get_current_user)):
+    return await _by_manager_data(manager_id, year, month, rev)
+
+def _mgr_col_headers(data):
+    y = data["year"]; ml = data["month_label"]; rl = data["rev_label"]
+    return [f"Réel {ml} {y} (Cumulatif)", f"Budget {rl} {y} ({ml} {y})",
+            f"Budget {rl} {y} (Annuel)", "Écart Budget Mois vs Annuel", "Notes et commentaires"]
+
+@api.get("/acct/report/by-manager/excel")
+async def acct_report_by_manager_excel(manager_id: str, year: int, month: int, rev: str = "rev1", user: dict = Depends(get_current_user)):
+    data = await _by_manager_data(manager_id, year, month, rev)
+    S = openpyxl.styles
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Suivi Budget vs Réel"
+    navy = "FF063044"; teal = "FF0E9488"; grey = "FFEEF1F5"
+    title = f"Suivi Budget frais d'exploitation - {data['manager']['name']}"
+    ws["B3"] = title; ws["B3"].font = S.Font(bold=True, size=13, color=navy)
+    hdrs = _mgr_col_headers(data)
+    for i, h in enumerate(hdrs[:4]):
+        c = ws.cell(row=4, column=5 + i, value=h)
+        c.font = S.Font(bold=True, color=navy, size=9); c.alignment = S.Alignment(wrap_text=True, vertical="center", horizontal="center")
+    ws.cell(row=4, column=10, value=hdrs[4]).font = S.Font(bold=True, color=navy, size=9)
+    ws["A5"] = "No GL"; ws["B5"] = "Désignation"
+    for cell in ("A5", "B5"):
+        ws[cell].font = S.Font(bold=True, size=9)
+    r = 7
+    money_fmt = '#,##0.00;(#,##0.00)'
+    for ln in data["lines"]:
+        ws.cell(row=r, column=1, value=ln["account"])
+        ws.cell(row=r, column=2, value=ln["label"])
+        for j, key in enumerate(("reel", "budget", "annuel", "ecart")):
+            c = ws.cell(row=r, column=5 + j, value=ln[key]); c.number_format = money_fmt
+            if ln[key] < 0: c.font = S.Font(color="FFDC2626")
+        r += 1
+    r += 1
+    ws.cell(row=r, column=1, value=f"TOTAL - {data['manager']['name'].upper()}")
+    for j, key in enumerate(("reel", "budget", "annuel", "ecart")):
+        c = ws.cell(row=r, column=5 + j, value=data["total"][key]); c.number_format = money_fmt
+    for c in ws[r]:
+        c.font = S.Font(bold=True, color=navy)
+        c.fill = S.PatternFill("solid", fgColor=grey)
+    ws.column_dimensions["A"].width = 12; ws.column_dimensions["B"].width = 44
+    for col in ("E", "F", "G", "H"): ws.column_dimensions[col].width = 18
+    ws.column_dimensions["J"].width = 30
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    fn = f"suivi_budget_{data['manager']['name']}_{_pkey(year, month)}.xlsx".replace(" ", "_")
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename={fn}"})
+
+@api.get("/acct/report/by-manager/pdf")
+async def acct_report_by_manager_pdf(manager_id: str, year: int, month: int, rev: str = "rev1", user: dict = Depends(get_current_user)):
+    data = await _by_manager_data(manager_id, year, month, rev)
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    NAVY = colors.HexColor("#063044"); GREY = colors.HexColor("#EEF1F5"); RED = colors.HexColor("#DC2626")
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=14 * mm, rightMargin=14 * mm, topMargin=14 * mm, bottomMargin=12 * mm)
+    styles = getSampleStyleSheet()
+    h = ParagraphStyle("h", parent=styles["Title"], fontSize=15, textColor=NAVY, spaceAfter=2)
+    sub = ParagraphStyle("sub", parent=styles["Normal"], fontSize=9, textColor=colors.HexColor("#64748B"))
+    cellS = ParagraphStyle("cell", parent=styles["Normal"], fontSize=8, leading=10)
+    elems = [Paragraph(f"Suivi Budget frais d'exploitation - {data['manager']['name']}", h)]
+    prov = "" if data["locked"] else " · données provisoires"
+    elems.append(Paragraph(f"Réel {data['month_label']} {data['year']} (Cumulatif) · Budget {data['rev_label']}{prov}", sub))
+    elems.append(Spacer(1, 6 * mm))
+    hdrs = _mgr_col_headers(data)
+    head = ["No GL", "Désignation"] + [Paragraph(x, ParagraphStyle("hh", parent=cellS, fontSize=7.5, textColor=colors.white, alignment=1)) for x in hdrs]
+    rows = [head]
+    def fmt(v):
+        s = f"{abs(v):,.2f}".replace(",", " ")
+        return f"({s})" if v < 0 else s
+    style_cmds = [
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CBD5E1")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]
+    ri = 1
+    for ln in data["lines"]:
+        vals = [ln["reel"], ln["budget"], ln["annuel"], ln["ecart"]]
+        rows.append([str(ln["account"]), Paragraph(ln["label"], cellS)] + [fmt(v) for v in vals] + [""])
+        for ci, v in enumerate(vals):
+            if v < 0: style_cmds.append(("TEXTCOLOR", (2 + ci, ri), (2 + ci, ri), RED))
+        ri += 1
+    t = data["total"]
+    rows.append([f"TOTAL - {data['manager']['name'].upper()}", "", fmt(t["reel"]), fmt(t["budget"]), fmt(t["annuel"]), fmt(t["ecart"]), ""])
+    style_cmds += [("BACKGROUND", (0, ri), (-1, ri), GREY), ("FONTNAME", (0, ri), (-1, ri), "Helvetica-Bold"), ("TEXTCOLOR", (0, ri), (-1, ri), NAVY)]
+    col_w = [24 * mm, 78 * mm, 34 * mm, 34 * mm, 34 * mm, 34 * mm, 34 * mm]
+    tbl = Table(rows, colWidths=col_w, repeatRows=1); tbl.setStyle(TableStyle(style_cmds))
+    elems.append(tbl)
+    doc.build(elems); buf.seek(0)
+    fn = f"suivi_budget_{data['manager']['name']}_{_pkey(year, month)}.pdf".replace(" ", "_")
+    return StreamingResponse(buf, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={fn}"})
 
 
 

@@ -45,9 +45,6 @@ const PAGES = {
 const NAV_ACCT = [
   { key: "acct_dashboard", label: "Tableau de bord", sub: "Vue d'ensemble", icon: LayoutDashboard },
   { key: "acct_bv", label: "Balance de vérification", sub: "Upload mensuel", icon: ClipboardList },
-  { key: "acct_bilan", label: "Bilan", sub: "État de situation", icon: Landmark },
-  { key: "acct_pnl", label: "États des résultats", sub: "P&L", icon: FileBarChart },
-  { key: "acct_cashflow", label: "Flux de trésorerie", sub: "Méthode indirecte", icon: Wallet },
   { key: "acct_audit", label: "Rapports", sub: "Génération centralisée", icon: FileText },
 ];
 

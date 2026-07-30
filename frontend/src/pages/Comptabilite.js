@@ -1631,8 +1631,8 @@ export function AcctReports() {
   const TYPES = [
     { value: "bilan", label: "Bilan" },
     { value: "pnl", label: "État des résultats" },
+    { value: "monthly", label: "Résultats mensuels" },
     { value: "cashflow", label: "Flux de trésorerie" },
-    { value: "monthly", label: "Résultats mensuels (colonnes)" },
     { value: "manager", label: "Par responsable budgétaire" },
   ];
   return (
@@ -1647,8 +1647,8 @@ export function AcctReports() {
       </div>
       {type === "bilan" ? <AcctBilan />
         : type === "pnl" ? <AcctPnl />
-        : type === "cashflow" ? <AcctCashflow />
         : type === "monthly" ? <PnlMonthlyView />
+        : type === "cashflow" ? <AcctCashflow />
         : <ByManagerView />}
     </div>
   );
@@ -1658,47 +1658,62 @@ function PnlMonthlyView() {
   const { periods } = usePeriods();
   const years = [...new Set(periods.map((p) => p.year))].sort((a, b) => b - a);
   const [year, setYear] = useState(null);
+  const [variant, setVariant] = useState(() => localStorage.getItem("acct.monthly.variant") || "detail");
+  const [hideZero, setHideZero] = useState(() => localStorage.getItem("acct.monthly.hideZero") === "1");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const setVar = (v) => { setVariant(v); localStorage.setItem("acct.monthly.variant", v); };
+  useEffect(() => { localStorage.setItem("acct.monthly.hideZero", hideZero ? "1" : "0"); }, [hideZero]);
   useEffect(() => { if (years.length && !year) setYear(years[0]); }, [years, year]);
-  useEffect(() => { if (!year) return; setLoading(true); api.acctPnlMonthly({ year }).then(setData).catch(() => setData(null)).finally(() => setLoading(false)); }, [year]);
+  useEffect(() => { if (!year) return; setLoading(true); api.acctPnlMonthly({ year, variant }).then(setData).catch(() => setData(null)).finally(() => setLoading(false)); }, [year, variant]);
   if (!periods.length) return <NoPeriodsState testId="acct-no-periods-monthly" />;
   const months = data?.months || [];
   const hasProvisional = months.some((m) => m.has_data && !m.locked);
+  const isSommaire = variant === "sommaire";
+  const allLines = data?.lines || [];
+  const detailFiltered = allLines.filter((ln) => !(!isSommaire && (ln.label || "").trim() === "Réel vs Budget"));
+  const visibleLines = detailFiltered.filter((ln) => !(hideZero && ln.kind === "data" && months.every((m) => Math.abs(ln.values[String(m.month)] || 0) < 0.005) && Math.abs(ln.values.total || 0) < 0.005));
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500">Année :</span>
-          <select value={year || ""} onChange={(e) => setYear(Number(e.target.value))} data-testid="acct-monthly-year"
-            className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
-            {years.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-500">Année :</span>
+            <select value={year || ""} onChange={(e) => setYear(Number(e.target.value))} data-testid="acct-monthly-year"
+              className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+              {years.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+          <ViewToggle value={variant} onChange={setVar} options={[{ value: "detail", label: "État détaillé" }, { value: "sommaire", label: "Résultat sommaire" }]} />
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600" data-testid="acct-monthly-hidezero-label">
+            <input type="checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} data-testid="acct-monthly-hidezero-toggle" className="h-4 w-4 rounded border-slate-300" />
+            Masquer les comptes à solde zéro
+          </label>
         </div>
         <PresentationButton />
       </div>
       {hasProvisional && <p className="text-xs text-amber-600" data-testid="acct-monthly-provisional">⚠ Les colonnes marquées « * » sont des mois non verrouillés (données provisoires).</p>}
-      <div className="card overflow-x-auto">
+      <div className="card overflow-x-auto lg:overflow-auto lg:max-h-[calc(100vh-230px)]">
         {loading ? <p className="p-8 text-center text-sm text-slate-500">Chargement…</p>
           : !data || data.empty ? <p className="p-8 text-center text-sm text-slate-400">Aucune donnée pour {year}.</p>
           : <table className="acct-hover-rows w-full text-sm" data-testid="acct-monthly-table">
               <thead>
-                <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
-                  <th className="px-3 py-2 text-left">Compte</th>
-                  <th className="px-3 py-2 text-left">Description</th>
-                  {months.map((m) => <th key={m.month} className={`px-3 py-2 text-right ${!m.locked && m.has_data ? "text-amber-600" : ""}`}>{m.short}{!m.locked && m.has_data ? " *" : ""}</th>)}
-                  <th className="px-3 py-2 text-right font-700 text-[#063044]">Total</th>
+                <tr className="z-20 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400 lg:sticky lg:top-0">
+                  <th className="bg-white px-3 py-2 text-left">Compte</th>
+                  <th className="bg-white px-3 py-2 text-left">Description</th>
+                  {months.map((m) => <th key={m.month} className={`bg-white px-3 py-2 text-right ${!m.locked && m.has_data ? "text-amber-600" : ""}`}>{m.short}{!m.locked && m.has_data ? " *" : ""}</th>)}
+                  <th className="bg-white px-3 py-2 text-right font-700 text-[#063044]">Total</th>
                 </tr>
               </thead>
-              <tbody>
-                {data.lines.map((ln, i) => {
-                  const s = excelRowStyle(ln, true);
+              <tbody className="font-mono-data">
+                {visibleLines.map((ln, i) => {
+                  const s = excelRowStyle(ln, !isSommaire);
                   return (
-                    <tr key={i} className={`border-b border-slate-50 ${s.cls}`} style={{ background: s.bg, color: s.color }}>
+                    <tr key={i} className={`border-b border-slate-50 ${s.cls}`} style={{ background: s.bg, color: s.color, fontWeight: s.plain ? 400 : undefined }}>
                       <td className="px-3 py-1.5 text-left text-slate-400">{ln.account || ""}</td>
-                      <td className={`px-3 py-1.5 text-left ${s.headerDefault ? "text-[#063044]" : ""}`}>{ln.label}</td>
-                      {months.map((m) => <td key={m.month} className="px-3 py-1.5 text-right">{ln.kind === "header" ? "" : money(ln.values[String(m.month)])}</td>)}
-                      <td className="px-3 py-1.5 text-right font-700">{ln.kind === "header" ? "" : money(ln.values.total)}</td>
+                      <td className={`px-3 py-1.5 text-left font-sans ${s.headerDefault ? "text-[#063044]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`}>{ln.label}</td>
+                      {months.map((m) => <td key={m.month} className="px-3 py-1.5 text-right" style={{ color: excelCellColor(s, ln.values[String(m.month)] || 0, false) }}>{ln.kind === "header" ? "" : money(ln.values[String(m.month)])}</td>)}
+                      <td className="px-3 py-1.5 text-right font-700" style={{ color: excelCellColor(s, ln.values.total || 0, false) }}>{ln.kind === "header" ? "" : money(ln.values.total)}</td>
                     </tr>
                   );
                 })}
@@ -1716,64 +1731,107 @@ function ByManagerView() {
   const [managers, setManagers] = useState([]);
   const [mid, setMid] = useState("");
   const [period, setPeriod] = useState("");
+  const [rev, setRev] = useState(() => localStorage.getItem("acct.bymanager.rev") || "rev1");
   const [rep, setRep] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
+  const setRevision = (v) => { setRev(v); localStorage.setItem("acct.bymanager.rev", v); };
   const load = () => api.acctBudgetManagers().then((r) => setManagers(r || []));
   useEffect(() => { load(); }, []);
   useEffect(() => { if (periods.length && !period) setPeriod(periods[0].id); }, [periods, period]);
   useEffect(() => {
-    if (mid && period) { const [y, m] = period.split("-").map(Number); api.acctReportByManager({ manager_id: mid, year: y, month: m }).then(setRep).catch(() => setRep(null)); }
-    else setRep(null);
-  }, [mid, period]);
-  const isEcart = (k) => k.startsWith("ecart");
-  const colLabel = (k) => ({ reel: "Réel", bud_rev2: "Bud. Rév-2", ecart_rev2: "Écart Rév-2", bud_rev1: "Bud. Rév-1", ecart_rev1: "Écart Rév-1", bud_ca: "Bud. CA", ecart_ca: "Écart CA" }[k] || k);
+    if (mid && period) {
+      const [y, m] = period.split("-").map(Number);
+      setLoading(true); setRep(null);
+      api.acctReportByManager({ manager_id: mid, year: y, month: m, rev }).then(setRep).catch(() => setRep(null)).finally(() => setLoading(false));
+    } else setRep(null);
+  }, [mid, period, rev]);
+
+  const doExport = async (kind) => {
+    const [y, m] = period.split("-").map(Number);
+    try {
+      const blob = await (kind === "pdf" ? api.acctReportByManagerPdf : api.acctReportByManagerExcel)({ manager_id: mid, year: y, month: m, rev });
+      const url = URL.createObjectURL(blob); const a = document.createElement("a");
+      a.href = url; a.download = `suivi_budget_${rep?.manager?.name || "responsable"}_${period}.${kind === "pdf" ? "pdf" : "xlsx"}`.replace(/\s+/g, "_"); a.click(); URL.revokeObjectURL(url);
+      toast.success(kind === "pdf" ? "PDF téléchargé" : "Export téléchargé");
+    } catch (e) { toast.error(e.response?.data?.detail || "Export impossible"); }
+  };
+
+  const REVS = [{ value: "rev1", label: "Budget Rév-1" }, { value: "ca", label: "Budget CA" }, { value: "rev2", label: "Budget Rév-2" }];
+  const cell = (v) => <span style={{ color: v < 0 ? "#DC2626" : undefined }}>{money(v)}</span>;
+
   return (
     <div className="space-y-4" data-testid="acct-bymanager-view">
-      <div className="card p-3 flex flex-wrap items-end gap-3">
-        <div>
-          <label className="mb-1 block text-[11px] font-600 uppercase tracking-wider text-slate-400">Responsable budgétaire</label>
-          <select value={mid} onChange={(e) => setMid(e.target.value)} data-testid="acct-bymanager-select"
-            className="h-9 min-w-[220px] rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
-            <option value="">— Choisir —</option>
-            {managers.map((m) => <option key={m.id} value={m.id}>{m.name}{m.accounts?.length ? ` (${m.accounts.length} cptes)` : ""}</option>)}
-          </select>
+      <div className="card p-3 flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-[11px] font-600 uppercase tracking-wider text-slate-400">Responsable budgétaire</label>
+            <select value={mid} onChange={(e) => setMid(e.target.value)} data-testid="acct-bymanager-select"
+              className="h-9 min-w-[220px] rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+              <option value="">— Choisir —</option>
+              {managers.map((m) => <option key={m.id} value={m.id}>{m.name}{m.accounts?.length ? ` (${m.accounts.length} cptes)` : ""}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-600 uppercase tracking-wider text-slate-400">Période</label>
+            <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId="acct-bymanager" />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-600 uppercase tracking-wider text-slate-400">Budget</label>
+            <select value={rev} onChange={(e) => setRevision(e.target.value)} data-testid="acct-bymanager-rev"
+              className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+              {REVS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </div>
         </div>
-        <div>
-          <label className="mb-1 block text-[11px] font-600 uppercase tracking-wider text-slate-400">Période</label>
-          <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId="acct-bymanager" />
+        <div className="flex items-center gap-2">
+          {mid && rep && <ExportMenu onPdf={() => doExport("pdf")} onExcel={() => doExport("excel")} disabled={!rep} testid="acct-bymanager-export" className="bg-[#0E9488] hover:bg-[#0E9488]/90" />}
+          {isAdmin && <Button size="sm" variant="outline" onClick={() => setManageOpen(true)} data-testid="acct-bymanager-manage" className="gap-2"><Settings2 size={15} /> Gérer les responsables</Button>}
         </div>
-        {isAdmin && <Button size="sm" variant="outline" onClick={() => setManageOpen(true)} data-testid="acct-bymanager-manage" className="gap-2"><Settings2 size={15} /> Gérer les responsables</Button>}
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-500" data-testid="acct-bymanager-note">
-        Phase 1 : structure de données et comparatif budget. La mise en page finale (modèle Excel) et l'envoi/synchronisation OneDrive seront ajoutés une fois le modèle fourni.
-      </div>
-
-      {!mid ? <p className="p-6 text-center text-sm text-slate-400">Sélectionnez un responsable budgétaire pour afficher son état de résultats.</p>
+      {!mid ? <p className="p-6 text-center text-sm text-slate-400">Sélectionnez un responsable budgétaire pour afficher son suivi budgétaire.</p>
+        : loading ? <p className="p-6 text-center text-sm text-slate-500">Chargement…</p>
         : !rep ? <p className="p-6 text-center text-sm text-slate-400">Aucune donnée pour cette sélection.</p>
         : (
-          <div className="card overflow-x-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
-              <p className="text-sm font-700 text-slate-700">{rep.manager.name} — {rep.month_label} {rep.year}{!rep.locked ? " · provisoire" : ""}</p>
-              <p className="text-xs text-slate-400">{rep.accounts.length} compte(s) · {rep.manager.email || "aucun courriel"}</p>
+          <div className="card overflow-x-auto" data-testid="acct-bymanager-report">
+            <div className="border-b border-slate-100 px-5 py-3">
+              <h3 className="font-display text-base font-700 text-[#063044]">Suivi Budget frais d'exploitation - {rep.manager.name}</h3>
+              <p className="mt-0.5 text-xs text-slate-400">Réel {rep.month_label} {rep.year} (Cumulatif) · Budget {rep.rev_label}{!rep.locked ? " · données provisoires" : ""} · {rep.manager.email || "aucun courriel"}</p>
             </div>
             {rep.lines.length === 0 ? <p className="p-6 text-center text-sm text-slate-400">Aucun compte mappé à ce responsable (à définir dans « Gérer les responsables »).</p>
-              : <table className="acct-hover-rows w-full text-sm">
+              : <table className="acct-hover-rows w-full text-sm" data-testid="acct-bymanager-table">
                   <thead>
                     <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-400">
-                      <th className="px-3 py-2 text-left">Compte</th>
-                      <th className="px-3 py-2 text-left">Description</th>
-                      {rep.value_cols.map((k) => <th key={k} className="px-3 py-2 text-right">{colLabel(k)}</th>)}
+                      <th className="px-3 py-2 text-left font-600">No GL</th>
+                      <th className="px-3 py-2 text-left font-600">Désignation</th>
+                      <th className="px-3 py-2 text-right font-600">Réel {rep.month_label} {rep.year} (Cumulatif)</th>
+                      <th className="px-3 py-2 text-right font-600">Budget {rep.rev_label} {rep.year} ({rep.month_label} {rep.year})</th>
+                      <th className="px-3 py-2 text-right font-600">Budget {rep.rev_label} {rep.year} (Annuel)</th>
+                      <th className="px-3 py-2 text-right font-600">Écart Budget Mois vs Annuel</th>
+                      <th className="px-3 py-2 text-left font-600">Notes et commentaires</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="font-mono-data">
                     {rep.lines.map((ln, i) => (
                       <tr key={i} className="border-b border-slate-50">
                         <td className="px-3 py-1.5 text-left text-slate-400">{ln.account || ""}</td>
-                        <td className="px-3 py-1.5 text-left">{ln.label}</td>
-                        {rep.value_cols.map((k) => <td key={k} className={`px-3 py-1.5 text-right ${isEcart(k) ? "italic text-slate-500" : ""}`}>{money(ln.values[k])}</td>)}
+                        <td className="px-3 py-1.5 text-left font-sans text-slate-700">{ln.label}</td>
+                        <td className="px-3 py-1.5 text-right">{cell(ln.reel)}</td>
+                        <td className="px-3 py-1.5 text-right">{cell(ln.budget)}</td>
+                        <td className="px-3 py-1.5 text-right">{cell(ln.annuel)}</td>
+                        <td className="px-3 py-1.5 text-right">{cell(ln.ecart)}</td>
+                        <td className="px-3 py-1.5 text-left font-sans text-slate-400"></td>
                       </tr>
                     ))}
+                    <tr className="border-t-2 border-slate-300 bg-[#eef1f5] font-700 text-[#063044]" data-testid="acct-bymanager-total">
+                      <td className="px-3 py-2 text-left" colSpan={2}>TOTAL - {rep.manager.name.toUpperCase()}</td>
+                      <td className="px-3 py-2 text-right font-mono-data">{cell(rep.total.reel)}</td>
+                      <td className="px-3 py-2 text-right font-mono-data">{cell(rep.total.budget)}</td>
+                      <td className="px-3 py-2 text-right font-mono-data">{cell(rep.total.annuel)}</td>
+                      <td className="px-3 py-2 text-right font-mono-data">{cell(rep.total.ecart)}</td>
+                      <td className="px-3 py-2"></td>
+                    </tr>
                   </tbody>
                 </table>}
           </div>
