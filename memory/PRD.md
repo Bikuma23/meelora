@@ -535,6 +535,16 @@ Transformation de l'ancien menu « Rapports d'audit » (placeholder) en **hub ce
 - [x] Vérifié testing_agent iteration_31 : backend 3/3 + frontend 100 % (hub 5 types, P&L mensuel 12 mois+Total, CRUD responsables admin-only, filtrage par comptes, régression Bilan/P&L/Flux OK). Collection `acct_budget_managers` laissée vide.
 - [ ] **Phase 2 (à venir)** : modèle Excel « État de résultat par responsable » (mise en page finale, à fournir par l'utilisateur) ; **synchro OneDrive/SharePoint via Microsoft Graph** (nécessite enregistrement d'app Azure AD — à confirmer avec l'utilisateur avant de démarrer).
 
+## Hub « Rapports » — Phase 2 (2026-07-30d)
+Refonte du hub selon nouvelles demandes + modèle Excel « par responsable » fourni.
+- [x] **Onglets réordonnés** : Bilan · État des résultats · **Résultats mensuels** · Flux de trésorerie · Par responsable budgétaire. Renommé « Résultats mensuels (colonnes) » → « Résultats mensuels ».
+- [x] **Résultats mensuels** : bascule **État détaillé / Résultat sommaire** (`variant` sur `/acct/report/pnl-monthly`, pnl vs pnl_sommaire) + case **Masquer les comptes à solde zéro**. Mise en page fidèle au P&L (styles Excel, en-têtes navy, totaux surlignés, négatifs rouge, ligne « Réel vs Budget » filtrée en détaillé). 12 colonnes mois + Total.
+- [x] **Sidebar Comptabilité nettoyée** : items **Bilan, États de résultats, Flux de trésorerie retirés** de `NAV_ACCT` (accessibles uniquement via le hub Rapports). Restent : Tableau de bord, Balance de vérification, Rapports, Journal.
+- [x] **Par responsable budgétaire — modèle Excel exact** (fichiers RH/TI/MKT/FGF fournis) : titre « Suivi Budget frais d'exploitation - <responsable> », colonnes **No GL | Désignation | Réel <mois> <an> (Cumulatif) | Budget REV-1 <an> (<mois> <an>) | Budget REV-1 <an> (Annuel) | Écart Budget Mois vs Annuel | Notes et commentaires**, ligne **TOTAL - <RESPONSABLE>**. Réel cum = P&L `cumulatif` ; Budget à date = `bud_<rev>_cum` ; **Annuel = budget mensuel `bud_<rev>` × 12** ; Écart = Annuel − Réel. Sélecteur budget Rév-1 (défaut) / CA / Rév-2. *(NB : « Annuel » reconstitué depuis le budget mensuel BV arrondi → écart d'arrondi ~4 $ vs l'annuel exact du fichier source, seul l'annuel exact n'étant pas importé.)*
+- [x] **Exports PDF + Excel** du rapport par responsable (`/acct/report/by-manager/excel` et `/pdf`) respectant la même mise en page (titre, en-têtes navy, TOTAL surligné, négatifs rouge/parenthèses).
+- [x] Vérifié testing_agent iteration_32 : backend 5/5 + frontend 100 % (valeurs RH conformes au fichier, ordre onglets, sidebar, bascule détail/sommaire, masquer zéro, exports, sécurité CRUD admin-only). Collection `acct_budget_managers` laissée vide.
+- [ ] **Phase 3 (à venir)** : colonne « Notes et commentaires » éditable par les responsables ; **synchro/envoi OneDrive-SharePoint via Microsoft Graph** (nécessite app Azure AD — à confirmer avec l'utilisateur).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
