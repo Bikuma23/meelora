@@ -251,7 +251,7 @@ def build_presentation_bilan_pdf(data, year, month_label, date_label):
     ]
 
     styles = getSampleStyleSheet()
-    lblS = ParagraphStyle("l", parent=styles["Normal"], fontSize=8, leading=10, textColor=DARKTX)
+    lblS = ParagraphStyle("l", parent=styles["Normal"], fontSize=6.8, leading=8.5, textColor=DARKTX)
 
     def build_side(spec):
         rows = []; st = []
@@ -264,7 +264,7 @@ def build_presentation_bilan_pdf(data, year, month_label, date_label):
                 st += [("TEXTCOLOR", (0, r), (0, r), NAVY)]
                 r += 1; continue
             if kind == "title":
-                rows.append([Paragraph(f"<b>{disp}</b>", ParagraphStyle("t", parent=lblS, fontSize=11, textColor=TEAL)), ""])
+                rows.append([Paragraph(f"<b>{disp}</b>", ParagraphStyle("t", parent=lblS, fontSize=9, textColor=TEAL)), ""])
                 r += 1; continue
             v = val(src)
             rows.append([Paragraph(("  " + disp) if kind == "data" else f"<i>{disp}</i>", lblS), _fmt(v, 2)])
@@ -276,30 +276,30 @@ def build_presentation_bilan_pdf(data, year, month_label, date_label):
                 if v < 0:
                     st += [("TEXTCOLOR", (1, r), (1, r), colors.HexColor("#FCA5A5"))]
             r += 1
-        st += [("ALIGN", (1, 0), (1, -1), "RIGHT"), ("FONTSIZE", (0, 0), (-1, -1), 8),
+        st += [("ALIGN", (1, 0), (1, -1), "RIGHT"), ("FONTSIZE", (0, 0), (-1, -1), 6.8),
                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-               ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]
-        t = Table(rows, colWidths=[75 * mm, 33 * mm]); t.setStyle(TableStyle(st))
+               ("TOPPADDING", (0, 0), (-1, -1), 1.4), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.4)]
+        t = Table(rows, colWidths=[60 * mm, 30 * mm]); t.setStyle(TableStyle(st))
         return t
 
     actif_t = build_side(ACTIF)
     passif_t = build_side(PASSIF)
-    two_col = Table([[actif_t, passif_t]], colWidths=[112 * mm, 112 * mm])
-    two_col.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (1, 0), (1, 0), 8)]))
+    two_col = Table([[actif_t, passif_t]], colWidths=[92 * mm, 92 * mm])
+    two_col.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (1, 0), (1, 0), 6)]))
 
     # Bandeau total actif / passif
     tot_actif = val("TOTAL DE L'ACTIF")
     tot_pc = val("TOTAL PASSIF ET CAPITAUX")
     band = Table([["TOTAL ACTIF", _fmt(tot_actif, 2), "TOTAL PASSIF ET CAPITAUX", _fmt(tot_pc, 2)]],
-                 colWidths=[50 * mm, 58 * mm, 62 * mm, 46 * mm])
+                 colWidths=[38 * mm, 54 * mm, 54 * mm, 38 * mm])
     band.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), NAVY), ("TEXTCOLOR", (0, 0), (-1, -1), WHITE),
-                              ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 9),
+                              ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 8),
                               ("ALIGN", (1, 0), (1, 0), "RIGHT"), ("ALIGN", (3, 0), (3, 0), "RIGHT"),
-                              ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-                              ("LEFTPADDING", (0, 0), (-1, -1), 6)]))
+                              ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                              ("LEFTPADDING", (0, 0), (-1, -1), 5)]))
 
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm,
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=12 * mm, rightMargin=12 * mm,
                             topMargin=12 * mm, bottomMargin=10 * mm)
     hS = ParagraphStyle("h", parent=styles["Normal"], fontSize=12, textColor=DARKTX, fontName="Helvetica-Bold")
     subS = ParagraphStyle("s", parent=styles["Normal"], fontSize=8, textColor=DARKTX)

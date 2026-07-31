@@ -602,6 +602,12 @@ Refonte du hub selon nouvelles demandes + modèle Excel « par responsable » fo
 ## Aperçu Margination — en-têtes figés (2026-07-30m)
 - [x] Dans l'aperçu tableau du fichier Margination, la **première ligne** (`sticky top-0`) et la **première colonne des comptes** (`sticky left-0`, fond blanc) restent figées lors du défilement vertical/horizontal, pour lire les grandes feuilles (ex. CAR ~260 lignes). Gestion des z-index (coin en z-30). Vérifié par capture (défilement CAR : comptes ancrés à gauche).
 
+## Envoi Externe — Mise en page PDF présentation (2026-06)
+- [x] **Bilan de présentation en PORTRAIT sur 1 page** : `build_presentation_bilan_pdf` (`presentation_reports.py`) passé de `landscape(A4)` à `A4` (portrait). Colonnes ACTIF/PASSIF côte à côte (2 colonnes, `92mm` chacune, tables internes `60mm+30mm`), polices réduites (labels 6,8 / titres 9 / bandeau 8) et paddings resserrés pour tenir sur une seule page portrait. Bandeau TOTAL ACTIF / TOTAL PASSIF ET CAPITAUX réajusté (`38/54/54/38 mm`).
+- [x] **États de résultats de présentation** : conservé en **paysage** (nombreuses colonnes Mois + Cumulatif + Annuel), déjà sur 1 page — inchangé (choix utilisateur).
+- [x] Vérifié via `pdfinfo` + rendu image : Bilan = 1 page, `595 × 841` (portrait), Actif = Passif = 19 756 123,01, aucune donnée coupée ; P&L = 1 page paysage inchangé.
+
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
