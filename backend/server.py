@@ -4347,6 +4347,7 @@ async def acct_cashflow_pdf(open_year: int, open_month: int, close_year: int, cl
 class QcLine(BaseModel):
     account: str
     account_name: str = ""
+    tiers: str = ""
     debit: float = 0.0
     credit: float = 0.0
 
@@ -4364,6 +4365,8 @@ class QcExternalContact(BaseModel):
 
 QC_EXTERNAL_CATALOG = [
     {"key": "trial_balance", "label": "Balance de vérification (Excel)", "fmt": "xlsx"},
+    {"key": "bilan", "label": "Bilan détaillé (Excel)", "fmt": "xlsx"},
+    {"key": "pnl", "label": "État des résultats (Excel)", "fmt": "xlsx"},
 ]
 _QC_CAT_LABELS = {c["key"]: c["label"] for c in QC_EXTERNAL_CATALOG}
 
@@ -4565,6 +4568,14 @@ async def _qc_generate_external(key, year):
         tb = await _qc_trial_balance(year)
         return _qc_tb_xlsx(tb), f"balance_verification_9434_{year}.xlsx", \
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    if key == "bilan":
+        rep = await _qc_bilan(year)
+        return _qc_report_xlsx(rep, "Bilan détaillé"), f"bilan_9434_{year}.xlsx", \
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    if key == "pnl":
+        rep = await _qc_pnl(year)
+        return _qc_report_xlsx(rep, "État des résultats"), f"resultats_9434_{year}.xlsx", \
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     return None, None, None
 
 @api.get("/qc9434/external/catalog")
@@ -4664,6 +4675,355 @@ async def qc_external_email(contact_id: str, year: int, user: dict = Depends(get
     except Exception as e:
         logger.error(f"Envoi externe 9434 échec : {e}")
         raise HTTPException(status_code=400, detail=f"Échec d'envoi : {str(e)[:150]}")
+
+
+# ---- Plan comptable (chart of accounts) --------------------------------
+def _qc_type_from_gl(gl):
+    p = str(gl).strip()[:1]
+    return {"1": "actif", "2": "passif", "3": "capitaux", "4": "produit", "5": "charge"}.get(p, "actif")
+
+QC_SECTIONS = {
+    "actif_court": "Actif à court terme", "actif_placement": "Placement et autre participation",
+    "actif_long": "Immobilisations", "passif_court": "Passif à court terme",
+    "passif_long": "Passif à long terme", "capitaux": "Capitaux",
+    "revenus": "Revenus", "charges": "Charges", "quote_part": "Quote-part des bénéfices", "impots": "Impôts",
+}
+
+# Plan comptable seed d'après le modèle « Commandité ACCS EF 2026 » (23 comptes + sections).
+QC_ACCOUNTS_SEED = [
+    ("100105", "Caisse populaire (CAD) - # 084129 - Part sociale", "actif", "actif_court"),
+    ("100110", "Caisse populaire (CAD) - # 084129", "actif", "actif_court"),
+    ("130118", "Comptes à recevoir - Apparentés", "actif", "actif_court"),
+    ("145110", "TPS à recevoir", "actif", "actif_court"),
+    ("145101", "TVQ à recevoir", "actif", "actif_court"),
+    ("160010", "Participation - Société en commandite ACCS", "actif", "actif_placement"),
+    ("211010", "Comptes à payer - Auxiliaire", "passif", "passif_court"),
+    ("211120", "Provision - comptes à payer", "passif", "passif_court"),
+    ("215301", "TVQ à payer", "passif", "passif_court"),
+    ("215310", "TPS à payer", "passif", "passif_court"),
+    ("215311", "TPS-TVQ à Recevoir/Payer", "passif", "passif_court"),
+    ("215400", "Impôt à payer", "passif", "passif_court"),
+    ("310000", "Actions ordinaires", "capitaux", "capitaux"),
+    ("330010", "Bénéfices non-répartis - début", "capitaux", "capitaux"),
+    ("400310", "Ventes - Services autres", "produit", "revenus"),
+    ("400311", "Ventes - Revenus à facturer", "produit", "revenus"),
+    ("450010", "Quote-part des bénéfices - Société en commandite ACCS", "produit", "quote_part"),
+    ("540210", "Service d'expertise comptable et financière", "charge", "charges"),
+    ("550108", "Services juridiques", "charge", "charges"),
+    ("578220", "Intérêts sur le compte de banque", "charge", "charges"),
+    ("579000", "Intérêts et pénalités", "charge", "charges"),
+    ("580210", "Frais de banque", "charge", "charges"),
+    ("595110", "Impôt exigible", "charge", "impots"),
+]
+
+async def _qc_seed_accounts():
+    if await db.qc9434_accounts.count_documents({}) == 0:
+        docs = [{"gl": gl, "description": desc, "type": typ, "section": sec, "sort": i}
+                for i, (gl, desc, typ, sec) in enumerate(QC_ACCOUNTS_SEED)]
+        await db.qc9434_accounts.insert_many(docs)
+
+class QcAccount(BaseModel):
+    gl: str
+    description: str = ""
+    type: str = "actif"
+    section: str = "actif_court"
+
+@api.get("/qc9434/accounts")
+async def qc_accounts(user: dict = Depends(get_current_user)):
+    await _qc_seed_accounts()
+    docs = await db.qc9434_accounts.find().to_list(2000)
+    docs.sort(key=lambda d: (str(d.get("gl"))))
+    return {"sections": QC_SECTIONS,
+            "accounts": [{"gl": d["gl"], "description": d.get("description", ""),
+                          "type": d.get("type"), "section": d.get("section")} for d in docs]}
+
+@api.post("/qc9434/accounts")
+async def qc_create_account(payload: QcAccount, user: dict = Depends(get_current_user)):
+    gl = payload.gl.strip()
+    if not gl:
+        raise HTTPException(status_code=400, detail="Numéro de compte requis.")
+    if await db.qc9434_accounts.find_one({"gl": gl}):
+        raise HTTPException(status_code=400, detail=f"Le compte {gl} existe déjà.")
+    await db.qc9434_accounts.insert_one({"gl": gl, "description": payload.description.strip(),
+        "type": payload.type, "section": payload.section})
+    await log_action(user, "Créer", "9434 — Compte", f"{gl} · {payload.description}")
+    return {"success": True}
+
+@api.put("/qc9434/accounts/{gl}")
+async def qc_update_account(gl: str, payload: QcAccount, user: dict = Depends(get_current_user)):
+    ex = await db.qc9434_accounts.find_one({"gl": gl})
+    if not ex:
+        raise HTTPException(status_code=404, detail="Compte introuvable")
+    await db.qc9434_accounts.update_one({"gl": gl}, {"$set": {"description": payload.description.strip(),
+        "type": payload.type, "section": payload.section}})
+    await log_action(user, "Modifier", "9434 — Compte", gl)
+    return {"success": True}
+
+@api.delete("/qc9434/accounts/{gl}")
+async def qc_delete_account(gl: str, user: dict = Depends(get_current_user)):
+    used = await db.qc9434_entries.find_one({"lines.account": gl})
+    if used:
+        raise HTTPException(status_code=400, detail="Compte utilisé dans des écritures — suppression impossible.")
+    await db.qc9434_accounts.delete_one({"gl": gl})
+    await log_action(user, "Supprimer", "9434 — Compte", gl)
+    return {"success": True}
+
+# ---- Balances par exercice (mouvement / antérieur / cumulatif) ---------
+async def _qc_report_balances(year):
+    """Retourne {gl: {movement, opening, cumulative}} + méta comptes."""
+    await _qc_seed_accounts()
+    accts = {d["gl"]: d for d in await db.qc9434_accounts.find().to_list(2000)}
+    docs = await db.qc9434_entries.find({"year": {"$lte": int(year)}}).to_list(50000)
+    bal = {}
+    for e in docs:
+        cur = e.get("year") == int(year)
+        for l in e.get("lines", []):
+            gl = (l.get("account") or "").strip()
+            if not gl:
+                continue
+            b = bal.setdefault(gl, {"movement": 0.0, "opening": 0.0})
+            net = float(l.get("debit") or 0) - float(l.get("credit") or 0)
+            if cur:
+                b["movement"] += net
+            else:
+                b["opening"] += net
+    for gl, b in bal.items():
+        b["cumulative"] = round(b["opening"] + b["movement"], 2)
+        b["movement"] = round(b["movement"], 2); b["opening"] = round(b["opening"], 2)
+    return bal, accts
+
+def _acc_val(accts, gl, default_type):
+    a = accts.get(gl) or {}
+    return a.get("description", ""), a.get("type", default_type)
+
+async def _qc_bilan(year):
+    bal, accts = await _qc_report_balances(year)
+    # net income (produit/charge/quote_part/impots) — équité
+    def sum_pl(key):
+        s = 0.0
+        for gl, b in bal.items():
+            t = (accts.get(gl) or {}).get("type")
+            if t in ("produit", "charge"):
+                s += b[key]
+        return round(-s, 2)  # bénéfice = -(débit-crédit) des comptes de résultat
+    ni = {"movement": sum_pl("movement"), "opening": sum_pl("opening"), "cumulative": sum_pl("cumulative")}
+
+    order = ["actif_court", "actif_placement", "actif_long", "passif_court", "passif_long", "capitaux"]
+    by_sec = {k: [] for k in order}
+    for gl, a in accts.items():
+        sec = a.get("section")
+        if sec in by_sec:
+            b = bal.get(gl, {"movement": 0, "opening": 0, "cumulative": 0})
+            sign = 1 if a.get("type") == "actif" else -1  # passif/capitaux présentés positifs
+            by_sec[sec].append({"gl": gl, "label": a.get("description", ""),
+                "movement": round(sign * b["movement"], 2), "opening": round(sign * b["opening"], 2),
+                "cumulative": round(sign * b["cumulative"], 2)})
+    for k in by_sec:
+        by_sec[k].sort(key=lambda r: r["gl"])
+
+    lines = []
+    def total_of(*secs):
+        return {c: round(sum(r[c] for s in secs for r in by_sec[s]), 2) for c in ("movement", "opening", "cumulative")}
+
+    lines.append({"kind": "title", "label": "ACTIF"})
+    lines.append({"kind": "header", "label": QC_SECTIONS["actif_court"]})
+    lines += [{"kind": "data", **r} for r in by_sec["actif_court"]]
+    if by_sec["actif_placement"]:
+        lines.append({"kind": "header", "label": QC_SECTIONS["actif_placement"]})
+        lines += [{"kind": "data", **r} for r in by_sec["actif_placement"]]
+    if by_sec["actif_long"]:
+        lines.append({"kind": "header", "label": QC_SECTIONS["actif_long"]})
+        lines += [{"kind": "data", **r} for r in by_sec["actif_long"]]
+    t_actif = total_of("actif_court", "actif_placement", "actif_long")
+    lines.append({"kind": "total", "label": "TOTAL DE L'ACTIF", **t_actif})
+
+    lines.append({"kind": "title", "label": "PASSIF"})
+    lines.append({"kind": "header", "label": QC_SECTIONS["passif_court"]})
+    lines += [{"kind": "data", **r} for r in by_sec["passif_court"]]
+    if by_sec["passif_long"]:
+        lines.append({"kind": "header", "label": QC_SECTIONS["passif_long"]})
+        lines += [{"kind": "data", **r} for r in by_sec["passif_long"]]
+    lines.append({"kind": "subtotal", "label": "TOTAL DU PASSIF", **total_of("passif_court", "passif_long")})
+    lines.append({"kind": "header", "label": QC_SECTIONS["capitaux"]})
+    lines += [{"kind": "data", **r} for r in by_sec["capitaux"]]
+    lines.append({"kind": "data", "gl": "", "label": "Bénéfices non répartis", **ni})
+    t_capitaux = total_of("capitaux")
+    t_pc = {c: round(total_of("passif_court", "passif_long")[c] + t_capitaux[c] + ni[c], 2) for c in ("movement", "opening", "cumulative")}
+    lines.append({"kind": "total", "label": "TOTAL PASSIF ET CAPITAUX", **t_pc})
+    diff = {c: round(t_actif[c] - t_pc[c], 2) for c in ("movement", "opening", "cumulative")}
+    lines.append({"kind": "diff", "label": "Diff", **diff})
+    return {"year": int(year), "lines": lines, "balanced": abs(diff["cumulative"]) < 0.01,
+            "cols": ["movement", "opening", "cumulative"]}
+
+async def _qc_pnl(year):
+    bal, accts = await _qc_report_balances(year)
+    by_sec = {"revenus": [], "charges": [], "quote_part": [], "impots": []}
+    for gl, a in accts.items():
+        sec = a.get("section")
+        if sec in by_sec:
+            b = bal.get(gl, {"movement": 0, "opening": 0})
+            # produits présentés positifs (crédit), charges positives (débit)
+            sign = -1 if a.get("type") == "produit" else 1
+            by_sec[sec].append({"gl": gl, "label": a.get("description", ""),
+                "cur": round(sign * b["movement"], 2), "prev": round(sign * b["opening"], 2)})
+    for k in by_sec:
+        by_sec[k].sort(key=lambda r: r["gl"])
+    def tot(sec):
+        return {"cur": round(sum(r["cur"] for r in by_sec[sec]), 2), "prev": round(sum(r["prev"] for r in by_sec[sec]), 2)}
+    lines = []
+    lines.append({"kind": "header", "label": "REVENUS"})
+    lines += [{"kind": "data", **r} for r in by_sec["revenus"]]
+    t_rev = tot("revenus"); lines.append({"kind": "subtotal", "label": "TOTAL - REVENUS", **t_rev})
+    lines.append({"kind": "header", "label": "CHARGES"})
+    lines += [{"kind": "data", **r} for r in by_sec["charges"]]
+    t_chg = tot("charges"); lines.append({"kind": "subtotal", "label": "TOTAL - CHARGES", **t_chg})
+    baiia = {"cur": round(t_rev["cur"] - t_chg["cur"], 2), "prev": round(t_rev["prev"] - t_chg["prev"], 2)}
+    lines.append({"kind": "total", "label": "BÉNÉFICE AVANT INTÉRÊTS, IMPÔT ET AMORTISSEMENT (BAIIA)", **baiia})
+    t_qp = tot("quote_part")
+    if by_sec["quote_part"]:
+        lines += [{"kind": "data", **r} for r in by_sec["quote_part"]]
+    avant_impot = {"cur": round(baiia["cur"] + t_qp["cur"], 2), "prev": round(baiia["prev"] + t_qp["prev"], 2)}
+    lines.append({"kind": "subtotal", "label": "BÉNÉFICE AVANT IMPÔT", **avant_impot})
+    lines.append({"kind": "header", "label": "IMPÔTS"})
+    lines += [{"kind": "data", **r} for r in by_sec["impots"]]
+    t_imp = tot("impots"); lines.append({"kind": "subtotal", "label": "TOTAL - IMPÔTS", **t_imp})
+    net = {"cur": round(avant_impot["cur"] - t_imp["cur"], 2), "prev": round(avant_impot["prev"] - t_imp["prev"], 2)}
+    lines.append({"kind": "total", "label": "BÉNÉFICE NET (PERTE NETTE)", **net})
+    lines.append({"kind": "qp", "label": "Q-P DES RÉSULTATS - SERVICES HILO (65%)",
+                  "cur": round(net["cur"] * 0.65, 2), "prev": round(net["prev"] * 0.65, 2)})
+    lines.append({"kind": "qp", "label": "Q-P DES RÉSULTATS - 9379-5599 QUEBEC INC (35%)",
+                  "cur": round(net["cur"] * 0.35, 2), "prev": round(net["prev"] * 0.35, 2)})
+    return {"year": int(year), "lines": lines, "net": net, "cols": ["cur", "prev"]}
+
+@api.get("/qc9434/bilan")
+async def qc_bilan(year: int, user: dict = Depends(get_current_user)):
+    return await _qc_bilan(year)
+
+@api.get("/qc9434/pnl")
+async def qc_pnl(year: int, user: dict = Depends(get_current_user)):
+    return await _qc_pnl(year)
+
+def _qc_report_xlsx(rep, title):
+    from openpyxl.styles import Font, PatternFill, Alignment
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = title[:30]
+    navy = PatternFill("solid", fgColor="063044"); white = Font(color="FFFFFF", bold=True)
+    ws.append(["9434-3977 QUÉBEC INC - COMMANDITÉ"]); ws["A1"].font = Font(bold=True, size=13)
+    ws.append([f"{title} — Exercice {rep['year']}"]); ws["A2"].font = Font(size=10, italic=True)
+    ws.append([])
+    is_bilan = "cumulative" in rep.get("cols", [])
+    hdr = ["Compte", "Libellé"] + (["Exercice", "Antérieur", "Cumulatif"] if is_bilan else [f"{rep['year']}", f"{rep['year']-1}"])
+    ws.append(hdr); hr = ws.max_row
+    for c in range(1, len(hdr) + 1):
+        cell = ws.cell(hr, c); cell.fill = navy; cell.font = white
+    for ln in rep["lines"]:
+        if is_bilan:
+            vals = [ln.get("gl", ""), ln["label"], ln.get("movement"), ln.get("opening"), ln.get("cumulative")]
+        else:
+            vals = [ln.get("gl", ""), ln["label"], ln.get("cur"), ln.get("prev")]
+        if ln["kind"] in ("title", "header"):
+            vals = [ln["label"]] + [None] * (len(hdr) - 1)
+        ws.append(vals)
+        r = ws.max_row
+        if ln["kind"] in ("total", "subtotal", "title"):
+            for c in range(1, len(hdr) + 1):
+                ws.cell(r, c).font = Font(bold=True)
+        if ln["kind"] == "header":
+            ws.cell(r, 1).font = Font(bold=True)
+    for col, w in zip("ABCDE", [14, 44, 16, 16, 16]):
+        ws.column_dimensions[col].width = w
+    for row in ws.iter_rows(min_row=5, min_col=3, max_col=len(hdr)):
+        for cell in row:
+            cell.number_format = '#,##0.00;(#,##0.00)'; cell.alignment = Alignment(horizontal="right")
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return buf.getvalue()
+
+@api.get("/qc9434/bilan/excel")
+async def qc_bilan_excel(year: int, user: dict = Depends(get_current_user)):
+    rep = await _qc_bilan(year)
+    return StreamingResponse(io.BytesIO(_qc_report_xlsx(rep, "Bilan détaillé")),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=bilan_9434_{year}.xlsx"})
+
+@api.get("/qc9434/pnl/excel")
+async def qc_pnl_excel(year: int, user: dict = Depends(get_current_user)):
+    rep = await _qc_pnl(year)
+    return StreamingResponse(io.BytesIO(_qc_report_xlsx(rep, "État des résultats")),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=resultats_9434_{year}.xlsx"})
+
+# ---- Journal général PDF -----------------------------------------------
+@api.get("/qc9434/journal/pdf")
+async def qc_journal_pdf(year: int, user: dict = Depends(get_current_user)):
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    docs = await db.qc9434_entries.find({"year": int(year)}).sort([("date", 1), ("created_at", 1)]).to_list(50000)
+    styles = getSampleStyleSheet()
+    small = ParagraphStyle("s", parent=styles["Normal"], fontSize=7.5, leading=9)
+    NAVY = colors.HexColor("#063044"); GREY = colors.HexColor("#E9EDEF")
+    rows = [["Date", "Réf.", "Compte", "Libellé / Description", "Tiers", "Débit", "Crédit"]]
+    style = [("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+             ("FONTSIZE", (0, 0), (-1, -1), 7.5), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+             ("ALIGN", (5, 0), (6, -1), "RIGHT"), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+             ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
+             ("LINEBELOW", (0, 0), (-1, 0), 0.5, NAVY)]
+    td = tc = 0.0
+    r = 1
+    for e in docs:
+        first = True
+        for l in e.get("lines", []):
+            dr = float(l.get("debit") or 0); cr = float(l.get("credit") or 0)
+            td += dr; tc += cr
+            rows.append([e.get("date", "") if first else "", (e.get("reference", "") if first else ""),
+                         l.get("account", ""), Paragraph(((e.get("description", "") + " · ") if first and e.get("description") else "") + (l.get("account_name") or ""), small),
+                         l.get("tiers", ""), f"{dr:,.2f}" if dr else "", f"{cr:,.2f}" if cr else ""])
+            r += 1
+            first = False
+        style.append(("LINEBELOW", (0, r - 1), (-1, r - 1), 0.3, colors.HexColor("#CBD5E1")))
+    rows.append(["", "", "", "TOTAUX", "", f"{td:,.2f}", f"{tc:,.2f}"])
+    style += [("FONTNAME", (0, len(rows) - 1), (-1, len(rows) - 1), "Helvetica-Bold"),
+              ("BACKGROUND", (0, len(rows) - 1), (-1, len(rows) - 1), GREY)]
+    tbl = Table(rows, colWidths=[20 * mm, 18 * mm, 22 * mm, 120 * mm, 45 * mm, 25 * mm, 25 * mm], repeatRows=1)
+    tbl.setStyle(TableStyle(style))
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=10 * mm, rightMargin=10 * mm, topMargin=10 * mm, bottomMargin=8 * mm)
+    hS = ParagraphStyle("h", parent=styles["Normal"], fontSize=12, fontName="Helvetica-Bold", textColor=NAVY)
+    doc.build([Paragraph("9434-3977 QUÉBEC INC - COMMANDITÉ", hS),
+               Paragraph(f"Journal général — Exercice {year}", ParagraphStyle("s2", parent=styles["Normal"], fontSize=9)),
+               Spacer(1, 4 * mm), tbl])
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=journal_9434_{year}.pdf"})
+
+# ---- Écritures modèles (récurrentes) -----------------------------------
+class QcTemplate(BaseModel):
+    name: str
+    description: str = ""
+    lines: List[QcLine]
+
+@api.get("/qc9434/templates")
+async def qc_templates(user: dict = Depends(get_current_user)):
+    docs = await db.qc9434_templates.find().sort("name", 1).to_list(500)
+    return [{"id": str(d["_id"]), "name": d.get("name", ""), "description": d.get("description", ""),
+             "lines": d.get("lines", [])} for d in docs]
+
+@api.post("/qc9434/templates")
+async def qc_create_template(payload: QcTemplate, user: dict = Depends(get_current_user)):
+    if not payload.name.strip():
+        raise HTTPException(status_code=400, detail="Nom du modèle requis.")
+    res = await db.qc9434_templates.insert_one({"name": payload.name.strip(), "description": payload.description.strip(),
+        "lines": [l.model_dump() for l in payload.lines]})
+    await log_action(user, "Créer", "9434 — Modèle d'écriture", payload.name)
+    return {"success": True, "id": str(res.inserted_id)}
+
+@api.delete("/qc9434/templates/{tid}")
+async def qc_delete_template(tid: str, user: dict = Depends(get_current_user)):
+    await db.qc9434_templates.delete_one({"_id": _oid(tid)})
+    await log_action(user, "Supprimer", "9434 — Modèle d'écriture", tid)
+    return {"success": True}
+
 
 
 

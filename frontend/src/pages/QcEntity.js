@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
@@ -9,18 +9,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog";
 import {
-  Plus, Lock, Unlock, Trash2, Pencil, Send, Settings2, Download, Clock, CheckCircle2, AlertTriangle, BookOpen, Scale, FileText, X, Eye,
+  Plus, Lock, Unlock, Trash2, Pencil, Send, Settings2, Download, Clock, CheckCircle2, AlertTriangle, BookOpen, Scale, FileText, X, Eye, FileDown, Save, Copy,
 } from "lucide-react";
 
 const ENTITY = "9434-3977 QC inc.";
 const TODAY = new Date().toISOString().slice(0, 10);
 
-// Onglets : Écritures + Balance de vérification (générés maintenant), autres en attente du modèle Excel.
+// Onglets reproduisant le modèle Excel.
 const TABS = [
   { key: "entries", label: "Écritures", icon: BookOpen, ready: true },
   { key: "tb", label: "Balance de vérification", icon: Scale, ready: true },
-  { key: "bilan", label: "Bilan", icon: FileText, ready: false },
-  { key: "pnl", label: "État des résultats", icon: FileText, ready: false },
+  { key: "bilan", label: "Bilan détaillé", icon: FileText, ready: true },
+  { key: "pnl", label: "États des résultats", icon: FileText, ready: true },
+  { key: "accounts", label: "Plan comptable", icon: BookOpen, ready: true },
   { key: "external", label: "Envoi externe", icon: Send, ready: true },
 ];
 
@@ -113,6 +114,9 @@ export default function QcEntity() {
           </div>
         : tab === "entries" ? <EntriesView year={activeYear} locked={locked} canEdit={canEdit} />
         : tab === "tb" ? <TrialBalanceView year={activeYear} />
+        : tab === "bilan" ? <StatementView year={activeYear} kind="bilan" />
+        : tab === "pnl" ? <StatementView year={activeYear} kind="pnl" />
+        : tab === "accounts" ? <PlanComptableView canEdit={canEdit} />
         : tab === "external" ? <QcExternalView years={years} isAdmin={isAdmin} />
         : <PlaceholderView label={TABS.find((t) => t.key === tab)?.label} />}
 
@@ -149,51 +153,68 @@ function PlaceholderView({ label }) {
 }
 
 // ===================== Écritures =====================
-const emptyLine = () => ({ account: "", account_name: "", debit: "", credit: "" });
+const emptyLine = () => ({ account: "", account_name: "", tiers: "", debit: "", credit: "" });
 
 function EntriesView({ year, locked, canEdit }) {
   const [entries, setEntries] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [dlg, setDlg] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ date: TODAY, description: "", reference: "", lines: [emptyLine(), emptyLine()] });
   const [saving, setSaving] = useState(false);
   const [delTarget, setDelTarget] = useState(null);
+  const [tplName, setTplName] = useState("");
 
   const load = useCallback(() => { if (year) api.qcEntries({ year }).then(setEntries).catch(() => setEntries([])); }, [year]);
+  const loadTpl = useCallback(() => api.qcTemplates().then(setTemplates).catch(() => setTemplates([])), []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { api.qcAccounts().then((r) => setAccounts(r.accounts || [])).catch(() => {}); loadTpl(); }, [loadTpl]);
 
-  // suggestions de comptes déjà utilisés
-  const accountOptions = useMemo(() => {
-    const m = {};
-    entries.forEach((e) => (e.lines || []).forEach((l) => { if (l.account) m[l.account] = l.account_name || m[l.account] || ""; }));
-    return Object.entries(m).map(([account, name]) => ({ account, name }));
-  }, [entries]);
+  const accountOptions = accounts.map((a) => ({ account: a.gl, name: a.description }));
 
   const totalDebit = form.lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
   const totalCredit = form.lines.reduce((s, l) => s + (Number(l.credit) || 0), 0);
   const balanced = Math.abs(totalDebit - totalCredit) < 0.005 && totalDebit > 0;
 
-  const openNew = () => { setEditing(null); setForm({ date: TODAY, description: "", reference: "", lines: [emptyLine(), emptyLine()] }); setDlg(true); };
+  const openNew = () => { setEditing(null); setForm({ date: TODAY, description: "", reference: "", lines: [emptyLine(), emptyLine()] }); setTplName(""); setDlg(true); };
   const openEdit = (e) => {
     setEditing(e);
     setForm({ date: e.date, description: e.description || "", reference: e.reference || "",
-      lines: (e.lines || []).map((l) => ({ account: l.account, account_name: l.account_name || "", debit: l.debit || "", credit: l.credit || "" })) });
-    setDlg(true);
+      lines: (e.lines || []).map((l) => ({ account: l.account, account_name: l.account_name || "", tiers: l.tiers || "", debit: l.debit || "", credit: l.credit || "" })) });
+    setTplName(""); setDlg(true);
   };
   const setLine = (i, k, v) => setForm((f) => ({ ...f, lines: f.lines.map((l, j) => j === i ? { ...l, [k]: v } : l) }));
-  const onAccountBlur = (i) => {
-    const acc = form.lines[i].account;
+  const onAccountChange = (i, acc) => {
     const found = accountOptions.find((o) => o.account === acc);
-    if (found && found.name && !form.lines[i].account_name) setLine(i, "account_name", found.name);
+    setForm((f) => ({ ...f, lines: f.lines.map((l, j) => j === i ? { ...l, account: acc, account_name: found ? found.name : l.account_name } : l) }));
   };
   const addLine = () => setForm((f) => ({ ...f, lines: [...f.lines, emptyLine()] }));
   const removeLine = (i) => setForm((f) => ({ ...f, lines: f.lines.length > 2 ? f.lines.filter((_, j) => j !== i) : f.lines }));
+  const applyTemplate = (t) => {
+    if (!t) return;
+    setForm((f) => ({ ...f, description: t.description || f.description,
+      lines: (t.lines || []).map((l) => ({ account: l.account, account_name: l.account_name || "", tiers: l.tiers || "", debit: l.debit || "", credit: l.credit || "" })) }));
+  };
+  const saveTemplate = async () => {
+    if (!tplName.trim()) { toast.error("Nommez le modèle"); return; }
+    try {
+      await api.qcCreateTemplate({ name: tplName, description: form.description,
+        lines: form.lines.filter((l) => l.account).map((l) => ({ account: String(l.account).trim(), account_name: l.account_name || "", tiers: l.tiers || "", debit: Number(l.debit) || 0, credit: Number(l.credit) || 0 })) });
+      toast.success("Modèle enregistré"); setTplName(""); loadTpl();
+    } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); }
+  };
+  const delTemplate = async (t) => { try { await api.qcDeleteTemplate(t.id); toast.success("Modèle supprimé"); loadTpl(); } catch { toast.error("Impossible"); } };
+  const journalPdf = async () => {
+    try { const b = await api.qcJournalPdf({ year }); const url = URL.createObjectURL(b); const a = document.createElement("a"); a.href = url; a.download = `journal_9434_${year}.pdf`; a.click(); URL.revokeObjectURL(url); }
+    catch { toast.error("Export impossible"); }
+  };
 
   const save = async () => {
     const body = {
       date: form.date, description: form.description, reference: form.reference,
       lines: form.lines.filter((l) => l.account || l.debit || l.credit).map((l) => ({
-        account: String(l.account).trim(), account_name: l.account_name || "",
+        account: String(l.account).trim(), account_name: l.account_name || "", tiers: l.tiers || "",
         debit: Number(l.debit) || 0, credit: Number(l.credit) || 0 })),
     };
     setSaving(true);
@@ -213,7 +234,10 @@ function EntriesView({ year, locked, canEdit }) {
     <div className="space-y-3" data-testid="qc-entries-view">
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">{entries.length} écriture(s) · Exercice {year}</p>
-        {canEdit && !locked && <Button size="sm" onClick={openNew} data-testid="qc-add-entry" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouvelle écriture</Button>}
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={journalPdf} data-testid="qc-journal-pdf" className="gap-2"><FileDown size={14} /> Journal PDF</Button>
+          {canEdit && !locked && <Button size="sm" onClick={openNew} data-testid="qc-add-entry" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouvelle écriture</Button>}
+        </div>
       </div>
 
       {entries.length === 0
@@ -235,7 +259,7 @@ function EntriesView({ year, locked, canEdit }) {
                       <td className="px-3 py-2">{e.description || "—"}</td>
                       <td className="px-3 py-2 text-xs text-slate-500">
                         {(e.lines || []).map((l, i) => (
-                          <div key={i}>{l.account}{l.account_name ? ` · ${l.account_name}` : ""} <span className={l.debit ? "text-[#063044]" : "text-[#0E9488]"}>{l.debit ? `Dt ${money(l.debit)}` : `Ct ${money(l.credit)}`}</span></div>
+                          <div key={i}>{l.account}{l.account_name ? ` · ${l.account_name}` : ""}{l.tiers ? ` · ${l.tiers}` : ""} <span className={l.debit ? "text-[#063044]" : "text-[#0E9488]"}>{l.debit ? `Dt ${money(l.debit)}` : `Ct ${money(l.credit)}`}</span></div>
                         ))}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-right font-mono-data">{money(e.total)}</td>
@@ -268,17 +292,34 @@ function EntriesView({ year, locked, canEdit }) {
               <div><label className="mb-1 block text-xs font-600 text-slate-500">Description</label><Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Libellé de l'écriture" data-testid="qc-entry-desc" className="h-9" /></div>
             </div>
 
-            <datalist id="qc-accounts">{accountOptions.map((o) => <option key={o.account} value={o.account}>{o.name}</option>)}</datalist>
+            {templates.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" data-testid="qc-template-apply">
+                <span className="text-xs font-600 text-slate-500"><Copy size={13} className="mr-1 inline" />Modèles :</span>
+                {templates.map((t) => (
+                  <span key={t.id} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white pl-2.5 pr-1 py-0.5 text-xs">
+                    <button onClick={() => applyTemplate(t)} data-testid={`qc-tpl-apply-${t.id}`} className="font-600 text-[#0E9488] hover:underline">{t.name}</button>
+                    <button onClick={() => delTemplate(t)} className="text-slate-300 hover:text-red-500"><X size={12} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="rounded-lg border border-slate-200">
               <table className="w-full text-sm">
                 <thead><tr className="bg-slate-50 text-left text-[11px] uppercase text-slate-500">
-                  <th className="px-2 py-1.5">Compte</th><th className="px-2 py-1.5">Nom du compte</th><th className="px-2 py-1.5 text-right">Débit</th><th className="px-2 py-1.5 text-right">Crédit</th><th></th>
+                  <th className="px-2 py-1.5">Compte</th><th className="px-2 py-1.5">Nom du compte</th><th className="px-2 py-1.5">Fournisseur / Client</th><th className="px-2 py-1.5 text-right">Débit</th><th className="px-2 py-1.5 text-right">Crédit</th><th></th>
                 </tr></thead>
                 <tbody>
                   {form.lines.map((l, i) => (
                     <tr key={i} data-testid={`qc-line-${i}`}>
-                      <td className="px-2 py-1"><Input list="qc-accounts" value={l.account} onChange={(e) => setLine(i, "account", e.target.value)} onBlur={() => onAccountBlur(i)} placeholder="N°" data-testid={`qc-line-account-${i}`} className="h-8 w-24" /></td>
+                      <td className="px-2 py-1">
+                        <select value={l.account} onChange={(e) => onAccountChange(i, e.target.value)} data-testid={`qc-line-account-${i}`}
+                          className="h-8 w-32 rounded-md border border-slate-300 bg-white px-1.5 text-sm focus:border-[#0E9488] focus:outline-none">
+                          <option value="">—</option>
+                          {accountOptions.map((o) => <option key={o.account} value={o.account}>{o.account}</option>)}
+                        </select>
+                      </td>
                       <td className="px-2 py-1"><Input value={l.account_name} onChange={(e) => setLine(i, "account_name", e.target.value)} placeholder="Nom" data-testid={`qc-line-name-${i}`} className="h-8" /></td>
+                      <td className="px-2 py-1"><Input value={l.tiers} onChange={(e) => setLine(i, "tiers", e.target.value)} placeholder="(optionnel)" data-testid={`qc-line-tiers-${i}`} className="h-8 w-40" /></td>
                       <td className="px-2 py-1"><Input type="number" step="0.01" value={l.debit} onChange={(e) => setLine(i, "debit", e.target.value)} onFocus={() => l.credit && setLine(i, "credit", "")} data-testid={`qc-line-debit-${i}`} className="h-8 w-28 text-right" /></td>
                       <td className="px-2 py-1"><Input type="number" step="0.01" value={l.credit} onChange={(e) => setLine(i, "credit", e.target.value)} onFocus={() => l.debit && setLine(i, "debit", "")} data-testid={`qc-line-credit-${i}`} className="h-8 w-28 text-right" /></td>
                       <td className="px-1"><button onClick={() => removeLine(i)} disabled={form.lines.length <= 2} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30"><X size={14} /></button></td>
@@ -287,7 +328,7 @@ function EntriesView({ year, locked, canEdit }) {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-slate-200 font-600">
-                    <td className="px-2 py-1.5" colSpan={2}>
+                    <td className="px-2 py-1.5" colSpan={3}>
                       <button onClick={addLine} data-testid="qc-add-line" className="inline-flex items-center gap-1 text-xs text-[#0E9488] hover:underline"><Plus size={13} /> Ajouter une ligne</button>
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono-data" data-testid="qc-total-debit">{money(totalDebit)}</td>
@@ -296,6 +337,11 @@ function EntriesView({ year, locked, canEdit }) {
                   </tr>
                 </tfoot>
               </table>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2" data-testid="qc-template-save">
+              <Save size={14} className="text-slate-400" />
+              <Input value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="Nom du modèle (ex. Frais bancaires)" data-testid="qc-tpl-name" className="h-8 max-w-xs" />
+              <Button size="sm" variant="outline" onClick={saveTemplate} data-testid="qc-tpl-save">Enregistrer comme modèle</Button>
             </div>
             <div data-testid="qc-balance-indicator" className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-600 ${balanced ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
               {balanced ? <><CheckCircle2 size={15} /> Écriture équilibrée</> : <><AlertTriangle size={15} /> Déséquilibre : {money(Math.abs(totalDebit - totalCredit))} $ (débits {money(totalDebit)} vs crédits {money(totalCredit)})</>}
@@ -372,6 +418,152 @@ function TrialBalanceView({ year }) {
     </div>
   );
 }
+
+// ===================== Bilan / États des résultats =====================
+function StatementView({ year, kind }) {
+  const [rep, setRep] = useState(null);
+  const isBilan = kind === "bilan";
+  useEffect(() => {
+    if (!year) return;
+    (isBilan ? api.qcBilan({ year }) : api.qcPnl({ year })).then(setRep).catch(() => setRep(null));
+  }, [year, isBilan]);
+  const dl = async () => {
+    try {
+      const b = await (isBilan ? api.qcBilanExcel({ year }) : api.qcPnlExcel({ year }));
+      const url = URL.createObjectURL(b); const a = document.createElement("a");
+      a.href = url; a.download = `${isBilan ? "bilan" : "resultats"}_9434_${year}.xlsx`; a.click(); URL.revokeObjectURL(url);
+    } catch { toast.error("Export impossible"); }
+  };
+  if (!rep) return <div className="card p-8 text-center text-sm text-slate-400">Chargement…</div>;
+  const cols = isBilan
+    ? [["movement", "Exercice"], ["opening", "Antérieur"], ["cumulative", "Cumulatif"]]
+    : [["cur", String(year)], ["prev", String(year - 1)]];
+  const rowCls = (k) => {
+    if (k === "title") return "bg-[#063044] text-white font-700";
+    if (k === "total") return "border-t-2 border-[#063044] bg-slate-100 font-700";
+    if (k === "subtotal") return "border-t border-slate-300 font-600";
+    if (k === "header") return "font-600 text-[#0E9488]";
+    if (k === "diff") return "text-xs text-slate-400";
+    if (k === "qp") return "text-xs italic text-slate-500";
+    return "";
+  };
+  return (
+    <div className="space-y-3" data-testid={`qc-${kind}-view`}>
+      <div className="flex items-center justify-between">
+        {isBilan
+          ? <span data-testid="qc-bilan-balanced" className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-600 ${rep.balanced ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{rep.balanced ? <><CheckCircle2 size={13} /> Bilan équilibré</> : <><AlertTriangle size={13} /> Écart de bilan</>}</span>
+          : <span className="text-sm font-600 text-[#063044]">Bénéfice net : {money(rep.net?.cur)} $</span>}
+        <Button size="sm" variant="outline" onClick={dl} data-testid={`qc-${kind}-excel`} className="gap-2"><Download size={14} /> Excel</Button>
+      </div>
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid={`qc-${kind}-table`}>
+            <thead><tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
+              <th className="px-3 py-2 w-20">Compte</th><th className="px-3 py-2">Libellé</th>
+              {cols.map(([k, lbl]) => <th key={k} className="px-3 py-2 text-right">{lbl}</th>)}
+            </tr></thead>
+            <tbody>
+              {rep.lines.map((ln, i) => {
+                const isText = ln.kind === "title" || ln.kind === "header";
+                return (
+                  <tr key={i} className={rowCls(ln.kind)} data-testid={`qc-${kind}-line-${i}`}>
+                    <td className="px-3 py-1.5 font-mono-data text-xs">{ln.gl || ""}</td>
+                    <td className="px-3 py-1.5">{ln.label}</td>
+                    {isText ? cols.map(([k]) => <td key={k}></td>)
+                      : cols.map(([k]) => <td key={k} className={`px-3 py-1.5 text-right font-mono-data ${(ln[k] || 0) < 0 ? "text-red-600" : ""}`}>{ln[k] === undefined || ln[k] === null ? "" : money(ln[k])}</td>)}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== Plan comptable =====================
+function PlanComptableView({ canEdit }) {
+  const [data, setData] = useState({ accounts: [], sections: {} });
+  const [form, setForm] = useState({ gl: "", description: "", type: "actif", section: "actif_court" });
+  const [editGl, setEditGl] = useState(null);
+  const load = useCallback(() => api.qcAccounts().then(setData).catch(() => {}), []);
+  useEffect(() => { load(); }, [load]);
+  const sections = data.sections || {};
+  const TYPES = [["actif", "Actif"], ["passif", "Passif"], ["capitaux", "Capitaux"], ["produit", "Produit"], ["charge", "Charge"]];
+  const reset = () => { setForm({ gl: "", description: "", type: "actif", section: "actif_court" }); setEditGl(null); };
+  const startEdit = (a) => { setEditGl(a.gl); setForm({ gl: a.gl, description: a.description, type: a.type, section: a.section }); };
+  const save = async () => {
+    if (!form.gl.trim()) { toast.error("N° de compte requis"); return; }
+    try {
+      if (editGl) await api.qcUpdateAccount(editGl, form);
+      else await api.qcCreateAccount(form);
+      toast.success("Enregistré"); reset(); load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); }
+  };
+  const del = async (a) => { try { await api.qcDeleteAccount(a.gl); toast.success("Supprimé"); load(); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } };
+
+  return (
+    <div className="space-y-3" data-testid="qc-accounts-view">
+      <p className="text-sm text-slate-500">{data.accounts.length} compte(s) · plan comptable propre à cette entité</p>
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="qc-accounts-table">
+            <thead><tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
+              <th className="px-3 py-2">GL</th><th className="px-3 py-2">Description</th><th className="px-3 py-2">Type</th><th className="px-3 py-2">Section de rapport</th><th className="px-3 py-2"></th>
+            </tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {data.accounts.map((a) => (
+                <tr key={a.gl} className="hover:bg-slate-50" data-testid={`qc-account-row-${a.gl}`}>
+                  <td className="px-3 py-1.5 font-mono-data text-xs">{a.gl}</td>
+                  <td className="px-3 py-1.5">{a.description}</td>
+                  <td className="px-3 py-1.5 text-xs capitalize">{a.type}</td>
+                  <td className="px-3 py-1.5 text-xs text-slate-500">{sections[a.section] || a.section}</td>
+                  <td className="px-3 py-1.5">
+                    {canEdit && (
+                      <div className="flex justify-end gap-1">
+                        <button onClick={() => startEdit(a)} data-testid={`qc-account-edit-${a.gl}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100"><Pencil size={14} /></button>
+                        <button onClick={() => del(a)} data-testid={`qc-account-del-${a.gl}`} className="rounded p-1.5 text-red-500 hover:bg-red-50"><Trash2 size={14} /></button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {canEdit && (
+        <div className="card space-y-3 p-4" data-testid="qc-account-form">
+          <p className="text-xs font-700 text-[#063044]">{editGl ? `Modifier le compte ${editGl}` : "Nouveau compte"}</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <Input value={form.gl} disabled={!!editGl} onChange={(e) => setForm({ ...form, gl: e.target.value.replace(/\D/g, "") })} placeholder="N° GL" data-testid="qc-account-gl" className="h-9" />
+            <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Description" data-testid="qc-account-desc" className="h-9 sm:col-span-3" />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-600 text-slate-500">Type</label>
+              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} data-testid="qc-account-type" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[#0E9488] focus:outline-none">
+                {TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-600 text-slate-500">Section de rapport</label>
+              <select value={form.section} onChange={(e) => setForm({ ...form, section: e.target.value })} data-testid="qc-account-section" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[#0E9488] focus:outline-none">
+                {Object.entries(sections).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={save} data-testid="qc-account-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">Enregistrer</Button>
+            {editGl && <Button size="sm" variant="outline" onClick={reset}>Annuler</Button>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 // ===================== Envoi externe (contacts propres) =====================
 function QcExternalView({ years, isAdmin }) {

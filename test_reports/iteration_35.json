@@ -1,0 +1,25 @@
+{
+  "summary": "Phase 2 testing of the 9434-3977 QC inc. « Commandité » module. 16/16 new pytest backend tests PASS covering: plan comptable seed (23 accounts+sections auto-derived types), account CRUD + role gating + delete-blocked-if-used, tiers persistance, Bilan structure with 3 columns (movement/opening/cumulative), Bilan balanced (Diff=0), 'Bénéfices non répartis' equals net income (equity impact), PNL with BAIIA/BÉNÉFICE NET + Q-P 65/35 that sum back to net, prev column = N-1 movement, bilan/pnl xlsx exports, journal PDF magic %PDF, templates CRUD, external catalog with 3 keys (trial_balance, bilan, pnl), delete-account-in-use blocked with FR message. Frontend Playwright: sidebar '9434-3977 QC inc.'/'Commandité' + header title/subtitle OK, all 6 tabs (entries/tb/bilan/pnl/accounts/external) present and navigable, plan comptable displays 23 accounts, account dropdown in entry dialog has 23+ options and auto-fills nom on selection (Caisse), tiers column persists and appears in table, balance indicator gates the save button correctly, template save-then-apply pre-fills lines, Bilan table shows 'TOTAL DE L\\u2019ACTIF' + 'Bénéfices non répartis' + 'Bilan équilibré' badge + 'Antérieur' comparative column, PNL shows BAIIA/BÉNÉFICE NET + Q-P 65/35, external management dialog exposes 3 doc-type checkboxes (trial_balance/bilan/pnl) and downloads render Excel buttons for each. Journal PDF button visible.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_qc9434_phase2.py",
+    "/app/backend/tests/test_qc9434.py",
+    "/app/test_reports/pytest/qc9434_phase2.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PUT /api/qc9434/accounts/{gl} accepts a payload with `gl` field but ignores it (path parameter is used). Fine but keep documented.",
+    "_qc_report_balances loads all entries with year<=year and separates by cur/opening — this is O(all entries). For very old bases consider indexing on qc9434_entries.year.",
+    "Bilan 'movement' arithmetic: for the equity side, 'Bénéfices non répartis' is added as-is on top of the section total 'Capitaux'. This works because seed account 330010 'BNR-début' captures cumulative history via opening. Verified balanced=true with N-1 locked + N open scenario.",
+    "The write_guard middleware correctly blocks user role on POST/PUT/DELETE /api/qc9434/accounts (403). Confirmed via test_account_role_gating.",
+    "Q-P lines: 65% + 35% = 100% of net (verified numerically). Correct." 
+  ],
+  "updated_files": ["/app/backend/tests/test_qc9434_phase2.py"],
+  "success_rate": {"backend": "100% (16/16 new + 21/21 existing)", "frontend": "100%"},
+  "test_credentials": "admin@accslegro.com/admin123, editor.test@accslegro.com/editor123, user.test@accslegro.com/user123",
+  "seed_data_creation": "Backend tests used existing years 2025 (N-1 locked) + 2026 (N open) with a few entries. Frontend test created 1 entry (TEST_Front tiers), 1 template (TEST_FrontTpl), 1 external contact (TEST_FrontContact). All qc9434_* collections wiped at end per instructions (except qc9434_accounts which auto-reseeds).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "qc9434_* collections cleared. qc9434_accounts left untouched (23 seed re-created on next GET /api/qc9434/accounts). Test file /app/backend/tests/test_qc9434_phase2.py is idempotent and adapts to existing/absent years. Use `export REACT_APP_BACKEND_URL=$(grep REACT_APP_BACKEND_URL /app/frontend/.env | cut -d= -f2)` before pytest and pass `-o addopts=''` to skip xdist worker env-loss."
+}

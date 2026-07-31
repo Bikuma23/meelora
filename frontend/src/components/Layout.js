@@ -41,14 +41,14 @@ const PAGES = {
   acct_pnl: { title: "État des résultats", sub: "P&L du mois", comp: AcctPnl },
   acct_cashflow: { title: "Flux de trésorerie", sub: "Méthode indirecte", comp: AcctCashflow },
   acct_audit: { title: "Rapports", sub: "Génération centralisée", comp: AcctReports },
-  acct_qc9434: { title: "9434-3977 QC inc.", sub: "Comptabilité — entité distincte", comp: QcEntity },
+  acct_qc9434: { title: "9434-3977 QC inc.", sub: "Commandité", comp: QcEntity },
 };
 
 const NAV_ACCT = [
   { key: "acct_dashboard", label: "Tableau de bord", sub: "Vue d'ensemble", icon: LayoutDashboard },
   { key: "acct_bv", label: "Balance de vérification", sub: "Upload mensuel", icon: ClipboardList },
   { key: "acct_audit", label: "Rapports", sub: "Génération centralisée", icon: FileText },
-  { key: "acct_qc9434", label: "9434-3977 QC inc.", sub: "Entité distincte", icon: Building },
+  { key: "acct_qc9434", label: "9434-3977 QC inc.", sub: "Commandité", icon: Building },
 ];
 
 const NAV_GROUP = [
