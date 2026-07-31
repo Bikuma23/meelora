@@ -4459,6 +4459,14 @@ QC_EF_PREV = {
 QC_EF_ADMINS_DEFAULT = {"a1_name": "Marco Vézina", "a1_title": "Administrateur",
                         "a2_name": "Simon Chevalier-Fournier", "a2_title": "Administrateur"}
 
+# Flux de trésorerie 2025 figé (modèle « Commandité ACCS EF 2026 »)
+QC_CF_PREV = {
+    "net": 411.0, "qp_noncash": -95.0, "wc": 0.0, "op_sub": 316.0,
+    "capital": 0.0, "placement": 350.0, "net_var": 666.0,
+    "cash_open": 8545.0, "cash_close": 9211.0,
+    "wc_detail": {"clients": 1.0, "taxes_rec": 0.0, "crediteurs": 0.0, "taxes_rem": 0.0, "impot": 0.0, "total": 1.0},
+}
+
 # Bilan de clôture 2025 = solde d'ouverture 2026, en base débit (actif +, passif/capitaux −).
 # Aligné sur les données réelles (créance client 11 497,50 $ = 10 000 $ × 1,14975) pour un solde net nul.
 QC_OPENING_2026 = {
@@ -5722,6 +5730,7 @@ async def _qc_etats_financiers(year):
           "capital": fin, "fin_sub": fin, "placement": inv, "inv_sub": inv,
           "net_var": net_var, "cash_open": cash_open, "cash_close": round(cash_open + net_var, 2),
           "bilan_cash": cash_close, "reconciled": abs(cash_open + net_var - cash_close) < 1.0,
+          "prev": dict(QC_CF_PREV),
           "wc_detail": {"clients": d_clients, "taxes_rec": d_txrec, "crediteurs": d_pay, "taxes_rem": d_txrem, "impot": d_imp, "total": wc}}
     admins = await _qc_ef_admins()
     return {"year": int(year), "cur": cur, "prev": prev, "prev_year": QC_EF_PREV_YEAR, "admins": admins,
@@ -5802,35 +5811,37 @@ def _qc_ef_pdf(ef):
     el += [sig]
     cf = ef.get("cashflow")
     if cf:
+        cp = cf.get("prev", {})
         el += [PageBreak(), Paragraph("9434-3977 QUÉBEC INC. - COMMANDITÉ", H), Spacer(1, 2 * mm),
                Paragraph("ÉTATS DES FLUX DE TRÉSORERIE", H),
                Paragraph(f"Exercice terminé le 31 décembre {y} — Non-audités — En dollars canadiens", SUB), Spacer(1, 4 * mm)]
-        crows = [["", str(y), ""],
+        crows = [["", str(y), str(y - 1)],
                  ["Activités d'exploitation", "", ""],
-                 ["  Bénéfice (perte) net(te) de l'exercice", cf["net"], ""],
+                 ["  Bénéfice (perte) net(te) de l'exercice", cf["net"], cp.get("net")],
                  ["  Élément sans effet sur la trésorerie :", "", ""],
-                 ["    Quote-part des résultats de la Société en commandite", cf["qp_noncash"], ""],
-                 ["  Variation des éléments hors caisse du fonds de roulement", cf["wc"], ""],
-                 ["  ", cf["op_sub"], ""],
+                 ["    Quote-part des résultats de la Société en commandite", cf["qp_noncash"], cp.get("qp_noncash")],
+                 ["  Variation des éléments hors caisse du fonds de roulement", cf["wc"], cp.get("wc")],
+                 ["  ", cf["op_sub"], cp.get("op_sub")],
                  ["Activités de financement", "", ""],
-                 ["  Émission d'actions ordinaires", cf["capital"], ""],
+                 ["  Émission d'actions ordinaires", cf["capital"], cp.get("capital")],
                  ["Activités d'investissement", "", ""],
-                 ["  Variation du placement – Société en commandite ACCS", cf["placement"], ""],
-                 ["Variation nette de la trésorerie au cours de l'exercice", cf["net_var"], ""],
-                 ["Trésorerie au début de l'exercice", cf["cash_open"], ""],
-                 ["Trésorerie à la fin de l'exercice", cf["cash_close"], ""]]
+                 ["  Variation du placement – Société en commandite ACCS", cf["placement"], cp.get("placement")],
+                 ["Variation nette de la trésorerie au cours de l'exercice", cf["net_var"], cp.get("net_var")],
+                 ["Trésorerie au début de l'exercice", cf["cash_open"], cp.get("cash_open")],
+                 ["Trésorerie à la fin de l'exercice", cf["cash_close"], cp.get("cash_close")]]
         t3, st3 = money_table(crows)
         st3 += [("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"), ("FONTNAME", (0, 7), (-1, 7), "Helvetica-Bold"),
                 ("FONTNAME", (0, 9), (-1, 9), "Helvetica-Bold"), ("FONTNAME", (0, 11), (-1, 13), "Helvetica-Bold"),
                 ("LINEABOVE", (0, 6), (-1, 6), 0.3, colors.grey), ("LINEABOVE", (0, 11), (-1, 11), 0.5, NAVY)]
         t3.setStyle(TableStyle(st3)); el += [t3, Spacer(1, 4 * mm)]
-        drows = [["Informations supplémentaires — Variation des éléments hors caisse du fonds de roulement", str(y), ""],
-                 ["  Clients – Société en commandite ACCS", cf["wc_detail"]["clients"], ""],
-                 ["  Sommes à recevoir de l'état - Taxes de ventes", cf["wc_detail"]["taxes_rec"], ""],
-                 ["  Créditeurs et charges à payer aux apparentés", cf["wc_detail"]["crediteurs"], ""],
-                 ["  Taxes de ventes à remettre", cf["wc_detail"]["taxes_rem"], ""],
-                 ["  Impôt à payer", cf["wc_detail"]["impot"], ""],
-                 ["  ", cf["wc_detail"]["total"], ""]]
+        cpd = cp.get("wc_detail", {}); wd = cf["wc_detail"]
+        drows = [["Informations supplémentaires — Variation des éléments hors caisse du fonds de roulement", str(y), str(y - 1)],
+                 ["  Clients – Société en commandite ACCS", wd["clients"], cpd.get("clients")],
+                 ["  Sommes à recevoir de l'état - Taxes de ventes", wd["taxes_rec"], cpd.get("taxes_rec")],
+                 ["  Créditeurs et charges à payer aux apparentés", wd["crediteurs"], cpd.get("crediteurs")],
+                 ["  Taxes de ventes à remettre", wd["taxes_rem"], cpd.get("taxes_rem")],
+                 ["  Impôt à payer", wd["impot"], cpd.get("impot")],
+                 ["  ", wd["total"], cpd.get("total")]]
         t4, st4 = money_table(drows)
         st4 += [("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, 0), 8),
                 ("LINEABOVE", (0, 6), (-1, 6), 0.3, colors.grey)]
@@ -5871,26 +5882,27 @@ def _qc_ef_xlsx(ef):
         ws.append([lbl, v, pb.get(pk)])
     cf = ef.get("cashflow")
     if cf:
-        ws.append([]); ws.append(["ÉTATS DES FLUX DE TRÉSORERIE", y])
-        for lbl, v in [("Activités d'exploitation", None),
-                       ("  Bénéfice (perte) net(te) de l'exercice", cf["net"]),
-                       ("  Quote-part des résultats de la Société en commandite (sans effet trésorerie)", cf["qp_noncash"]),
-                       ("  Variation des éléments hors caisse du fonds de roulement", cf["wc"]),
-                       ("  Flux liés à l'exploitation", cf["op_sub"]),
-                       ("Activités de financement — Émission d'actions ordinaires", cf["capital"]),
-                       ("Activités d'investissement — Variation du placement – SEC ACCS", cf["placement"]),
-                       ("Variation nette de la trésorerie", cf["net_var"]),
-                       ("Trésorerie au début de l'exercice", cf["cash_open"]),
-                       ("Trésorerie à la fin de l'exercice", cf["cash_close"])]:
-            ws.append([lbl, v])
-        ws.append([]); ws.append(["Variation des éléments hors caisse du fonds de roulement", y])
-        for lbl, v in [("Clients – Société en commandite ACCS", cf["wc_detail"]["clients"]),
-                       ("Sommes à recevoir de l'état - Taxes de ventes", cf["wc_detail"]["taxes_rec"]),
-                       ("Créditeurs et charges à payer aux apparentés", cf["wc_detail"]["crediteurs"]),
-                       ("Taxes de ventes à remettre", cf["wc_detail"]["taxes_rem"]),
-                       ("Impôt à payer", cf["wc_detail"]["impot"]),
-                       ("Total", cf["wc_detail"]["total"])]:
-            ws.append([lbl, v])
+        cp = cf.get("prev", {}); cpd = cp.get("wc_detail", {}); wd = cf["wc_detail"]
+        ws.append([]); ws.append(["ÉTATS DES FLUX DE TRÉSORERIE", y, y - 1])
+        for lbl, v, pv in [("Activités d'exploitation", None, None),
+                       ("  Bénéfice (perte) net(te) de l'exercice", cf["net"], cp.get("net")),
+                       ("  Quote-part des résultats de la Société en commandite (sans effet trésorerie)", cf["qp_noncash"], cp.get("qp_noncash")),
+                       ("  Variation des éléments hors caisse du fonds de roulement", cf["wc"], cp.get("wc")),
+                       ("  Flux liés à l'exploitation", cf["op_sub"], cp.get("op_sub")),
+                       ("Activités de financement — Émission d'actions ordinaires", cf["capital"], cp.get("capital")),
+                       ("Activités d'investissement — Variation du placement – SEC ACCS", cf["placement"], cp.get("placement")),
+                       ("Variation nette de la trésorerie", cf["net_var"], cp.get("net_var")),
+                       ("Trésorerie au début de l'exercice", cf["cash_open"], cp.get("cash_open")),
+                       ("Trésorerie à la fin de l'exercice", cf["cash_close"], cp.get("cash_close"))]:
+            ws.append([lbl, v, pv])
+        ws.append([]); ws.append(["Variation des éléments hors caisse du fonds de roulement", y, y - 1])
+        for lbl, v, pv in [("Clients – Société en commandite ACCS", wd["clients"], cpd.get("clients")),
+                       ("Sommes à recevoir de l'état - Taxes de ventes", wd["taxes_rec"], cpd.get("taxes_rec")),
+                       ("Créditeurs et charges à payer aux apparentés", wd["crediteurs"], cpd.get("crediteurs")),
+                       ("Taxes de ventes à remettre", wd["taxes_rem"], cpd.get("taxes_rem")),
+                       ("Impôt à payer", wd["impot"], cpd.get("impot")),
+                       ("Total", wd["total"], cpd.get("total"))]:
+            ws.append([lbl, v, pv])
     ad = ef.get("admins") or {}
     ws.append([]); ws.append(["Au nom du Conseil d'administration"])
     ws.append([ad.get("a1_name", ""), ad.get("a2_name", "")])

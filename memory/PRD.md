@@ -695,3 +695,8 @@ Basée sur « Facturation - Frais de gestion 2021 Commandité.xlsx » + import d
 - [x] **Cause** : l'import du modèle ne créait que la facture 2025, donc l'ouverture 2026 (soldes antérieurs) était incomplète → colonne « Antérieur » du Bilan détaillé vide, cumulatif non représentatif, flux de trésorerie sans trésorerie d'ouverture.
 - [x] **Fix** : écriture d'à-nouveaux `Solde d'ouverture au 1er janvier 2026` (année 2025, source="opening", num "OUV-2026") calculée par deltas pour amener l'ouverture 2026 au bilan de clôture 2025 (`QC_OPENING_2026`, base débit, aligné sur la créance réelle 11 497,50 $ → aucun résidu). Helper `_qc_seed_opening_balances`, intégré à `POST /qc9434/import-model` + endpoint admin `POST /qc9434/seed-opening` (idempotent).
 - [x] **Résultat vérifié** : Bilan détaillé — Antérieur 19 950,50 = équilibré ; Caisse 6 735 → 17 979,58 ; créance 11 497,50 → 0 (soldée). Flux de trésorerie : trésorerie début 6 735 + variation 11 244,58 = fin 17 979,58 (reconciled). Aucune modification de la structure des autres rapports de l'outil.
+
+## Commandité — Colonne comparative 2025 au flux de trésorerie (2026-07-31)
+- [x] Ajout des chiffres 2025 FIGÉS (`QC_CF_PREV`, modèle) au flux de trésorerie : net 411, quote-part -95, variation FDR 0, flux exploitation 316, distribution/placement 350, variation nette 666, trésorerie début 8 545 → fin 9 211, détail FDR (clients 1). Exposé via `cf.prev`.
+- [x] Colonne 2025 rendue dans la vue (`qc-ef-cashflow-table` + détail), le PDF et l'Excel. Structure des autres rapports inchangée.
+- [x] Vérifié : API renvoie `cashflow.prev`, PDF/Excel 200, capture confirme les 2 colonnes (2026 réconcilié : 6 735 + 11 232,68 = 17 967,68 ; 2025 : 8 545 + 666 = 9 211).

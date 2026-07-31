@@ -967,38 +967,38 @@ function EtatsFinanciersView({ year }) {
 
       {/* États des flux de trésorerie */}
       {ef.cashflow && (() => {
-        const cf = ef.cashflow;
+        const cf = ef.cashflow; const cpf = cf.prev || {}; const cpd = cpf.wc_detail || {};
         return (
           <div className="card overflow-hidden" data-testid="qc-ef-cashflow">
-            <div className="border-b border-slate-100 bg-[#063044] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">États des flux de trésorerie</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · Exercice terminé le 31 décembre {year} · méthode indirecte</p></div>
+            <div className="border-b border-slate-100 bg-[#063044] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">États des flux de trésorerie</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · Exercice terminé le 31 décembre {year} · Non-audités · En dollars canadiens · méthode indirecte</p></div>
             {!cf.reconciled && <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-600 text-amber-700">Note : léger écart de réconciliation (trésorerie au bilan {money(cf.bilan_cash)} $).</div>}
             <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ef-cashflow-table">
-              <thead><tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><th className="px-3 py-2">Poste</th><th className="px-3 py-2 text-right">{year}</th></tr></thead>
+              <thead><tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><th className="px-3 py-2">Poste</th><th className="px-3 py-2 text-right">{year}</th><th className="px-3 py-2 text-right">{py}</th></tr></thead>
               <tbody className="divide-y divide-slate-50">
-                <R label="Activités d'exploitation" kind="header" prev="none" />
-                <R label="Bénéfice (perte) net(te) de l'exercice" kind="indent" cur={cf.net} prev="none" />
-                <R label="Élément sans effet sur la trésorerie :" kind="indent" prev="none" />
-                <R label="Quote-part des résultats de la Société en commandite" kind="indent" cur={cf.qp_noncash} prev="none" />
-                <R label="Variation des éléments hors caisse du fonds de roulement" kind="indent" cur={cf.wc} prev="none" />
-                <R label="Flux liés aux activités d'exploitation" kind="subtotal" cur={cf.op_sub} prev="none" />
-                <R label="Activités de financement" kind="header" prev="none" />
-                <R label="Émission d'actions ordinaires" kind="indent" cur={cf.capital} prev="none" />
-                <R label="Activités d'investissement" kind="header" prev="none" />
-                <R label="Variation du placement – Société en commandite ACCS" kind="indent" cur={cf.placement} prev="none" />
-                <R label="Variation nette de la trésorerie au cours de l'exercice" kind="subtotal" cur={cf.net_var} prev="none" />
-                <R label="Trésorerie au début de l'exercice" kind="indent" cur={cf.cash_open} prev="none" />
-                <R label="Trésorerie à la fin de l'exercice" kind="total" cur={cf.cash_close} prev="none" />
+                <R label="Activités d'exploitation" kind="header" cur={undefined} prev={undefined} />
+                <R label="Bénéfice (perte) net(te) de l'exercice" kind="indent" cur={cf.net} prev={cpf.net} />
+                <R label="Élément sans effet sur la trésorerie :" kind="indent" cur={undefined} prev={undefined} />
+                <R label="Quote-part des résultats de la Société en commandite" kind="indent" cur={cf.qp_noncash} prev={cpf.qp_noncash} />
+                <R label="Variation des éléments hors caisse du fonds de roulement" kind="indent" cur={cf.wc} prev={cpf.wc} />
+                <R label="Flux liés aux activités d'exploitation" kind="subtotal" cur={cf.op_sub} prev={cpf.op_sub} />
+                <R label="Activités de financement" kind="header" cur={undefined} prev={undefined} />
+                <R label="Émission d'actions ordinaires" kind="indent" cur={cf.capital} prev={cpf.capital} />
+                <R label="Activités d'investissement" kind="header" cur={undefined} prev={undefined} />
+                <R label="Variation du placement – Société en commandite ACCS" kind="indent" cur={cf.placement} prev={cpf.placement} />
+                <R label="Variation nette de la trésorerie au cours de l'exercice" kind="subtotal" cur={cf.net_var} prev={cpf.net_var} />
+                <R label="Trésorerie au début de l'exercice" kind="indent" cur={cf.cash_open} prev={cpf.cash_open} />
+                <R label="Trésorerie à la fin de l'exercice" kind="total" cur={cf.cash_close} prev={cpf.cash_close} />
               </tbody>
             </table></div>
             <div className="border-t border-slate-100 px-4 py-2"><p className="text-xs font-700 uppercase text-[#0E9488]">Informations supplémentaires — Variation des éléments hors caisse</p></div>
             <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ef-cashflow-detail">
               <tbody className="divide-y divide-slate-50">
-                <R label="Clients – Société en commandite ACCS" kind="indent" cur={cf.wc_detail.clients} prev="none" />
-                <R label="Sommes à recevoir de l'état - Taxes de ventes" kind="indent" cur={cf.wc_detail.taxes_rec} prev="none" />
-                <R label="Créditeurs et charges à payer aux apparentés" kind="indent" cur={cf.wc_detail.crediteurs} prev="none" />
-                <R label="Taxes de ventes à remettre" kind="indent" cur={cf.wc_detail.taxes_rem} prev="none" />
-                <R label="Impôt à payer" kind="indent" cur={cf.wc_detail.impot} prev="none" />
-                <R label="Total" kind="subtotal" cur={cf.wc_detail.total} prev="none" />
+                <R label="Clients – Société en commandite ACCS" kind="indent" cur={cf.wc_detail.clients} prev={cpd.clients} />
+                <R label="Sommes à recevoir de l'état - Taxes de ventes" kind="indent" cur={cf.wc_detail.taxes_rec} prev={cpd.taxes_rec} />
+                <R label="Créditeurs et charges à payer aux apparentés" kind="indent" cur={cf.wc_detail.crediteurs} prev={cpd.crediteurs} />
+                <R label="Taxes de ventes à remettre" kind="indent" cur={cf.wc_detail.taxes_rem} prev={cpd.taxes_rem} />
+                <R label="Impôt à payer" kind="indent" cur={cf.wc_detail.impot} prev={cpd.impot} />
+                <R label="Total" kind="subtotal" cur={cf.wc_detail.total} prev={cpd.total} />
               </tbody>
             </table></div>
           </div>
