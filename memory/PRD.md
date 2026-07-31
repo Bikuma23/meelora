@@ -577,6 +577,17 @@ Refonte du hub selon nouvelles demandes + modèle Excel « par responsable » fo
 ## Correctif : pas de % dans le sommaire mensuel (2026-07-30i)
 - [x] Le formatage en pourcentage ne s'applique qu'à l'**État détaillé** (comme `ReportView` où `isDetailedPnl = type === "pnl"`). Dans le mensuel, `is_pct` est désormais gâté par `variant == "detail"` → la ligne **FRAIS FINANCIERS** (et toute autre) du **Résultat sommaire** s'affiche en montants, plus jamais en %. Vérifié (curl : sommaire `is_pct=[]`, détaillé conserve 13 lignes % ; capture sommaire OK).
 
+## Onglet « Envoi Externe » + rapports présentation + Margination Desjardins (2026-07-30j)
+- [x] **Nouvel onglet « Envoi Externe »** dans le hub Rapports (après « Par responsable budgétaire »), même logique que celui-ci mais liste intitulée **« Contact Externe »** (`ExternalSendView`).
+- [x] **Contacts externes multiples** (`acct_external_contacts`) : CRUD **admin-only** (`GET/POST/PUT/DELETE /api/acct/external-contacts`), dialogue « Gérer les contacts » (`ExternalContactsDialog`) avec sélection des **types de rapports** depuis un catalogue (`GET /api/acct/external/catalog` : pnl_presentation, bilan_presentation, margination, pnl, pnl_sommaire, bilan).
+- [x] **Contact « Banque Desjardins » seedé** (report_types = présentation P&L + présentation Bilan + Margination ; courriel vide à remplir).
+- [x] **Rapports PDF « présentation » ACCS** (`presentation_reports.py`, fidèles aux images fournies) : États de Résultats (bandeaux marine BÉNÉFICE BRUT/BAIIA/BÉNÉFICE NET, colonnes Réel/Budget CA/Écart mois + cumulatif + Budget CA annuel, cellules Réel surlignées sarcelle, % sarcelle italique, colonne annuelle vert clair, mention CONFIDENTIEL) et Bilan (Actif/Passif, surlignage sarcelle, bandeau marine TOTAL, équilibré 19 756 123,01). *Sans logo (à ajouter en phase de finalisation).*
+- [x] **Rapport de Margination Desjardins — téléversement mensuel** (approche (a) validée) : `POST /api/acct/margination/upload` (multipart, **admin-only**), `GET /acct/margination/status`, stockage base64 (`acct_margination` par période). Le fichier est **joint tel quel** (formules/onglets/mise en page 100 % préservés). Fichier juin 2026 déjà téléversé.
+- [x] **Package + envoi** : `GET /acct/external/report` (téléchargement individuel PDF/Excel), `POST /acct/external/email` (joint tous les rapports du contact via Resend). Bouton « Envoyer le package » désactivé tant que Resend non configuré (dégradation gracieuse, 400 clair).
+- [x] Vérifié testing_agent iteration_33 : backend 13/13 + frontend 100 % (catalogue, seed Desjardins, package Juin 2026, PDF présentation, Margination upload/status/download, sécurité admin-only, email guard). PDF présentation inspectés visuellement (conformes aux modèles).
+- [ ] **Limitation connue** : colonne « Budget CA ANNUEL » du P&L présentation = budget cumulatif annualisé linéairement (`bud_ca_cum / mois × 12`) car le budget annuel exact n'est pas importé → léger écart vs budget saisonnier réel. À corriger en important la source du budget annuel.
+- [ ] **À venir** : logo ACCS sur tous les rapports (phase de finalisation) ; activation envoi Resend (clé + expéditeur).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

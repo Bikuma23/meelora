@@ -3141,6 +3141,8 @@ async def delete_external_contact(cid: str, user: dict = Depends(get_current_use
 
 @api.post("/acct/margination/upload")
 async def upload_margination(year: int, month: int, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
     content = await file.read()
     await db.acct_margination.update_one(
         {"_id": _pkey(year, month)},
