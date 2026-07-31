@@ -594,6 +594,7 @@ function InvoicesView({ year, locked, canEdit }) {
             </div>
             <Input value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} placeholder="Nom du client" data-testid="qc-invoice-client" className="h-9" />
             <Input value={form.client_att} onChange={(e) => setForm({ ...form, client_att: e.target.value })} placeholder="À l'attention de (optionnel)" data-testid="qc-invoice-att" className="h-9" />
+            <Input type="email" value={form.client_email} onChange={(e) => setForm({ ...form, client_email: e.target.value })} placeholder="Courriel du client (pour l'envoi par courriel)" data-testid="qc-invoice-email-input" className="h-9" />
             <Input value={form.client_address} onChange={(e) => setForm({ ...form, client_address: e.target.value })} placeholder="Adresse (optionnel)" className="h-9" />
             <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Description (ex. Frais de gestion annuel)" data-testid="qc-invoice-desc" className="h-9" />
             <div><label className="mb-1 block text-xs font-600 text-slate-500">Montant HT ($)</label><Input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} data-testid="qc-invoice-amount" className="h-9" /></div>
@@ -691,8 +692,9 @@ function BillsView({ year, locked, canEdit }) {
             <Input value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} placeholder="Nom du fournisseur" data-testid="qc-bill-supplier" className="h-9" />
             <div className="grid grid-cols-2 gap-3">
               <div><label className="mb-1 block text-xs font-600 text-slate-500">Date</label><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} data-testid="qc-bill-date" className="h-9" /></div>
-              <div><label className="mb-1 block text-xs font-600 text-slate-500">N° facture (réf.)</label><Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} data-testid="qc-bill-ref" className="h-9" /></div>
+              <div><label className="mb-1 block text-xs font-600 text-slate-500">Échéance</label><Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} data-testid="qc-bill-due" className="h-9" /></div>
             </div>
+            <div><label className="mb-1 block text-xs font-600 text-slate-500">N° facture (réf.)</label><Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} data-testid="qc-bill-ref" className="h-9" /></div>
             <div><label className="mb-1 block text-xs font-600 text-slate-500">Compte de charge</label>
               <select value={form.expense_account} onChange={(e) => setForm({ ...form, expense_account: e.target.value })} data-testid="qc-bill-account" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[#0E9488] focus:outline-none">
                 {accounts.map((a) => <option key={a.gl} value={a.gl}>{a.gl} · {a.description}</option>)}
