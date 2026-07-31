@@ -574,6 +574,9 @@ Refonte du hub selon nouvelles demandes + modèle Excel « par responsable » fo
 - [x] **Mise en forme identique au P&L détaillé** (`ReportView`) : nombres via `money()` (négatifs rouges entre parenthèses), ratios en **vert `#0E9488` italique %** (`pctFmt`), en-têtes de section navy, sous-totaux gris, ligne totale navy, regroupement **Q-P DES** (bordures teal + police réduite + 2 lignes d'espacement), couleurs de cellule via `excelCellColor`, police et classes reprises à l'identique.
 - [x] Vérifié par curl (alignement + is_pct + totaux) et captures (comparaison visuelle mensuel vs P&L détaillé : identiques).
 
+## Correctif : pas de % dans le sommaire mensuel (2026-07-30i)
+- [x] Le formatage en pourcentage ne s'applique qu'à l'**État détaillé** (comme `ReportView` où `isDetailedPnl = type === "pnl"`). Dans le mensuel, `is_pct` est désormais gâté par `variant == "detail"` → la ligne **FRAIS FINANCIERS** (et toute autre) du **Résultat sommaire** s'affiche en montants, plus jamais en %. Vérifié (curl : sommaire `is_pct=[]`, détaillé conserve 13 lignes % ; capture sommaire OK).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

@@ -2701,10 +2701,11 @@ async def acct_pnl_monthly(year: int, variant: str = "detail", user: dict = Depe
     last_row_map = ({l.get("row"): l for l in last_r["lines"]} if last_r else {})
     labels = [(ln.get("label") or "").strip() for ln in base_lines]
     baiia_idx = next((i for i, l in enumerate(labels) if "BAIIA" in l), -1)
+    is_detail = (variant != "sommaire")
     out_lines = []
     for i, ln in enumerate(base_lines):
         rk = ln.get("row")
-        is_pct = (labels[i] in PNL_PCT_LABELS) or (baiia_idx >= 0 and i == baiia_idx + 1)
+        is_pct = is_detail and ((labels[i] in PNL_PCT_LABELS) or (baiia_idx >= 0 and i == baiia_idx + 1))
         vals = {}
         for m in months:
             lm = row_maps[m].get(rk)
