@@ -125,14 +125,14 @@ def build_presentation_pnl_pdf(data, year, month_label):
     rows = [head1, head2]
     style = [
         ("SPAN", (1, 0), (3, 0)), ("SPAN", (4, 0), (6, 0)),
-        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("FONTSIZE", (0, 0), (-1, -1), 6.3),
         ("FONTNAME", (0, 0), (-1, 1), "Helvetica-Bold"),
         ("TEXTCOLOR", (1, 0), (6, 0), TEAL),
         ("BACKGROUND", (7, 0), (7, 0), NAVY), ("TEXTCOLOR", (7, 0), (7, 1), WHITE),
         ("ALIGN", (1, 0), (-1, -1), "RIGHT"), ("ALIGN", (0, 0), (0, -1), "LEFT"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("LINEBELOW", (1, 1), (6, 1), 0.5, colors.HexColor("#94A3B8")),
-        ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
+        ("TOPPADDING", (0, 0), (-1, -1), 0.8), ("BOTTOMPADDING", (0, 0), (-1, -1), 0.8),
         ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
     ]
 
@@ -180,8 +180,8 @@ def build_presentation_pnl_pdf(data, year, month_label):
     tbl.setStyle(TableStyle(style))
 
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm,
-                            topMargin=12 * mm, bottomMargin=10 * mm)
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=10 * mm, rightMargin=10 * mm,
+                            topMargin=8 * mm, bottomMargin=6 * mm)
     hS = ParagraphStyle("h", parent=styles["Normal"], fontSize=11, textColor=DARKTX, fontName="Helvetica-Bold")
     subS = ParagraphStyle("s", parent=styles["Normal"], fontSize=8, textColor=DARKTX)
     dateS = ParagraphStyle("d", parent=styles["Normal"], fontSize=8, textColor=ORANGE, fontName="Helvetica-Bold")
@@ -191,7 +191,7 @@ def build_presentation_pnl_pdf(data, year, month_label):
          Paragraph(f"{data.get('month_label','').upper()} {year}", dateS), Paragraph("En dollars canadiens (CAD)", subS)],
         Paragraph("CONFIDENTIEL", confS)]], colWidths=[210 * mm, 60 * mm])
     header_tbl.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    doc.build([header_tbl, Spacer(1, 5 * mm), tbl])
+    doc.build([header_tbl, Spacer(1, 2.5 * mm), tbl])
     buf.seek(0)
     return buf.getvalue()
 
