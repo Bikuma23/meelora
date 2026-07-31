@@ -5372,6 +5372,58 @@ async def qc_invoice_pdf(iid: str, user: dict = Depends(get_current_user)):
     doc.build(el); buf.seek(0)
     return StreamingResponse(buf, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=facture_{inv['number']}.pdf"})
 
+async def _qc_payment_history(source_id: str, source: str, tier_account: str):
+    entries = await db.qc9434_entries.find({"source_id": source_id, "source": source}).sort([("date", 1), ("created_at", 1)]).to_list(1000)
+    out = []
+    for e in entries:
+        amt = round(sum(l.get("debit", 0) if source == "receipt" else l.get("credit", 0)
+                        for l in e.get("lines", []) if l.get("account") == QC_DEF["cash"]), 2)
+        out.append({"num": e.get("num", ""), "date": e.get("date", ""), "amount": amt,
+                    "description": e.get("description", ""), "entry_id": str(e.get("_id"))})
+    return out
+
+@api.get("/qc9434/invoices/{iid}/payments")
+async def qc_invoice_payments(iid: str, user: dict = Depends(get_current_user)):
+    inv = await db.qc9434_invoices.find_one({"_id": _oid(iid)})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Facture introuvable")
+    payments = await _qc_payment_history(iid, "receipt", QC_DEF["ar"])
+    return {"invoice": _qc_invoice_out(inv), "payments": payments}
+
+@api.post("/qc9434/invoices/send-reminders")
+async def qc_invoice_send_reminders(year: int, user: dict = Depends(get_current_user)):
+    if not _email_configured():
+        raise HTTPException(status_code=400, detail="Service d'email non configuré. Un administrateur doit renseigner la clé Resend.")
+    today = datetime.now(timezone.utc).date().isoformat()
+    docs = await db.qc9434_invoices.find({"year": int(year)}).to_list(2000)
+    overdue = [d for d in docs if d.get("status") != "paid" and d.get("due_date") and d["due_date"] < today]
+    import resend
+    resend.api_key = os.environ["RESEND_API_KEY"]
+    sent, skipped = [], []
+    for inv in overdue:
+        email = (inv.get("client_email") or "").strip()
+        if not email:
+            skipped.append({"number": inv.get("number"), "reason": "aucun courriel"}); continue
+        bal = round(inv.get("total", 0) - inv.get("paid_amount", 0), 2)
+        html = (f"<div style=\"font-family:Arial,sans-serif;color:#1e293b;font-size:14px\"><p>Bonjour,</p>"
+                f"<p>Notre système indique que la facture <strong>#{inv['number']}</strong> "
+                f"(échéance du <strong>{inv.get('due_date')}</strong>) demeure impayée.</p>"
+                f"<p>Solde dû : <strong>{bal:,.2f} $</strong> sur un total de {inv.get('total',0):,.2f} $.</p>"
+                f"<p>Nous vous saurions gré de bien vouloir procéder au règlement dans les meilleurs délais. "
+                f"Si le paiement a déjà été effectué, veuillez ignorer ce rappel.</p>"
+                f"<p style=\"color:#64748b;font-size:12px;margin-top:24px\">9434-3977 Québec Inc.</p></div>")
+        try:
+            await asyncio.to_thread(resend.Emails.send, {"from": os.environ.get("SENDER_EMAIL", "onboarding@resend.dev"),
+                "to": [email], "subject": f"Rappel — Facture #{inv['number']} échue — 9434-3977 Québec Inc.", "html": html})
+            await db.qc9434_invoices.update_one({"_id": inv["_id"]}, {"$set": {"reminded_at": datetime.now(timezone.utc).isoformat()}})
+            sent.append({"number": inv.get("number"), "email": email})
+        except Exception as e:
+            logger.error(f"Relance facture {inv.get('number')} échec : {e}")
+            skipped.append({"number": inv.get("number"), "reason": str(e)[:80]})
+    await log_action(user, "Relancer", "9434 — Factures clients", f"{len(sent)} relance(s) · {len(skipped)} ignorée(s)")
+    msg = f"{len(sent)} rappel(s) envoyé(s)" + (f", {len(skipped)} ignoré(s)" if skipped else "")
+    return {"success": True, "sent": sent, "skipped": skipped, "message": msg}
+
 # ---- Factures fournisseurs (auxiliaire payable) ------------------------
 def _qc_bill_out(d):
     total = d.get("total", 0); paid = d.get("paid_amount", 0)
@@ -5460,6 +5512,14 @@ async def qc_pay_bill(bid: str, date: str = "", amount: float = 0, user: dict = 
         "status": "paid" if paid_full else "partial", "paid_at": datetime.now(timezone.utc).isoformat() if paid_full else b.get("paid_at")}})
     await log_action(user, "Payer", "9434 — Facture fournisseur", f"{b.get('supplier','')} ({amt:,.2f} $)")
     return {"success": True, "paid_amount": new_paid, "balance": round(b["total"] - new_paid, 2)}
+
+@api.get("/qc9434/bills/{bid}/payments")
+async def qc_bill_payments(bid: str, user: dict = Depends(get_current_user)):
+    b = await db.qc9434_bills.find_one({"_id": _oid(bid)})
+    if not b:
+        raise HTTPException(status_code=404, detail="Facture introuvable")
+    payments = await _qc_payment_history(bid, "payment", QC_DEF["ap"])
+    return {"bill": _qc_bill_out(b), "payments": payments}
 
 @api.get("/qc9434/bills/{bid}/file")
 async def qc_bill_file(bid: str, auth: str = Query(None), authorization: str = Header(None)):
@@ -5579,8 +5639,29 @@ async def _qc_etats_financiers(year):
     capital = round(cum_pos("310000"), 2)
     bnr_bilan = bnr_fin_cur
     total_pc = round(total_passif + capital + bnr_bilan, 2)
+    # ---- États des flux de trésorerie (méthode indirecte) ----
+    def bopen(gl): return (bal.get(gl) or {}).get("opening", 0.0)
+    def bclose(gl): return (bal.get(gl) or {}).get("cumulative", 0.0)
+    def contrib(gls): return round(sum(bopen(g) - bclose(g) for g in gls), 2)  # apport de trésorerie (débit: ouverture - clôture)
+    CASH = ["100105", "100110"]; ARG = ["130118"]; TXREC = ["145110", "145101"]; PLAC = ["160010"]
+    PAY = ["211010", "211120"]; TXREM = ["215301", "215310", "215311"]; IMP = ["215400"]; CAP = ["310000"]
+    cash_open = round(sum(bopen(g) for g in CASH), 2)
+    cash_close = round(sum(bclose(g) for g in CASH), 2)
+    net_mv = cur["net"]; qp_mv = cur["qp"]
+    d_clients = contrib(ARG); d_txrec = contrib(TXREC); d_pay = contrib(PAY); d_txrem = contrib(TXREM); d_imp = contrib(IMP)
+    wc = round(d_clients + d_txrec + d_pay + d_txrem + d_imp, 2)
+    op_sub = round(net_mv - qp_mv + wc, 2)
+    fin = contrib(CAP)
+    inv = round(contrib(PLAC) + qp_mv, 2)
+    net_var = round(op_sub + fin + inv, 2)
+    cf = {"net": net_mv, "qp_noncash": round(-qp_mv, 2), "wc": wc, "op_sub": op_sub,
+          "capital": fin, "fin_sub": fin, "placement": inv, "inv_sub": inv,
+          "net_var": net_var, "cash_open": cash_open, "cash_close": round(cash_open + net_var, 2),
+          "bilan_cash": cash_close, "reconciled": abs(cash_open + net_var - cash_close) < 1.0,
+          "wc_detail": {"clients": d_clients, "taxes_rec": d_txrec, "crediteurs": d_pay, "taxes_rem": d_txrem, "impot": d_imp, "total": wc}}
     return {"year": int(year), "cur": cur, "prev": prev,
             "bnr": {"debut_cur": bnr_debut_cur, "fin_cur": bnr_fin_cur, "debut_prev": bnr_debut_prev, "fin_prev": bnr_fin_prev},
+            "cashflow": cf,
             "bilan": {"treso": treso, "clients": clients, "taxes_rec": taxes_rec, "total_ct": total_ct,
                       "placement": placement, "total_actif": total_actif, "crediteurs": crediteurs, "taxes_rem": taxes_rem,
                       "impot_pay": impot_pay, "total_passif": total_passif, "capital": capital, "bnr": bnr_bilan, "total_pc": total_pc},
@@ -5643,6 +5724,41 @@ def _qc_ef_pdf(ef):
             ("FONTNAME", (0, 17), (-1, 17), "Helvetica-Bold"), ("LINEABOVE", (0, 8), (-1, 8), 0.5, NAVY),
             ("LINEABOVE", (0, 17), (-1, 17), 0.5, NAVY)]
     t2.setStyle(TableStyle(st2)); el += [t2]
+    cf = ef.get("cashflow")
+    if cf:
+        el += [PageBreak(), Paragraph("9434-3977 QUÉBEC INC. - COMMANDITÉ", H), Spacer(1, 2 * mm),
+               Paragraph("ÉTATS DES FLUX DE TRÉSORERIE", H),
+               Paragraph(f"Exercice terminé le 31 décembre {y} — Non-audités — En dollars canadiens", SUB), Spacer(1, 4 * mm)]
+        crows = [["", str(y), ""],
+                 ["Activités d'exploitation", "", ""],
+                 ["  Bénéfice (perte) net(te) de l'exercice", cf["net"], ""],
+                 ["  Élément sans effet sur la trésorerie :", "", ""],
+                 ["    Quote-part des résultats de la Société en commandite", cf["qp_noncash"], ""],
+                 ["  Variation des éléments hors caisse du fonds de roulement", cf["wc"], ""],
+                 ["  ", cf["op_sub"], ""],
+                 ["Activités de financement", "", ""],
+                 ["  Émission d'actions ordinaires", cf["capital"], ""],
+                 ["Activités d'investissement", "", ""],
+                 ["  Variation du placement – Société en commandite ACCS", cf["placement"], ""],
+                 ["Variation nette de la trésorerie au cours de l'exercice", cf["net_var"], ""],
+                 ["Trésorerie au début de l'exercice", cf["cash_open"], ""],
+                 ["Trésorerie à la fin de l'exercice", cf["cash_close"], ""]]
+        t3, st3 = money_table(crows)
+        st3 += [("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"), ("FONTNAME", (0, 7), (-1, 7), "Helvetica-Bold"),
+                ("FONTNAME", (0, 9), (-1, 9), "Helvetica-Bold"), ("FONTNAME", (0, 11), (-1, 13), "Helvetica-Bold"),
+                ("LINEABOVE", (0, 6), (-1, 6), 0.3, colors.grey), ("LINEABOVE", (0, 11), (-1, 11), 0.5, NAVY)]
+        t3.setStyle(TableStyle(st3)); el += [t3, Spacer(1, 4 * mm)]
+        drows = [["Informations supplémentaires — Variation des éléments hors caisse du fonds de roulement", str(y), ""],
+                 ["  Clients – Société en commandite ACCS", cf["wc_detail"]["clients"], ""],
+                 ["  Sommes à recevoir de l'état - Taxes de ventes", cf["wc_detail"]["taxes_rec"], ""],
+                 ["  Créditeurs et charges à payer aux apparentés", cf["wc_detail"]["crediteurs"], ""],
+                 ["  Taxes de ventes à remettre", cf["wc_detail"]["taxes_rem"], ""],
+                 ["  Impôt à payer", cf["wc_detail"]["impot"], ""],
+                 ["  ", cf["wc_detail"]["total"], ""]]
+        t4, st4 = money_table(drows)
+        st4 += [("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, 0), 8),
+                ("LINEABOVE", (0, 6), (-1, 6), 0.3, colors.grey)]
+        t4.setStyle(TableStyle(st4)); el += [t4]
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=22 * mm, rightMargin=22 * mm, topMargin=18 * mm, bottomMargin=18 * mm)
     doc.build(el); buf.seek(0)
@@ -5675,6 +5791,28 @@ def _qc_ef_xlsx(ef):
                    ("Total du passif", b["total_passif"]), ("Capital-actions", b["capital"]),
                    ("Bénéfices non-répartis", b["bnr"]), ("TOTAL DU PASSIF ET CAPITAUX", b["total_pc"])]:
         ws.append([lbl, v])
+    cf = ef.get("cashflow")
+    if cf:
+        ws.append([]); ws.append(["ÉTATS DES FLUX DE TRÉSORERIE", y])
+        for lbl, v in [("Activités d'exploitation", None),
+                       ("  Bénéfice (perte) net(te) de l'exercice", cf["net"]),
+                       ("  Quote-part des résultats de la Société en commandite (sans effet trésorerie)", cf["qp_noncash"]),
+                       ("  Variation des éléments hors caisse du fonds de roulement", cf["wc"]),
+                       ("  Flux liés à l'exploitation", cf["op_sub"]),
+                       ("Activités de financement — Émission d'actions ordinaires", cf["capital"]),
+                       ("Activités d'investissement — Variation du placement – SEC ACCS", cf["placement"]),
+                       ("Variation nette de la trésorerie", cf["net_var"]),
+                       ("Trésorerie au début de l'exercice", cf["cash_open"]),
+                       ("Trésorerie à la fin de l'exercice", cf["cash_close"])]:
+            ws.append([lbl, v])
+        ws.append([]); ws.append(["Variation des éléments hors caisse du fonds de roulement", y])
+        for lbl, v in [("Clients – Société en commandite ACCS", cf["wc_detail"]["clients"]),
+                       ("Sommes à recevoir de l'état - Taxes de ventes", cf["wc_detail"]["taxes_rec"]),
+                       ("Créditeurs et charges à payer aux apparentés", cf["wc_detail"]["crediteurs"]),
+                       ("Taxes de ventes à remettre", cf["wc_detail"]["taxes_rem"]),
+                       ("Impôt à payer", cf["wc_detail"]["impot"]),
+                       ("Total", cf["wc_detail"]["total"])]:
+            ws.append([lbl, v])
     ws["A1"].font = Font(bold=True, size=13); ws.column_dimensions["A"].width = 52
     for col in ("B", "C"):
         ws.column_dimensions[col].width = 16

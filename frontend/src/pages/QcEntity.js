@@ -521,11 +521,46 @@ function BillStatus({ status }) {
   return <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-600 text-amber-700" data-testid="qc-bill-status-open">Ouverte</span>;
 }
 
+function PaymentHistoryDialog({ open, onOpenChange, kind, id, label }) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    if (!open || !id) { setData(null); return; }
+    (kind === "bill" ? api.qcBillPayments(id) : api.qcInvoicePayments(id)).then(setData).catch(() => setData(null));
+  }, [open, id, kind]);
+  const doc = data ? (kind === "bill" ? data.bill : data.invoice) : null;
+  const payments = data?.payments || [];
+  const verb = kind === "bill" ? "Paiement" : "Encaissement";
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="qc-payment-history-dialog" className="max-h-[85vh] max-w-lg overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Clock size={16} className="text-[#0E9488]" /> Historique des {verb.toLowerCase()}s — {label}</DialogTitle>
+          <DialogDescription className="text-xs">{doc ? <>Total {money(doc.total)} $ · Réglé {money(doc.paid_amount)} $ · Solde {money(doc.balance)} $ · <InvoiceStatus status={doc.status} /></> : "Chargement…"}</DialogDescription>
+        </DialogHeader>
+        {!data ? <p className="py-6 text-center text-sm text-slate-400">Chargement…</p>
+          : payments.length === 0 ? <p className="py-6 text-center text-sm text-slate-400" data-testid="qc-payment-empty">Aucun {verb.toLowerCase()} enregistré pour l'instant.</p>
+          : <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-payment-table">
+              <thead><tr className="bg-[#063044] text-left text-xs uppercase text-white"><th className="px-3 py-2">Écriture</th><th className="px-3 py-2">Date</th><th className="px-3 py-2 text-right">Montant</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {payments.map((p, i) => (
+                  <tr key={i} data-testid={`qc-payment-row-${i}`}><td className="px-3 py-1.5 font-mono-data text-xs text-[#0E9488]">{p.num}</td><td className="px-3 py-1.5 text-xs">{p.date}</td><td className="px-3 py-1.5 text-right font-mono-data">{money(p.amount)}</td></tr>
+                ))}
+              </tbody>
+              <tfoot><tr className="border-t-2 border-[#063044] bg-slate-50 font-700"><td className="px-3 py-2" colSpan={2}>Total réglé</td><td className="px-3 py-2 text-right font-mono-data">{money(payments.reduce((s, p) => s + (p.amount || 0), 0))}</td></tr></tfoot>
+            </table></div>}
+        <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Fermer</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function InvoicesView({ year, locked, canEdit }) {
   const [rows, setRows] = useState([]);
   const [dlg, setDlg] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ date: TODAY, due_date: "", client_name: "", client_att: "", client_address: "", client_email: "", description: "", amount: "" });
+  const [history, setHistory] = useState(null);
+  const [reminding, setReminding] = useState(false);
   const load = useCallback(() => { if (year) api.qcInvoices({ year }).then(setRows).catch(() => setRows([])); }, [year]);
   useEffect(() => { load(); }, [load]);
   const amt = Number(form.amount) || 0;
@@ -544,6 +579,11 @@ function InvoicesView({ year, locked, canEdit }) {
     try { await api.qcReceiveInvoice(inv.id, { date: TODAY, amount: a }); toast.success("Encaissement comptabilisé"); load(); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); }
   };
   const emailInvoice = async (inv) => { try { const r = await api.qcEmailInvoice(inv.id); toast.success(r.message || "Envoyée"); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } };
+  const sendReminders = async () => {
+    setReminding(true);
+    try { const r = await api.qcInvoiceSendReminders({ year }); toast.success(r.message || "Rappels envoyés"); load(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Envoi impossible"); } finally { setReminding(false); }
+  };
   const pdf = async (inv) => { try { const b = await api.qcInvoicePdf(inv.id); const url = URL.createObjectURL(b); const a = document.createElement("a"); a.href = url; a.download = `facture_${inv.number}.pdf`; a.click(); URL.revokeObjectURL(url); } catch { toast.error("PDF indisponible"); } };
   const openTotal = rows.filter((r) => r.status !== "paid").reduce((s, r) => s + (r.balance || 0), 0);
   const overdueCount = rows.filter(overdue).length;
@@ -554,7 +594,7 @@ function InvoicesView({ year, locked, canEdit }) {
         <p className="text-sm text-slate-500">{rows.length} facture(s) · Solde à recevoir : <strong>{money(openTotal)} $</strong></p>
         {canEdit && !locked && <Button size="sm" onClick={() => setDlg(true)} data-testid="qc-add-invoice" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouvelle facture</Button>}
       </div>
-      {overdueCount > 0 && <div data-testid="qc-ar-overdue-banner" className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-600 text-red-700"><AlertTriangle size={16} /> {overdueCount} facture(s) en retard (échéance dépassée).</div>}
+      {overdueCount > 0 && <div data-testid="qc-ar-overdue-banner" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-600 text-red-700"><span className="flex items-center gap-2"><AlertTriangle size={16} /> {overdueCount} facture(s) en retard (échéance dépassée).</span>{canEdit && <Button size="sm" onClick={sendReminders} disabled={reminding} data-testid="qc-ar-remind-btn" className="gap-1.5 bg-red-600 hover:bg-red-700"><Mail size={14} /> {reminding ? "Envoi…" : "Relancer les retards"}</Button>}</div>}
       {rows.length === 0
         ? <div className="card p-10 text-center text-sm text-slate-400" data-testid="qc-ar-empty">Aucune facture client pour cet exercice.</div>
         : <div className="card overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-invoices-table">
@@ -574,6 +614,7 @@ function InvoicesView({ year, locked, canEdit }) {
                   <td className="px-3 py-2 text-right font-mono-data">{money(r.balance)}</td>
                   <td className="px-3 py-2"><InvoiceStatus status={r.status} /></td>
                   <td className="px-3 py-2"><div className="flex justify-end gap-1">
+                    <button onClick={() => setHistory({ id: r.id, label: r.number })} data-testid={`qc-invoice-history-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Historique des encaissements"><Clock size={14} /></button>
                     <button onClick={() => pdf(r)} data-testid={`qc-invoice-pdf-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="PDF"><FileDown size={14} /></button>
                     {r.client_email && <button onClick={() => emailInvoice(r)} data-testid={`qc-invoice-email-${r.id}`} className="rounded p-1.5 text-[#0E9488] hover:bg-[#0E9488]/10" title={`Envoyer à ${r.client_email}`}><Mail size={14} /></button>}
                     {canEdit && !locked && r.status !== "paid" && <button onClick={() => receive(r)} data-testid={`qc-invoice-receive-${r.id}`} className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50" title="Encaisser"><Wallet size={14} /></button>}
@@ -582,6 +623,8 @@ function InvoicesView({ year, locked, canEdit }) {
               );})}
             </tbody>
           </table></div></div>}
+
+      <PaymentHistoryDialog open={!!history} onOpenChange={(v) => !v && setHistory(null)} kind="invoice" id={history?.id} label={history?.label} />
 
       <Dialog open={dlg} onOpenChange={setDlg}>
         <DialogContent data-testid="qc-invoice-dialog" className="max-w-lg">
@@ -649,6 +692,7 @@ function BillsView({ year, locked, canEdit }) {
   const API = process.env.REACT_APP_BACKEND_URL;
   const token = localStorage.getItem("token");
   const viewFile = (b) => window.open(`${API}/api/qc9434/bills/${b.id}/file?auth=${token}`, "_blank");
+  const [history, setHistory] = useState(null);
 
   return (
     <div className="space-y-3" data-testid="qc-ap-view">
@@ -676,6 +720,7 @@ function BillsView({ year, locked, canEdit }) {
                   <td className="px-3 py-2 text-right font-mono-data">{money(r.balance)}</td>
                   <td className="px-3 py-2"><BillStatus status={r.status} /></td>
                   <td className="px-3 py-2"><div className="flex justify-end gap-1">
+                    <button onClick={() => setHistory({ id: r.id, label: r.number })} data-testid={`qc-bill-history-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Historique des paiements"><Clock size={14} /></button>
                     {r.file_id && <button onClick={() => viewFile(r)} data-testid={`qc-bill-file-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Voir le fichier"><Eye size={14} /></button>}
                     {canEdit && !locked && r.status !== "paid" && <button onClick={() => pay(r)} data-testid={`qc-bill-pay-${r.id}`} className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50" title="Payer"><Wallet size={14} /></button>}
                   </div></td>
@@ -683,6 +728,8 @@ function BillsView({ year, locked, canEdit }) {
               );})}
             </tbody>
           </table></div></div>}
+
+      <PaymentHistoryDialog open={!!history} onOpenChange={(v) => !v && setHistory(null)} kind="bill" id={history?.id} label={history?.label} />
 
       <Dialog open={dlg} onOpenChange={setDlg}>
         <DialogContent data-testid="qc-bill-dialog" className="max-w-lg">
@@ -875,6 +922,46 @@ function EtatsFinanciersView({ year }) {
           </tbody>
         </table></div>
       </div>
+
+      {/* États des flux de trésorerie */}
+      {ef.cashflow && (() => {
+        const cf = ef.cashflow;
+        return (
+          <div className="card overflow-hidden" data-testid="qc-ef-cashflow">
+            <div className="border-b border-slate-100 bg-[#063044] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">États des flux de trésorerie</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · Exercice terminé le 31 décembre {year} · méthode indirecte</p></div>
+            {!cf.reconciled && <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-600 text-amber-700">Note : léger écart de réconciliation (trésorerie au bilan {money(cf.bilan_cash)} $).</div>}
+            <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ef-cashflow-table">
+              <thead><tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><th className="px-3 py-2">Poste</th><th className="px-3 py-2 text-right">{year}</th></tr></thead>
+              <tbody className="divide-y divide-slate-50">
+                <R label="Activités d'exploitation" kind="header" prev="none" />
+                <R label="Bénéfice (perte) net(te) de l'exercice" kind="indent" cur={cf.net} prev="none" />
+                <R label="Élément sans effet sur la trésorerie :" kind="indent" prev="none" />
+                <R label="Quote-part des résultats de la Société en commandite" kind="indent" cur={cf.qp_noncash} prev="none" />
+                <R label="Variation des éléments hors caisse du fonds de roulement" kind="indent" cur={cf.wc} prev="none" />
+                <R label="Flux liés aux activités d'exploitation" kind="subtotal" cur={cf.op_sub} prev="none" />
+                <R label="Activités de financement" kind="header" prev="none" />
+                <R label="Émission d'actions ordinaires" kind="indent" cur={cf.capital} prev="none" />
+                <R label="Activités d'investissement" kind="header" prev="none" />
+                <R label="Variation du placement – Société en commandite ACCS" kind="indent" cur={cf.placement} prev="none" />
+                <R label="Variation nette de la trésorerie au cours de l'exercice" kind="subtotal" cur={cf.net_var} prev="none" />
+                <R label="Trésorerie au début de l'exercice" kind="indent" cur={cf.cash_open} prev="none" />
+                <R label="Trésorerie à la fin de l'exercice" kind="total" cur={cf.cash_close} prev="none" />
+              </tbody>
+            </table></div>
+            <div className="border-t border-slate-100 px-4 py-2"><p className="text-xs font-700 uppercase text-[#0E9488]">Informations supplémentaires — Variation des éléments hors caisse</p></div>
+            <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ef-cashflow-detail">
+              <tbody className="divide-y divide-slate-50">
+                <R label="Clients – Société en commandite ACCS" kind="indent" cur={cf.wc_detail.clients} prev="none" />
+                <R label="Sommes à recevoir de l'état - Taxes de ventes" kind="indent" cur={cf.wc_detail.taxes_rec} prev="none" />
+                <R label="Créditeurs et charges à payer aux apparentés" kind="indent" cur={cf.wc_detail.crediteurs} prev="none" />
+                <R label="Taxes de ventes à remettre" kind="indent" cur={cf.wc_detail.taxes_rem} prev="none" />
+                <R label="Impôt à payer" kind="indent" cur={cf.wc_detail.impot} prev="none" />
+                <R label="Total" kind="subtotal" cur={cf.wc_detail.total} prev="none" />
+              </tbody>
+            </table></div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
