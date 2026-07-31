@@ -179,4 +179,7 @@ export const api = {
   qcCreateBill: (formData) => client.post("/qc9434/bills", formData, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data),
   qcPayBill: (id, params) => client.post(`/qc9434/bills/${id}/pay`, {}, { params }).then((r) => r.data),
   qcImportModel: () => client.post("/qc9434/import-model", {}).then((r) => r.data),
+  qcEmailInvoice: (id) => client.post(`/qc9434/invoices/${id}/email`, {}).then((r) => r.data),
+  qcAccountDetail: (params) => client.get("/qc9434/account-detail", { params }).then((r) => r.data),
+  qcEtatsFinanciers: (params) => client.get("/qc9434/etats-financiers", { params }).then((r) => r.data),
 };

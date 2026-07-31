@@ -152,6 +152,49 @@ export default function QcEntity() {
   );
 }
 
+function AccountDetailModal({ year, account, scope, onClose }) {
+  const [d, setD] = useState(null);
+  useEffect(() => { if (account) api.qcAccountDetail({ year, account, scope }).then(setD).catch(() => setD(null)); }, [year, account, scope]);
+  return (
+    <Dialog open={!!account} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent data-testid="qc-account-detail-modal" className="max-h-[85vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#0E9488]" /> Détail du compte {account} {d?.name ? `— ${d.name}` : ""}</DialogTitle>
+          <DialogDescription className="text-xs">{scope === "cumulative" ? "Écritures cumulatives jusqu'à la fin de l'exercice" : `Écritures de l'exercice ${year}`} · Solde : {d ? money(d.balance) : "…"} $</DialogDescription>
+        </DialogHeader>
+        {!d ? <p className="py-6 text-center text-sm text-slate-400">Chargement…</p>
+          : d.rows.length === 0 ? <p className="py-6 text-center text-sm text-slate-400" data-testid="qc-detail-empty">Aucune écriture pour ce compte.</p>
+          : <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-detail-table">
+              <thead><tr className="bg-[#063044] text-left text-xs uppercase text-white">
+                <th className="px-3 py-2">N°</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Description</th><th className="px-3 py-2">Tiers</th><th className="px-3 py-2 text-right">Débit</th><th className="px-3 py-2 text-right">Crédit</th><th className="px-3 py-2 text-right">Solde</th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {d.rows.map((r, i) => (
+                  <tr key={i} className="hover:bg-slate-50" data-testid={`qc-detail-row-${i}`}>
+                    <td className="px-3 py-1.5 font-mono-data text-xs text-[#0E9488]">{r.num}</td>
+                    <td className="px-3 py-1.5 text-xs">{r.date}</td>
+                    <td className="px-3 py-1.5">{r.description}</td>
+                    <td className="px-3 py-1.5 text-xs text-slate-500">{r.tiers || "—"}</td>
+                    <td className="px-3 py-1.5 text-right font-mono-data">{r.debit ? money(r.debit) : "—"}</td>
+                    <td className="px-3 py-1.5 text-right font-mono-data">{r.credit ? money(r.credit) : "—"}</td>
+                    <td className="px-3 py-1.5 text-right font-mono-data">{money(r.balance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr className="border-t-2 border-[#063044] bg-slate-50 font-700">
+                <td className="px-3 py-2" colSpan={4}>TOTAL</td>
+                <td className="px-3 py-2 text-right font-mono-data">{money(d.total_debit)}</td>
+                <td className="px-3 py-2 text-right font-mono-data">{money(d.total_credit)}</td>
+                <td className="px-3 py-2 text-right font-mono-data">{money(d.balance)}</td>
+              </tr></tfoot>
+            </table></div>}
+        <DialogFooter><Button variant="outline" onClick={onClose}>Fermer</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
 function PlaceholderView({ label }) {
   return (
     <div className="card p-10 text-center" data-testid="qc-placeholder">
@@ -385,6 +428,7 @@ function EntriesView({ year, locked, canEdit }) {
 // ===================== Balance de vérification =====================
 function TrialBalanceView({ year }) {
   const [tb, setTb] = useState(null);
+  const [drill, setDrill] = useState(null);
   useEffect(() => { if (year) api.qcTrialBalance({ year }).then(setTb).catch(() => setTb(null)); }, [year]);
   const dl = async () => {
     try { const b = await api.qcTrialBalanceExcel({ year }); const url = URL.createObjectURL(b); const a = document.createElement("a"); a.href = url; a.download = `balance_verification_9434_${year}.xlsx`; a.click(); URL.revokeObjectURL(url); }
@@ -409,8 +453,8 @@ function TrialBalanceView({ year }) {
             <tbody className="divide-y divide-slate-100">
               {tb.rows.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-slate-400">Aucun compte (saisissez des écritures).</td></tr>}
               {tb.rows.map((r) => (
-                <tr key={r.account} className="hover:bg-slate-50">
-                  <td className="px-3 py-1.5 font-mono-data text-xs">{r.account}</td>
+                <tr key={r.account} className="cursor-pointer hover:bg-[#0E9488]/5" onClick={() => setDrill(r.account)} data-testid={`qc-tb-row-${r.account}`} title="Voir le détail des écritures">
+                  <td className="px-3 py-1.5 font-mono-data text-xs text-[#0E9488] underline decoration-dotted">{r.account}</td>
                   <td className="px-3 py-1.5">{r.account_name || "—"}</td>
                   <td className="px-3 py-1.5 text-right font-mono-data">{r.debit ? money(r.debit) : "—"}</td>
                   <td className="px-3 py-1.5 text-right font-mono-data">{r.credit ? money(r.credit) : "—"}</td>
@@ -427,6 +471,7 @@ function TrialBalanceView({ year }) {
           </table>
         </div>
       </div>
+      {drill && <AccountDetailModal year={year} account={drill} scope="movement" onClose={() => setDrill(null)} />}
     </div>
   );
 }
@@ -437,20 +482,28 @@ function InvoicesView({ year, locked, canEdit }) {
   const [rows, setRows] = useState([]);
   const [dlg, setDlg] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ date: TODAY, due_date: "", client_name: "", client_att: "", client_address: "", description: "", amount: "" });
+  const [form, setForm] = useState({ date: TODAY, due_date: "", client_name: "", client_att: "", client_address: "", client_email: "", description: "", amount: "" });
   const load = useCallback(() => { if (year) api.qcInvoices({ year }).then(setRows).catch(() => setRows([])); }, [year]);
   useEffect(() => { load(); }, [load]);
   const amt = Number(form.amount) || 0;
   const tps = Math.round(amt * 0.05 * 100) / 100, tvq = Math.round(amt * 0.09975 * 100) / 100, total = Math.round((amt + tps + tvq) * 100) / 100;
+  const overdue = (r) => r.status !== "paid" && r.due_date && r.due_date < TODAY;
   const save = async () => {
     if (!form.client_name.trim() || amt <= 0) { toast.error("Client et montant requis"); return; }
     setSaving(true);
-    try { await api.qcCreateInvoice({ ...form, amount: amt }, { year }); toast.success("Facture créée et comptabilisée"); setDlg(false); setForm({ date: TODAY, due_date: "", client_name: "", client_att: "", client_address: "", description: "", amount: "" }); load(); }
+    try { await api.qcCreateInvoice({ ...form, amount: amt }, { year }); toast.success("Facture créée et comptabilisée"); setDlg(false); setForm({ date: TODAY, due_date: "", client_name: "", client_att: "", client_address: "", client_email: "", description: "", amount: "" }); load(); }
     catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setSaving(false); }
   };
-  const receive = async (inv) => { try { await api.qcReceiveInvoice(inv.id, { date: TODAY }); toast.success("Encaissement comptabilisé"); load(); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } };
+  const receive = async (inv) => {
+    const input = window.prompt(`Montant à encaisser (solde ${money(inv.balance)} $) — laisser vide pour le solde complet :`, "");
+    if (input === null) return;
+    const a = input.trim() === "" ? 0 : Number(input);
+    try { await api.qcReceiveInvoice(inv.id, { date: TODAY, amount: a }); toast.success("Encaissement comptabilisé"); load(); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); }
+  };
+  const emailInvoice = async (inv) => { try { const r = await api.qcEmailInvoice(inv.id); toast.success(r.message || "Envoyée"); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } };
   const pdf = async (inv) => { try { const b = await api.qcInvoicePdf(inv.id); const url = URL.createObjectURL(b); const a = document.createElement("a"); a.href = url; a.download = `facture_${inv.number}.pdf`; a.click(); URL.revokeObjectURL(url); } catch { toast.error("PDF indisponible"); } };
-  const openTotal = rows.filter((r) => r.status !== "paid").reduce((s, r) => s + (r.total || 0), 0);
+  const openTotal = rows.filter((r) => r.status !== "paid").reduce((s, r) => s + (r.balance || 0), 0);
+  const overdueCount = rows.filter(overdue).length;
 
   return (
     <div className="space-y-3" data-testid="qc-ar-view">
@@ -609,6 +662,7 @@ function BillsView({ year, locked, canEdit }) {
 // ===================== Bilan / États des résultats =====================
 function StatementView({ year, kind }) {
   const [rep, setRep] = useState(null);
+  const [drill, setDrill] = useState(null);
   const isBilan = kind === "bilan";
   useEffect(() => {
     if (!year) return;
@@ -652,9 +706,10 @@ function StatementView({ year, kind }) {
             <tbody>
               {rep.lines.map((ln, i) => {
                 const isText = ln.kind === "title" || ln.kind === "header";
+                const clickable = ln.kind === "data" && ln.gl;
                 return (
-                  <tr key={i} className={rowCls(ln.kind)} data-testid={`qc-${kind}-line-${i}`}>
-                    <td className="px-3 py-1.5 font-mono-data text-xs">{ln.gl || ""}</td>
+                  <tr key={i} className={`${rowCls(ln.kind)} ${clickable ? "cursor-pointer hover:bg-[#0E9488]/5" : ""}`} onClick={clickable ? () => setDrill(ln.gl) : undefined} data-testid={`qc-${kind}-line-${i}`} title={clickable ? "Voir le détail des écritures" : undefined}>
+                    <td className={`px-3 py-1.5 font-mono-data text-xs ${clickable ? "text-[#0E9488] underline decoration-dotted" : ""}`}>{ln.gl || ""}</td>
                     <td className="px-3 py-1.5">{ln.label}</td>
                     {isText ? cols.map(([k]) => <td key={k}></td>)
                       : cols.map(([k]) => <td key={k} className={`px-3 py-1.5 text-right font-mono-data ${(ln[k] || 0) < 0 ? "text-red-600" : ""}`}>{ln[k] === undefined || ln[k] === null ? "" : money(ln[k])}</td>)}
@@ -665,6 +720,7 @@ function StatementView({ year, kind }) {
           </table>
         </div>
       </div>
+      {drill && <AccountDetailModal year={year} account={drill} scope={isBilan ? "cumulative" : "movement"} onClose={() => setDrill(null)} />}
     </div>
   );
 }

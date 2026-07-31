@@ -4366,6 +4366,8 @@ class QcExternalContact(BaseModel):
     active: bool = True
 
 QC_EXTERNAL_CATALOG = [
+    {"key": "etats_financiers_pdf", "label": "États Financiers complets (PDF)", "fmt": "pdf"},
+    {"key": "etats_financiers", "label": "États Financiers complets (Excel)", "fmt": "xlsx"},
     {"key": "bilan_pdf", "label": "Bilan détaillé (PDF)", "fmt": "pdf"},
     {"key": "pnl_pdf", "label": "État des résultats (PDF)", "fmt": "pdf"},
     {"key": "trial_balance", "label": "Balance de vérification (Excel)", "fmt": "xlsx"},
@@ -4666,6 +4668,11 @@ async def _qc_generate_external(key, year):
     if key == "pnl_pdf":
         rep = await _qc_pnl(year)
         return _qc_report_pdf(rep, "ÉTAT DES RÉSULTATS", year), f"resultats_9434_{year}.pdf", "application/pdf"
+    if key == "etats_financiers_pdf":
+        return _qc_ef_pdf(await _qc_etats_financiers(year)), f"etats_financiers_9434_{year}.pdf", "application/pdf"
+    if key == "etats_financiers":
+        return _qc_ef_xlsx(await _qc_etats_financiers(year)), f"etats_financiers_9434_{year}.xlsx", \
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     return None, None, None
 
 @api.get("/qc9434/external/catalog")
@@ -5207,12 +5214,13 @@ async def _qc_next_invoice_number(year):
     return n, f"{year}-{n:03d}"
 
 def _qc_invoice_out(d):
+    total = d.get("total", 0); paid = d.get("paid_amount", 0)
     return {"id": str(d["_id"]), "year": d.get("year"), "number": d.get("number"), "date": d.get("date"),
             "due_date": d.get("due_date"), "client_name": d.get("client_name", ""), "client_att": d.get("client_att", ""),
-            "client_address": d.get("client_address", ""), "description": d.get("description", ""),
-            "amount": d.get("amount", 0), "tps": d.get("tps", 0), "tvq": d.get("tvq", 0), "total": d.get("total", 0),
-            "status": d.get("status", "open"), "paid_at": d.get("paid_at"), "entry_id": str(d.get("entry_id")) if d.get("entry_id") else None,
-            "receipt_entry_id": str(d.get("receipt_entry_id")) if d.get("receipt_entry_id") else None}
+            "client_address": d.get("client_address", ""), "client_email": d.get("client_email", ""), "description": d.get("description", ""),
+            "amount": d.get("amount", 0), "tps": d.get("tps", 0), "tvq": d.get("tvq", 0), "total": total,
+            "paid_amount": round(paid, 2), "balance": round(total - paid, 2),
+            "status": d.get("status", "open"), "paid_at": d.get("paid_at"), "entry_id": str(d.get("entry_id")) if d.get("entry_id") else None}
 
 class QcInvoiceIn(BaseModel):
     date: str
@@ -5220,6 +5228,7 @@ class QcInvoiceIn(BaseModel):
     client_name: str
     client_att: str = ""
     client_address: str = ""
+    client_email: str = ""
     description: str = ""
     amount: float
     sales_account: str = QC_DEF["sales"]
@@ -5252,8 +5261,8 @@ async def qc_create_invoice(payload: QcInvoiceIn, year: int, user: dict = Depend
         reference=number, source="invoice", actor=user)
     doc = {"year": int(year), "num_seq": num_seq, "number": number, "date": payload.date, "due_date": payload.due_date,
            "client_name": payload.client_name, "client_att": payload.client_att, "client_address": payload.client_address,
-           "description": payload.description, "amount": amount, "tps": tps, "tvq": tvq, "total": total,
-           "sales_account": sales, "status": "open", "entry_id": entry["_id"],
+           "client_email": payload.client_email, "description": payload.description, "amount": amount, "tps": tps, "tvq": tvq, "total": total,
+           "sales_account": sales, "status": "open", "paid_amount": 0.0, "entry_id": entry["_id"],
            "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email")}
     res = await db.qc9434_invoices.insert_one(doc)
     await db.qc9434_entries.update_one({"_id": entry["_id"]}, {"$set": {"source_id": str(res.inserted_id)}})
@@ -5262,7 +5271,7 @@ async def qc_create_invoice(payload: QcInvoiceIn, year: int, user: dict = Depend
     return _qc_invoice_out(doc)
 
 @api.post("/qc9434/invoices/{iid}/receive")
-async def qc_receive_invoice(iid: str, date: str = "", user: dict = Depends(get_current_user)):
+async def qc_receive_invoice(iid: str, date: str = "", amount: float = 0, user: dict = Depends(get_current_user)):
     inv = await db.qc9434_invoices.find_one({"_id": _oid(iid)})
     if not inv:
         raise HTTPException(status_code=404, detail="Facture introuvable")
@@ -5271,16 +5280,51 @@ async def qc_receive_invoice(iid: str, date: str = "", user: dict = Depends(get_
     y = await _qc_year_doc(inv["year"])
     if y and y.get("locked"):
         raise HTTPException(status_code=403, detail=f"L'exercice {inv['year']} est verrouillé.")
-    total = _round2(inv["total"])
+    balance = round(inv["total"] - inv.get("paid_amount", 0), 2)
+    amt = round(float(amount), 2) if amount and float(amount) > 0 else balance
+    if amt <= 0 or amt > balance + 0.005:
+        raise HTTPException(status_code=400, detail=f"Montant invalide (solde restant : {balance:,.2f} $).")
     lines = [
-        {"account": QC_DEF["cash"], "account_name": await _qc_acc_name(QC_DEF["cash"]), "tiers": inv.get("client_name", ""), "debit": total, "credit": 0.0},
-        {"account": QC_DEF["ar"], "account_name": await _qc_acc_name(QC_DEF["ar"]), "tiers": inv.get("client_name", ""), "debit": 0.0, "credit": total},
+        {"account": QC_DEF["cash"], "account_name": await _qc_acc_name(QC_DEF["cash"]), "tiers": inv.get("client_name", ""), "debit": amt, "credit": 0.0},
+        {"account": QC_DEF["ar"], "account_name": await _qc_acc_name(QC_DEF["ar"]), "tiers": inv.get("client_name", ""), "debit": 0.0, "credit": amt},
     ]
-    entry = await _qc_post_entry(inv["year"], date or datetime.now(timezone.utc).date().isoformat(),
+    await _qc_post_entry(inv["year"], date or datetime.now(timezone.utc).date().isoformat(),
         f"Encaissement facture #{inv['number']} — {inv.get('client_name','')}", lines, reference=inv["number"], source="receipt", source_id=iid, actor=user)
-    await db.qc9434_invoices.update_one({"_id": _oid(iid)}, {"$set": {"status": "paid", "paid_at": datetime.now(timezone.utc).isoformat(), "receipt_entry_id": entry["_id"]}})
-    await log_action(user, "Encaisser", "9434 — Facture client", f"{inv['number']} ({total:,.2f} $)")
-    return {"success": True}
+    new_paid = round(inv.get("paid_amount", 0) + amt, 2)
+    paid_full = new_paid >= round(inv["total"], 2) - 0.005
+    await db.qc9434_invoices.update_one({"_id": _oid(iid)}, {"$set": {"paid_amount": new_paid,
+        "status": "paid" if paid_full else "partial", "paid_at": datetime.now(timezone.utc).isoformat() if paid_full else inv.get("paid_at")}})
+    await log_action(user, "Encaisser", "9434 — Facture client", f"{inv['number']} ({amt:,.2f} $)")
+    return {"success": True, "paid_amount": new_paid, "balance": round(inv["total"] - new_paid, 2)}
+
+@api.post("/qc9434/invoices/{iid}/email")
+async def qc_email_invoice(iid: str, user: dict = Depends(get_current_user)):
+    inv = await db.qc9434_invoices.find_one({"_id": _oid(iid)})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Facture introuvable")
+    email = (inv.get("client_email") or "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="Aucun courriel client sur cette facture.")
+    if not _email_configured():
+        raise HTTPException(status_code=400, detail="Service d'email non configuré.")
+    pdf = await qc_invoice_pdf(iid, user)
+    pdf_bytes = b"".join([chunk async for chunk in pdf.body_iterator]) if hasattr(pdf, "body_iterator") else pdf.body
+    import resend
+    resend.api_key = os.environ["RESEND_API_KEY"]
+    html = (f"<div style=\"font-family:Arial,sans-serif;color:#1e293b;font-size:14px\"><p>Bonjour,</p>"
+            f"<p>Veuillez trouver ci-joint la facture <strong>#{inv['number']}</strong> de 9434-3977 Québec Inc. "
+            f"au montant de <strong>{inv['total']:,.2f} $</strong>.</p>"
+            f"<p style=\"color:#64748b;font-size:12px;margin-top:24px\">9434-3977 Québec Inc.</p></div>")
+    try:
+        await asyncio.to_thread(resend.Emails.send, {"from": os.environ.get("SENDER_EMAIL", "onboarding@resend.dev"),
+            "to": [email], "subject": f"Facture #{inv['number']} — 9434-3977 Québec Inc.",
+            "html": html, "attachments": [{"filename": f"facture_{inv['number']}.pdf", "content": list(pdf_bytes)}]})
+        await db.qc9434_invoices.update_one({"_id": _oid(iid)}, {"$set": {"emailed_at": datetime.now(timezone.utc).isoformat()}})
+        await log_action(user, "Envoyer", "9434 — Facture client", f"{inv['number']} → {email}")
+        return {"success": True, "message": f"Facture envoyée à {email}"}
+    except Exception as e:
+        logger.error(f"Envoi facture échec : {e}")
+        raise HTTPException(status_code=400, detail=f"Échec d'envoi : {str(e)[:150]}")
 
 @api.get("/qc9434/invoices/{iid}/pdf")
 async def qc_invoice_pdf(iid: str, user: dict = Depends(get_current_user)):
@@ -5330,9 +5374,11 @@ async def qc_invoice_pdf(iid: str, user: dict = Depends(get_current_user)):
 
 # ---- Factures fournisseurs (auxiliaire payable) ------------------------
 def _qc_bill_out(d):
+    total = d.get("total", 0); paid = d.get("paid_amount", 0)
     return {"id": str(d["_id"]), "year": d.get("year"), "number": d.get("number"), "supplier": d.get("supplier", ""),
             "date": d.get("date"), "due_date": d.get("due_date"), "description": d.get("description", ""),
-            "amount": d.get("amount", 0), "tps": d.get("tps", 0), "tvq": d.get("tvq", 0), "total": d.get("total", 0),
+            "amount": d.get("amount", 0), "tps": d.get("tps", 0), "tvq": d.get("tvq", 0), "total": total,
+            "paid_amount": round(paid, 2), "balance": round(total - paid, 2),
             "expense_account": d.get("expense_account", ""), "status": d.get("status", "open"), "paid_at": d.get("paid_at"),
             "file_id": d.get("file_id"), "file_name": d.get("file_name"),
             "entry_id": str(d.get("entry_id")) if d.get("entry_id") else None}
@@ -5389,7 +5435,7 @@ async def qc_create_bill(year: int = Form(...), supplier: str = Form(...), date:
     return _qc_bill_out(doc)
 
 @api.post("/qc9434/bills/{bid}/pay")
-async def qc_pay_bill(bid: str, date: str = "", user: dict = Depends(get_current_user)):
+async def qc_pay_bill(bid: str, date: str = "", amount: float = 0, user: dict = Depends(get_current_user)):
     b = await db.qc9434_bills.find_one({"_id": _oid(bid)})
     if not b:
         raise HTTPException(status_code=404, detail="Facture introuvable")
@@ -5398,16 +5444,22 @@ async def qc_pay_bill(bid: str, date: str = "", user: dict = Depends(get_current
     y = await _qc_year_doc(b["year"])
     if y and y.get("locked"):
         raise HTTPException(status_code=403, detail=f"L'exercice {b['year']} est verrouillé.")
-    total = _round2(b["total"])
+    balance = round(b["total"] - b.get("paid_amount", 0), 2)
+    amt = round(float(amount), 2) if amount and float(amount) > 0 else balance
+    if amt <= 0 or amt > balance + 0.005:
+        raise HTTPException(status_code=400, detail=f"Montant invalide (solde restant : {balance:,.2f} $).")
     lines = [
-        {"account": QC_DEF["ap"], "account_name": await _qc_acc_name(QC_DEF["ap"]), "tiers": b.get("supplier", ""), "debit": total, "credit": 0.0},
-        {"account": QC_DEF["cash"], "account_name": await _qc_acc_name(QC_DEF["cash"]), "tiers": b.get("supplier", ""), "debit": 0.0, "credit": total},
+        {"account": QC_DEF["ap"], "account_name": await _qc_acc_name(QC_DEF["ap"]), "tiers": b.get("supplier", ""), "debit": amt, "credit": 0.0},
+        {"account": QC_DEF["cash"], "account_name": await _qc_acc_name(QC_DEF["cash"]), "tiers": b.get("supplier", ""), "debit": 0.0, "credit": amt},
     ]
-    entry = await _qc_post_entry(b["year"], date or datetime.now(timezone.utc).date().isoformat(),
+    await _qc_post_entry(b["year"], date or datetime.now(timezone.utc).date().isoformat(),
         f"Paiement fournisseur — {b.get('supplier','')}", lines, reference=b.get("number", ""), source="payment", source_id=bid, actor=user)
-    await db.qc9434_bills.update_one({"_id": _oid(bid)}, {"$set": {"status": "paid", "paid_at": datetime.now(timezone.utc).isoformat(), "payment_entry_id": entry["_id"]}})
-    await log_action(user, "Payer", "9434 — Facture fournisseur", f"{b.get('supplier','')} ({total:,.2f} $)")
-    return {"success": True}
+    new_paid = round(b.get("paid_amount", 0) + amt, 2)
+    paid_full = new_paid >= round(b["total"], 2) - 0.005
+    await db.qc9434_bills.update_one({"_id": _oid(bid)}, {"$set": {"paid_amount": new_paid,
+        "status": "paid" if paid_full else "partial", "paid_at": datetime.now(timezone.utc).isoformat() if paid_full else b.get("paid_at")}})
+    await log_action(user, "Payer", "9434 — Facture fournisseur", f"{b.get('supplier','')} ({amt:,.2f} $)")
+    return {"success": True, "paid_amount": new_paid, "balance": round(b["total"] - new_paid, 2)}
 
 @api.get("/qc9434/bills/{bid}/file")
 async def qc_bill_file(bid: str, auth: str = Query(None), authorization: str = Header(None)):
@@ -5462,6 +5514,192 @@ async def qc_import_model(user: dict = Depends(require_admin)):
     await db.qc9434_invoices.update_one({"_id": _oid(inv["id"])}, {"$set": {"status": "paid", "paid_at": "2026-02-13"}})
     await log_action(user, "Importer", "9434 — Modèle Excel", "Exercices 2025 (verrouillé) + 2026")
     return {"success": True, "message": "Modèle importé : exercice 2025 (verrouillé) + exercice 2026 (9 écritures)."}
+
+
+# ---- Détail d'un compte (drill-down) -----------------------------------
+@api.get("/qc9434/account-detail")
+async def qc_account_detail(year: int, account: str, scope: str = "movement", user: dict = Depends(get_current_user)):
+    q = {"source": {"$ne": "closing"}}
+    q["year"] = {"$lte": int(year)} if scope == "cumulative" else int(year)
+    docs = await db.qc9434_entries.find(q).sort([("date", 1), ("seq", 1)]).to_list(50000)
+    name = await _qc_acc_name(account)
+    rows = []; running = 0.0
+    for e in docs:
+        for l in e.get("lines", []):
+            if (l.get("account") or "").strip() != account:
+                continue
+            dr = float(l.get("debit") or 0); cr = float(l.get("credit") or 0)
+            running += dr - cr
+            rows.append({"date": e.get("date"), "num": e.get("num"), "year": e.get("year"),
+                         "description": e.get("description", ""), "tiers": l.get("tiers", ""),
+                         "debit": round(dr, 2), "credit": round(cr, 2), "balance": round(running, 2)})
+    return {"account": account, "name": name, "scope": scope, "year": int(year), "rows": rows,
+            "total_debit": round(sum(r["debit"] for r in rows), 2), "total_credit": round(sum(r["credit"] for r in rows), 2),
+            "balance": round(running, 2)}
+
+# ---- États Financiers (structure du modèle Excel) ---------------------
+async def _qc_etats_financiers(year):
+    bal, accts = await _qc_report_balances(year)
+    def bcum(gl): return (bal.get(gl) or {}).get("cumulative", 0.0)
+    def sec_pl(section, key):
+        s = 0.0
+        for gl, a in accts.items():
+            if a.get("section") == section:
+                s += (bal.get(gl) or {}).get(key, 0.0)
+        return s
+    def stmt(key):
+        rev = round(-sec_pl("revenus", key), 2)
+        juridique = round((bal.get("550108") or {}).get(key, 0.0), 2)
+        expertise = round((bal.get("540210") or {}).get(key, 0.0), 2)
+        financiers = round(sum((bal.get(g) or {}).get(key, 0.0) for g in ("578220", "579000", "580210")), 2)
+        charges = round(juridique + expertise + financiers, 2)
+        avant_qp = round(rev - charges, 2)
+        qp = round(-sec_pl("quote_part", key), 2)
+        avant_impot = round(avant_qp + qp, 2)
+        impots = round(sec_pl("impots", key), 2)
+        net = round(avant_impot - impots, 2)
+        return {"rev": rev, "juridique": juridique, "expertise": expertise, "financiers": financiers,
+                "charges": charges, "avant_qp": avant_qp, "qp": qp, "avant_impot": avant_impot, "impots": impots, "net": net}
+    cur = stmt("movement"); prev = stmt("opening")
+    bnr_debut_cur = round(-((bal.get("330010") or {}).get("opening", 0.0)) + prev["net"], 2)
+    bnr_fin_cur = round(bnr_debut_cur + cur["net"], 2)
+    bnr_debut_prev = round(-((bal.get("330010") or {}).get("opening", 0.0)), 2)
+    bnr_fin_prev = round(bnr_debut_prev + prev["net"], 2)
+    def cum_pos(gl): return round(-bcum(gl), 2)
+    treso = round(bcum("100105") + bcum("100110"), 2)
+    clients = round(bcum("130118"), 2)
+    taxes_rec = round(bcum("145110") + bcum("145101"), 2)
+    total_ct = round(treso + clients + taxes_rec, 2)
+    placement = round(bcum("160010"), 2)
+    total_actif = round(total_ct + placement, 2)
+    crediteurs = round(cum_pos("211010") + cum_pos("211120"), 2)
+    taxes_rem = round(cum_pos("215301") + cum_pos("215310") + cum_pos("215311"), 2)
+    impot_pay = round(cum_pos("215400"), 2)
+    total_passif = round(crediteurs + taxes_rem + impot_pay, 2)
+    capital = round(cum_pos("310000"), 2)
+    bnr_bilan = bnr_fin_cur
+    total_pc = round(total_passif + capital + bnr_bilan, 2)
+    return {"year": int(year), "cur": cur, "prev": prev,
+            "bnr": {"debut_cur": bnr_debut_cur, "fin_cur": bnr_fin_cur, "debut_prev": bnr_debut_prev, "fin_prev": bnr_fin_prev},
+            "bilan": {"treso": treso, "clients": clients, "taxes_rec": taxes_rec, "total_ct": total_ct,
+                      "placement": placement, "total_actif": total_actif, "crediteurs": crediteurs, "taxes_rem": taxes_rem,
+                      "impot_pay": impot_pay, "total_passif": total_passif, "capital": capital, "bnr": bnr_bilan, "total_pc": total_pc},
+            "qp": {"hilo_cur": round(cur["net"] * 0.65, 2), "hilo_prev": round(prev["net"] * 0.65, 2),
+                   "autre_cur": round(cur["net"] * 0.35, 2), "autre_prev": round(prev["net"] * 0.35, 2)}}
+
+def _qc_ef_pdf(ef):
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    NAVY = colors.HexColor("#063044"); y = ef["year"]; c = ef["cur"]; p = ef["prev"]; b = ef["bilan"]; bn = ef["bnr"]
+    styles = getSampleStyleSheet()
+    TITLE = ParagraphStyle("t", parent=styles["Normal"], fontSize=14, fontName="Helvetica-Bold", textColor=NAVY, alignment=1)
+    SUB = ParagraphStyle("s", parent=styles["Normal"], fontSize=9, alignment=1, textColor=colors.grey)
+    H = ParagraphStyle("h", parent=styles["Normal"], fontSize=11, fontName="Helvetica-Bold", textColor=NAVY, alignment=1)
+    def fmt(v): return f"{v:,.2f}" if v else "—"
+    def money_table(data):
+        t = Table([[r[0], fmt(r[1]) if isinstance(r[1], (int, float)) else r[1], fmt(r[2]) if isinstance(r[2], (int, float)) else r[2]] for r in data],
+                  colWidths=[110 * mm, 30 * mm, 30 * mm])
+        st = [("FONTSIZE", (0, 0), (-1, -1), 9), ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+              ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]
+        return t, st
+    el = [Spacer(1, 40 * mm), Paragraph("9434-3977 QUÉBEC INC. - COMMANDITÉ", TITLE), Spacer(1, 6 * mm),
+          Paragraph("ÉTATS FINANCIERS (non-audités)", H), Paragraph(f"31 décembre {y}", SUB), PageBreak()]
+    el += [Paragraph("9434-3977 QUÉBEC INC. - COMMANDITÉ", H), Spacer(1, 2 * mm),
+           Paragraph("ÉTAT DES RÉSULTATS ET DES BÉNÉFICES NON-RÉPARTIS", H),
+           Paragraph("Exercice terminé le 31 décembre — Non-audités — En dollars canadiens", SUB), Spacer(1, 4 * mm)]
+    rows = [["", str(y), str(y - 1)], ["Produits", "", ""], ["  Honoraires de gestion", c["rev"], p["rev"]],
+            ["Charges", "", ""], ["  Services juridiques", c["juridique"], p["juridique"]],
+            ["  Services d'expertise comptable et financière", c["expertise"], p["expertise"]],
+            ["  Frais financiers", c["financiers"], p["financiers"]], ["  ", c["charges"], p["charges"]],
+            ["Bénéfice (perte) avant quote-part et impôts", c["avant_qp"], p["avant_qp"]],
+            ["Quote-part des résultats de la société en commandite", c["qp"], p["qp"]],
+            ["Bénéfice (perte) avant impôts sur les bénéfices", c["avant_impot"], p["avant_impot"]],
+            ["Impôts sur les bénéfices exigibles", c["impots"], p["impots"]],
+            ["Bénéfice (perte) net(te) de l'exercice", c["net"], p["net"]],
+            ["Bénéfices non répartis au début de l'exercice", bn["debut_cur"], bn["debut_prev"]],
+            ["Bénéfices non répartis à la fin de l'exercice", bn["fin_cur"], bn["fin_prev"]]]
+    t, st = money_table(rows)
+    st += [("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("LINEBELOW", (0, 0), (-1, 0), 0.5, NAVY),
+           ("FONTNAME", (0, 12), (-1, 12), "Helvetica-Bold"), ("LINEABOVE", (0, 12), (-1, 12), 0.5, colors.grey),
+           ("FONTNAME", (0, 14), (-1, 14), "Helvetica-Bold"), ("LINEABOVE", (0, 7), (-1, 7), 0.3, colors.grey)]
+    t.setStyle(TableStyle(st)); el += [t, PageBreak()]
+    el += [Paragraph("9434-3977 QUÉBEC INC. - COMMANDITÉ", H), Spacer(1, 2 * mm), Paragraph("BILAN", H),
+           Paragraph("Non-audités — En dollars canadiens", SUB), Spacer(1, 4 * mm)]
+    brows = [["", str(y), str(y - 1)], ["ACTIF", "", ""], ["Actif à court terme", "", ""],
+             ["  Trésorerie", b["treso"], ""], ["  Clients", b["clients"], ""],
+             ["  Sommes à recevoir de l'état - Taxes de ventes", b["taxes_rec"], ""], ["  ", b["total_ct"], ""],
+             ["Placement – Société en commandite ACCS", b["placement"], ""], ["TOTAL DE L'ACTIF", b["total_actif"], ""],
+             ["PASSIF", "", ""], ["Passif à court terme", "", ""],
+             ["  Créditeurs et charges à payer aux apparentés", b["crediteurs"], ""],
+             ["  Taxes de ventes à remettre", b["taxes_rem"], ""], ["  Impôt à payer", b["impot_pay"], ""],
+             ["  ", b["total_passif"], ""], ["Capital-actions", b["capital"], ""],
+             ["Bénéfices non-répartis", b["bnr"], ""], ["TOTAL DU PASSIF ET CAPITAUX", b["total_pc"], ""]]
+    t2, st2 = money_table(brows)
+    st2 += [("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
+            ("FONTNAME", (0, 9), (-1, 9), "Helvetica-Bold"), ("FONTNAME", (0, 8), (-1, 8), "Helvetica-Bold"),
+            ("FONTNAME", (0, 17), (-1, 17), "Helvetica-Bold"), ("LINEABOVE", (0, 8), (-1, 8), 0.5, NAVY),
+            ("LINEABOVE", (0, 17), (-1, 17), 0.5, NAVY)]
+    t2.setStyle(TableStyle(st2)); el += [t2]
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=22 * mm, rightMargin=22 * mm, topMargin=18 * mm, bottomMargin=18 * mm)
+    doc.build(el); buf.seek(0)
+    return buf.getvalue()
+
+def _qc_ef_xlsx(ef):
+    from openpyxl.styles import Font, Alignment
+    y = ef["year"]; c = ef["cur"]; p = ef["prev"]; b = ef["bilan"]; bn = ef["bnr"]
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Résultats et BNR"
+    ws.append(["9434-3977 QUÉBEC INC. - COMMANDITÉ"]); ws.append(["ÉTAT DES RÉSULTATS ET DES BÉNÉFICES NON-RÉPARTIS"])
+    ws.append(["", y, y - 1])
+    for lbl, cv, pv in [("Produits — Honoraires de gestion", c["rev"], p["rev"]),
+                        ("Charges — Services juridiques", c["juridique"], p["juridique"]),
+                        ("Charges — Services d'expertise comptable et financière", c["expertise"], p["expertise"]),
+                        ("Charges — Frais financiers", c["financiers"], p["financiers"]),
+                        ("Total des charges", c["charges"], p["charges"]),
+                        ("Bénéfice avant quote-part et impôts", c["avant_qp"], p["avant_qp"]),
+                        ("Quote-part des résultats de la société en commandite", c["qp"], p["qp"]),
+                        ("Bénéfice avant impôts", c["avant_impot"], p["avant_impot"]),
+                        ("Impôts sur les bénéfices exigibles", c["impots"], p["impots"]),
+                        ("Bénéfice (perte) net(te) de l'exercice", c["net"], p["net"]),
+                        ("BNR au début de l'exercice", bn["debut_cur"], bn["debut_prev"]),
+                        ("BNR à la fin de l'exercice", bn["fin_cur"], bn["fin_prev"])]:
+        ws.append([lbl, cv, pv])
+    ws.append([]); ws.append(["BILAN", y])
+    for lbl, v in [("Trésorerie", b["treso"]), ("Clients", b["clients"]), ("Taxes de ventes à recevoir", b["taxes_rec"]),
+                   ("Total actif à court terme", b["total_ct"]), ("Placement – SEC ACCS", b["placement"]),
+                   ("TOTAL DE L'ACTIF", b["total_actif"]), ("Créditeurs et charges à payer", b["crediteurs"]),
+                   ("Taxes de ventes à remettre", b["taxes_rem"]), ("Impôt à payer", b["impot_pay"]),
+                   ("Total du passif", b["total_passif"]), ("Capital-actions", b["capital"]),
+                   ("Bénéfices non-répartis", b["bnr"]), ("TOTAL DU PASSIF ET CAPITAUX", b["total_pc"])]:
+        ws.append([lbl, v])
+    ws["A1"].font = Font(bold=True, size=13); ws.column_dimensions["A"].width = 52
+    for col in ("B", "C"):
+        ws.column_dimensions[col].width = 16
+    for row in ws.iter_rows(min_col=2, max_col=3):
+        for cell in row:
+            if isinstance(cell.value, (int, float)):
+                cell.number_format = '#,##0.00;(#,##0.00)'; cell.alignment = Alignment(horizontal="right")
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return buf.getvalue()
+
+@api.get("/qc9434/etats-financiers")
+async def qc_ef(year: int, user: dict = Depends(get_current_user)):
+    return await _qc_etats_financiers(year)
+
+@api.get("/qc9434/etats-financiers/pdf")
+async def qc_ef_pdf(year: int, user: dict = Depends(get_current_user)):
+    return StreamingResponse(io.BytesIO(_qc_ef_pdf(await _qc_etats_financiers(year))),
+        media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=etats_financiers_9434_{year}.pdf"})
+
+@api.get("/qc9434/etats-financiers/excel")
+async def qc_ef_excel(year: int, user: dict = Depends(get_current_user)):
+    return StreamingResponse(io.BytesIO(_qc_ef_xlsx(await _qc_etats_financiers(year))),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=etats_financiers_9434_{year}.xlsx"})
+
 
 
 
