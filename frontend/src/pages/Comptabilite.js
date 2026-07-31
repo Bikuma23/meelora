@@ -2201,10 +2201,19 @@ function ExternalSendView() {
                     <table className="w-full border-collapse text-xs font-mono-data">
                       <tbody>
                         {(preview.sheets[preview.active]?.rows || []).map((row, ri) => (
-                          <tr key={ri} className={ri === 0 ? "bg-[#063044] text-white" : "odd:bg-white even:bg-slate-50"}>
-                            {row.map((c, ci) => (
-                              <td key={ci} className={`whitespace-nowrap border border-slate-100 px-2 py-1 ${typeof c === "number" ? "text-right" : "text-left"}`}>{fmtCell(c)}</td>
-                            ))}
+                          <tr key={ri} className={ri === 0 ? "text-white" : "odd:bg-white even:bg-slate-50"}>
+                            {row.map((c, ci) => {
+                              const isHead = ri === 0;
+                              const isFirstCol = ci === 0;
+                              const cls = [
+                                "whitespace-nowrap border border-slate-100 px-2 py-1",
+                                typeof c === "number" ? "text-right" : "text-left",
+                                isHead ? "sticky top-0 bg-[#063044] text-white" : "",
+                                isFirstCol && !isHead ? "sticky left-0 bg-white" : "",
+                                isHead && isFirstCol ? "z-30" : isHead ? "z-20" : isFirstCol ? "z-10" : "",
+                              ].join(" ");
+                              return <td key={ci} className={cls}>{fmtCell(c)}</td>;
+                            })}
                           </tr>
                         ))}
                       </tbody>

@@ -599,6 +599,9 @@ Refonte du hub selon nouvelles demandes + modèle Excel « par responsable » fo
 ## Aperçu web du fichier Margination (2026-07-30l)
 - [x] **Aperçu tableau multi-onglets** du fichier Excel de Margination (au lieu d'un simple téléchargement) : endpoint `GET /acct/margination/preview` lit le fichier stocké (openpyxl `data_only` → valeurs de formules mises en cache par Excel), renvoie chaque feuille (nom + lignes, plafonné 300×20). Frontend : onglets par feuille + tableau HTML défilable, nombres formatés/alignés à droite, en-tête marine. Vérifié : 6 onglets (Calcul du Montant Disponible, Ventilation cpt assurés, Engagements financiers, CAP, Sheet1, CAR) avec montants calculés corrects (capture). Bouton « Télécharger l'Excel » conservé.
 
+## Aperçu Margination — en-têtes figés (2026-07-30m)
+- [x] Dans l'aperçu tableau du fichier Margination, la **première ligne** (`sticky top-0`) et la **première colonne des comptes** (`sticky left-0`, fond blanc) restent figées lors du défilement vertical/horizontal, pour lire les grandes feuilles (ex. CAR ~260 lignes). Gestion des z-index (coin en z-30). Vérifié par capture (défilement CAR : comptes ancrés à gauche).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.
