@@ -8,24 +8,29 @@ import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
 import {
-  Plus, Lock, Unlock, Trash2, Pencil, Send, Settings2, Download, Clock, CheckCircle2, AlertTriangle, BookOpen, Scale, FileText, X, Eye, FileDown, Save, Copy, Upload, Wallet,
+  Plus, Lock, Unlock, Trash2, Pencil, Send, Settings2, Download, Clock, CheckCircle2, AlertTriangle, BookOpen, Scale, FileText, X, Eye, FileDown, Save, Copy, Upload, Wallet, ChevronDown, LayoutList, Mail,
 } from "lucide-react";
 
 const ENTITY = "9434-3977 QC inc.";
 const TODAY = new Date().toISOString().slice(0, 10);
 
 // Onglets reproduisant le modèle Excel.
-const TABS = [
-  { key: "entries", label: "Écritures", icon: BookOpen, ready: true },
-  { key: "ar", label: "Factures clients", icon: FileText, ready: true },
-  { key: "ap", label: "Factures fournisseurs", icon: FileText, ready: true },
-  { key: "tb", label: "Balance de vérification", icon: Scale, ready: true },
-  { key: "bilan", label: "Bilan détaillé", icon: FileText, ready: true },
-  { key: "pnl", label: "États des résultats", icon: FileText, ready: true },
-  { key: "accounts", label: "Plan comptable", icon: BookOpen, ready: true },
-  { key: "external", label: "Envoi externe", icon: Send, ready: true },
+const MAIN_TABS = [
+  { key: "entries", label: "Écritures", icon: BookOpen },
+  { key: "ar", label: "Factures clients", icon: FileText },
+  { key: "ap", label: "Factures fournisseurs", icon: FileText },
 ];
+const REPORT_TABS = [
+  { key: "tb", label: "Balance de vérification", icon: Scale },
+  { key: "bilan", label: "Bilan détaillé", icon: FileText },
+  { key: "pnl", label: "États des résultats", icon: Scale },
+  { key: "ef", label: "États Financiers", icon: FileText },
+  { key: "accounts", label: "Plan comptable", icon: BookOpen },
+  { key: "external", label: "Envoi externe", icon: Send },
+];
+const ALL_TABS = [...MAIN_TABS, ...REPORT_TABS];
 
 function fmtSent(iso) {
   if (!iso) return "";
@@ -100,17 +105,42 @@ export default function QcEntity() {
         </div>
       </div>
 
-      {/* Onglets (reproduisent les onglets du fichier Excel — à compléter au modèle) */}
-      <div className="flex flex-wrap gap-2" data-testid="qc-tabbar">
-        {TABS.map((tp) => {
+      {/* Onglets : principaux + menu déroulant Rapports */}
+      <div className="flex flex-wrap items-center gap-2" data-testid="qc-tabbar">
+        {MAIN_TABS.map((tp) => {
           const Icon = tp.icon; const on = tab === tp.key;
           return (
             <button key={tp.key} onClick={() => setTab(tp.key)} data-testid={`qc-tab-${tp.key}`}
               className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-600 transition-colors ${on ? "border-[#063044] bg-[#063044] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488] hover:text-[#0E9488]"}`}>
-              <Icon size={14} /> {tp.label}{!tp.ready && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-700 text-amber-700">bientôt</span>}
+              <Icon size={14} /> {tp.label}
             </button>
           );
         })}
+        {(() => {
+          const reportOn = REPORT_TABS.some((t) => t.key === tab);
+          const active = REPORT_TABS.find((t) => t.key === tab);
+          return (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button data-testid="qc-tab-rapports"
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-600 transition-colors ${reportOn ? "border-[#063044] bg-[#063044] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488] hover:text-[#0E9488]"}`}>
+                  <LayoutList size={14} /> Rapports{active ? ` · ${active.label}` : ""} <ChevronDown size={14} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56" data-testid="qc-rapports-menu">
+                {REPORT_TABS.map((tp) => {
+                  const Icon = tp.icon;
+                  return (
+                    <DropdownMenuItem key={tp.key} onClick={() => setTab(tp.key)} data-testid={`qc-tab-${tp.key}`}
+                      className={`gap-2 ${tab === tp.key ? "bg-[#0E9488]/10 font-600 text-[#0E9488]" : ""}`}>
+                      <Icon size={14} /> {tp.label}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        })()}
       </div>
 
       {!activeYear && tab !== "external"
@@ -127,9 +157,10 @@ export default function QcEntity() {
         : tab === "tb" ? <TrialBalanceView year={activeYear} />
         : tab === "bilan" ? <StatementView year={activeYear} kind="bilan" />
         : tab === "pnl" ? <StatementView year={activeYear} kind="pnl" />
+        : tab === "ef" ? <EtatsFinanciersView year={activeYear} />
         : tab === "accounts" ? <PlanComptableView canEdit={canEdit} />
         : tab === "external" ? <QcExternalView years={years} isAdmin={isAdmin} />
-        : <PlaceholderView label={TABS.find((t) => t.key === tab)?.label} />}
+        : <PlaceholderView label={ALL_TABS.find((t) => t.key === tab)?.label} />}
 
       {/* Dialogue nouvel exercice */}
       <Dialog open={yearDlg} onOpenChange={setYearDlg}>
@@ -478,6 +509,18 @@ function TrialBalanceView({ year }) {
 
 
 // ===================== Factures clients (auxiliaire recevable) =====================
+function InvoiceStatus({ status }) {
+  if (status === "paid") return <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-600 text-emerald-700" data-testid="qc-status-paid">Encaissée</span>;
+  if (status === "partial") return <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-600 text-sky-700" data-testid="qc-status-partial">Partielle</span>;
+  return <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-600 text-amber-700" data-testid="qc-status-open">Ouverte</span>;
+}
+
+function BillStatus({ status }) {
+  if (status === "paid") return <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-600 text-emerald-700" data-testid="qc-bill-status-paid">Payée</span>;
+  if (status === "partial") return <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-600 text-sky-700" data-testid="qc-bill-status-partial">Partielle</span>;
+  return <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-600 text-amber-700" data-testid="qc-bill-status-open">Ouverte</span>;
+}
+
 function InvoicesView({ year, locked, canEdit }) {
   const [rows, setRows] = useState([]);
   const [dlg, setDlg] = useState(false);
@@ -507,31 +550,36 @@ function InvoicesView({ year, locked, canEdit }) {
 
   return (
     <div className="space-y-3" data-testid="qc-ar-view">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-500">{rows.length} facture(s) · Solde à recevoir : <strong>{money(openTotal)} $</strong></p>
         {canEdit && !locked && <Button size="sm" onClick={() => setDlg(true)} data-testid="qc-add-invoice" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouvelle facture</Button>}
       </div>
+      {overdueCount > 0 && <div data-testid="qc-ar-overdue-banner" className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-600 text-red-700"><AlertTriangle size={16} /> {overdueCount} facture(s) en retard (échéance dépassée).</div>}
       {rows.length === 0
         ? <div className="card p-10 text-center text-sm text-slate-400" data-testid="qc-ar-empty">Aucune facture client pour cet exercice.</div>
         : <div className="card overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-invoices-table">
             <thead><tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
-              <th className="px-3 py-2">N°</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Client</th><th className="px-3 py-2 text-right">HT</th><th className="px-3 py-2 text-right">Total</th><th className="px-3 py-2">Statut</th><th className="px-3 py-2"></th>
+              <th className="px-3 py-2">N°</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Échéance</th><th className="px-3 py-2">Client</th><th className="px-3 py-2 text-right">Total</th><th className="px-3 py-2 text-right">Solde</th><th className="px-3 py-2">Statut</th><th className="px-3 py-2"></th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
-              {rows.map((r) => (
+              {rows.map((r) => {
+                const od = overdue(r);
+                return (
                 <tr key={r.id} className="hover:bg-slate-50" data-testid={`qc-invoice-row-${r.id}`}>
                   <td className="px-3 py-2 font-mono-data text-xs">{r.number}</td>
                   <td className="px-3 py-2 text-xs">{r.date}</td>
+                  <td className={`px-3 py-2 text-xs ${od ? "font-700 text-red-600" : "text-slate-500"}`}>{r.due_date || "—"}{od && <span className="ml-1 rounded bg-red-100 px-1 text-[10px] font-700 text-red-700">RETARD</span>}</td>
                   <td className="px-3 py-2">{r.client_name}</td>
-                  <td className="px-3 py-2 text-right font-mono-data">{money(r.amount)}</td>
                   <td className="px-3 py-2 text-right font-mono-data">{money(r.total)}</td>
-                  <td className="px-3 py-2">{r.status === "paid" ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-600 text-emerald-700">Encaissée</span> : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-600 text-amber-700">Ouverte</span>}</td>
+                  <td className="px-3 py-2 text-right font-mono-data">{money(r.balance)}</td>
+                  <td className="px-3 py-2"><InvoiceStatus status={r.status} /></td>
                   <td className="px-3 py-2"><div className="flex justify-end gap-1">
                     <button onClick={() => pdf(r)} data-testid={`qc-invoice-pdf-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="PDF"><FileDown size={14} /></button>
+                    {r.client_email && <button onClick={() => emailInvoice(r)} data-testid={`qc-invoice-email-${r.id}`} className="rounded p-1.5 text-[#0E9488] hover:bg-[#0E9488]/10" title={`Envoyer à ${r.client_email}`}><Mail size={14} /></button>}
                     {canEdit && !locked && r.status !== "paid" && <button onClick={() => receive(r)} data-testid={`qc-invoice-receive-${r.id}`} className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50" title="Encaisser"><Wallet size={14} /></button>}
                   </div></td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table></div></div>}
 
@@ -588,39 +636,50 @@ function BillsView({ year, locked, canEdit }) {
     try { await api.qcCreateBill(fd); toast.success("Facture fournisseur comptabilisée"); setDlg(false); setForm({ supplier: "", date: TODAY, due_date: "", reference: "", description: "", amount: "", expense_account: "540210" }); setFile(null); load(); }
     catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setSaving(false); }
   };
-  const pay = async (b) => { try { await api.qcPayBill(b.id, { date: TODAY }); toast.success("Paiement comptabilisé"); load(); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } };
-  const openTotal = rows.filter((r) => r.status !== "paid").reduce((s, r) => s + (r.total || 0), 0);
+  const pay = async (b) => {
+    const input = window.prompt(`Montant à payer (solde ${money(b.balance)} $) — laisser vide pour le solde complet :`, "");
+    if (input === null) return;
+    const a = input.trim() === "" ? 0 : Number(input);
+    try { await api.qcPayBill(b.id, { date: TODAY, amount: a }); toast.success("Paiement comptabilisé"); load(); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); }
+  };
+  const overdue = (r) => r.status !== "paid" && r.due_date && r.due_date < TODAY;
+  const overdueCount = rows.filter(overdue).length;
+  const openTotal = rows.filter((r) => r.status !== "paid").reduce((s, r) => s + (r.balance || 0), 0);
   const API = process.env.REACT_APP_BACKEND_URL;
   const token = localStorage.getItem("token");
   const viewFile = (b) => window.open(`${API}/api/qc9434/bills/${b.id}/file?auth=${token}`, "_blank");
 
   return (
     <div className="space-y-3" data-testid="qc-ap-view">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-500">{rows.length} facture(s) · Solde à payer : <strong>{money(openTotal)} $</strong></p>
         {canEdit && !locked && <Button size="sm" onClick={() => setDlg(true)} data-testid="qc-add-bill" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Upload size={14} /> Téléverser une facture</Button>}
       </div>
+      {overdueCount > 0 && <div data-testid="qc-ap-overdue-banner" className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-600 text-red-700"><AlertTriangle size={16} /> {overdueCount} facture(s) fournisseur en retard (échéance dépassée).</div>}
       {rows.length === 0
         ? <div className="card p-10 text-center text-sm text-slate-400" data-testid="qc-ap-empty">Aucune facture fournisseur pour cet exercice.</div>
         : <div className="card overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-bills-table">
             <thead><tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
-              <th className="px-3 py-2">Réf.</th><th className="px-3 py-2">Fournisseur</th><th className="px-3 py-2">Date</th><th className="px-3 py-2 text-right">HT</th><th className="px-3 py-2 text-right">Total</th><th className="px-3 py-2">Statut</th><th className="px-3 py-2"></th>
+              <th className="px-3 py-2">Réf.</th><th className="px-3 py-2">Fournisseur</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Échéance</th><th className="px-3 py-2 text-right">Total</th><th className="px-3 py-2 text-right">Solde</th><th className="px-3 py-2">Statut</th><th className="px-3 py-2"></th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
-              {rows.map((r) => (
+              {rows.map((r) => {
+                const od = overdue(r);
+                return (
                 <tr key={r.id} className="hover:bg-slate-50" data-testid={`qc-bill-row-${r.id}`}>
                   <td className="px-3 py-2 font-mono-data text-xs">{r.number}</td>
                   <td className="px-3 py-2">{r.supplier}</td>
                   <td className="px-3 py-2 text-xs">{r.date}</td>
-                  <td className="px-3 py-2 text-right font-mono-data">{money(r.amount)}</td>
+                  <td className={`px-3 py-2 text-xs ${od ? "font-700 text-red-600" : "text-slate-500"}`}>{r.due_date || "—"}{od && <span className="ml-1 rounded bg-red-100 px-1 text-[10px] font-700 text-red-700">RETARD</span>}</td>
                   <td className="px-3 py-2 text-right font-mono-data">{money(r.total)}</td>
-                  <td className="px-3 py-2">{r.status === "paid" ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-600 text-emerald-700">Payée</span> : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-600 text-amber-700">Ouverte</span>}</td>
+                  <td className="px-3 py-2 text-right font-mono-data">{money(r.balance)}</td>
+                  <td className="px-3 py-2"><BillStatus status={r.status} /></td>
                   <td className="px-3 py-2"><div className="flex justify-end gap-1">
                     {r.file_id && <button onClick={() => viewFile(r)} data-testid={`qc-bill-file-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Voir le fichier"><Eye size={14} /></button>}
                     {canEdit && !locked && r.status !== "paid" && <button onClick={() => pay(r)} data-testid={`qc-bill-pay-${r.id}`} className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50" title="Payer"><Wallet size={14} /></button>}
                   </div></td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table></div></div>}
 
@@ -725,6 +784,99 @@ function StatementView({ year, kind }) {
   );
 }
 
+// ===================== États Financiers (modèle Excel) =====================
+function EtatsFinanciersView({ year }) {
+  const [ef, setEf] = useState(null);
+  useEffect(() => { if (year) api.qcEtatsFinanciers({ year }).then(setEf).catch(() => setEf(null)); }, [year]);
+  const dl = async (fmt) => {
+    try {
+      const b = await (fmt === "pdf" ? api.qcEfPdf({ year }) : api.qcEfExcel({ year }));
+      const url = URL.createObjectURL(b); const a = document.createElement("a");
+      a.href = url; a.download = `etats_financiers_9434_${year}.${fmt === "pdf" ? "pdf" : "xlsx"}`; a.click(); URL.revokeObjectURL(url);
+    } catch { toast.error("Export impossible"); }
+  };
+  if (!ef) return <div className="card p-8 text-center text-sm text-slate-400" data-testid="qc-ef-loading">Chargement…</div>;
+  const balanced = Math.abs((ef.bilan.total_actif || 0) - (ef.bilan.total_pc || 0)) < 1;
+  const R = ({ label, cur, prev, kind }) => {
+    const cls = kind === "total" ? "border-t-2 border-[#063044] bg-slate-100 font-700"
+      : kind === "subtotal" ? "border-t border-slate-300 font-600"
+      : kind === "header" ? "font-600 text-[#0E9488]" : "";
+    return (
+      <tr className={cls}>
+        <td className={`px-3 py-1.5 ${kind === "indent" ? "pl-6 text-slate-600" : ""}`}>{label}</td>
+        <td className={`px-3 py-1.5 text-right font-mono-data ${(cur || 0) < 0 ? "text-red-600" : ""}`}>{cur === undefined ? "" : money(cur)}</td>
+        {prev !== "none" && <td className={`px-3 py-1.5 text-right font-mono-data ${(prev || 0) < 0 ? "text-red-600" : ""}`}>{prev === undefined ? "" : money(prev)}</td>}
+      </tr>
+    );
+  };
+  const c = ef.cur, p = ef.prev, bn = ef.bnr, bl = ef.bilan;
+  return (
+    <div className="space-y-4" data-testid="qc-ef-view">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span data-testid="qc-ef-balanced" className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-600 ${balanced ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{balanced ? <><CheckCircle2 size={13} /> Bilan équilibré</> : <><AlertTriangle size={13} /> Écart de bilan</>}</span>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => dl("pdf")} data-testid="qc-ef-pdf" className="gap-2"><FileDown size={14} /> PDF</Button>
+          <Button size="sm" variant="outline" onClick={() => dl("xlsx")} data-testid="qc-ef-excel" className="gap-2"><Download size={14} /> Excel</Button>
+        </div>
+      </div>
+
+      {/* État des résultats */}
+      <div className="card overflow-hidden">
+        <div className="border-b border-slate-100 bg-[#063044] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">État des résultats et des bénéfices non répartis</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · Exercice terminé le 31 décembre {year}</p></div>
+        <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ef-resultats">
+          <thead><tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+            <th className="px-3 py-2">Poste</th><th className="px-3 py-2 text-right">{year}</th><th className="px-3 py-2 text-right">{year - 1}</th>
+          </tr></thead>
+          <tbody className="divide-y divide-slate-50">
+            <R label="PRODUITS" kind="header" cur={undefined} prev={undefined} />
+            <R label="Honoraires de gestion et revenus" kind="indent" cur={c.rev} prev={p.rev} />
+            <R label="CHARGES" kind="header" cur={undefined} prev={undefined} />
+            <R label="Honoraires juridiques" kind="indent" cur={c.juridique} prev={p.juridique} />
+            <R label="Honoraires d'expertise comptable" kind="indent" cur={c.expertise} prev={p.expertise} />
+            <R label="Frais financiers" kind="indent" cur={c.financiers} prev={p.financiers} />
+            <R label="Total des charges" kind="subtotal" cur={c.charges} prev={p.charges} />
+            <R label="Bénéfice avant quote-part et impôts" kind="subtotal" cur={c.avant_qp} prev={p.avant_qp} />
+            <R label="Quote-part du résultat des sociétés en commandite" kind="indent" cur={c.qp} prev={p.qp} />
+            <R label="Bénéfice avant impôts" kind="subtotal" cur={c.avant_impot} prev={p.avant_impot} />
+            <R label="Impôts sur le revenu" kind="indent" cur={c.impots} prev={p.impots} />
+            <R label="BÉNÉFICE NET" kind="total" cur={c.net} prev={p.net} />
+            <R label="Bénéfices non répartis au début" kind="indent" cur={bn.debut_cur} prev={bn.debut_prev} />
+            <R label="BÉNÉFICES NON RÉPARTIS À LA FIN" kind="total" cur={bn.fin_cur} prev={bn.fin_prev} />
+          </tbody>
+        </table></div>
+      </div>
+
+      {/* Bilan */}
+      <div className="card overflow-hidden">
+        <div className="border-b border-slate-100 bg-[#063044] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">Bilan</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · au 31 décembre {year}</p></div>
+        <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ef-bilan">
+          <thead><tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+            <th className="px-3 py-2">Poste</th><th className="px-3 py-2 text-right">{year}</th>
+          </tr></thead>
+          <tbody className="divide-y divide-slate-50">
+            <R label="ACTIF" kind="header" prev="none" />
+            <R label="Encaisse" kind="indent" cur={bl.treso} prev="none" />
+            <R label="Comptes à recevoir" kind="indent" cur={bl.clients} prev="none" />
+            <R label="Taxes à recevoir" kind="indent" cur={bl.taxes_rec} prev="none" />
+            <R label="Total de l'actif à court terme" kind="subtotal" cur={bl.total_ct} prev="none" />
+            <R label="Participation - Société en commandite" kind="indent" cur={bl.placement} prev="none" />
+            <R label="TOTAL DE L'ACTIF" kind="total" cur={bl.total_actif} prev="none" />
+            <R label="PASSIF" kind="header" prev="none" />
+            <R label="Créditeurs et charges à payer" kind="indent" cur={bl.crediteurs} prev="none" />
+            <R label="Taxes à remettre" kind="indent" cur={bl.taxes_rem} prev="none" />
+            <R label="Impôts à payer" kind="indent" cur={bl.impot_pay} prev="none" />
+            <R label="Total du passif à court terme" kind="subtotal" cur={bl.total_passif} prev="none" />
+            <R label="AVOIR DES ACTIONNAIRES" kind="header" prev="none" />
+            <R label="Capital-actions" kind="indent" cur={bl.capital} prev="none" />
+            <R label="Bénéfices non répartis" kind="indent" cur={bl.bnr} prev="none" />
+            <R label="TOTAL DU PASSIF ET DE L'AVOIR" kind="total" cur={bl.total_pc} prev="none" />
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+  );
+}
+
 // ===================== Plan comptable =====================
 function PlanComptableView({ canEdit }) {
   const [data, setData] = useState({ accounts: [], sections: {} });
@@ -809,6 +961,105 @@ function PlanComptableView({ canEdit }) {
 
 
 // ===================== Envoi externe (contacts propres) =====================
+function QcExtPreviewDialog({ open, onOpenChange, reportKey, label, year, onDownload }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const family = !reportKey ? null
+    : reportKey.startsWith("etats_financiers") ? "ef"
+    : reportKey.startsWith("bilan") ? "bilan"
+    : reportKey.startsWith("pnl") ? "pnl" : "tb";
+  useEffect(() => {
+    if (!open || !reportKey || !year) return;
+    setLoading(true); setData(null);
+    const fetcher = family === "ef" ? api.qcEtatsFinanciers({ year })
+      : family === "bilan" ? api.qcBilan({ year })
+      : family === "pnl" ? api.qcPnl({ year })
+      : api.qcTrialBalance({ year });
+    fetcher.then(setData).catch(() => setData(null)).finally(() => setLoading(false));
+  }, [open, reportKey, year, family]);
+
+  const lineCls = (k) => k === "title" ? "bg-[#063044] text-white font-700"
+    : k === "total" ? "border-t-2 border-[#063044] bg-slate-100 font-700"
+    : k === "subtotal" ? "border-t border-slate-300 font-600"
+    : k === "header" ? "font-600 text-[#0E9488]" : "";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="qc-ext-preview-dialog" className="max-h-[88vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Eye size={16} className="text-[#0E9488]" /> Aperçu — {label}</DialogTitle>
+          <DialogDescription className="text-xs">Exercice {year} · Aperçu du document qui sera transmis au contact.</DialogDescription>
+        </DialogHeader>
+        {loading ? <p className="py-8 text-center text-sm text-slate-400">Chargement…</p>
+          : !data ? <p className="py-8 text-center text-sm text-slate-400" data-testid="qc-ext-preview-empty">Aperçu indisponible.</p>
+          : family === "tb" ? (
+            <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ext-preview-tb">
+              <thead><tr className="bg-[#063044] text-left text-xs uppercase text-white"><th className="px-3 py-2">Compte</th><th className="px-3 py-2">Libellé</th><th className="px-3 py-2 text-right">Débit</th><th className="px-3 py-2 text-right">Crédit</th></tr></thead>
+              <tbody className="divide-y divide-slate-50">
+                {(data.rows || []).map((r, i) => (
+                  <tr key={i}><td className="px-3 py-1.5 font-mono-data text-xs">{r.account}</td><td className="px-3 py-1.5">{r.account_name}</td><td className="px-3 py-1.5 text-right font-mono-data">{r.debit ? money(r.debit) : "—"}</td><td className="px-3 py-1.5 text-right font-mono-data">{r.credit ? money(r.credit) : "—"}</td></tr>
+                ))}
+              </tbody>
+              <tfoot><tr className="border-t-2 border-[#063044] bg-slate-100 font-700"><td className="px-3 py-2" colSpan={2}>TOTAL</td><td className="px-3 py-2 text-right font-mono-data">{money(data.total_debit)}</td><td className="px-3 py-2 text-right font-mono-data">{money(data.total_credit)}</td></tr></tfoot>
+            </table></div>
+          ) : family === "ef" ? <EfPreview ef={data} year={year} />
+          : (
+            <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ext-preview-lines">
+              <tbody>
+                {(data.lines || []).map((ln, i) => {
+                  const isText = ln.kind === "title" || ln.kind === "header";
+                  const cols = family === "bilan" ? ["cumulative"] : ["cur"];
+                  return (
+                    <tr key={i} className={lineCls(ln.kind)}>
+                      <td className="px-3 py-1.5 font-mono-data text-xs">{ln.gl || ""}</td>
+                      <td className="px-3 py-1.5">{ln.label}</td>
+                      {isText ? <td></td> : cols.map((k) => <td key={k} className={`px-3 py-1.5 text-right font-mono-data ${(ln[k] || 0) < 0 ? "text-red-600" : ""}`}>{ln[k] === undefined || ln[k] === null ? "" : money(ln[k])}</td>)}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table></div>
+          )}
+        <DialogFooter>
+          {reportKey && <Button variant="outline" onClick={() => onDownload(reportKey)} className="gap-2"><Download size={14} /> Télécharger</Button>}
+          <Button onClick={() => onOpenChange(false)} className="bg-[#0E9488] hover:bg-[#0E9488]/90">Fermer</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EfPreview({ ef, year }) {
+  const c = ef.cur, p = ef.prev, bl = ef.bilan, bn = ef.bnr;
+  const Row = ({ l, a, b, bold }) => <tr className={bold ? "border-t border-slate-300 font-700" : ""}><td className="px-3 py-1.5">{l}</td><td className="px-3 py-1.5 text-right font-mono-data">{money(a)}</td>{b !== undefined && <td className="px-3 py-1.5 text-right font-mono-data">{money(b)}</td>}</tr>;
+  return (
+    <div className="space-y-4" data-testid="qc-ext-preview-ef">
+      <div className="overflow-x-auto">
+        <p className="mb-1 text-xs font-700 uppercase text-[#0E9488]">État des résultats</p>
+        <table className="w-full text-sm"><thead><tr className="bg-slate-50 text-xs uppercase text-slate-500"><th className="px-3 py-1.5 text-left">Poste</th><th className="px-3 py-1.5 text-right">{year}</th><th className="px-3 py-1.5 text-right">{year - 1}</th></tr></thead>
+          <tbody className="divide-y divide-slate-50">
+            <Row l="Produits" a={c.rev} b={p.rev} />
+            <Row l="Total des charges" a={c.charges} b={p.charges} />
+            <Row l="Quote-part" a={c.qp} b={p.qp} />
+            <Row l="Impôts" a={c.impots} b={p.impots} />
+            <Row l="Bénéfice net" a={c.net} b={p.net} bold />
+            <Row l="BNR à la fin" a={bn.fin_cur} b={bn.fin_prev} bold />
+          </tbody></table>
+      </div>
+      <div className="overflow-x-auto">
+        <p className="mb-1 text-xs font-700 uppercase text-[#0E9488]">Bilan</p>
+        <table className="w-full text-sm"><tbody className="divide-y divide-slate-50">
+          <Row l="Total de l'actif" a={bl.total_actif} bold />
+          <Row l="Total du passif" a={bl.total_passif} />
+          <Row l="Capital-actions" a={bl.capital} />
+          <Row l="Bénéfices non répartis" a={bl.bnr} />
+          <Row l="Total du passif et de l'avoir" a={bl.total_pc} bold />
+        </tbody></table>
+      </div>
+    </div>
+  );
+}
+
 function QcExternalView({ years, isAdmin }) {
   const [contacts, setContacts] = useState([]);
   const [catalog, setCatalog] = useState([]);
@@ -819,6 +1070,7 @@ function QcExternalView({ years, isAdmin }) {
   const [manageOpen, setManageOpen] = useState(false);
   const [history, setHistory] = useState([]);
   const [histOpen, setHistOpen] = useState(false);
+  const [preview, setPreview] = useState(null);
 
   const load = useCallback(() => api.qcExternalContacts().then((r) => setContacts(r || [])), []);
   const loadHistory = useCallback(() => { if (cid) api.qcExternalEmailLog({ contact_id: cid }).then((r) => setHistory(r || [])).catch(() => setHistory([])); else setHistory([]); }, [cid]);
@@ -828,11 +1080,12 @@ function QcExternalView({ years, isAdmin }) {
 
   const contact = contacts.find((c) => c.id === cid);
   const labelOf = (k) => (catalog.find((c) => c.key === k) || {}).label || k;
+  const fmtOf = (k) => (catalog.find((c) => c.key === k) || {}).fmt || "xlsx";
   const ls = contact?.last_sent;
   const fmt = (iso) => fmtSent(iso);
 
   const download = async (key) => {
-    try { const b = await api.qcExternalReport({ key, year }); const url = URL.createObjectURL(b); const a = document.createElement("a"); a.href = url; a.download = `${key}_9434_${year}.xlsx`; a.click(); URL.revokeObjectURL(url); toast.success("Téléchargé"); }
+    try { const b = await api.qcExternalReport({ key, year }); const url = URL.createObjectURL(b); const a = document.createElement("a"); a.href = url; a.download = `${key}_9434_${year}.${fmtOf(key)}`; a.click(); URL.revokeObjectURL(url); toast.success("Téléchargé"); }
     catch (e) { toast.error(e.response?.data?.detail || "Indisponible"); }
   };
   const sendAll = async () => {
@@ -869,7 +1122,7 @@ function QcExternalView({ years, isAdmin }) {
         </div>
       </div>
 
-      <p className="text-xs text-slate-400">Note : seule la <strong>Balance de vérification</strong> est disponible pour l'instant. Le Bilan et l'État des résultats seront ajoutés une fois le modèle Excel reçu.</p>
+      <p className="text-xs text-slate-400">Astuce : cliquez sur une ligne de rapport pour <strong>prévisualiser</strong> le document qui sera envoyé à ce contact.</p>
 
       {!cid ? <p className="p-6 text-center text-sm text-slate-400">Sélectionnez un contact externe pour préparer son package.</p>
         : (
@@ -885,10 +1138,11 @@ function QcExternalView({ years, isAdmin }) {
             </div>
             <div className="divide-y divide-slate-50">
               {(contact.report_types || []).map((key) => (
-                <div key={key} className="flex items-center justify-between gap-3 px-5 py-3" data-testid={`qc-external-report-${key}`}>
-                  <p className="text-sm font-600 text-slate-700">{labelOf(key)}</p>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" variant="outline" onClick={() => download(key)} data-testid={`qc-external-download-${key}`} className="gap-1.5"><Download size={14} /> Excel</Button>
+                <div key={key} onClick={() => setPreview({ key, label: labelOf(key) })} title="Cliquer pour prévisualiser" className="flex cursor-pointer items-center justify-between gap-3 px-5 py-3 hover:bg-[#0E9488]/5" data-testid={`qc-external-report-${key}`}>
+                  <p className="flex items-center gap-2 text-sm font-600 text-slate-700"><Eye size={14} className="text-[#0E9488]" /> {labelOf(key)}</p>
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <Button size="sm" variant="ghost" onClick={() => setPreview({ key, label: labelOf(key) })} data-testid={`qc-external-preview-${key}`} className="gap-1.5 text-[#0E9488] hover:bg-[#0E9488]/10"><Eye size={14} /> Aperçu</Button>
+                    <Button size="sm" variant="outline" onClick={() => download(key)} data-testid={`qc-external-download-${key}`} className="gap-1.5"><Download size={14} /> {fmtOf(key) === "pdf" ? "PDF" : "Excel"}</Button>
                     <span className="text-xs font-600 text-emerald-600">Prêt</span>
                   </div>
                 </div>
@@ -897,6 +1151,8 @@ function QcExternalView({ years, isAdmin }) {
             </div>
           </div>
         )}
+
+      <QcExtPreviewDialog open={!!preview} onOpenChange={(v) => !v && setPreview(null)} reportKey={preview?.key} label={preview?.label} year={year} onDownload={download} />
 
       {isAdmin && <QcContactsDialog open={manageOpen} onOpenChange={setManageOpen} contacts={contacts} catalog={catalog} onChanged={load} />}
 

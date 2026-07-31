@@ -1,0 +1,43 @@
+{
+  "summary": "Phase 4 testing of 9434-3977 QC inc. (Commandité). Backend: 16/16 new pytests PASS in test_qc9434_phase4.py covering partial receive on invoices (open→partial→paid + balance decrement), partial pay on bills, overpayment refusal, receive-on-paid refusal, email-invoice clear error when no client_email or Resend not configured, États Financiers JSON structure + balanced (total_actif==total_pc), EF /pdf (200 + %PDF magic + application/pdf), EF /excel (200 + PK magic + spreadsheet content-type), account-detail drill-down (movement + cumulative scopes), main-app isolation (/api/employees, /api/acct/bv unaffected). Phase 3 regression still green. Frontend Playwright: tabbar restructured — 3 main tabs (qc-tab-entries/ar/ap) + Rapports dropdown (qc-tab-rapports) exposing 6 items (qc-tab-tb/bilan/pnl/ef/accounts/external) — all present and switch correctly. qc-ef-view renders qc-ef-resultats + qc-ef-bilan with 'Bilan équilibré' badge (qc-ef-balanced) and PDF/Excel buttons; EF numbers match backend (BÉNÉFICE NET 2026=81.89 / 2025=10 000, TOTAL ACTIF=TOTAL PASSIF+CAPITAUX=11 573,90 after test data). AR: qc-invoices-table shows Date+Échéance+Total+Solde+Statut columns; qc-ar-overdue-banner and 'RETARD' badge appear when due_date past; qc-invoice-pdf-*, qc-invoice-email-* (only when client_email present), qc-invoice-receive-* buttons present. Partial receive via prompt (50 $) correctly moves status to 'Partielle' and shrinks Solde, then completing sends to 'Encaissée'. AP: qc-bills-table + qc-add-bill work, qc-bill-pay-* prompt for partial amount transitions to 'Partielle' then 'Payée'. Drill-down on Bilan lines (qc-bilan-line-*) opens qc-account-detail-modal (qc-detail-table or qc-detail-empty for accounts w/o entries). External view: rows are clickable (qc-external-report-*) + explicit qc-external-preview-* / qc-external-download-* buttons; qc-ext-preview-dialog opens and renders EF/TB/lines preview per type. Contact management dialog exposes 7 doc types (bilan_pdf/pnl_pdf/trial_balance/bilan/pnl/etats_financiers_pdf/etats_financiers_excel) — up from 5 in Phase 3.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "InvoicesView / qc-invoice-dialog", "issue": "The new-invoice dialog has NO input field for client_email. The AR list renders qc-invoice-email-* only if r.client_email is set, so email-sending is unreachable from the UI for invoices created after the initial model import. Backend accepts POST /qc9434/invoices with client_email — a simple <Input placeholder='Courriel du client (optionnel)' bound to form.client_email> between qc-invoice-att and qc-invoice-address (or after) is needed.", "selector": "[data-testid=\"qc-invoice-dialog\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "qc-invoice-dialog & qc-bill-dialog", "issues": ["Native browser date pickers (mm/dd/yyyy) are used for Date/Échéance instead of a locale-aware/shadcn calendar — inconsistent format vs the FR YYYY-MM-DD shown in the table."]},
+      {"screen": "qc-bill-dialog (also entry dialog)", "issues": ["Persistent React hydration warning '<span> cannot be a child of <option>' — caused by visual-editor injection wrapping option children with <span data-ve-dynamic>. Cosmetic, dropdown works. Same warning as iterations 34-36."]},
+      {"screen": "qc-bill-dialog", "issues": ["BillsView dialog exposes only Date + Référence but no Échéance/due_date input — user cannot set a due date from UI (backend accepts it). Overdue-banner path therefore only triggers for bills posted through the API or model import."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_qc9434_phase4.py",
+    "/app/test_reports/pytest/qc9434_phase4.xml"
+  ],
+  "action_items": [
+    "HIGH — Add a client_email Input to qc-invoice-dialog (bound to form.client_email) so users can enable the email button on newly created invoices.",
+    "MEDIUM — Add a due_date Input (type=date) to qc-bill-dialog so users can set/track bill overdue dates from the UI (backend already supports it via multipart 'due_date').",
+    "LOW — Replace native date pickers with locale-aware picker in qc-invoice-dialog and qc-bill-dialog (project uses shadcn — consistency).",
+    "LOW — Suppress the visual-editor <span>-in-<option> hydration warning (dev overlay artifact, safe to ignore in prod)."
+  ],
+  "critical_code_review_comments": [
+    "server.py continues to grow (5827 lines). The qc9434_* block (>1400 lines including EF) should be moved to backend/qc9434.py (mirror of acct_ai module).",
+    "_qc_etats_financiers hardcodes account GLs (100105/100110/130118/145110/145101/160010/211010/211120/215301/215310/215311/215400/310000/330010). This is fine for the fixed 9434 chart of accounts but couples reporting logic to seed data — any account rename or renumber will silently zero the EF.",
+    "qc_receive_invoice/qc_pay_bill validate amount>0 and amount<=balance+0.005 (nice float tolerance). Both correctly transition to 'partial' vs 'paid' and post a balanced receipt/payment entry.",
+    "qc_email_invoice returns 400 with 'Aucun courriel client' or 'Service d'email non configuré' — clean French error surfaced by frontend toast; behaviour verified with Resend absent (test env).",
+    "qc_ef_pdf builds the ReportLab document with hardcoded row indices for style rules (index 12, 14, 7 in P&L; 8/17 in Bilan) — brittle if row list changes. Consider a builder that returns row indices with style tags.",
+    "InvoicesView omits client_email input while relying on r.client_email to render the email button (frontend bug already flagged).",
+    "BillsView dialog omits due_date input while _qc_bill_out reports due_date & balance — the UI path can never trigger the overdue banner it renders."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_qc9434_phase4.py"
+  ],
+  "success_rate": {"backend": "100% (16/16 new + 25/25 phase-3 regression)", "frontend": "≈90% (all core flows OK; missing client_email input in invoice dialog blocks the email-send path)"},
+  "test_credentials": "admin@accslegro.com / admin123 used.",
+  "seed_data_creation": "Backend tests created 4 TEST_ invoices (TEST_Partial Client, TEST_NoEmail) and 2 TEST_ bills (TEST_Supp Partial, TEST_OverPay) on year 2026 — not deleted (no DELETE endpoint for invoices/bills). Frontend test also created 1 invoice 2026-003 'TEST_UI_Overdue' and 1 bill 'TEST_UI_Supp' + 1 external contact 'TEST_UI_Ext'. Main agent may want to wipe qc9434_invoices/qc9434_bills/qc9434_entries where source in ('invoice','bill','receipt','payment') and re-import model, OR provide DELETE endpoints so these can be cleaned via UI/API.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_qc9434_phase4.py is idempotent w.r.t. state (creates new invoices/bills each run; expects year 2026 open). Uses REACT_APP_BACKEND_URL from env. Bilan remains balanced after all mutations. If model needs re-import, first wipe qc9434_* collections then POST /api/qc9434/import-model. The single HIGH bug (missing client_email input in qc-invoice-dialog) prevents e2e email testing — Resend key is not configured in this env either so full email send cannot be validated end-to-end; backend endpoint returns 400 with a clear French message which the frontend renders as a toast (acceptable per PS)."
+}

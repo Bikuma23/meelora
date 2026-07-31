@@ -182,4 +182,6 @@ export const api = {
   qcEmailInvoice: (id) => client.post(`/qc9434/invoices/${id}/email`, {}).then((r) => r.data),
   qcAccountDetail: (params) => client.get("/qc9434/account-detail", { params }).then((r) => r.data),
   qcEtatsFinanciers: (params) => client.get("/qc9434/etats-financiers", { params }).then((r) => r.data),
+  qcEfPdf: (params) => client.get("/qc9434/etats-financiers/pdf", { params, responseType: "blob" }).then((r) => r.data),
+  qcEfExcel: (params) => client.get("/qc9434/etats-financiers/excel", { params, responseType: "blob" }).then((r) => r.data),
 };
