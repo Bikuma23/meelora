@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 33 — Onglet 'Envoi Externe' validé end-to-end. Backend (test_external_send.py, 13/13 pass): (a) catalog = 6 clés {pnl_presentation, bilan_presentation, margination, pnl, pnl_sommaire, bilan}; (b) Banque Desjardins seedée avec 3 types de rapports; (c) /api/acct/margination/status year=2026 month=6 → present:true (fichier réel préservé); (d) /api/acct/external/report → PDF 200 (%PDF-) pour pnl_presentation et bilan_presentation, xlsx 200 (PK) pour margination, 404 pour margination period absente; (e) POST /api/acct/external/email → 400 'Service d'email non configuré' (Resend absent, attendu); (f) admin-only strict sur POST/PUT/DELETE /api/acct/external-contacts → 403 pour editor.test et user.test; (g) CRUD admin complet (create/verify/update/delete + cleanup). Note: upload Margination effectué puis fichier original re-téléversé — statut final present:true avec filename original '06-Rapport - Margination - Desjardins 30 juin 2026.xlsx'. Frontend (Playwright, admin): sidebar Comptabilité inchangée; hub Rapports → 6 onglets exact ordre: ['Bilan','État des résultats','Résultats mensuels','Flux de trésorerie','Par responsable budgétaire','Envoi Externe'] ✓. Onglet Envoi Externe: select liste 'Banque Desjardins (3 rapport(s))'; sélection + Juin 2026 → 'Package — Banque Desjardins · 2026-06 · aucun courriel · 3 rapport(s)' avec 3 lignes: États de Résultats (présentation) [PDF|Prêt], Bilan (présentation) [PDF|Prêt], Rapport de Margination (Excel téléversé) [Remplacer|Excel|Prêt, filename affiché]. Bouton 'Envoyer le package' DÉSACTIVÉ (Resend non configuré) ✓. Bouton 'Gérer les contacts' visible pour admin ✓. Téléchargements confirmés: pnl_presentation_2026-06.pdf, bilan_presentation_2026-06.pdf. Dialog Gérer les contacts: création TEST_UI_Contact via [acct-external-new] + name/email/checkbox type + save → 2 rows; suppression via [acct-external-del-{id}] → 1 row final (seule Banque Desjardins).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_external_send.py",
+    "/app/test_reports/pytest/external_send.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py toujours >4300 lignes — extraire le module 'Envoi Externe' (~150 lignes ajoutées) dans un router dédié pour maintenir la lisibilité.",
+    "Comptabilite.js dépasse 2200 lignes — ExternalSendView + ExternalContactsDialog devraient vivre dans src/pages/comptabilite/external/*.",
+    "POST /api/acct/margination/upload n'est pas admin-only (editor peut téléverser). Le spec ne l'exige pas explicitement, mais compte tenu que le fichier est diffusé aux contacts externes (Banque Desjardins), envisager de restreindre à admin. À confirmer avec le PO.",
+    "Le hook resend n'est chargé qu'à l'appel de /api/acct/external/email (import local dans fonction) — bonne pratique conservée; s'assurer que 'resend' figure dans requirements.txt sinon l'endpoint plantera en 500 quand la clé sera fournie.",
+    "external_report_download renvoie 404 pour margination manquant — cohérent, mais côté UI le bouton est déjà désactivé (missing state), donc double protection OK."
+  ],
+  "updated_files": ["/app/backend/tests/test_external_send.py"],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100%"},
+  "test_credentials": "admin@accslegro.com/admin123, editor.test@accslegro.com/editor123, user.test@accslegro.com/user123 — tous existants et fonctionnels.",
+  "seed_data_creation": "Aucun. Un TEST_UI_Contact éphémère créé et supprimé via UI. Banque Desjardins conservée (seed). Fichier Margination juin 2026 préservé (re-uploaded avec le contenu original après le test de remplacement).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Sélecteurs Playwright confirmés: [data-testid=acct-reports-type-external] (6e onglet), acct-external-view, acct-external-select, acct-external-package, acct-external-report-{key}, acct-external-download-{key}, acct-margination-upload/file, acct-external-email (disabled quand !_email_configured()), acct-external-manage (admin-only), acct-external-contacts-dialog, acct-external-new/name/cemail/type-{key}/save, acct-external-row-{id}, acct-external-edit-{id}, acct-external-del-{id}. PeriodSelect utilisé (testId='acct-external') affiche année (select) + mois (dropdown) et Juin 2026 est la période par défaut. Le download de margination via UI ouvre un lien XLSX (nommé 'Excel' pour le libellé du bouton, PDF pour les autres — comportement correct).",
+  "rca of the issue": "N/A — toutes les exigences fonctionnelles de l'onglet Envoi Externe (contacts CRUD admin-only, catalog 6 clés, package Desjardins Juin 2026, PDF présentation, Margination upload/status/download, email guard 400 sans Resend) sont conformes."
+}

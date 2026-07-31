@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, Fragment } from "react";
+import { useEffect, useState, useCallback, useRef, Fragment } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/button";
@@ -1689,6 +1689,7 @@ export function AcctReports() {
     { value: "monthly", label: "Résultats mensuels" },
     { value: "cashflow", label: "Flux de trésorerie" },
     { value: "manager", label: "Par responsable budgétaire" },
+    { value: "external", label: "Envoi Externe" },
   ];
   return (
     <div className="space-y-4" data-testid="acct-reports-page">
@@ -1704,7 +1705,8 @@ export function AcctReports() {
         : type === "pnl" ? <AcctPnl />
         : type === "monthly" ? <PnlMonthlyView />
         : type === "cashflow" ? <AcctCashflow />
-        : <ByManagerView />}
+        : type === "manager" ? <ByManagerView />
+        : <ExternalSendView />}
     </div>
   );
 }
@@ -2047,6 +2049,179 @@ function ManagersDialog({ open, onOpenChange, managers, onChanged }) {
     </Dialog>
   );
 }
+
+function ExternalSendView() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const { periods } = usePeriods();
+  const [catalog, setCatalog] = useState([]);
+  const [contacts, setContacts] = useState([]);
+  const [cid, setCid] = useState("");
+  const [period, setPeriod] = useState("");
+  const [manageOpen, setManageOpen] = useState(false);
+  const [emailCfg, setEmailCfg] = useState({ configured: false });
+  const [marg, setMarg] = useState({ present: false });
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef(null);
+  const load = () => api.acctExternalContacts().then((r) => setContacts(r || []));
+  useEffect(() => { load(); api.acctExternalCatalog().then(setCatalog).catch(() => {}); api.acctEmailStatus().then(setEmailCfg).catch(() => {}); }, []);
+  useEffect(() => { if (periods.length && !period) setPeriod(periods[0].id); }, [periods, period]);
+  const [y, m] = period ? period.split("-").map(Number) : [null, null];
+  const refreshMarg = () => { if (period) api.acctMarginationStatus({ year: y, month: m }).then(setMarg).catch(() => setMarg({ present: false })); };
+  useEffect(() => { refreshMarg(); /* eslint-disable-next-line */ }, [period]);
+  const contact = contacts.find((c) => c.id === cid);
+  const labelOf = (k) => (catalog.find((c) => c.key === k) || {}).label || k;
+
+  const download = async (key) => {
+    try {
+      const blob = await api.acctExternalReport({ key, year: y, month: m });
+      const url = URL.createObjectURL(blob); const a = document.createElement("a");
+      const ext = key === "margination" ? "xlsx" : "pdf";
+      a.href = url; a.download = `${key}_${period}.${ext}`; a.click(); URL.revokeObjectURL(url);
+      toast.success("Téléchargé");
+    } catch (e) { toast.error(e.response?.data?.detail || "Rapport indisponible"); }
+  };
+  const uploadMarg = async (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    setBusy(true);
+    try { await api.acctMarginationUpload(f, { year: y, month: m }); toast.success("Fichier Margination téléversé"); refreshMarg(); }
+    catch (err) { toast.error(err.response?.data?.detail || "Téléversement impossible"); }
+    finally { setBusy(false); if (fileRef.current) fileRef.current.value = ""; }
+  };
+  const sendAll = async () => {
+    setBusy(true);
+    try { const r = await api.acctExternalEmail({ contact_id: cid, year: y, month: m }); toast.success(r.message || "Envoyé"); }
+    catch (e) { toast.error(e.response?.data?.detail || "Envoi impossible"); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="space-y-4" data-testid="acct-external-view">
+      <div className="card p-3 flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-[11px] font-600 uppercase tracking-wider text-slate-400">Contact Externe</label>
+            <select value={cid} onChange={(e) => setCid(e.target.value)} data-testid="acct-external-select"
+              className="h-9 min-w-[220px] rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+              <option value="">— Choisir —</option>
+              {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}{c.report_types?.length ? ` (${c.report_types.length} rapport(s))` : ""}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-600 uppercase tracking-wider text-slate-400">Période</label>
+            <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId="acct-external" />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {cid && contact && (
+            <Button size="sm" onClick={sendAll} disabled={busy || !emailCfg.configured}
+              title={emailCfg.configured ? `Envoyer le package à ${contact.email || "(aucun courriel)"}` : "Service d'email non configuré"}
+              data-testid="acct-external-email" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Send size={15} /> {busy ? "…" : "Envoyer le package"}</Button>
+          )}
+          {isAdmin && <Button size="sm" variant="outline" onClick={() => setManageOpen(true)} data-testid="acct-external-manage" className="gap-2"><Settings2 size={15} /> Gérer les contacts</Button>}
+        </div>
+      </div>
+
+      {!cid ? <p className="p-6 text-center text-sm text-slate-400">Sélectionnez un contact externe pour préparer son package mensuel.</p>
+        : (
+          <div className="card overflow-hidden" data-testid="acct-external-package">
+            <div className="border-b border-slate-100 px-5 py-3">
+              <h3 className="font-display text-base font-700 text-[#063044]">Package — {contact.name}</h3>
+              <p className="mt-0.5 text-xs text-slate-400">{period ? period : ""} · {contact.email || "aucun courriel"} · {contact.report_types?.length || 0} rapport(s)</p>
+            </div>
+            <div className="divide-y divide-slate-50">
+              {(contact.report_types || []).map((key) => {
+                const isMarg = key === "margination";
+                const missing = isMarg && !marg.present;
+                return (
+                  <div key={key} className="flex items-center justify-between gap-3 px-5 py-3" data-testid={`acct-external-report-${key}`}>
+                    <div className="min-w-0">
+                      <p className="text-sm font-600 text-slate-700">{labelOf(key)}</p>
+                      {isMarg && <p className="text-xs text-slate-400">{marg.present ? `Fichier : ${marg.filename}` : "Aucun fichier téléversé pour cette période"}</p>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isMarg && isAdmin && (
+                        <>
+                          <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={uploadMarg} className="hidden" data-testid="acct-margination-file" />
+                          <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={busy} data-testid="acct-margination-upload" className="gap-1.5"><Upload size={14} /> {marg.present ? "Remplacer" : "Téléverser"}</Button>
+                        </>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => download(key)} disabled={missing} data-testid={`acct-external-download-${key}`} className="gap-1.5"><Download size={14} /> {isMarg ? "Excel" : "PDF"}</Button>
+                      {missing ? <span className="text-xs font-600 text-amber-600">Manquant</span> : <span className="text-xs font-600 text-emerald-600">Prêt</span>}
+                    </div>
+                  </div>
+                );
+              })}
+              {(contact.report_types || []).length === 0 && <p className="p-6 text-center text-sm text-slate-400">Aucun rapport sélectionné pour ce contact (voir « Gérer les contacts »).</p>}
+            </div>
+          </div>
+        )}
+
+      {isAdmin && <ExternalContactsDialog open={manageOpen} onOpenChange={setManageOpen} contacts={contacts} catalog={catalog} onChanged={load} />}
+    </div>
+  );
+}
+
+function ExternalContactsDialog({ open, onOpenChange, contacts, catalog, onChanged }) {
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ name: "", email: "", report_types: [] });
+  const startNew = () => { setEditing("new"); setForm({ name: "", email: "", report_types: [] }); };
+  const startEdit = (c) => { setEditing(c.id); setForm({ name: c.name, email: c.email || "", report_types: [...(c.report_types || [])] }); };
+  const toggle = (k) => setForm((f) => ({ ...f, report_types: f.report_types.includes(k) ? f.report_types.filter((x) => x !== k) : [...f.report_types, k] }));
+  const save = async () => {
+    const body = { name: form.name.trim(), email: form.email.trim(), report_types: form.report_types, active: true };
+    if (!body.name) { toast.error("Nom requis"); return; }
+    try {
+      if (editing === "new") await api.acctCreateExternalContact(body); else await api.acctUpdateExternalContact(editing, body);
+      toast.success("Contact enregistré"); setEditing(null); onChanged();
+    } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+  };
+  const del = async (c) => { try { await api.acctDeleteExternalContact(c.id); toast.success("Supprimé"); onChanged(); } catch (e) { toast.error("Erreur"); } };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="acct-external-contacts-dialog" className="max-h-[85vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Contacts externes</DialogTitle>
+          <DialogDescription className="text-xs">Ajoutez des contacts (banque, partenaires…) et choisissez les rapports à leur envoyer chaque mois.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          {contacts.map((c) => (
+            <div key={c.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2" data-testid={`acct-external-row-${c.id}`}>
+              <div className="min-w-0"><p className="text-sm font-600 text-slate-700">{c.name}</p><p className="truncate text-xs text-slate-400">{c.email || "—"} · {(c.report_types || []).length} rapport(s)</p></div>
+              <div className="flex gap-1">
+                <button onClick={() => startEdit(c)} data-testid={`acct-external-edit-${c.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100"><Pencil size={15} /></button>
+                <button onClick={() => del(c)} data-testid={`acct-external-del-${c.id}`} className="rounded p-1.5 text-red-500 hover:bg-red-50"><Trash2 size={15} /></button>
+              </div>
+            </div>
+          ))}
+          {contacts.length === 0 && <p className="py-3 text-center text-sm text-slate-400">Aucun contact défini.</p>}
+        </div>
+        {editing ? (
+          <div className="space-y-3 rounded-lg border border-[#0E9488]/30 bg-[#0E9488]/5 p-3" data-testid="acct-external-form">
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nom du contact" data-testid="acct-external-name" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0E9488] focus:outline-none" />
+            <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Courriel" data-testid="acct-external-cemail" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0E9488] focus:outline-none" />
+            <div>
+              <p className="mb-1.5 text-xs font-600 uppercase tracking-wider text-slate-400">Rapports à envoyer</p>
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {catalog.map((c) => (
+                  <label key={c.key} className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-2 py-1.5 text-sm text-slate-700 hover:border-[#0E9488]" data-testid={`acct-external-type-${c.key}`}>
+                    <input type="checkbox" checked={form.report_types.includes(c.key)} onChange={() => toggle(c.key)} className="h-4 w-4 rounded border-slate-300" />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="outline" onClick={() => setEditing(null)}>Annuler</Button>
+              <Button size="sm" onClick={save} data-testid="acct-external-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">Enregistrer</Button>
+            </div>
+          </div>
+        ) : <Button size="sm" onClick={startNew} data-testid="acct-external-new" className="gap-2 bg-[#063044] hover:bg-[#063044]/90"><Plus size={15} /> Nouveau contact</Button>}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 
 // ---------- Flux de trésorerie (méthode indirecte) ----------
 function CashflowView() {

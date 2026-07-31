@@ -20,6 +20,8 @@ import bcrypt
 import jwt
 import io
 import asyncio
+import base64
+import presentation_reports
 import openpyxl
 from accounting import ReportEngine
 
@@ -3049,6 +3051,160 @@ async def email_all_manager_reports(year: int, month: int, rev: str = "rev1", us
     return {"success": True, "sent": sent, "failed": failed, "skipped": skipped,
             "summary": f"{len(sent)} envoyé(s), {len(failed)} échec(s), {len(skipped)} sans courriel"}
 
+# ---------------------------------------------------------------------------
+# Envoi Externe : contacts externes + rapports « présentation » + Margination
+# ---------------------------------------------------------------------------
+EXTERNAL_REPORT_CATALOG = [
+    {"key": "pnl_presentation", "label": "États de Résultats (présentation)", "fmt": "pdf"},
+    {"key": "bilan_presentation", "label": "Bilan (présentation)", "fmt": "pdf"},
+    {"key": "margination", "label": "Rapport de Margination (Excel téléversé)", "fmt": "xlsx"},
+    {"key": "pnl", "label": "États de résultats — détaillé", "fmt": "pdf"},
+    {"key": "pnl_sommaire", "label": "États de résultats — sommaire", "fmt": "pdf"},
+    {"key": "bilan", "label": "Bilan — détaillé", "fmt": "pdf"},
+]
+_CATALOG_LABELS = {c["key"]: c["label"] for c in EXTERNAL_REPORT_CATALOG}
+
+EXTERNAL_CONTACTS_SEED = [
+    {"name": "Banque Desjardins", "email": "", "report_types": ["pnl_presentation", "bilan_presentation", "margination"], "active": True},
+]
+
+class ExternalContact(BaseModel):
+    name: str
+    email: str = ""
+    report_types: List[str] = []
+    active: bool = True
+
+async def _generate_external_report(key, year, month):
+    """Renvoie (bytes, filename, mimetype) ou (None, None, None) si indisponible."""
+    ml = MONTHS_FR[month - 1]
+    if key == "pnl_presentation":
+        data = await _acct_report(year, month, "pnl_sommaire")
+        data["month"] = month; data.setdefault("month_label", ml)
+        b = presentation_reports.build_presentation_pnl_pdf(data, year, ml)
+        return b, f"etats_resultats_presentation_{_pkey(year, month)}.pdf", "application/pdf"
+    if key == "bilan_presentation":
+        data = await _acct_report(year, month, "bilan")
+        import calendar as _cal
+        last = _cal.monthrange(year, month)[1]
+        b = presentation_reports.build_presentation_bilan_pdf(data, year, ml, f"{last} {ml} {year}")
+        return b, f"bilan_presentation_{_pkey(year, month)}.pdf", "application/pdf"
+    if key == "margination":
+        doc = await db.acct_margination.find_one({"_id": _pkey(year, month)})
+        if not doc:
+            return None, None, None
+        return base64.b64decode(doc["data"]), doc.get("filename", f"margination_{_pkey(year, month)}.xlsx"), \
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    if key in ("pnl", "pnl_sommaire", "bilan"):
+        rep = await _acct_report(year, month, key)
+        if key == "pnl":
+            rep = _pnl_detail_adjust(rep)
+        rep = _filter_rep_view(rep, "", False)
+        return _acct_pdf(rep).getvalue(), f"{key}_{_pkey(year, month)}.pdf", "application/pdf"
+    return None, None, None
+
+@api.get("/acct/external/catalog")
+async def external_catalog(user: dict = Depends(get_current_user)):
+    return EXTERNAL_REPORT_CATALOG
+
+@api.get("/acct/external-contacts")
+async def list_external_contacts(user: dict = Depends(get_current_user)):
+    docs = await db.acct_external_contacts.find().sort("name", 1).to_list(500)
+    return [{"id": str(d["_id"]), "name": d.get("name", ""), "email": d.get("email", ""),
+             "report_types": d.get("report_types", []), "active": d.get("active", True)} for d in docs]
+
+@api.post("/acct/external-contacts")
+async def create_external_contact(payload: ExternalContact, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
+    res = await db.acct_external_contacts.insert_one(payload.model_dump())
+    await log_action(user, "Créer", "Contact externe", payload.name)
+    return {"id": str(res.inserted_id), **payload.model_dump()}
+
+@api.put("/acct/external-contacts/{cid}")
+async def update_external_contact(cid: str, payload: ExternalContact, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
+    r = await db.acct_external_contacts.update_one({"_id": _oid(cid)}, {"$set": payload.model_dump()})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Contact introuvable")
+    await log_action(user, "Modifier", "Contact externe", payload.name)
+    return {"id": cid, **payload.model_dump()}
+
+@api.delete("/acct/external-contacts/{cid}")
+async def delete_external_contact(cid: str, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
+    d = await db.acct_external_contacts.find_one({"_id": _oid(cid)})
+    await db.acct_external_contacts.delete_one({"_id": _oid(cid)})
+    await log_action(user, "Supprimer", "Contact externe", (d or {}).get("name", cid))
+    return {"success": True}
+
+@api.post("/acct/margination/upload")
+async def upload_margination(year: int, month: int, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    content = await file.read()
+    await db.acct_margination.update_one(
+        {"_id": _pkey(year, month)},
+        {"$set": {"year": int(year), "month": int(month), "filename": file.filename,
+                  "data": base64.b64encode(content).decode(), "size": len(content),
+                  "uploaded_by": user.get("email"), "uploaded_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True)
+    await log_action(user, "Téléverser", "Rapport Margination", f"{file.filename} ({_pkey(year, month)})")
+    return {"success": True, "filename": file.filename, "size": len(content)}
+
+@api.get("/acct/margination/status")
+async def margination_status(year: int, month: int, user: dict = Depends(get_current_user)):
+    doc = await db.acct_margination.find_one({"_id": _pkey(year, month)})
+    if not doc:
+        return {"present": False}
+    return {"present": True, "filename": doc.get("filename"), "size": doc.get("size"),
+            "uploaded_by": doc.get("uploaded_by"), "uploaded_at": doc.get("uploaded_at")}
+
+@api.get("/acct/external/report")
+async def external_report_download(key: str, year: int, month: int, user: dict = Depends(get_current_user)):
+    b, fn, mime = await _generate_external_report(key, year, month)
+    if b is None:
+        raise HTTPException(status_code=404, detail="Rapport indisponible pour cette période (fichier Margination non téléversé ?)")
+    return StreamingResponse(io.BytesIO(b), media_type=mime, headers={"Content-Disposition": f"attachment; filename={fn}"})
+
+@api.post("/acct/external/email")
+async def external_email(contact_id: str, year: int, month: int, user: dict = Depends(get_current_user)):
+    c = await db.acct_external_contacts.find_one({"_id": _oid(contact_id)})
+    if not c:
+        raise HTTPException(status_code=404, detail="Contact introuvable")
+    if not _email_configured():
+        raise HTTPException(status_code=400, detail="Service d'email non configuré. Un administrateur doit renseigner la clé Resend.")
+    email = (c.get("email") or "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail=f"{c.get('name')} : aucun courriel renseigné")
+    attachments, missing = [], []
+    for key in c.get("report_types", []):
+        b, fn, mime = await _generate_external_report(key, year, month)
+        if b is None:
+            missing.append(_CATALOG_LABELS.get(key, key)); continue
+        attachments.append({"filename": fn, "content": list(b)})
+    if not attachments:
+        raise HTTPException(status_code=400, detail="Aucun rapport disponible à envoyer. " + (f"Manquant : {', '.join(missing)}" if missing else ""))
+    ml = MONTHS_FR[month - 1]
+    import resend
+    resend.api_key = os.environ["RESEND_API_KEY"]
+    html = (f"<div style=\"font-family:Arial,sans-serif;color:#1e293b;font-size:14px\">"
+            f"<p>Bonjour,</p><p>Veuillez trouver ci-joint le package financier de <strong>{ml} {year}</strong> "
+            f"pour <strong>{c.get('name')}</strong> ({len(attachments)} document(s)).</p>"
+            f"<p style=\"color:#64748b;font-size:12px;margin-top:24px\">ACCSL Groupe — Plateforme financière</p></div>")
+    try:
+        await asyncio.to_thread(resend.Emails.send, {
+            "from": os.environ.get("SENDER_EMAIL", "onboarding@resend.dev"),
+            "to": [email], "subject": f"Package financier {c.get('name')} — {ml} {year}",
+            "html": html, "attachments": attachments})
+        await log_action(user, "Envoyer", "Package externe", f"{c.get('name')} → {email} ({_pkey(year, month)})")
+        msg = f"{len(attachments)} document(s) envoyé(s) à {email}"
+        if missing:
+            msg += f" · manquant : {', '.join(missing)}"
+        return {"success": True, "message": msg}
+    except Exception as e:
+        logger.error(f"Envoi externe échec : {e}")
+        raise HTTPException(status_code=400, detail=f"Échec d'envoi : {str(e)[:150]}")
+
 
 
 @api.get("/acct/dashboard")
@@ -4223,6 +4379,11 @@ async def startup():
         if await db.acct_budget_managers.count_documents({}) == 0:
             await db.acct_budget_managers.insert_many([dict(m) for m in BUDGET_MANAGERS_SEED])
         await db.settings.update_one({"key": "app"}, {"$set": {"budget_managers_seeded": True}}, upsert=True)
+    # Seed des contacts externes (Banque Desjardins) — une seule fois.
+    if not (app_settings and app_settings.get("external_contacts_seeded")):
+        if await db.acct_external_contacts.count_documents({}) == 0:
+            await db.acct_external_contacts.insert_many([dict(c) for c in EXTERNAL_CONTACTS_SEED])
+        await db.settings.update_one({"key": "app"}, {"$set": {"external_contacts_seeded": True}}, upsert=True)
 
 @app.on_event("shutdown")
 async def shutdown():
