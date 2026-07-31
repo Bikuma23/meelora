@@ -834,6 +834,7 @@ export function AcctBV() {
   const [ledgerBusy, setLedgerBusy] = useState(false);
   const [ledgerPreview, setLedgerPreview] = useState({ open: false, year: null, month: null });
   const [sendDialog, setSendDialog] = useState({ open: false, year: null, month: null });
+  const [sendRev, setSendRev] = useState("rev1");
   const [emailCfg, setEmailCfg] = useState({ configured: false });
   const [sending, setSending] = useState(false);
   useEffect(() => { api.acctEmailStatus().then(setEmailCfg).catch(() => {}); }, []);
@@ -878,7 +879,7 @@ export function AcctBV() {
     const { year: y, month: m } = sendDialog;
     setSending(true);
     try {
-      const r = await api.acctEmailAllManagers({ year: y, month: m, rev: "rev1" });
+      const r = await api.acctEmailAllManagers({ year: y, month: m, rev: sendRev });
       toast.success(r.summary || "Rapports envoyés");
       if (r.failed?.length) toast.warning(`Échecs : ${r.failed.join(" · ")}`);
       setSendDialog({ open: false, year: null, month: null });
@@ -1109,6 +1110,15 @@ export function AcctBV() {
               <AlertTriangle size={14} className="mt-0.5 shrink-0" /> Le service d'envoi de courriels n'est pas encore configuré. Un administrateur doit renseigner la clé Resend (backend) pour activer l'envoi.
             </div>
           )}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-500">Budget à envoyer :</span>
+            <select value={sendRev} onChange={(e) => setSendRev(e.target.value)} data-testid="acct-sendreports-rev"
+              className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+              <option value="rev1">Budget Rév-1</option>
+              <option value="ca">Budget CA</option>
+              <option value="rev2">Budget Rév-2</option>
+            </select>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSendDialog({ open: false, year: null, month: null })} data-testid="acct-sendreports-later">Plus tard</Button>
             <Button onClick={sendAllReports} disabled={!emailCfg.configured || sending} data-testid="acct-sendreports-all" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90">
@@ -1838,6 +1848,8 @@ function ByManagerView() {
     try {
       const r = await api.acctEmailManager({ manager_id: mid, year: y, month: m, rev });
       toast.success(r.message ? `Envoyé : ${r.message}` : "Rapport envoyé");
+      const fresh = await api.acctReportByManager({ manager_id: mid, year: y, month: m, rev });
+      setRep(fresh);
     } catch (e) { toast.error(e.response?.data?.detail || "Envoi impossible"); }
     finally { setEmailing(false); }
   };
@@ -1890,6 +1902,11 @@ function ByManagerView() {
             <div className="border-b border-slate-100 px-5 py-3">
               <h3 className="font-display text-base font-700 text-[#063044]">Suivi Budget frais d'exploitation - {rep.manager.name}</h3>
               <p className="mt-0.5 text-xs text-slate-400">Réel {rep.month_label} {rep.year} (Cumulatif) · Budget {rep.rev_label}{!rep.locked ? " · données provisoires" : ""} · {rep.manager.email || "aucun courriel"}</p>
+              {rep.last_sent
+                ? <p className="mt-1 flex items-center gap-1.5 text-xs text-[#0E9488]" data-testid="acct-bymanager-lastsent">
+                    <Send size={12} /> Dernier envoi : {new Date(rep.last_sent.sent_at).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" })} à {rep.last_sent.email} · par {rep.last_sent.sent_by} (budget {rep.last_sent.rev_label})
+                  </p>
+                : <p className="mt-1 text-xs text-slate-300" data-testid="acct-bymanager-lastsent-none">Jamais envoyé pour cette période</p>}
             </div>
             {rep.lines.length === 0 ? <p className="p-6 text-center text-sm text-slate-400">Aucun compte mappé à ce responsable (à définir dans « Gérer les responsables »).</p>
               : <table className="acct-hover-rows w-full text-sm" data-testid="acct-bymanager-table">
@@ -1937,6 +1954,16 @@ function ByManagerView() {
 function ManagersDialog({ open, onOpenChange, managers, onChanged }) {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", accounts: "" });
+  const [lastByMgr, setLastByMgr] = useState({});
+  useEffect(() => {
+    if (!open) return;
+    api.acctEmailLog({ limit: 300 }).then((rows) => {
+      const map = {};
+      (rows || []).forEach((r) => { if (!map[r.manager_id]) map[r.manager_id] = r; });
+      setLastByMgr(map);
+    }).catch(() => setLastByMgr({}));
+  }, [open]);
+  const MONTHS_FR = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
   const startNew = () => { setEditing("new"); setForm({ name: "", email: "", accounts: "" }); };
   const startEdit = (m) => { setEditing(m.id); setForm({ name: m.name, email: m.email || "", accounts: (m.accounts || []).join(", ") }); };
   const save = async () => {
@@ -1959,7 +1986,11 @@ function ManagersDialog({ open, onOpenChange, managers, onChanged }) {
         <div className="space-y-2">
           {managers.map((m) => (
             <div key={m.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2" data-testid={`acct-manager-row-${m.id}`}>
-              <div className="min-w-0"><p className="text-sm font-600 text-slate-700">{m.name}</p><p className="truncate text-xs text-slate-400">{m.email || "—"} · {(m.accounts || []).length} compte(s)</p></div>
+              <div className="min-w-0"><p className="text-sm font-600 text-slate-700">{m.name}</p><p className="truncate text-xs text-slate-400">{m.email || "—"} · {(m.accounts || []).length} compte(s)</p>
+                {lastByMgr[m.id]
+                  ? <p className="mt-0.5 truncate text-[11px] text-[#0E9488]" data-testid={`acct-manager-lastsent-${m.id}`}>Dernier envoi : {MONTHS_FR[lastByMgr[m.id].month - 1]} {lastByMgr[m.id].year} · {new Date(lastByMgr[m.id].sent_at).toLocaleDateString("fr-CA", { dateStyle: "medium" })} par {lastByMgr[m.id].sent_by}</p>
+                  : <p className="mt-0.5 text-[11px] text-slate-300">Aucun envoi enregistré</p>}
+              </div>
               <div className="flex gap-1">
                 <button onClick={() => startEdit(m)} data-testid={`acct-manager-edit-${m.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100"><Pencil size={15} /></button>
                 <button onClick={() => del(m)} data-testid={`acct-manager-del-${m.id}`} className="rounded p-1.5 text-red-500 hover:bg-red-50"><Trash2 size={15} /></button>

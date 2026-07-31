@@ -561,6 +561,13 @@ Refonte du hub selon nouvelles demandes + modèle Excel « par responsable » fo
 - [x] Les 4 responsables (RH/TI/MARKETING/FGF) pré-remplis avec le courriel `bbindanda@accslegroupe.ca` (modifiable via « Gérer les responsables »).
 - [ ] **À FAIRE pour activer l'envoi réel** : renseigner `RESEND_API_KEY` (clé re_… du compte Resend) et `SENDER_EMAIL` (domaine expéditeur vérifié) dans `backend/.env`, puis `sudo supervisorctl restart backend`. En mode test Resend, seuls les destinataires vérifiés reçoivent les courriels.
 
+## Historique d'envoi + choix du budget à l'envoi (2026-07-30g)
+- [x] **Historique / dernier envoi par responsable** : chaque envoi réussi est journalisé (`acct_email_log`) + dernier envoi mémorisé par (responsable, période) (`acct_email_last`, avec date, courriel, expéditeur `sent_by`, budget). Endpoint `GET /acct/email/log?manager_id=&limit=`.
+  - Affiché dans l'**en-tête du rapport par responsable** : « Dernier envoi : <date/heure> à <courriel> · par <utilisateur> (budget <rev>) » (`acct-bymanager-lastsent`) ; sinon « Jamais envoyé pour cette période ». Rafraîchi après un envoi individuel.
+  - Affiché aussi dans **« Gérer les responsables »** sous chaque responsable (dernier envoi tous mois confondus, `acct-manager-lastsent-<id>`).
+- [x] **Choix du budget à l'envoi** dans le **dialogue de verrouillage** : sélecteur Budget Rév-1 (défaut) / CA / Rév-2 (`acct-sendreports-rev`) → transmis à `email-all`. L'envoi individuel utilise déjà le budget affiché.
+- [x] Vérifié : endpoints log/last_sent (curl + enregistrement simulé), affichage en-tête + dialogue « Gérer » + sélecteur budget au verrouillage (captures). État nettoyé (simulation supprimée, courriels responsables = `bbindanda@accslegroupe.ca`).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

@@ -103,6 +103,7 @@ export const api = {
   acctReportByManagerPdf: (params) => client.get("/acct/report/by-manager/pdf", { params, responseType: "blob" }).then((r) => r.data),
   acctSaveManagerNote: (body) => client.put("/acct/report/by-manager/note", body).then((r) => r.data),
   acctEmailStatus: () => client.get("/acct/email/status").then((r) => r.data),
+  acctEmailLog: (params) => client.get("/acct/email/log", { params }).then((r) => r.data),
   acctEmailManager: (params) => client.post("/acct/report/by-manager/email", {}, { params }).then((r) => r.data),
   acctEmailAllManagers: (params) => client.post("/acct/report/by-manager/email-all", {}, { params }).then((r) => r.data),
   acctAccounts: () => client.get("/acct/accounts").then((r) => r.data),

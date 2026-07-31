@@ -2795,10 +2795,15 @@ async def _by_manager_data(manager_id, year, month, rev="rev1"):
         tot["reel"] += reel; tot["budget"] += budget; tot["annuel"] += annuel; tot["ecart"] += ecart
     for k in tot:
         tot[k] = round(tot[k], 2)
+    last = await db.acct_email_last.find_one({"_id": f"{mgr['_id']}:{_pkey(year, month)}"})
+    last_sent = None
+    if last:
+        last_sent = {"sent_at": last.get("sent_at"), "email": last.get("email"),
+                     "sent_by": last.get("sent_by"), "rev_label": last.get("rev_label")}
     return {"manager": {"id": manager_id, "name": mgr.get("name", ""), "email": mgr.get("email", "")},
             "year": int(year), "month": int(month), "month_label": rep["month_label"],
             "rev": rev, "rev_label": REV_LABEL[rev], "locked": rep["locked"],
-            "lines": lines, "total": tot, "accounts": accts}
+            "lines": lines, "total": tot, "accounts": accts, "last_sent": last_sent}
 
 @api.get("/acct/report/by-manager")
 async def acct_report_by_manager(manager_id: str, year: int, month: int, rev: str = "rev1", user: dict = Depends(get_current_user)):
@@ -2937,7 +2942,7 @@ async def acct_report_by_manager_pdf(manager_id: str, year: int, month: int, rev
 def _email_configured():
     return bool(os.environ.get("RESEND_API_KEY"))
 
-async def _send_manager_report_email(mgr_doc, year, month, rev="rev1"):
+async def _send_manager_report_email(mgr_doc, year, month, rev="rev1", actor=None):
     """Génère le PDF et l'envoie au responsable. Renvoie (ok: bool, message: str)."""
     email = (mgr_doc.get("email") or "").strip()
     name = mgr_doc.get("name", "")
@@ -2970,7 +2975,16 @@ async def _send_manager_report_email(mgr_doc, year, month, rev="rev1"):
     }
     try:
         res = await asyncio.to_thread(resend.Emails.send, params)
-        await log_action({"email": "système"}, "Envoyer", "Rapport responsable", f"{name} → {email} ({_pkey(year, month)})")
+        sent_by = (actor or {}).get("email") or "système"
+        rec = {"manager_id": str(mgr_doc["_id"]), "manager_name": name, "email": email,
+               "year": int(year), "month": int(month), "rev": rev, "rev_label": data["rev_label"],
+               "sent_at": datetime.now(timezone.utc).isoformat(), "sent_by": sent_by,
+               "email_id": (res or {}).get("id") if isinstance(res, dict) else None}
+        await db.acct_email_log.insert_one(dict(rec))
+        # Dernier envoi mémorisé par (responsable, période).
+        await db.acct_email_last.update_one(
+            {"_id": f"{mgr_doc['_id']}:{_pkey(year, month)}"}, {"$set": rec}, upsert=True)
+        await log_action(actor or {"email": "système"}, "Envoyer", "Rapport responsable", f"{name} → {email} ({_pkey(year, month)})")
         return True, f"{name} → {email}"
     except Exception as e:
         logger.error(f"Resend échec ({name}): {e}")
@@ -2980,6 +2994,16 @@ async def _send_manager_report_email(mgr_doc, year, month, rev="rev1"):
 async def acct_email_status(user: dict = Depends(get_current_user)):
     return {"configured": _email_configured(), "sender": os.environ.get("SENDER_EMAIL", "")}
 
+@api.get("/acct/email/log")
+async def acct_email_log(manager_id: Optional[str] = None, limit: int = 100, user: dict = Depends(get_current_user)):
+    q = {}
+    if manager_id:
+        q["manager_id"] = manager_id
+    docs = await db.acct_email_log.find(q).sort("sent_at", -1).to_list(int(limit))
+    return [{"manager_id": d.get("manager_id"), "manager_name": d.get("manager_name"), "email": d.get("email"),
+             "year": d.get("year"), "month": d.get("month"), "rev_label": d.get("rev_label"),
+             "sent_at": d.get("sent_at"), "sent_by": d.get("sent_by")} for d in docs]
+
 @api.post("/acct/report/by-manager/email")
 async def email_manager_report(manager_id: str, year: int, month: int, rev: str = "rev1", user: dict = Depends(get_current_user)):
     mgr = await db.acct_budget_managers.find_one({"_id": _oid(manager_id)})
@@ -2987,7 +3011,7 @@ async def email_manager_report(manager_id: str, year: int, month: int, rev: str 
         raise HTTPException(status_code=404, detail="Responsable introuvable")
     if not _email_configured():
         raise HTTPException(status_code=400, detail="Service d'email non configuré. Un administrateur doit renseigner la clé Resend.")
-    ok, msg = await _send_manager_report_email(mgr, year, month, rev)
+    ok, msg = await _send_manager_report_email(mgr, year, month, rev, actor=user)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     return {"success": True, "message": msg}
@@ -3001,7 +3025,7 @@ async def email_all_manager_reports(year: int, month: int, rev: str = "rev1", us
     for m in mgrs:
         if not (m.get("email") or "").strip():
             skipped.append(m.get("name", "")); continue
-        ok, msg = await _send_manager_report_email(m, year, month, rev)
+        ok, msg = await _send_manager_report_email(m, year, month, rev, actor=user)
         (sent if ok else failed).append(msg)
     return {"success": True, "sent": sent, "failed": failed, "skipped": skipped,
             "summary": f"{len(sent)} envoyé(s), {len(failed)} échec(s), {len(skipped)} sans courriel"}
