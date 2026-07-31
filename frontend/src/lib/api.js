@@ -187,4 +187,6 @@ export const api = {
   qcEtatsFinanciers: (params) => client.get("/qc9434/etats-financiers", { params }).then((r) => r.data),
   qcEfPdf: (params) => client.get("/qc9434/etats-financiers/pdf", { params, responseType: "blob" }).then((r) => r.data),
   qcEfExcel: (params) => client.get("/qc9434/etats-financiers/excel", { params, responseType: "blob" }).then((r) => r.data),
+  qcEfSettings: () => client.get("/qc9434/ef-settings").then((r) => r.data),
+  qcEfSettingsUpdate: (body) => client.put("/qc9434/ef-settings", body).then((r) => r.data),
 };

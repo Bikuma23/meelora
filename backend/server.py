@@ -4444,6 +4444,27 @@ QC_DEF = {"sales": "400310", "ar": "130118", "ap": "211010", "tps_pay": "215310"
           "tvq_pay": "215301", "tps_rec": "145110", "tvq_rec": "145101", "cash": "100110", "bnr": "330010"}
 QC_TPS, QC_TVQ = 0.05, 0.09975
 
+# Chiffres comparatifs 2025 figés (modèle Excel « Commandité ACCS EF 2026 »)
+QC_EF_PREV_YEAR = 2025
+QC_EF_PREV = {
+    "result": {"rev": 10000.0, "juridique": 7720.0, "expertise": 32.0, "financiers": 68.0,
+               "charges": 7820.0, "avant_qp": 2180.0, "qp": -95.0, "avant_impot": 2275.0,
+               "impots": 1864.0, "net": 411.0},
+    "bnr": {"debut": 5278.0, "fin": 5689.0},
+    "bilan": {"treso": 6735.0, "clients": 11498.0, "taxes_rec": 1447.0, "total_ct": 19680.0,
+              "placement": 271.0, "total_actif": 19951.0, "crediteurs": 11879.0,
+              "taxes_rem": 0.0, "impot_pay": 637.0, "total_passif": 12516.0,
+              "capital": 100.0, "bnr": 7335.0, "total_pc": 19951.0},
+}
+QC_EF_ADMINS_DEFAULT = {"a1_name": "Marco Vézina", "a1_title": "Administrateur",
+                        "a2_name": "Simon Chevalier-Fournier", "a2_title": "Administrateur"}
+
+async def _qc_ef_admins():
+    cfg = await db.qc9434_settings.find_one({"_id": "config"}) or {}
+    a = cfg.get("ef_admins") or {}
+    return {**QC_EF_ADMINS_DEFAULT, **a}
+
+
 async def _qc_acc_name(gl):
     a = await db.qc9434_accounts.find_one({"gl": gl})
     return a.get("description", "") if a else ""
@@ -5620,11 +5641,12 @@ async def _qc_etats_financiers(year):
         net = round(avant_impot - impots, 2)
         return {"rev": rev, "juridique": juridique, "expertise": expertise, "financiers": financiers,
                 "charges": charges, "avant_qp": avant_qp, "qp": qp, "avant_impot": avant_impot, "impots": impots, "net": net}
-    cur = stmt("movement"); prev = stmt("opening")
-    bnr_debut_cur = round(-((bal.get("330010") or {}).get("opening", 0.0)) + prev["net"], 2)
+    cur = stmt("movement")
+    prev = dict(QC_EF_PREV["result"])
+    bnr_debut_cur = round(QC_EF_PREV["bnr"]["fin"], 2)
     bnr_fin_cur = round(bnr_debut_cur + cur["net"], 2)
-    bnr_debut_prev = round(-((bal.get("330010") or {}).get("opening", 0.0)), 2)
-    bnr_fin_prev = round(bnr_debut_prev + prev["net"], 2)
+    bnr_debut_prev = round(QC_EF_PREV["bnr"]["debut"], 2)
+    bnr_fin_prev = round(QC_EF_PREV["bnr"]["fin"], 2)
     def cum_pos(gl): return round(-bcum(gl), 2)
     treso = round(bcum("100105") + bcum("100110"), 2)
     clients = round(bcum("130118"), 2)
@@ -5637,7 +5659,8 @@ async def _qc_etats_financiers(year):
     impot_pay = round(cum_pos("215400"), 2)
     total_passif = round(crediteurs + taxes_rem + impot_pay, 2)
     capital = round(cum_pos("310000"), 2)
-    bnr_bilan = bnr_fin_cur
+    # BNR au bilan = solde équilibrant (actif − passif − capital) → le bilan balance toujours
+    bnr_bilan = round(total_actif - total_passif - capital, 2)
     total_pc = round(total_passif + capital + bnr_bilan, 2)
     # ---- États des flux de trésorerie (méthode indirecte) ----
     def bopen(gl): return (bal.get(gl) or {}).get("opening", 0.0)
@@ -5659,12 +5682,14 @@ async def _qc_etats_financiers(year):
           "net_var": net_var, "cash_open": cash_open, "cash_close": round(cash_open + net_var, 2),
           "bilan_cash": cash_close, "reconciled": abs(cash_open + net_var - cash_close) < 1.0,
           "wc_detail": {"clients": d_clients, "taxes_rec": d_txrec, "crediteurs": d_pay, "taxes_rem": d_txrem, "impot": d_imp, "total": wc}}
-    return {"year": int(year), "cur": cur, "prev": prev,
+    admins = await _qc_ef_admins()
+    return {"year": int(year), "cur": cur, "prev": prev, "prev_year": QC_EF_PREV_YEAR, "admins": admins,
             "bnr": {"debut_cur": bnr_debut_cur, "fin_cur": bnr_fin_cur, "debut_prev": bnr_debut_prev, "fin_prev": bnr_fin_prev},
             "cashflow": cf,
             "bilan": {"treso": treso, "clients": clients, "taxes_rec": taxes_rec, "total_ct": total_ct,
                       "placement": placement, "total_actif": total_actif, "crediteurs": crediteurs, "taxes_rem": taxes_rem,
                       "impot_pay": impot_pay, "total_passif": total_passif, "capital": capital, "bnr": bnr_bilan, "total_pc": total_pc},
+            "prev_bilan": dict(QC_EF_PREV["bilan"]),
             "qp": {"hilo_cur": round(cur["net"] * 0.65, 2), "hilo_prev": round(prev["net"] * 0.65, 2),
                    "autre_cur": round(cur["net"] * 0.35, 2), "autre_prev": round(prev["net"] * 0.35, 2)}}
 
@@ -5679,6 +5704,8 @@ def _qc_ef_pdf(ef):
     TITLE = ParagraphStyle("t", parent=styles["Normal"], fontSize=14, fontName="Helvetica-Bold", textColor=NAVY, alignment=1)
     SUB = ParagraphStyle("s", parent=styles["Normal"], fontSize=9, alignment=1, textColor=colors.grey)
     H = ParagraphStyle("h", parent=styles["Normal"], fontSize=11, fontName="Helvetica-Bold", textColor=NAVY, alignment=1)
+    B = ParagraphStyle("efb", parent=styles["Normal"], fontSize=9, fontName="Helvetica-Bold", textColor=NAVY)
+    N = ParagraphStyle("efn", parent=styles["Normal"], fontSize=9, leading=13)
     def fmt(v): return f"{v:,.2f}" if v else "—"
     def money_table(data):
         t = Table([[r[0], fmt(r[1]) if isinstance(r[1], (int, float)) else r[1], fmt(r[2]) if isinstance(r[2], (int, float)) else r[2]] for r in data],
@@ -5709,21 +5736,29 @@ def _qc_ef_pdf(ef):
     t.setStyle(TableStyle(st)); el += [t, PageBreak()]
     el += [Paragraph("9434-3977 QUÉBEC INC. - COMMANDITÉ", H), Spacer(1, 2 * mm), Paragraph("BILAN", H),
            Paragraph("Non-audités — En dollars canadiens", SUB), Spacer(1, 4 * mm)]
+    pb = ef.get("prev_bilan", {})
     brows = [["", str(y), str(y - 1)], ["ACTIF", "", ""], ["Actif à court terme", "", ""],
-             ["  Trésorerie", b["treso"], ""], ["  Clients", b["clients"], ""],
-             ["  Sommes à recevoir de l'état - Taxes de ventes", b["taxes_rec"], ""], ["  ", b["total_ct"], ""],
-             ["Placement – Société en commandite ACCS", b["placement"], ""], ["TOTAL DE L'ACTIF", b["total_actif"], ""],
+             ["  Trésorerie", b["treso"], pb.get("treso")], ["  Clients - Société en commandite ACCS", b["clients"], pb.get("clients")],
+             ["  Sommes à recevoir de l'état - Taxes de ventes", b["taxes_rec"], pb.get("taxes_rec")], ["  ", b["total_ct"], pb.get("total_ct")],
+             ["Placement – Société en commandite ACCS", b["placement"], pb.get("placement")], ["TOTAL DE L'ACTIF", b["total_actif"], pb.get("total_actif")],
              ["PASSIF", "", ""], ["Passif à court terme", "", ""],
-             ["  Créditeurs et charges à payer aux apparentés", b["crediteurs"], ""],
-             ["  Taxes de ventes à remettre", b["taxes_rem"], ""], ["  Impôt à payer", b["impot_pay"], ""],
-             ["  ", b["total_passif"], ""], ["Capital-actions", b["capital"], ""],
-             ["Bénéfices non-répartis", b["bnr"], ""], ["TOTAL DU PASSIF ET CAPITAUX", b["total_pc"], ""]]
+             ["  Créditeurs et charges à payer aux apparentés", b["crediteurs"], pb.get("crediteurs")],
+             ["  Taxes de ventes à remettre", b["taxes_rem"], pb.get("taxes_rem")], ["  Impôt à payer", b["impot_pay"], pb.get("impot_pay")],
+             ["  ", b["total_passif"], pb.get("total_passif")], ["Capital-actions", b["capital"], pb.get("capital")],
+             ["Bénéfices non-répartis", b["bnr"], pb.get("bnr")], ["TOTAL DU PASSIF ET CAPITAUX PROPRES", b["total_pc"], pb.get("total_pc")]]
     t2, st2 = money_table(brows)
     st2 += [("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
             ("FONTNAME", (0, 9), (-1, 9), "Helvetica-Bold"), ("FONTNAME", (0, 8), (-1, 8), "Helvetica-Bold"),
             ("FONTNAME", (0, 17), (-1, 17), "Helvetica-Bold"), ("LINEABOVE", (0, 8), (-1, 8), 0.5, NAVY),
             ("LINEABOVE", (0, 17), (-1, 17), 0.5, NAVY)]
-    t2.setStyle(TableStyle(st2)); el += [t2]
+    t2.setStyle(TableStyle(st2)); el += [t2, Spacer(1, 10 * mm)]
+    ad = ef.get("admins") or {}
+    el += [Paragraph("Au nom du Conseil d'administration", B), Spacer(1, 10 * mm)]
+    sig = Table([[Paragraph(f"_____________________________<br/><b>{ad.get('a1_name','')}</b><br/>{ad.get('a1_title','Administrateur')}", N),
+                  Paragraph(f"_____________________________<br/><b>{ad.get('a2_name','')}</b><br/>{ad.get('a2_title','Administrateur')}", N)]],
+                 colWidths=[85 * mm, 85 * mm])
+    sig.setStyle(TableStyle([("FONTSIZE", (0, 0), (-1, -1), 9), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    el += [sig]
     cf = ef.get("cashflow")
     if cf:
         el += [PageBreak(), Paragraph("9434-3977 QUÉBEC INC. - COMMANDITÉ", H), Spacer(1, 2 * mm),
@@ -5783,14 +5818,16 @@ def _qc_ef_xlsx(ef):
                         ("BNR au début de l'exercice", bn["debut_cur"], bn["debut_prev"]),
                         ("BNR à la fin de l'exercice", bn["fin_cur"], bn["fin_prev"])]:
         ws.append([lbl, cv, pv])
-    ws.append([]); ws.append(["BILAN", y])
-    for lbl, v in [("Trésorerie", b["treso"]), ("Clients", b["clients"]), ("Taxes de ventes à recevoir", b["taxes_rec"]),
-                   ("Total actif à court terme", b["total_ct"]), ("Placement – SEC ACCS", b["placement"]),
-                   ("TOTAL DE L'ACTIF", b["total_actif"]), ("Créditeurs et charges à payer", b["crediteurs"]),
-                   ("Taxes de ventes à remettre", b["taxes_rem"]), ("Impôt à payer", b["impot_pay"]),
-                   ("Total du passif", b["total_passif"]), ("Capital-actions", b["capital"]),
-                   ("Bénéfices non-répartis", b["bnr"]), ("TOTAL DU PASSIF ET CAPITAUX", b["total_pc"])]:
-        ws.append([lbl, v])
+    ws.append([]); ws.append(["BILAN", y, y - 1])
+    pb = ef.get("prev_bilan", {})
+    for lbl, v, pk in [("Trésorerie", b["treso"], "treso"), ("Clients - Société en commandite ACCS", b["clients"], "clients"),
+                   ("Sommes à recevoir de l'état - Taxes de ventes", b["taxes_rec"], "taxes_rec"),
+                   ("Total de l'actif à court terme", b["total_ct"], "total_ct"), ("Placement – SEC ACCS", b["placement"], "placement"),
+                   ("TOTAL DE L'ACTIF", b["total_actif"], "total_actif"), ("Créditeurs et charges à payer", b["crediteurs"], "crediteurs"),
+                   ("Taxes de ventes à remettre", b["taxes_rem"], "taxes_rem"), ("Impôt à payer", b["impot_pay"], "impot_pay"),
+                   ("Total du passif à court terme", b["total_passif"], "total_passif"), ("Capital-actions", b["capital"], "capital"),
+                   ("Bénéfices non-répartis", b["bnr"], "bnr"), ("TOTAL DU PASSIF ET CAPITAUX PROPRES", b["total_pc"], "total_pc")]:
+        ws.append([lbl, v, pb.get(pk)])
     cf = ef.get("cashflow")
     if cf:
         ws.append([]); ws.append(["ÉTATS DES FLUX DE TRÉSORERIE", y])
@@ -5813,6 +5850,10 @@ def _qc_ef_xlsx(ef):
                        ("Impôt à payer", cf["wc_detail"]["impot"]),
                        ("Total", cf["wc_detail"]["total"])]:
             ws.append([lbl, v])
+    ad = ef.get("admins") or {}
+    ws.append([]); ws.append(["Au nom du Conseil d'administration"])
+    ws.append([ad.get("a1_name", ""), ad.get("a2_name", "")])
+    ws.append([ad.get("a1_title", "Administrateur"), ad.get("a2_title", "Administrateur")])
     ws["A1"].font = Font(bold=True, size=13); ws.column_dimensions["A"].width = 52
     for col in ("B", "C"):
         ws.column_dimensions[col].width = 16
@@ -5826,6 +5867,17 @@ def _qc_ef_xlsx(ef):
 @api.get("/qc9434/etats-financiers")
 async def qc_ef(year: int, user: dict = Depends(get_current_user)):
     return await _qc_etats_financiers(year)
+
+@api.get("/qc9434/ef-settings")
+async def qc_ef_settings(user: dict = Depends(get_current_user)):
+    return await _qc_ef_admins()
+
+@api.put("/qc9434/ef-settings")
+async def qc_ef_settings_update(payload: dict, user: dict = Depends(require_admin)):
+    admins = {k: str(payload.get(k, "")).strip() for k in ("a1_name", "a1_title", "a2_name", "a2_title") if k in payload}
+    await db.qc9434_settings.update_one({"_id": "config"}, {"$set": {"ef_admins": {**QC_EF_ADMINS_DEFAULT, **admins}}}, upsert=True)
+    await log_action(user, "Modifier", "9434 — Signataires États Financiers", ", ".join(v for v in admins.values() if v))
+    return await _qc_ef_admins()
 
 @api.get("/qc9434/etats-financiers/pdf")
 async def qc_ef_pdf(year: int, user: dict = Depends(get_current_user)):

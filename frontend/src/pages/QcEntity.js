@@ -835,8 +835,19 @@ function StatementView({ year, kind }) {
 
 // ===================== États Financiers (modèle Excel) =====================
 function EtatsFinanciersView({ year }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [ef, setEf] = useState(null);
-  useEffect(() => { if (year) api.qcEtatsFinanciers({ year }).then(setEf).catch(() => setEf(null)); }, [year]);
+  const [sigDlg, setSigDlg] = useState(false);
+  const [admins, setAdmins] = useState({ a1_name: "", a1_title: "Administrateur", a2_name: "", a2_title: "Administrateur" });
+  const [savingSig, setSavingSig] = useState(false);
+  const loadEf = useCallback(() => { if (year) api.qcEtatsFinanciers({ year }).then((d) => { setEf(d); if (d.admins) setAdmins(d.admins); }).catch(() => setEf(null)); }, [year]);
+  useEffect(() => { loadEf(); }, [loadEf]);
+  const saveSig = async () => {
+    setSavingSig(true);
+    try { await api.qcEfSettingsUpdate(admins); toast.success("Signataires mis à jour"); setSigDlg(false); loadEf(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setSavingSig(false); }
+  };
   const dl = async (fmt) => {
     try {
       const b = await (fmt === "pdf" ? api.qcEfPdf({ year }) : api.qcEfExcel({ year }));
@@ -858,12 +869,13 @@ function EtatsFinanciersView({ year }) {
       </tr>
     );
   };
-  const c = ef.cur, p = ef.prev, bn = ef.bnr, bl = ef.bilan;
+  const c = ef.cur, p = ef.prev, bn = ef.bnr, bl = ef.bilan, pb = ef.prev_bilan || {}, py = ef.prev_year || (year - 1);
   return (
     <div className="space-y-4" data-testid="qc-ef-view">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span data-testid="qc-ef-balanced" className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-600 ${balanced ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{balanced ? <><CheckCircle2 size={13} /> Bilan équilibré</> : <><AlertTriangle size={13} /> Écart de bilan</>}</span>
         <div className="flex gap-2">
+          {isAdmin && <Button size="sm" variant="outline" onClick={() => setSigDlg(true)} data-testid="qc-ef-sig-btn" className="gap-2"><Pencil size={14} /> Signataires</Button>}
           <Button size="sm" variant="outline" onClick={() => dl("pdf")} data-testid="qc-ef-pdf" className="gap-2"><FileDown size={14} /> PDF</Button>
           <Button size="sm" variant="outline" onClick={() => dl("xlsx")} data-testid="qc-ef-excel" className="gap-2"><Download size={14} /> Excel</Button>
         </div>
@@ -871,57 +883,87 @@ function EtatsFinanciersView({ year }) {
 
       {/* État des résultats */}
       <div className="card overflow-hidden">
-        <div className="border-b border-slate-100 bg-[#063044] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">État des résultats et des bénéfices non répartis</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · Exercice terminé le 31 décembre {year}</p></div>
+        <div className="border-b border-slate-100 bg-[#063044] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">État des résultats et des bénéfices non répartis</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · Exercice terminé le 31 décembre {year} · Non-audités · En dollars canadiens</p></div>
         <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ef-resultats">
           <thead><tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-            <th className="px-3 py-2">Poste</th><th className="px-3 py-2 text-right">{year}</th><th className="px-3 py-2 text-right">{year - 1}</th>
+            <th className="px-3 py-2">Poste</th><th className="px-3 py-2 text-right">{year}</th><th className="px-3 py-2 text-right">{py}</th>
           </tr></thead>
           <tbody className="divide-y divide-slate-50">
-            <R label="PRODUITS" kind="header" cur={undefined} prev={undefined} />
-            <R label="Honoraires de gestion et revenus" kind="indent" cur={c.rev} prev={p.rev} />
-            <R label="CHARGES" kind="header" cur={undefined} prev={undefined} />
-            <R label="Honoraires juridiques" kind="indent" cur={c.juridique} prev={p.juridique} />
-            <R label="Honoraires d'expertise comptable" kind="indent" cur={c.expertise} prev={p.expertise} />
+            <R label="Produits" kind="header" cur={undefined} prev={undefined} />
+            <R label="Honoraires de gestion" kind="indent" cur={c.rev} prev={p.rev} />
+            <R label="Charges" kind="header" cur={undefined} prev={undefined} />
+            <R label="Services juridiques" kind="indent" cur={c.juridique} prev={p.juridique} />
+            <R label="Services d'expertise comptable et financière" kind="indent" cur={c.expertise} prev={p.expertise} />
             <R label="Frais financiers" kind="indent" cur={c.financiers} prev={p.financiers} />
-            <R label="Total des charges" kind="subtotal" cur={c.charges} prev={p.charges} />
-            <R label="Bénéfice avant quote-part et impôts" kind="subtotal" cur={c.avant_qp} prev={p.avant_qp} />
-            <R label="Quote-part du résultat des sociétés en commandite" kind="indent" cur={c.qp} prev={p.qp} />
-            <R label="Bénéfice avant impôts" kind="subtotal" cur={c.avant_impot} prev={p.avant_impot} />
-            <R label="Impôts sur le revenu" kind="indent" cur={c.impots} prev={p.impots} />
-            <R label="BÉNÉFICE NET" kind="total" cur={c.net} prev={p.net} />
-            <R label="Bénéfices non répartis au début" kind="indent" cur={bn.debut_cur} prev={bn.debut_prev} />
-            <R label="BÉNÉFICES NON RÉPARTIS À LA FIN" kind="total" cur={bn.fin_cur} prev={bn.fin_prev} />
+            <R label="" kind="subtotal" cur={c.charges} prev={p.charges} />
+            <R label="Bénéfice (perte) avant quote-part et impôts sur les bénéfices" kind="subtotal" cur={c.avant_qp} prev={p.avant_qp} />
+            <R label="Quote-part des résultats de la société en commandite" kind="indent" cur={c.qp} prev={p.qp} />
+            <R label="Bénéfice (perte) avant impôts sur les bénéfices" kind="subtotal" cur={c.avant_impot} prev={p.avant_impot} />
+            <R label="Impôts sur les bénéfices exigibles" kind="indent" cur={c.impots} prev={p.impots} />
+            <R label="Bénéfice (perte) net(te) de l'exercice" kind="total" cur={c.net} prev={p.net} />
+            <R label="Bénéfices non répartis au début de l'exercice" kind="indent" cur={bn.debut_cur} prev={bn.debut_prev} />
+            <R label="Bénéfices non répartis à la fin de l'exercice" kind="total" cur={bn.fin_cur} prev={bn.fin_prev} />
           </tbody>
         </table></div>
       </div>
 
       {/* Bilan */}
       <div className="card overflow-hidden">
-        <div className="border-b border-slate-100 bg-[#063044] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">Bilan</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · au 31 décembre {year}</p></div>
+        <div className="border-b border-slate-100 bg-[#063044] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">Bilan</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · au 31 décembre {year} · Non-audités · En dollars canadiens</p></div>
         <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ef-bilan">
           <thead><tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-            <th className="px-3 py-2">Poste</th><th className="px-3 py-2 text-right">{year}</th>
+            <th className="px-3 py-2">Poste</th><th className="px-3 py-2 text-right">{year}</th><th className="px-3 py-2 text-right">{py}</th>
           </tr></thead>
           <tbody className="divide-y divide-slate-50">
-            <R label="ACTIF" kind="header" prev="none" />
-            <R label="Encaisse" kind="indent" cur={bl.treso} prev="none" />
-            <R label="Comptes à recevoir" kind="indent" cur={bl.clients} prev="none" />
-            <R label="Taxes à recevoir" kind="indent" cur={bl.taxes_rec} prev="none" />
-            <R label="Total de l'actif à court terme" kind="subtotal" cur={bl.total_ct} prev="none" />
-            <R label="Participation - Société en commandite" kind="indent" cur={bl.placement} prev="none" />
-            <R label="TOTAL DE L'ACTIF" kind="total" cur={bl.total_actif} prev="none" />
-            <R label="PASSIF" kind="header" prev="none" />
-            <R label="Créditeurs et charges à payer" kind="indent" cur={bl.crediteurs} prev="none" />
-            <R label="Taxes à remettre" kind="indent" cur={bl.taxes_rem} prev="none" />
-            <R label="Impôts à payer" kind="indent" cur={bl.impot_pay} prev="none" />
-            <R label="Total du passif à court terme" kind="subtotal" cur={bl.total_passif} prev="none" />
-            <R label="AVOIR DES ACTIONNAIRES" kind="header" prev="none" />
-            <R label="Capital-actions" kind="indent" cur={bl.capital} prev="none" />
-            <R label="Bénéfices non répartis" kind="indent" cur={bl.bnr} prev="none" />
-            <R label="TOTAL DU PASSIF ET DE L'AVOIR" kind="total" cur={bl.total_pc} prev="none" />
+            <R label="ACTIF" kind="header" />
+            <R label="Actif à court terme" kind="header" cur={undefined} prev={undefined} />
+            <R label="Trésorerie" kind="indent" cur={bl.treso} prev={pb.treso} />
+            <R label="Clients - Société en commandite ACCS" kind="indent" cur={bl.clients} prev={pb.clients} />
+            <R label="Sommes à recevoir de l'état - Taxes de ventes" kind="indent" cur={bl.taxes_rec} prev={pb.taxes_rec} />
+            <R label="" kind="subtotal" cur={bl.total_ct} prev={pb.total_ct} />
+            <R label="Placement – Société en commandite ACCS" kind="indent" cur={bl.placement} prev={pb.placement} />
+            <R label="TOTAL DE L'ACTIF" kind="total" cur={bl.total_actif} prev={pb.total_actif} />
+            <R label="PASSIF" kind="header" />
+            <R label="Passif à court terme" kind="header" cur={undefined} prev={undefined} />
+            <R label="Créditeurs et charges à payer aux apparentés" kind="indent" cur={bl.crediteurs} prev={pb.crediteurs} />
+            <R label="Taxes de ventes à remettre" kind="indent" cur={bl.taxes_rem} prev={pb.taxes_rem} />
+            <R label="Impôt à payer" kind="indent" cur={bl.impot_pay} prev={pb.impot_pay} />
+            <R label="" kind="subtotal" cur={bl.total_passif} prev={pb.total_passif} />
+            <R label="CAPITAUX PROPRES" kind="header" cur={undefined} prev={undefined} />
+            <R label="Capital-actions" kind="indent" cur={bl.capital} prev={pb.capital} />
+            <R label="Bénéfices non répartis" kind="indent" cur={bl.bnr} prev={pb.bnr} />
+            <R label="TOTAL DU PASSIF ET DES CAPITAUX PROPRES" kind="total" cur={bl.total_pc} prev={pb.total_pc} />
           </tbody>
         </table></div>
+        <div className="border-t border-slate-100 px-4 py-3">
+          <p className="text-xs font-600 text-slate-500">Au nom du Conseil d'administration</p>
+          <div className="mt-2 flex flex-wrap gap-8" data-testid="qc-ef-signatures">
+            <div><p className="border-t border-slate-400 pt-1 text-sm font-700 text-[#063044]">{ef.admins?.a1_name || "—"}</p><p className="text-xs text-slate-400">{ef.admins?.a1_title || "Administrateur"}</p></div>
+            <div><p className="border-t border-slate-400 pt-1 text-sm font-700 text-[#063044]">{ef.admins?.a2_name || "—"}</p><p className="text-xs text-slate-400">{ef.admins?.a2_title || "Administrateur"}</p></div>
+          </div>
+        </div>
       </div>
+
+      <Dialog open={sigDlg} onOpenChange={setSigDlg}>
+        <DialogContent data-testid="qc-ef-sig-dialog" className="max-w-md">
+          <DialogHeader><DialogTitle>Signataires — Conseil d'administration</DialogTitle>
+            <DialogDescription className="text-xs">Ces noms apparaissent au bas du Bilan (PDF et Excel). Modifiables avant l'envoi.</DialogDescription></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="mb-1 block text-xs font-600 text-slate-500">Administrateur 1</label><Input value={admins.a1_name} onChange={(e) => setAdmins({ ...admins, a1_name: e.target.value })} data-testid="qc-ef-a1-name" className="h-9" /></div>
+              <div><label className="mb-1 block text-xs font-600 text-slate-500">Titre</label><Input value={admins.a1_title} onChange={(e) => setAdmins({ ...admins, a1_title: e.target.value })} data-testid="qc-ef-a1-title" className="h-9" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="mb-1 block text-xs font-600 text-slate-500">Administrateur 2</label><Input value={admins.a2_name} onChange={(e) => setAdmins({ ...admins, a2_name: e.target.value })} data-testid="qc-ef-a2-name" className="h-9" /></div>
+              <div><label className="mb-1 block text-xs font-600 text-slate-500">Titre</label><Input value={admins.a2_title} onChange={(e) => setAdmins({ ...admins, a2_title: e.target.value })} data-testid="qc-ef-a2-title" className="h-9" /></div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSigDlg(false)}>Annuler</Button>
+            <Button onClick={saveSig} disabled={savingSig} data-testid="qc-ef-sig-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">{savingSig ? "…" : "Enregistrer"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* États des flux de trésorerie */}
       {ef.cashflow && (() => {
