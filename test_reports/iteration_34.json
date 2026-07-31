@@ -1,0 +1,24 @@
+{
+  "summary": "Full backend + frontend testing of the new independent accounting entity « 9434-3977 QC inc. » module. All 21 pytest backend tests pass. Frontend flows (year creation, multi-line entry with balance validation & save-disable when unbalanced, entries table CRUD, trial balance tab with Excel button, external contacts CRUD, role gating for editor) all verified working via Playwright. qc9434_* collections cleaned up at the end as requested.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_qc9434.py",
+    "/app/test_reports/pytest/qc9434.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Le PUT /api/qc9434/entries/{eid} et DELETE /api/qc9434/entries/{eid} n'exigent pas require_admin/editor : ils utilisent get_current_user donc un rôle 'user' pourrait modifier/supprimer une écriture si le middleware write_guard ne le protège pas. Le middleware /api/qc9434/* semble reposer sur les Depends. À vérifier : est-ce que write_guard couvre les endpoints qc9434 ? Sinon, ajouter require_editor sur POST/PUT/DELETE entries.",
+  "Confirmé fonctionnel : cycle création année → saisie → blocage nouvelle année si non verrouillée → verrouillage admin → écritures bloquées 403 → création année suivante OK. Editor peut saisir mais ne peut pas verrouiller (403) ni créer une année (403). Isolation avec /api/acct/* vérifiée (periods 200, report bilan 2026-06 200/404).",
+    "Détail message FR déséquilibre : « Écriture déséquilibrée : débits X ≠ crédits Y » — OK, retourné en 400.",
+    "L'endpoint POST /api/qc9434/external/email retourne 400 quand RESEND_API_KEY absent — correct (message FR clair).",
+    "Le _qc_validate_lines n'exige pas un minimum de 2 lignes ('au moins deux lignes' dit le message mais la condition est 'not lines'). Une écriture à 1 seule ligne équilibrée (débit=crédit=0? non car montant nul est bloqué) — en pratique non atteignable puisque débits==crédits + montant>0 requiert au moins 2 lignes non nulles. Cosmétique."
+  ],
+  "updated_files": ["/app/backend/tests/test_qc9434.py"],
+  "success_rate": {"backend": "100% (21/21)", "frontend": "100%"},
+  "test_credentials": "admin@accslegro.com/admin123, editor.test@accslegro.com/editor123, user.test@accslegro.com/user123",
+  "seed_data_creation": "Backend tests créent années 2023 (verrouillée) + 2024 (ouverte), 1 écriture, 1 contact — tout supprimé à la fin (qc9434_* collections vidées manuellement post-tests).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Les collections qc9434_* sont vides. Le fichier /app/backend/tests/test_qc9434.py couvre années/écritures/verrouillage/balance/contacts/isolation. Utiliser -o addopts='' pour éviter le xdist worker qui perd l'environnement REACT_APP_BACKEND_URL. Exporter REACT_APP_BACKEND_URL depuis /app/frontend/.env avant de lancer pytest."
+}

@@ -4339,6 +4339,334 @@ async def acct_cashflow_pdf(open_year: int, open_month: int, close_year: int, cl
                              headers={"Content-Disposition": f"attachment; filename={fname}"})
 
 
+# ===========================================================================
+# Entité comptable indépendante : « 9434-3977 QC inc. »
+# Saisie directe (journal général), balance de vérification, verrouillage annuel.
+# Données 100% isolées du reste du module Comptabilité (collections qc9434_*).
+# ===========================================================================
+class QcLine(BaseModel):
+    account: str
+    account_name: str = ""
+    debit: float = 0.0
+    credit: float = 0.0
+
+class QcEntry(BaseModel):
+    date: str
+    description: str = ""
+    reference: str = ""
+    lines: List[QcLine]
+
+class QcExternalContact(BaseModel):
+    name: str
+    email: str = ""
+    report_types: List[str] = []
+    active: bool = True
+
+QC_EXTERNAL_CATALOG = [
+    {"key": "trial_balance", "label": "Balance de vérification (Excel)", "fmt": "xlsx"},
+]
+_QC_CAT_LABELS = {c["key"]: c["label"] for c in QC_EXTERNAL_CATALOG}
+
+def _qc_entry_out(d):
+    return {"id": str(d["_id"]), "year": d.get("year"), "date": d.get("date"),
+            "description": d.get("description", ""), "reference": d.get("reference", ""),
+            "lines": d.get("lines", []), "total": d.get("total", 0.0),
+            "created_at": d.get("created_at"), "created_by": d.get("created_by"),
+            "updated_at": d.get("updated_at")}
+
+async def _qc_year_doc(year: int):
+    return await db.qc9434_years.find_one({"_id": int(year)})
+
+def _qc_validate_lines(lines):
+    if not lines:
+        raise HTTPException(status_code=400, detail="L'écriture doit comporter au moins deux lignes.")
+    td = round(sum(l.debit or 0 for l in lines), 2)
+    tc = round(sum(l.credit or 0 for l in lines), 2)
+    for l in lines:
+        if not (l.account or "").strip():
+            raise HTTPException(status_code=400, detail="Chaque ligne doit avoir un numéro de compte.")
+        if (l.debit or 0) < 0 or (l.credit or 0) < 0:
+            raise HTTPException(status_code=400, detail="Les montants ne peuvent pas être négatifs.")
+        if (l.debit or 0) > 0 and (l.credit or 0) > 0:
+            raise HTTPException(status_code=400, detail="Une ligne ne peut être à la fois au débit et au crédit.")
+    if td <= 0 and tc <= 0:
+        raise HTTPException(status_code=400, detail="Le montant de l'écriture ne peut être nul.")
+    if abs(td - tc) > 0.005:
+        raise HTTPException(status_code=400, detail=f"Écriture déséquilibrée : débits {td:,.2f} $ ≠ crédits {tc:,.2f} $.")
+    return td
+
+# ---- Années -------------------------------------------------------------
+@api.get("/qc9434/years")
+async def qc_years(user: dict = Depends(get_current_user)):
+    docs = await db.qc9434_years.find().sort("_id", -1).to_list(1000)
+    cfg = await db.qc9434_settings.find_one({"_id": "config"}) or {}
+    active = cfg.get("active_year")
+    if active is None and docs:
+        active = docs[0]["_id"]
+    return {"years": [{"year": d["_id"], "locked": d.get("locked", False),
+                       "locked_by": d.get("locked_by"), "locked_at": d.get("locked_at"),
+                       "entry_count": d.get("entry_count", 0)} for d in docs],
+            "active_year": active}
+
+@api.post("/qc9434/years")
+async def qc_create_year(year: Optional[int] = None, user: dict = Depends(require_admin)):
+    docs = await db.qc9434_years.find().sort("_id", -1).to_list(1000)
+    if docs:
+        latest = docs[0]
+        if not latest.get("locked"):
+            raise HTTPException(status_code=400, detail=f"Vous devez d'abord verrouiller l'année {latest['_id']} avant de créer une nouvelle année.")
+        new_year = int(year) if year else latest["_id"] + 1
+    else:
+        new_year = int(year) if year else datetime.now(timezone.utc).year
+    if await _qc_year_doc(new_year):
+        raise HTTPException(status_code=400, detail=f"L'année {new_year} existe déjà.")
+    await db.qc9434_years.insert_one({"_id": new_year, "locked": False,
+        "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email")})
+    await db.qc9434_settings.update_one({"_id": "config"}, {"$set": {"active_year": new_year}}, upsert=True)
+    await log_action(user, "Créer", "9434 — Année", str(new_year))
+    return {"success": True, "year": new_year}
+
+@api.put("/qc9434/years/active")
+async def qc_set_active_year(year: int, user: dict = Depends(get_current_user)):
+    if not await _qc_year_doc(year):
+        raise HTTPException(status_code=404, detail="Année introuvable")
+    await db.qc9434_settings.update_one({"_id": "config"}, {"$set": {"active_year": int(year)}}, upsert=True)
+    return {"success": True, "active_year": int(year)}
+
+@api.post("/qc9434/years/lock")
+async def qc_lock_year(year: int, locked: bool = True, user: dict = Depends(require_admin)):
+    y = await _qc_year_doc(year)
+    if not y:
+        raise HTTPException(status_code=404, detail="Année introuvable")
+    await db.qc9434_years.update_one({"_id": int(year)}, {"$set": {
+        "locked": bool(locked), "locked_by": user.get("email") if locked else None,
+        "locked_at": datetime.now(timezone.utc).isoformat() if locked else None}})
+    await log_action(user, "Verrouiller" if locked else "Déverrouiller", "9434 — Année", str(year))
+    return {"success": True, "year": int(year), "locked": bool(locked)}
+
+# ---- Écritures (journal général) ---------------------------------------
+@api.get("/qc9434/entries")
+async def qc_entries(year: int, user: dict = Depends(get_current_user)):
+    docs = await db.qc9434_entries.find({"year": int(year)}).sort([("date", 1), ("created_at", 1)]).to_list(5000)
+    return [_qc_entry_out(d) for d in docs]
+
+@api.post("/qc9434/entries")
+async def qc_create_entry(payload: QcEntry, year: int, user: dict = Depends(get_current_user)):
+    y = await _qc_year_doc(year)
+    if not y:
+        raise HTTPException(status_code=404, detail="Année introuvable — créez d'abord l'exercice.")
+    if y.get("locked"):
+        raise HTTPException(status_code=403, detail=f"L'année {year} est verrouillée. Impossible de saisir de nouvelles écritures.")
+    total = _qc_validate_lines(payload.lines)
+    doc = {"year": int(year), "date": payload.date, "description": payload.description.strip(),
+           "reference": payload.reference.strip(), "lines": [l.model_dump() for l in payload.lines],
+           "total": total, "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email")}
+    res = await db.qc9434_entries.insert_one(doc)
+    await db.qc9434_years.update_one({"_id": int(year)}, {"$inc": {"entry_count": 1}})
+    await log_action(user, "Créer", "9434 — Écriture", f"{payload.date} · {payload.description[:40]} ({total:,.2f} $)")
+    doc["_id"] = res.inserted_id
+    return _qc_entry_out(doc)
+
+@api.put("/qc9434/entries/{eid}")
+async def qc_update_entry(eid: str, payload: QcEntry, user: dict = Depends(get_current_user)):
+    ex = await db.qc9434_entries.find_one({"_id": _oid(eid)})
+    if not ex:
+        raise HTTPException(status_code=404, detail="Écriture introuvable")
+    y = await _qc_year_doc(ex["year"])
+    if y and y.get("locked"):
+        raise HTTPException(status_code=403, detail=f"L'année {ex['year']} est verrouillée.")
+    total = _qc_validate_lines(payload.lines)
+    await db.qc9434_entries.update_one({"_id": _oid(eid)}, {"$set": {
+        "date": payload.date, "description": payload.description.strip(),
+        "reference": payload.reference.strip(), "lines": [l.model_dump() for l in payload.lines],
+        "total": total, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    await log_action(user, "Modifier", "9434 — Écriture", f"{payload.date} · {payload.description[:40]}")
+    return _qc_entry_out(await db.qc9434_entries.find_one({"_id": _oid(eid)}))
+
+@api.delete("/qc9434/entries/{eid}")
+async def qc_delete_entry(eid: str, user: dict = Depends(get_current_user)):
+    ex = await db.qc9434_entries.find_one({"_id": _oid(eid)})
+    if not ex:
+        raise HTTPException(status_code=404, detail="Écriture introuvable")
+    y = await _qc_year_doc(ex["year"])
+    if y and y.get("locked"):
+        raise HTTPException(status_code=403, detail=f"L'année {ex['year']} est verrouillée.")
+    await db.qc9434_entries.delete_one({"_id": _oid(eid)})
+    await db.qc9434_years.update_one({"_id": ex["year"]}, {"$inc": {"entry_count": -1}})
+    await log_action(user, "Supprimer", "9434 — Écriture", f"{ex.get('date')} · {ex.get('description','')[:40]}")
+    return {"success": True}
+
+# ---- Balance de vérification (générée à partir des écritures) -----------
+async def _qc_trial_balance(year: int):
+    docs = await db.qc9434_entries.find({"year": int(year)}).to_list(20000)
+    agg = {}
+    for e in docs:
+        for l in e.get("lines", []):
+            acc = (l.get("account") or "").strip()
+            if not acc:
+                continue
+            a = agg.setdefault(acc, {"account": acc, "account_name": l.get("account_name", ""), "debit": 0.0, "credit": 0.0})
+            a["debit"] += float(l.get("debit") or 0)
+            a["credit"] += float(l.get("credit") or 0)
+            if not a["account_name"] and l.get("account_name"):
+                a["account_name"] = l.get("account_name")
+    rows = []
+    for acc in sorted(agg.keys(), key=lambda k: (len(k), k)):
+        a = agg[acc]
+        bal = round(a["debit"] - a["credit"], 2)
+        rows.append({"account": a["account"], "account_name": a["account_name"],
+                     "debit": round(a["debit"], 2), "credit": round(a["credit"], 2), "balance": bal})
+    td = round(sum(r["debit"] for r in rows), 2)
+    tc = round(sum(r["credit"] for r in rows), 2)
+    return {"year": int(year), "rows": rows, "total_debit": td, "total_credit": tc,
+            "balanced": abs(td - tc) < 0.005, "entry_count": len(docs)}
+
+@api.get("/qc9434/trial-balance")
+async def qc_trial_balance(year: int, user: dict = Depends(get_current_user)):
+    return await _qc_trial_balance(year)
+
+def _qc_tb_xlsx(tb):
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Balance de vérification"
+    from openpyxl.styles import Font, PatternFill, Alignment
+    navy = PatternFill("solid", fgColor="063044"); white = Font(color="FFFFFF", bold=True)
+    ws.append(["9434-3977 QC inc."]); ws["A1"].font = Font(bold=True, size=13)
+    ws.append([f"Balance de vérification — Exercice {tb['year']}"]); ws["A2"].font = Font(size=10, italic=True)
+    ws.append([])
+    hdr = ["Compte", "Nom du compte", "Débit", "Crédit", "Solde"]
+    ws.append(hdr)
+    hr = ws.max_row
+    for c in range(1, 6):
+        cell = ws.cell(row=hr, column=c); cell.fill = navy; cell.font = white
+    for r in tb["rows"]:
+        ws.append([r["account"], r["account_name"], r["debit"], r["credit"], r["balance"]])
+    ws.append(["", "TOTAL", tb["total_debit"], tb["total_credit"], round(tb["total_debit"] - tb["total_credit"], 2)])
+    tr = ws.max_row
+    for c in range(1, 6):
+        ws.cell(row=tr, column=c).font = Font(bold=True)
+    for col, w in zip("ABCDE", [14, 40, 16, 16, 16]):
+        ws.column_dimensions[col].width = w
+    for row in ws.iter_rows(min_row=5, min_col=3, max_col=5):
+        for cell in row:
+            cell.number_format = '#,##0.00;(#,##0.00)'; cell.alignment = Alignment(horizontal="right")
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return buf.getvalue()
+
+@api.get("/qc9434/trial-balance/excel")
+async def qc_tb_excel(year: int, user: dict = Depends(get_current_user)):
+    tb = await _qc_trial_balance(year)
+    b = _qc_tb_xlsx(tb)
+    return StreamingResponse(io.BytesIO(b),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=balance_verification_9434_{year}.xlsx"})
+
+# ---- Envoi externe (contacts propres à cette entité) --------------------
+async def _qc_generate_external(key, year):
+    if key == "trial_balance":
+        tb = await _qc_trial_balance(year)
+        return _qc_tb_xlsx(tb), f"balance_verification_9434_{year}.xlsx", \
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    return None, None, None
+
+@api.get("/qc9434/external/catalog")
+async def qc_external_catalog(user: dict = Depends(get_current_user)):
+    return QC_EXTERNAL_CATALOG
+
+@api.get("/qc9434/external-contacts")
+async def qc_list_external(user: dict = Depends(get_current_user)):
+    docs = await db.qc9434_external_contacts.find().sort("name", 1).to_list(500)
+    return [{"id": str(d["_id"]), "name": d.get("name", ""), "email": d.get("email", ""),
+             "report_types": d.get("report_types", []), "active": d.get("active", True),
+             "last_sent": d.get("last_sent")} for d in docs]
+
+@api.post("/qc9434/external-contacts")
+async def qc_create_external(payload: QcExternalContact, user: dict = Depends(require_admin)):
+    res = await db.qc9434_external_contacts.insert_one(payload.model_dump())
+    await log_action(user, "Créer", "9434 — Contact externe", payload.name)
+    return {"success": True, "id": str(res.inserted_id)}
+
+@api.put("/qc9434/external-contacts/{cid}")
+async def qc_update_external(cid: str, payload: QcExternalContact, user: dict = Depends(require_admin)):
+    ex = await db.qc9434_external_contacts.find_one({"_id": _oid(cid)})
+    if not ex:
+        raise HTTPException(status_code=404, detail="Contact introuvable")
+    await db.qc9434_external_contacts.update_one({"_id": _oid(cid)}, {"$set": payload.model_dump()})
+    await log_action(user, "Modifier", "9434 — Contact externe", payload.name)
+    return {"success": True}
+
+@api.delete("/qc9434/external-contacts/{cid}")
+async def qc_delete_external(cid: str, user: dict = Depends(require_admin)):
+    ex = await db.qc9434_external_contacts.find_one({"_id": _oid(cid)})
+    if not ex:
+        raise HTTPException(status_code=404, detail="Contact introuvable")
+    await db.qc9434_external_contacts.delete_one({"_id": _oid(cid)})
+    await log_action(user, "Supprimer", "9434 — Contact externe", ex.get("name", ""))
+    return {"success": True}
+
+@api.get("/qc9434/external/report")
+async def qc_external_report(key: str, year: int, user: dict = Depends(get_current_user)):
+    b, fn, mime = await _qc_generate_external(key, year)
+    if b is None:
+        raise HTTPException(status_code=404, detail="Rapport indisponible pour cette entité.")
+    return StreamingResponse(io.BytesIO(b), media_type=mime, headers={"Content-Disposition": f"attachment; filename={fn}"})
+
+@api.get("/qc9434/external/email/log")
+async def qc_external_email_log(contact_id: Optional[str] = None, limit: int = 100, user: dict = Depends(get_current_user)):
+    q = {}
+    if contact_id:
+        q["contact_id"] = contact_id
+    docs = await db.qc9434_external_email_log.find(q).sort("sent_at", -1).to_list(int(limit))
+    return [{"contact_id": d.get("contact_id"), "contact_name": d.get("contact_name"), "email": d.get("email"),
+             "year": d.get("year"), "documents": d.get("documents", []), "doc_count": d.get("doc_count"),
+             "missing": d.get("missing", []), "sent_at": d.get("sent_at"), "sent_by": d.get("sent_by")} for d in docs]
+
+@api.post("/qc9434/external/email")
+async def qc_external_email(contact_id: str, year: int, user: dict = Depends(get_current_user)):
+    c = await db.qc9434_external_contacts.find_one({"_id": _oid(contact_id)})
+    if not c:
+        raise HTTPException(status_code=404, detail="Contact introuvable")
+    if not _email_configured():
+        raise HTTPException(status_code=400, detail="Service d'email non configuré. Un administrateur doit renseigner la clé Resend.")
+    email = (c.get("email") or "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail=f"{c.get('name')} : aucun courriel renseigné")
+    attachments, missing, doc_labels = [], [], []
+    for key in c.get("report_types", []):
+        b, fn, mime = await _qc_generate_external(key, year)
+        if b is None:
+            missing.append(_QC_CAT_LABELS.get(key, key)); continue
+        attachments.append({"filename": fn, "content": list(b)})
+        doc_labels.append(_QC_CAT_LABELS.get(key, key))
+    if not attachments:
+        raise HTTPException(status_code=400, detail="Aucun rapport disponible à envoyer. " + (f"Manquant : {', '.join(missing)}" if missing else ""))
+    import resend
+    resend.api_key = os.environ["RESEND_API_KEY"]
+    html = (f"<div style=\"font-family:Arial,sans-serif;color:#1e293b;font-size:14px\">"
+            f"<p>Bonjour,</p><p>Veuillez trouver ci-joint les documents financiers de <strong>9434-3977 QC inc.</strong> "
+            f"pour l'exercice <strong>{year}</strong> ({len(attachments)} document(s)).</p>"
+            f"<p style=\"color:#64748b;font-size:12px;margin-top:24px\">ACCSL Groupe — Plateforme financière</p></div>")
+    try:
+        res = await asyncio.to_thread(resend.Emails.send, {
+            "from": os.environ.get("SENDER_EMAIL", "onboarding@resend.dev"),
+            "to": [email], "subject": f"Documents financiers 9434-3977 QC inc. — {year}",
+            "html": html, "attachments": attachments})
+        rec = {"contact_id": contact_id, "contact_name": c.get("name", ""), "email": email,
+               "year": int(year), "documents": doc_labels, "doc_count": len(attachments), "missing": missing,
+               "sent_at": datetime.now(timezone.utc).isoformat(), "sent_by": (user or {}).get("email") or "système",
+               "email_id": (res or {}).get("id") if isinstance(res, dict) else None}
+        await db.qc9434_external_email_log.insert_one(dict(rec))
+        await db.qc9434_external_contacts.update_one({"_id": _oid(contact_id)}, {"$set": {"last_sent": {k: rec[k] for k in
+            ("email", "year", "documents", "doc_count", "sent_at", "sent_by")}}})
+        await log_action(user, "Envoyer", "9434 — Package externe", f"{c.get('name')} → {email} ({year})")
+        msg = f"{len(attachments)} document(s) envoyé(s) à {email}"
+        if missing:
+            msg += f" · manquant : {', '.join(missing)}"
+        return {"success": True, "message": msg}
+    except Exception as e:
+        logger.error(f"Envoi externe 9434 échec : {e}")
+        raise HTTPException(status_code=400, detail=f"Échec d'envoi : {str(e)[:150]}")
+
+
+
 import acct_ai
 acct_ai.init(
     db=db, log_action=log_action, _acct_report=_acct_report, _kpi_data=_kpi_data,
