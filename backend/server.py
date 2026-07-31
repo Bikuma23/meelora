@@ -4459,6 +4459,13 @@ QC_EF_PREV = {
 QC_EF_ADMINS_DEFAULT = {"a1_name": "Marco Vézina", "a1_title": "Administrateur",
                         "a2_name": "Simon Chevalier-Fournier", "a2_title": "Administrateur"}
 
+# Bilan de clôture 2025 = solde d'ouverture 2026, en base débit (actif +, passif/capitaux −).
+# Aligné sur les données réelles (créance client 11 497,50 $ = 10 000 $ × 1,14975) pour un solde net nul.
+QC_OPENING_2026 = {
+    "100110": 6735.00, "130118": 11497.50, "145110": 1447.00, "160010": 271.00,
+    "211010": -11879.00, "215400": -637.00, "310000": -100.00, "330010": -7334.50,
+}
+
 async def _qc_ef_admins():
     cfg = await db.qc9434_settings.find_one({"_id": "config"}) or {}
     a = cfg.get("ef_admins") or {}
@@ -4909,6 +4916,33 @@ async def _qc_report_balances(year):
         b["cumulative"] = round(b["opening"] + b["movement"], 2)
         b["movement"] = round(b["movement"], 2); b["opening"] = round(b["opening"], 2)
     return bal, accts
+
+async def _qc_seed_opening_balances(actor=None):
+    """Établit le solde d'ouverture 2026 = bilan de clôture 2025 du modèle (écriture d'à-nouveaux)."""
+    await db.qc9434_entries.delete_many({"source": "opening"})
+    bal, accts = await _qc_report_balances(2026)
+    gls = set(QC_OPENING_2026) | set(bal)
+    lines = []
+    for gl in sorted(gls):
+        target = float(QC_OPENING_2026.get(gl, 0.0))
+        cur_open = round((bal.get(gl) or {}).get("opening", 0.0), 2)
+        delta = round(target - cur_open, 2)
+        if abs(delta) < 0.005:
+            continue
+        name = (accts.get(gl) or {}).get("description", gl)
+        if delta > 0:
+            lines.append({"account": gl, "account_name": name, "tiers": "", "debit": delta, "credit": 0.0})
+        else:
+            lines.append({"account": gl, "account_name": name, "tiers": "", "debit": 0.0, "credit": round(-delta, 2)})
+    if not lines:
+        return None
+    doc = {"year": 2025, "date": "2025-12-31", "num": "OUV-2026", "period": "ouverture",
+           "description": "Solde d'ouverture au 1er janvier 2026 (report de la clôture 2025)",
+           "source": "opening", "lines": lines,
+           "created_at": datetime.now(timezone.utc).isoformat(),
+           "created_by": (actor or {}).get("email", "système")}
+    await db.qc9434_entries.insert_one(doc)
+    return doc
 
 def _acc_val(accts, gl, default_type):
     a = accts.get(gl) or {}
@@ -5593,8 +5627,15 @@ async def qc_import_model(user: dict = Depends(require_admin)):
     for date, desc, lines in entries:
         await _qc_post_entry(2026, date, desc, lines, source="import", actor=user)
     await db.qc9434_invoices.update_one({"_id": _oid(inv["id"])}, {"$set": {"status": "paid", "paid_at": "2026-02-13"}})
+    await _qc_seed_opening_balances(user)
     await log_action(user, "Importer", "9434 — Modèle Excel", "Exercices 2025 (verrouillé) + 2026")
-    return {"success": True, "message": "Modèle importé : exercice 2025 (verrouillé) + exercice 2026 (9 écritures)."}
+    return {"success": True, "message": "Modèle importé : exercice 2025 (verrouillé) + exercice 2026 (9 écritures) + soldes d'ouverture 2026."}
+
+@api.post("/qc9434/seed-opening")
+async def qc_seed_opening(user: dict = Depends(require_admin)):
+    doc = await _qc_seed_opening_balances(user)
+    await log_action(user, "Recalculer", "9434 — Soldes d'ouverture 2026", "à-nouveaux régénérés")
+    return {"success": True, "lines": len((doc or {}).get("lines", [])), "message": "Soldes d'ouverture 2026 régénérés."}
 
 
 # ---- Détail d'un compte (drill-down) -----------------------------------
