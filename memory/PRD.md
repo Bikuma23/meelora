@@ -568,6 +568,12 @@ Refonte du hub selon nouvelles demandes + modèle Excel « par responsable » fo
 - [x] **Choix du budget à l'envoi** dans le **dialogue de verrouillage** : sélecteur Budget Rév-1 (défaut) / CA / Rév-2 (`acct-sendreports-rev`) → transmis à `email-all`. L'envoi individuel utilise déjà le budget affiché.
 - [x] Vérifié : endpoints log/last_sent (curl + enregistrement simulé), affichage en-tête + dialogue « Gérer » + sélecteur budget au verrouillage (captures). État nettoyé (simulation supprimée, courriels responsables = `bbindanda@accslegroupe.ca`).
 
+## Correctif « État détaillé » du mensuel = copie exacte du P&L détaillé (2026-07-30h)
+- [x] **Bug de correction majeur** : le mensuel alignait les lignes par **index** `i`, or le nombre/ordre de lignes varie selon le mois → décalage (ex. « Marge Brute - Projet - % » affichait 171 584 au lieu de 13 %). Corrigé : alignement par la **clé stable `row`** (`GET /acct/report/pnl-monthly` construit un `row_maps` par mois). Chaque compte reflète désormais exactement les bons montants (vérifié vs P&L simple : Formation-RH juin 200,87 / total 23 760,04, etc.).
+- [x] **Lignes de ratio (%)** : détectées côté backend (`is_pct`, mêmes `PNL_PCT_LABELS` + BAIIA+1 que le front). Par mois = ratio du mois ; **Total = ratio annuel** (cumulatif du dernier mois avec données) au lieu d'une somme erronée de ratios.
+- [x] **Mise en forme identique au P&L détaillé** (`ReportView`) : nombres via `money()` (négatifs rouges entre parenthèses), ratios en **vert `#0E9488` italique %** (`pctFmt`), en-têtes de section navy, sous-totaux gris, ligne totale navy, regroupement **Q-P DES** (bordures teal + police réduite + 2 lignes d'espacement), couleurs de cellule via `excelCellColor`, police et classes reprises à l'identique.
+- [x] Vérifié par curl (alignement + is_pct + totaux) et captures (comparaison visuelle mensuel vs P&L détaillé : identiques).
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

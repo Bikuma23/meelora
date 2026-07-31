@@ -1761,17 +1761,50 @@ function PnlMonthlyView() {
                 </tr>
               </thead>
               <tbody className="font-mono-data">
-                {visibleLines.map((ln, i) => {
-                  const s = excelRowStyle(ln, !isSommaire);
-                  return (
-                    <tr key={i} className={`border-b border-slate-50 ${s.cls}`} style={{ background: s.bg, color: s.color, fontWeight: s.plain ? 400 : undefined }}>
-                      <td className="px-3 py-1.5 text-left text-slate-400">{ln.account || ""}</td>
-                      <td className={`px-3 py-1.5 text-left font-sans ${s.headerDefault ? "text-[#063044]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`}>{ln.label}</td>
-                      {months.map((m) => <td key={m.month} className="px-3 py-1.5 text-right" style={{ color: excelCellColor(s, ln.values[String(m.month)] || 0, false) }}>{ln.kind === "header" ? "" : money(ln.values[String(m.month)])}</td>)}
-                      <td className="px-3 py-1.5 text-right font-700" style={{ color: excelCellColor(s, ln.values.total || 0, false) }}>{ln.kind === "header" ? "" : money(ln.values.total)}</td>
-                    </tr>
-                  );
-                })}
+                {(() => {
+                  const pctFmt = (v) => (v == null || isNaN(v)) ? "" : (v * 100).toLocaleString("fr-CA", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %";
+                  const qpIdxs = visibleLines.map((l, i) => ({ l, i })).filter((x) => (x.l.label || "").toUpperCase().includes("Q-P DES")).map((x) => x.i);
+                  const qpFirst = qpIdxs[0]; const qpLast = qpIdxs[qpIdxs.length - 1];
+                  const totalCols = 3 + months.length;
+                  return visibleLines.map((ln, i) => {
+                    const s = excelRowStyle(ln, !isSommaire);
+                    const isQp = qpIdxs.indexOf(i) >= 0;
+                    const isPct = !!ln.is_pct;
+                    const qpB = (pos) => {
+                      if (!isQp) return "";
+                      let c = "border-[#0E9488] ";
+                      if (pos === "first") c += "border-l ";
+                      if (pos === "last") c += "border-r ";
+                      if (i === qpFirst) c += "border-t ";
+                      if (i === qpLast) c += "border-b ";
+                      return c;
+                    };
+                    const fmt = (v) => ln.kind === "header" ? "" : (isPct ? pctFmt(v) : money(v));
+                    const cellColor = (v) => isPct ? "#0E9488" : excelCellColor(s, v || 0, false);
+                    const row = (
+                      <tr key={ln.row ?? i} data-testid={`acct-monthly-line-${ln.row ?? i}`}
+                        className={`group ${isQp ? "" : "border-b border-slate-50"} ${s.cls}`}
+                        style={{ background: isQp ? "transparent" : s.bg, color: s.color, fontWeight: (isQp || isPct || s.plain) ? 400 : undefined, fontStyle: isPct ? "italic" : undefined, fontSize: isQp ? "0.72rem" : undefined }}>
+                        <td className={`px-3 py-1.5 text-left ${qpB("none")}`} style={{ color: "#94A3B8" }}>{ln.account || ""}</td>
+                        <td className={`px-3 py-1.5 text-left font-sans ${qpB("first")} ${s.headerDefault ? "text-[#063044]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`} style={{ color: isPct ? "#0E9488" : (s.headerDefault ? undefined : (s.color || undefined)) }}>{ln.label}</td>
+                        {months.map((m) => (
+                          <td key={m.month} className={`px-3 py-1.5 text-right ${qpB("mid")} ${isPct ? "italic" : ""}`} style={{ color: cellColor(ln.values[String(m.month)]) }}>{fmt(ln.values[String(m.month)])}</td>
+                        ))}
+                        <td className={`px-3 py-1.5 text-right font-700 ${qpB("last")} ${isPct ? "italic font-normal" : ""}`} style={{ color: cellColor(ln.values.total) }}>{fmt(ln.values.total)}</td>
+                      </tr>
+                    );
+                    if (i === qpFirst) {
+                      return (
+                        <Fragment key={`qpwrap-${ln.row ?? i}`}>
+                          <tr aria-hidden="true"><td colSpan={totalCols} className="h-6"></td></tr>
+                          <tr aria-hidden="true"><td colSpan={totalCols} className="h-6"></td></tr>
+                          {row}
+                        </Fragment>
+                      );
+                    }
+                    return row;
+                  });
+                })()}
               </tbody>
             </table>}
       </div>

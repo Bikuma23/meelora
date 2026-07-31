@@ -2670,6 +2670,14 @@ async def acct_report(type: str, year: int, month: int, user: dict = Depends(get
         raise HTTPException(status_code=400, detail="Type invalide")
     return await _acct_report(year, month, type)
 
+PNL_PCT_LABELS = {
+    "Matériels Projets/Revenus Projets", "Sous-traitance projets/Revenus Projets",
+    "Coût main d'œuvre direct projets/Revenus Projets", "FGF projets/Revenus Projets",
+    "Marge Brute - Projet - %", "Marge très brute - Projets",
+    "Matériel Services vs Revenus Services", "Sous-traitance Services vs Revenus Services",
+    "Salaires Services vs Revenus Services", "Marge Brute - Service %", "Marge Brute Globale - %",
+}
+
 @api.get("/acct/report/pnl-monthly")
 async def acct_pnl_monthly(year: int, variant: str = "detail", user: dict = Depends(get_current_user)):
     """État des résultats avec chaque mois de l'année en colonne. Réutilise le moteur P&L par mois.
@@ -2686,19 +2694,29 @@ async def acct_pnl_monthly(year: int, variant: str = "detail", user: dict = Depe
     base = next((r for r in reports.values() if r), None)
     if not base:
         return {"year": int(year), "months": [], "lines": [], "empty": True}
+    base_lines = base["lines"]
+    # Alignement par clé stable `row` (le nombre/ordre de lignes peut varier selon le mois).
+    row_maps = {m: ({l.get("row"): l for l in reports[m]["lines"]} if reports[m] else {}) for m in months}
+    last_r = next((reports[m] for m in reversed(months) if reports[m]), None)
+    last_row_map = ({l.get("row"): l for l in last_r["lines"]} if last_r else {})
+    labels = [(ln.get("label") or "").strip() for ln in base_lines]
+    baiia_idx = next((i for i, l in enumerate(labels) if "BAIIA" in l), -1)
     out_lines = []
-    for i, ln in enumerate(base["lines"]):
+    for i, ln in enumerate(base_lines):
+        rk = ln.get("row")
+        is_pct = (labels[i] in PNL_PCT_LABELS) or (baiia_idx >= 0 and i == baiia_idx + 1)
         vals = {}
         for m in months:
-            r = reports[m]
-            v = 0.0
-            if r and i < len(r["lines"]):
-                v = r["lines"][i]["values"].get("reel") or 0.0
-            vals[str(m)] = v
+            lm = row_maps[m].get(rk)
+            vals[str(m)] = (lm["values"].get("reel") if lm else 0.0) or 0.0
         if ln["kind"] != "header":
-            vals["total"] = round(sum(vals[str(m)] for m in months), 2)
+            if is_pct:
+                lr = last_row_map.get(rk)
+                vals["total"] = round(((lr["values"].get("cumulatif") if lr else 0.0) or 0.0), 6)
+            else:
+                vals["total"] = round(sum(vals[str(m)] for m in months), 2)
         out_lines.append({"account": ln["account"], "label": ln["label"], "kind": ln["kind"],
-                          "style": ln.get("style"), "values": vals})
+                          "style": ln.get("style"), "row": rk, "is_pct": is_pct, "values": vals})
     month_meta = [{"month": m, "label": MONTHS_FR[m - 1], "short": MONTHS[m - 1],
                    "locked": bool(per.get(m, {}).get("locked")), "has_data": reports[m] is not None} for m in months]
     return {"year": int(year), "months": month_meta, "lines": out_lines, "empty": False}
