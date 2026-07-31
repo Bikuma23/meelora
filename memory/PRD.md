@@ -644,3 +644,18 @@ Nouvelle entité juridique distincte, sous-menu du module Comptabilité, avec **
 - Validation du code département à la création d'un employé.
 - Édition rapide (double-clic) des taux ; gestion d'utilisateurs multiples.
 - Gestion multi-années / budget actif.
+
+
+## « 9434-3977 QC inc. » (Commandité) — Phase 2 : modèle Excel intégré (2026-06)
+Construite à partir du fichier fourni « Commandité ACCS EF 2026 (non-audités).xlsx ».
+- [x] **Renommage** : sous-titre du sous-menu « Entité distincte » → **« Commandité »** (`Layout.js`).
+- [x] **Plan comptable structuré** (nouvel onglet) : GL · Description · Type (auto-déduit du préfixe 1/2/3/4/5, modifiable) · **Section de rapport** (10 sections). CRUD complet ; suppression bloquée si le compte est utilisé dans une écriture. **Seed automatique des 23 comptes** du modèle avec sections pré-mappées (`_qc_seed_accounts`, `QC_ACCOUNTS_SEED`, `QC_SECTIONS`). Collection `qc9434_accounts`.
+- [x] **Écritures** : le champ Compte devient une **liste déroulante** alimentée par le plan comptable (auto-remplit le nom) ; ajout du champ **Fournisseur/Client** (`tiers`) par ligne (comme l'Excel). Validation d'équilibre inchangée.
+- [x] **Écritures modèles (récurrentes)** : enregistrer une écriture comme modèle réutilisable (`qc9434_templates`) et l'appliquer en un clic dans le dialogue de saisie. CRUD `/api/qc9434/templates`.
+- [x] **Journal général PDF** : export imprimable paysage de toutes les écritures de l'exercice (date, réf, compte, libellé/description, tiers, débit, crédit, totaux). `/api/qc9434/journal/pdf` (reportlab).
+- [x] **Onglet Bilan détaillé** (`_qc_bilan`) : sections ACTIF (court terme / placement / immobilisations) et PASSIF (court terme / long terme) / CAPITAUX, ligne calculée **« Bénéfices non répartis » = bénéfice net** (impact équité), TOTAL DE L'ACTIF / TOTAL PASSIF ET CAPITAUX, ligne **Diff** de contrôle. **3 colonnes** : Exercice (mouvement) / Antérieur (cumul des exercices précédents) / Cumulatif. Équilibré (Diff=0) validé inter-exercices. Export Excel `/api/qc9434/bilan/excel`.
+- [x] **Onglet États des résultats** (`_qc_pnl`) : REVENUS → TOTAL, CHARGES → TOTAL, **BAIIA**, Quote-part des bénéfices, Bénéfice avant impôt, IMPÔTS, **Bénéfice net**, puis **Q-P des résultats calculées auto : HILO 65 % / 9379-5599 QC inc. 35 %** du bénéfice net. **2 colonnes** : exercice courant / année précédente (comparatif). Export Excel `/api/qc9434/pnl/excel`.
+- [x] **Balances par exercice** (`_qc_report_balances`) : convention débit-positif ; movement (année) / opening (cumul années < N) / cumulative. Bénéfice net = -(somme des comptes de résultat) → garantit l'équilibre du bilan.
+- [x] **Envoi externe** : catalogue de l'entité étendu à **Balance de vérification + Bilan + État des résultats** (xlsx). `QC_EXTERNAL_CATALOG`.
+- [x] **Vérifié** testing_agent iteration_35 : backend 16/16 nouveaux + 21/21 existants, frontend 100 %. Exactitude comptable validée (bilan balancé, BNR = bénéfice net, comparatif N-1, Q-P 65/35 = 100 % du net), gating de rôles (user bloqué 403), isolation de l'entité principale confirmée. Collections de test vidées (plan comptable conservé/re-seed auto).
+- [ ] **Backlog** : index sur `qc9434_entries.year` si la base grossit (perf) ; onglets additionnels du modèle Excel si nécessaires (Auxiliaires, Transactions) ; logo/en-tête sur les exports.
