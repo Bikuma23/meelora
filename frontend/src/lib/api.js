@@ -110,6 +110,7 @@ export const api = {
   acctUpdateExternalContact: (id, body) => client.put(`/acct/external-contacts/${id}`, body).then((r) => r.data),
   acctDeleteExternalContact: (id) => client.delete(`/acct/external-contacts/${id}`).then((r) => r.data),
   acctMarginationStatus: (params) => client.get("/acct/margination/status", { params }).then((r) => r.data),
+  acctMarginationPreview: (params) => client.get("/acct/margination/preview", { params }).then((r) => r.data),
   acctMarginationUpload: (file, params) => { const fd = new FormData(); fd.append("file", file); return client.post("/acct/margination/upload", fd, { params }).then((r) => r.data); },
   acctExternalReport: (params) => client.get("/acct/external/report", { params, responseType: "blob" }).then((r) => r.data),
   acctExternalEmail: (params) => client.post("/acct/external/email", {}, { params }).then((r) => r.data),

@@ -596,6 +596,9 @@ Refonte du hub selon nouvelles demandes + modèle Excel « par responsable » fo
 - [x] Vérifié : PDF présentation inspectés visuellement (conformes), catalogue 7 types, aperçu iframe OK (curl + captures).
 - [ ] **Budget CA ANNUEL exact (à faire)** : toujours annualisé linéairement — nécessite l'import de la **source du budget annuel** (fichier de budget CA annuel non présent dans les données actuelles). En attente d'un fichier/source de la part de l'utilisateur.
 
+## Aperçu web du fichier Margination (2026-07-30l)
+- [x] **Aperçu tableau multi-onglets** du fichier Excel de Margination (au lieu d'un simple téléchargement) : endpoint `GET /acct/margination/preview` lit le fichier stocké (openpyxl `data_only` → valeurs de formules mises en cache par Excel), renvoie chaque feuille (nom + lignes, plafonné 300×20). Frontend : onglets par feuille + tableau HTML défilable, nombres formatés/alignés à droite, en-tête marine. Vérifié : 6 onglets (Calcul du Montant Disponible, Ventilation cpt assurés, Engagements financiers, CAP, Sheet1, CAR) avec montants calculés corrects (capture). Bouton « Télécharger l'Excel » conservé.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

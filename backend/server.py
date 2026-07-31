@@ -3171,6 +3171,36 @@ async def margination_status(year: int, month: int, user: dict = Depends(get_cur
     return {"present": True, "filename": doc.get("filename"), "size": doc.get("size"),
             "uploaded_by": doc.get("uploaded_by"), "uploaded_at": doc.get("uploaded_at")}
 
+@api.get("/acct/margination/preview")
+async def margination_preview(year: int, month: int, user: dict = Depends(get_current_user)):
+    doc = await db.acct_margination.find_one({"_id": _pkey(year, month)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Aucun fichier Margination pour cette période")
+    raw = base64.b64decode(doc["data"])
+    wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True, read_only=True)
+    sheets = []
+    for ws in wb.worksheets:
+        maxr = min(ws.max_row or 0, 300)
+        maxc = min(ws.max_column or 0, 20)
+        rows = []
+        for r in ws.iter_rows(min_row=1, max_row=maxr, max_col=maxc, values_only=True):
+            cells = []
+            for v in r:
+                if v is None:
+                    cells.append("")
+                elif isinstance(v, (int, float)):
+                    cells.append(v)
+                elif isinstance(v, datetime):
+                    cells.append(v.strftime("%Y-%m-%d"))
+                else:
+                    cells.append(str(v))
+            rows.append(cells)
+        while rows and all((c == "" for c in rows[-1])):
+            rows.pop()
+        sheets.append({"name": ws.title, "rows": rows})
+    wb.close()
+    return {"filename": doc.get("filename"), "sheets": sheets}
+
 @api.get("/acct/external/report")
 async def external_report_download(key: str, year: int, month: int, user: dict = Depends(get_current_user)):
     b, fn, mime = await _generate_external_report(key, year, month)

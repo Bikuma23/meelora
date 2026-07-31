@@ -2062,7 +2062,7 @@ function ExternalSendView() {
   const [emailCfg, setEmailCfg] = useState({ configured: false });
   const [marg, setMarg] = useState({ present: false });
   const [busy, setBusy] = useState(false);
-  const [preview, setPreview] = useState({ open: false, url: null, label: "", pdf: true, key: null });
+  const [preview, setPreview] = useState({ open: false, url: null, label: "", pdf: true, key: null, sheets: null, active: 0 });
   const fileRef = useRef(null);
   const load = () => api.acctExternalContacts().then((r) => setContacts(r || []));
   useEffect(() => { load(); api.acctExternalCatalog().then(setCatalog).catch(() => {}); api.acctEmailStatus().then(setEmailCfg).catch(() => {}); }, []);
@@ -2096,14 +2096,21 @@ function ExternalSendView() {
     finally { setBusy(false); }
   };
   const openPreview = async (key, label) => {
-    const isPdf = key !== "margination";
+    if (key === "margination") {
+      try {
+        const d = await api.acctMarginationPreview({ year: y, month: m });
+        setPreview({ open: true, url: null, label, pdf: false, key, sheets: d.sheets || [], active: 0 });
+      } catch (e) { toast.error(e.response?.data?.detail || "Aperçu indisponible"); }
+      return;
+    }
     try {
       const blob = await api.acctExternalReport({ key, year: y, month: m });
       const url = URL.createObjectURL(blob);
-      setPreview({ open: true, url, label, pdf: isPdf, key });
+      setPreview({ open: true, url, label, pdf: true, key, sheets: null, active: 0 });
     } catch (e) { toast.error(e.response?.data?.detail || "Aperçu indisponible"); }
   };
-  const closePreview = () => { if (preview.url) URL.revokeObjectURL(preview.url); setPreview({ open: false, url: null, label: "", pdf: true, key: null }); };
+  const closePreview = () => { if (preview.url) URL.revokeObjectURL(preview.url); setPreview({ open: false, url: null, label: "", pdf: true, key: null, sheets: null, active: 0 }); };
+  const fmtCell = (c) => typeof c === "number" ? (Number.isInteger(c) ? c.toLocaleString("fr-CA") : c.toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : c;
 
   return (
     <div className="space-y-4" data-testid="acct-external-view">
@@ -2173,21 +2180,44 @@ function ExternalSendView() {
       {isAdmin && <ExternalContactsDialog open={manageOpen} onOpenChange={setManageOpen} contacts={contacts} catalog={catalog} onChanged={load} />}
 
       <Dialog open={preview.open} onOpenChange={(v) => !v && closePreview()}>
-        <DialogContent data-testid="acct-external-preview-dialog" className="max-w-5xl">
+        <DialogContent data-testid="acct-external-preview-dialog" className="max-w-6xl">
           <DialogHeader>
             <DialogTitle>Aperçu — {preview.label}</DialogTitle>
             <DialogDescription className="text-xs">{period} · Ce document sera inclus dans le package envoyé au contact.</DialogDescription>
           </DialogHeader>
           {preview.pdf
             ? <iframe title="apercu" src={preview.url} className="h-[70vh] w-full rounded-lg border border-slate-200" data-testid="acct-preview-frame" />
-            : <div className="flex flex-col items-center gap-3 py-10 text-center" data-testid="acct-preview-xlsx">
-                <FileSpreadsheet size={40} className="text-emerald-600" />
-                <p className="text-sm text-slate-600">L'aperçu en ligne n'est pas disponible pour les fichiers Excel.<br />Téléchargez le fichier pour le visualiser.</p>
-                <Button size="sm" onClick={() => download(preview.key)} className="gap-1.5 bg-[#0E9488] hover:bg-[#0E9488]/90"><Download size={14} /> Télécharger l'Excel</Button>
-              </div>}
+            : preview.sheets
+              ? <div data-testid="acct-preview-xlsx-table">
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {preview.sheets.map((s, i) => (
+                      <button key={i} onClick={() => setPreview((p) => ({ ...p, active: i }))} data-testid={`acct-preview-tab-${i}`}
+                        className={`rounded-md border px-2.5 py-1 text-xs font-600 transition-colors ${preview.active === i ? "border-[#0E9488] bg-[#0E9488] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488]"}`}>
+                        {s.name.trim()}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="max-h-[65vh] overflow-auto rounded-lg border border-slate-200">
+                    <table className="w-full border-collapse text-xs font-mono-data">
+                      <tbody>
+                        {(preview.sheets[preview.active]?.rows || []).map((row, ri) => (
+                          <tr key={ri} className={ri === 0 ? "bg-[#063044] text-white" : "odd:bg-white even:bg-slate-50"}>
+                            {row.map((c, ci) => (
+                              <td key={ci} className={`whitespace-nowrap border border-slate-100 px-2 py-1 ${typeof c === "number" ? "text-right" : "text-left"}`}>{fmtCell(c)}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              : <div className="flex flex-col items-center gap-3 py-10 text-center" data-testid="acct-preview-xlsx">
+                  <FileSpreadsheet size={40} className="text-emerald-600" />
+                  <p className="text-sm text-slate-600">Aperçu indisponible.</p>
+                </div>}
           <DialogFooter>
             <Button variant="outline" onClick={closePreview}>Fermer</Button>
-            {preview.pdf && <Button onClick={() => download(preview.key)} className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90"><Download size={14} /> Télécharger</Button>}
+            <Button onClick={() => download(preview.key)} className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90"><Download size={14} /> Télécharger {preview.pdf ? "" : "l'Excel"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
