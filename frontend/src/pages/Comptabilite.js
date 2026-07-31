@@ -2063,10 +2063,14 @@ function ExternalSendView() {
   const [marg, setMarg] = useState({ present: false });
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState({ open: false, url: null, label: "", pdf: true, key: null, sheets: null, active: 0 });
-  const [margSearch, setMargSearch] = useState("");
+  const [margSearch, setMargSearch] = useState({});
+  const [history, setHistory] = useState([]);
+  const [histOpen, setHistOpen] = useState(false);
   const fileRef = useRef(null);
   const load = () => api.acctExternalContacts().then((r) => setContacts(r || []));
+  const loadHistory = () => { if (cid) api.acctExternalEmailLog({ contact_id: cid }).then((r) => setHistory(r || [])).catch(() => setHistory([])); else setHistory([]); };
   useEffect(() => { load(); api.acctExternalCatalog().then(setCatalog).catch(() => {}); api.acctEmailStatus().then(setEmailCfg).catch(() => {}); }, []);
+  useEffect(() => { loadHistory(); /* eslint-disable-next-line */ }, [cid]);
   useEffect(() => { if (periods.length && !period) setPeriod(periods[0].id); }, [periods, period]);
   const [y, m] = period ? period.split("-").map(Number) : [null, null];
   const refreshMarg = () => { if (period) api.acctMarginationStatus({ year: y, month: m }).then(setMarg).catch(() => setMarg({ present: false })); };
@@ -2092,7 +2096,7 @@ function ExternalSendView() {
   };
   const sendAll = async () => {
     setBusy(true);
-    try { const r = await api.acctExternalEmail({ contact_id: cid, year: y, month: m }); toast.success(r.message || "Envoyé"); }
+    try { const r = await api.acctExternalEmail({ contact_id: cid, year: y, month: m }); toast.success(r.message || "Envoyé"); load(); loadHistory(); }
     catch (e) { toast.error(e.response?.data?.detail || "Envoi impossible"); }
     finally { setBusy(false); }
   };
@@ -2101,6 +2105,7 @@ function ExternalSendView() {
       try {
         const d = await api.acctMarginationPreview({ year: y, month: m });
         setPreview({ open: true, url: null, label, pdf: false, key, sheets: d.sheets || [], active: 0 });
+        setMargSearch({});
       } catch (e) { toast.error(e.response?.data?.detail || "Aperçu indisponible"); }
       return;
     }
@@ -2110,8 +2115,10 @@ function ExternalSendView() {
       setPreview({ open: true, url, label, pdf: true, key, sheets: null, active: 0 });
     } catch (e) { toast.error(e.response?.data?.detail || "Aperçu indisponible"); }
   };
-  const closePreview = () => { if (preview.url) URL.revokeObjectURL(preview.url); setPreview({ open: false, url: null, label: "", pdf: true, key: null, sheets: null, active: 0 }); setMargSearch(""); };
+  const closePreview = () => { if (preview.url) URL.revokeObjectURL(preview.url); setPreview({ open: false, url: null, label: "", pdf: true, key: null, sheets: null, active: 0 }); setMargSearch({}); };
   const fmtCell = (c) => typeof c === "number" ? (Number.isInteger(c) ? c.toLocaleString("fr-CA") : c.toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : c;
+  const fmtSent = (iso) => { if (!iso) return ""; try { return new Date(iso).toLocaleString("fr-CA", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
+  const ls = contact?.last_sent;
 
   return (
     <div className="space-y-4" data-testid="acct-external-view">
@@ -2136,6 +2143,7 @@ function ExternalSendView() {
               title={emailCfg.configured ? `Envoyer le package à ${contact.email || "(aucun courriel)"}` : "Service d'email non configuré"}
               data-testid="acct-external-email" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Send size={15} /> {busy ? "…" : "Envoyer le package"}</Button>
           )}
+          {cid && <Button size="sm" variant="outline" onClick={() => setHistOpen(true)} data-testid="acct-external-history-btn" className="gap-2"><Clock size={15} /> Historique{history.length ? ` (${history.length})` : ""}</Button>}
           {isAdmin && <Button size="sm" variant="outline" onClick={() => setManageOpen(true)} data-testid="acct-external-manage" className="gap-2"><Settings2 size={15} /> Gérer les contacts</Button>}
         </div>
       </div>
@@ -2144,7 +2152,12 @@ function ExternalSendView() {
         : (
           <div className="card overflow-hidden" data-testid="acct-external-package">
             <div className="border-b border-slate-100 px-5 py-3">
-              <h3 className="font-display text-base font-700 text-[#063044]">Package — {contact.name}</h3>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-display text-base font-700 text-[#063044]">Package — {contact.name}</h3>
+                {ls
+                  ? <span data-testid="acct-external-last-sent" className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-600 text-emerald-700"><CheckCircle2 size={13} /> Dernier envoi : {fmtSent(ls.sent_at)} · {MONTHS[(ls.month || 1) - 1]?.slice(0, 3)} {ls.year} · {ls.doc_count || 0} doc(s)</span>
+                  : <span data-testid="acct-external-last-sent" className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-600 text-slate-500"><Clock size={13} /> Aucun envoi enregistré</span>}
+              </div>
               <p className="mt-0.5 text-xs text-slate-400">{period ? period : ""} · {contact.email || "aucun courriel"} · {contact.report_types?.length || 0} rapport(s)</p>
             </div>
             <div className="divide-y divide-slate-50">
@@ -2180,6 +2193,39 @@ function ExternalSendView() {
 
       {isAdmin && <ExternalContactsDialog open={manageOpen} onOpenChange={setManageOpen} contacts={contacts} catalog={catalog} onChanged={load} />}
 
+      <Dialog open={histOpen} onOpenChange={setHistOpen}>
+        <DialogContent data-testid="acct-external-history-dialog" className="max-h-[85vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Clock size={16} className="text-[#0E9488]" /> Historique des envois — {contact?.name || ""}</DialogTitle>
+            <DialogDescription className="text-xs">Journal des packages financiers transmis à ce contact.</DialogDescription>
+          </DialogHeader>
+          {history.length === 0
+            ? <p className="py-8 text-center text-sm text-slate-400" data-testid="acct-external-history-empty">Aucun envoi enregistré pour ce contact.</p>
+            : <div className="space-y-2" data-testid="acct-external-history-list">
+                {history.map((h, i) => (
+                  <div key={i} className="rounded-lg border border-slate-200 px-3 py-2.5" data-testid={`acct-external-history-row-${i}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-600 text-[#063044]">{MONTHS[(h.month || 1) - 1]} {h.year}</span>
+                      <span className="text-xs text-slate-500">{fmtSent(h.sent_at)}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">Vers {h.email} · par {h.sent_by} · {h.doc_count || 0} document(s)</p>
+                    {(h.documents || []).length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {h.documents.map((d, j) => <span key={j} className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-600 text-emerald-700">{d}</span>)}
+                      </div>
+                    )}
+                    {(h.missing || []).length > 0 && (
+                      <p className="mt-1 text-[11px] text-amber-600">Manquant : {h.missing.join(", ")}</p>
+                    )}
+                  </div>
+                ))}
+              </div>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHistOpen(false)}>Fermer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={preview.open} onOpenChange={(v) => !v && closePreview()}>
         <DialogContent data-testid="acct-external-preview-dialog" className="max-w-6xl">
           <DialogHeader>
@@ -2192,16 +2238,18 @@ function ExternalSendView() {
               ? <div data-testid="acct-preview-xlsx-table">
                   <div className="mb-2 flex flex-wrap gap-1.5">
                     {preview.sheets.map((s, i) => (
-                      <button key={i} onClick={() => { setPreview((p) => ({ ...p, active: i })); setMargSearch(""); }} data-testid={`acct-preview-tab-${i}`}
-                        className={`rounded-md border px-2.5 py-1 text-xs font-600 transition-colors ${preview.active === i ? "border-[#0E9488] bg-[#0E9488] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488]"}`}>
-                        {s.name.trim()}
+                      <button key={i} onClick={() => setPreview((p) => ({ ...p, active: i }))} data-testid={`acct-preview-tab-${i}`}
+                        className={`rounded-md border px-2.5 py-1 text-xs font-600 transition-colors ${preview.active === i ? "border-[#0E9488] bg-[#0E9488] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488]"} ${(margSearch[i] || "").trim() && preview.active !== i ? "ring-1 ring-[#F8A942]" : ""}`}>
+                        {s.name.trim()}{(margSearch[i] || "").trim() ? " ·" : ""}
                       </button>
                     ))}
                   </div>
                   {(() => {
-                    const allRows = preview.sheets[preview.active]?.rows || [];
+                    const ai = preview.active;
+                    const allRows = preview.sheets[ai]?.rows || [];
                     const header = allRows.length ? allRows[0] : null;
-                    const q = margSearch.trim().toLowerCase();
+                    const cur = margSearch[ai] || "";
+                    const q = cur.trim().toLowerCase();
                     const bodyRows = allRows.slice(1);
                     const filtered = q
                       ? bodyRows.filter((row) => row.some((c) => String(c ?? "").toLowerCase().includes(q)))
@@ -2212,8 +2260,8 @@ function ExternalSendView() {
                         <div className="mb-2 flex items-center gap-2">
                           <div className="relative flex-1 max-w-xs">
                             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <Input value={margSearch} onChange={(e) => setMargSearch(e.target.value)} data-testid="acct-marg-search"
-                              placeholder="Rechercher un compte / client…" className="h-8 pl-8 text-xs" />
+                            <Input value={cur} onChange={(e) => setMargSearch((s) => ({ ...s, [ai]: e.target.value }))} data-testid="acct-marg-search"
+                              placeholder="Rechercher dans cet onglet…" className="h-8 pl-8 text-xs" />
                           </div>
                           {q && <span data-testid="acct-marg-search-count" className="text-xs text-slate-500">{filtered.length} résultat(s)</span>}
                         </div>
@@ -2237,7 +2285,7 @@ function ExternalSendView() {
                                 </tr>
                               ))}
                               {q && filtered.length === 0 && (
-                                <tr data-testid="acct-marg-search-empty"><td className="px-3 py-4 text-center text-slate-500" colSpan={header ? header.length : 1}>Aucun résultat pour « {margSearch} »</td></tr>
+                                <tr data-testid="acct-marg-search-empty"><td className="px-3 py-4 text-center text-slate-500" colSpan={header ? header.length : 1}>Aucun résultat pour « {cur} »</td></tr>
                               )}
                             </tbody>
                           </table>

@@ -607,7 +607,14 @@ Refonte du hub selon nouvelles demandes + modèle Excel « par responsable » fo
 - [x] **États de résultats de présentation** : conservé en **paysage** (nombreuses colonnes Mois + Cumulatif + Annuel), déjà sur 1 page — inchangé (choix utilisateur).
 - [x] Vérifié via `pdfinfo` + rendu image : Bilan = 1 page, `595 × 841` (portrait), Actif = Passif = 19 756 123,01, aucune donnée coupée ; P&L = 1 page paysage inchangé.
 - [x] **Sous-titre Bilan corrigé** : « En millions $ dollars canadiens (CAD) » → « En dollars canadiens (CAD) » (les montants sont en dollars pleins). Vérifié via `pdftotext`.
-- [x] **Recherche dans l'aperçu Margination** (`ExternalSendView`, `Comptabilite.js`) : champ de recherche (`acct-marg-search`) au-dessus du tableau multi-onglets qui filtre les lignes de la feuille active sur toutes les colonnes (compte/client/description), conserve la ligne d'en-tête, affiche un compteur de résultats (`acct-marg-search-count`) et un état vide (`acct-marg-search-empty`), et se réinitialise au changement d'onglet / à la fermeture. En-têtes/1re colonne figés conservés. Vérifié par capture (« 1 » → 31 résultats).
+- [x] **Recherche dans l'aperçu Margination** (`ExternalSendView`, `Comptabilite.js`) : champ de recherche (`acct-marg-search`) au-dessus du tableau multi-onglets qui filtre les lignes de la feuille active sur toutes les colonnes (compte/client/description), conserve la ligne d'en-tête, affiche un compteur de résultats (`acct-marg-search-count`) et un état vide (`acct-marg-search-empty`). En-têtes/1re colonne figés conservés.
+- [x] **Recherche Margination mémorisée par onglet** : `margSearch` est un objet `{index_onglet: requête}` — chaque onglet conserve sa propre recherche (pas de réinitialisation au changement d'onglet). Indicateur visuel `·` + anneau orange sur les onglets ayant une recherche active. Réinitialisation uniquement à l'ouverture d'un nouveau fichier / fermeture. Vérifié (console : onglet CAR vide à l'entrée, onglet 0 conserve « credit » au retour).
+
+## Envoi Externe — Historique & dernier envoi (2026-06)
+- [x] **Journal des envois externes** : chaque envoi de package (`POST /acct/external/email`) est journalisé dans `acct_external_email_log` (contact, courriel, période, liste des documents, doc_count, manquants, sent_at, sent_by) et le dernier envoi est mémorisé sur le document contact (`last_sent`).
+- [x] Endpoint `GET /acct/external/email/log?contact_id=` (trié desc). `GET /acct/external-contacts` renvoie désormais `last_sent`.
+- [x] **Frontend** : badge « Dernier envoi : … · période · N doc(s) » (ou « Aucun envoi enregistré ») dans l'en-tête du package ; bouton **Historique (N)** (`acct-external-history-btn`) ouvrant un dialogue (`acct-external-history-dialog`) listant chaque envoi (période, date, destinataire, expéditeur, puces des documents transmis, manquants). Rafraîchi après un envoi réussi.
+- [x] Vérifié par capture (enregistrement de test injecté puis nettoyé) : badge dernier envoi vert, compteur Historique (1), dialogue détaillé avec 3 documents.
 
 
 ## Backlog restant

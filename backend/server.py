@@ -3120,7 +3120,8 @@ async def external_catalog(user: dict = Depends(get_current_user)):
 async def list_external_contacts(user: dict = Depends(get_current_user)):
     docs = await db.acct_external_contacts.find().sort("name", 1).to_list(500)
     return [{"id": str(d["_id"]), "name": d.get("name", ""), "email": d.get("email", ""),
-             "report_types": d.get("report_types", []), "active": d.get("active", True)} for d in docs]
+             "report_types": d.get("report_types", []), "active": d.get("active", True),
+             "last_sent": d.get("last_sent")} for d in docs]
 
 @api.post("/acct/external-contacts")
 async def create_external_contact(payload: ExternalContact, user: dict = Depends(get_current_user)):
@@ -3218,12 +3219,13 @@ async def external_email(contact_id: str, year: int, month: int, user: dict = De
     email = (c.get("email") or "").strip()
     if not email:
         raise HTTPException(status_code=400, detail=f"{c.get('name')} : aucun courriel renseigné")
-    attachments, missing = [], []
+    attachments, missing, doc_labels = [], [], []
     for key in c.get("report_types", []):
         b, fn, mime = await _generate_external_report(key, year, month)
         if b is None:
             missing.append(_CATALOG_LABELS.get(key, key)); continue
         attachments.append({"filename": fn, "content": list(b)})
+        doc_labels.append(_CATALOG_LABELS.get(key, key))
     if not attachments:
         raise HTTPException(status_code=400, detail="Aucun rapport disponible à envoyer. " + (f"Manquant : {', '.join(missing)}" if missing else ""))
     ml = MONTHS_FR[month - 1]
@@ -3234,10 +3236,20 @@ async def external_email(contact_id: str, year: int, month: int, user: dict = De
             f"pour <strong>{c.get('name')}</strong> ({len(attachments)} document(s)).</p>"
             f"<p style=\"color:#64748b;font-size:12px;margin-top:24px\">ACCSL Groupe — Plateforme financière</p></div>")
     try:
-        await asyncio.to_thread(resend.Emails.send, {
+        res = await asyncio.to_thread(resend.Emails.send, {
             "from": os.environ.get("SENDER_EMAIL", "onboarding@resend.dev"),
             "to": [email], "subject": f"Package financier {c.get('name')} — {ml} {year}",
             "html": html, "attachments": attachments})
+        sent_by = (user or {}).get("email") or "système"
+        rec = {"contact_id": contact_id, "contact_name": c.get("name", ""), "email": email,
+               "year": int(year), "month": int(month), "period": _pkey(year, month),
+               "documents": doc_labels, "doc_count": len(attachments), "missing": missing,
+               "sent_at": datetime.now(timezone.utc).isoformat(), "sent_by": sent_by,
+               "email_id": (res or {}).get("id") if isinstance(res, dict) else None}
+        await db.acct_external_email_log.insert_one(dict(rec))
+        await db.acct_external_contacts.update_one(
+            {"_id": _oid(contact_id)}, {"$set": {"last_sent": {k: rec[k] for k in
+             ("email", "year", "month", "period", "documents", "doc_count", "sent_at", "sent_by")}}})
         await log_action(user, "Envoyer", "Package externe", f"{c.get('name')} → {email} ({_pkey(year, month)})")
         msg = f"{len(attachments)} document(s) envoyé(s) à {email}"
         if missing:
@@ -3246,6 +3258,17 @@ async def external_email(contact_id: str, year: int, month: int, user: dict = De
     except Exception as e:
         logger.error(f"Envoi externe échec : {e}")
         raise HTTPException(status_code=400, detail=f"Échec d'envoi : {str(e)[:150]}")
+
+@api.get("/acct/external/email/log")
+async def external_email_log(contact_id: Optional[str] = None, limit: int = 100, user: dict = Depends(get_current_user)):
+    q = {}
+    if contact_id:
+        q["contact_id"] = contact_id
+    docs = await db.acct_external_email_log.find(q).sort("sent_at", -1).to_list(int(limit))
+    return [{"contact_id": d.get("contact_id"), "contact_name": d.get("contact_name"), "email": d.get("email"),
+             "year": d.get("year"), "month": d.get("month"), "period": d.get("period"),
+             "documents": d.get("documents", []), "doc_count": d.get("doc_count"),
+             "missing": d.get("missing", []), "sent_at": d.get("sent_at"), "sent_by": d.get("sent_by")} for d in docs]
 
 
 

@@ -114,6 +114,7 @@ export const api = {
   acctMarginationUpload: (file, params) => { const fd = new FormData(); fd.append("file", file); return client.post("/acct/margination/upload", fd, { params }).then((r) => r.data); },
   acctExternalReport: (params) => client.get("/acct/external/report", { params, responseType: "blob" }).then((r) => r.data),
   acctExternalEmail: (params) => client.post("/acct/external/email", {}, { params }).then((r) => r.data),
+  acctExternalEmailLog: (params) => client.get("/acct/external/email/log", { params }).then((r) => r.data),
   acctEmailManager: (params) => client.post("/acct/report/by-manager/email", {}, { params }).then((r) => r.data),
   acctEmailAllManagers: (params) => client.post("/acct/report/by-manager/email-all", {}, { params }).then((r) => r.data),
   acctAccounts: () => client.get("/acct/accounts").then((r) => r.data),
