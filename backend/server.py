@@ -6,7 +6,7 @@ import calendar
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, Query, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, Query, UploadFile, File, Form, Header
 from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
@@ -21,6 +21,8 @@ import jwt
 import io
 import asyncio
 import base64
+import uuid
+import requests
 import presentation_reports
 import openpyxl
 from accounting import ReportEngine
@@ -4364,6 +4366,8 @@ class QcExternalContact(BaseModel):
     active: bool = True
 
 QC_EXTERNAL_CATALOG = [
+    {"key": "bilan_pdf", "label": "Bilan détaillé (PDF)", "fmt": "pdf"},
+    {"key": "pnl_pdf", "label": "État des résultats (PDF)", "fmt": "pdf"},
     {"key": "trial_balance", "label": "Balance de vérification (Excel)", "fmt": "xlsx"},
     {"key": "bilan", "label": "Bilan détaillé (Excel)", "fmt": "xlsx"},
     {"key": "pnl", "label": "État des résultats (Excel)", "fmt": "xlsx"},
@@ -4372,13 +4376,48 @@ _QC_CAT_LABELS = {c["key"]: c["label"] for c in QC_EXTERNAL_CATALOG}
 
 def _qc_entry_out(d):
     return {"id": str(d["_id"]), "year": d.get("year"), "date": d.get("date"),
+            "num": d.get("num", ""), "seq": d.get("seq"),
             "description": d.get("description", ""), "reference": d.get("reference", ""),
             "lines": d.get("lines", []), "total": d.get("total", 0.0),
+            "source": d.get("source"), "source_id": d.get("source_id"),
             "created_at": d.get("created_at"), "created_by": d.get("created_by"),
             "updated_at": d.get("updated_at")}
 
 async def _qc_year_doc(year: int):
     return await db.qc9434_years.find_one({"_id": int(year)})
+
+async def _qc_next_seq(year):
+    top = await db.qc9434_entries.find({"year": int(year)}).sort("seq", -1).limit(1).to_list(1)
+    n = (top[0].get("seq") or 0) + 1 if top else 1
+    return n, f"{year}-{n:04d}"
+
+def _qc_validate_line_dicts(lines):
+    if not lines or len(lines) < 2:
+        raise HTTPException(status_code=400, detail="L'écriture doit comporter au moins deux lignes.")
+    td = round(sum(float(l.get("debit") or 0) for l in lines), 2)
+    tc = round(sum(float(l.get("credit") or 0) for l in lines), 2)
+    for l in lines:
+        if not (str(l.get("account") or "").strip()):
+            raise HTTPException(status_code=400, detail="Chaque ligne doit avoir un numéro de compte.")
+    if td <= 0 and tc <= 0:
+        raise HTTPException(status_code=400, detail="Le montant de l'écriture ne peut être nul.")
+    if abs(td - tc) > 0.005:
+        raise HTTPException(status_code=400, detail=f"Écriture déséquilibrée : débits {td:,.2f} $ ≠ crédits {tc:,.2f} $.")
+    return td
+
+async def _qc_post_entry(year, date, description, line_dicts, reference="", source=None, source_id=None, actor=None):
+    """Insère une écriture (validée + numérotée). Retourne le doc."""
+    total = _qc_validate_line_dicts(line_dicts)
+    seq, num = await _qc_next_seq(year)
+    doc = {"year": int(year), "date": date, "num": num, "seq": seq,
+           "description": (description or "").strip(), "reference": (reference or "").strip(),
+           "lines": line_dicts, "total": total, "source": source, "source_id": source_id,
+           "created_at": datetime.now(timezone.utc).isoformat(),
+           "created_by": (actor or {}).get("email") if actor else "système"}
+    res = await db.qc9434_entries.insert_one(doc)
+    await db.qc9434_years.update_one({"_id": int(year)}, {"$inc": {"entry_count": 1}})
+    doc["_id"] = res.inserted_id
+    return doc
 
 def _qc_validate_lines(lines):
     if not lines:
@@ -4397,6 +4436,16 @@ def _qc_validate_lines(lines):
     if abs(td - tc) > 0.005:
         raise HTTPException(status_code=400, detail=f"Écriture déséquilibrée : débits {td:,.2f} $ ≠ crédits {tc:,.2f} $.")
     return td
+
+# Comptes & taux par défaut (modèle Commandité)
+QC_DEF = {"sales": "400310", "ar": "130118", "ap": "211010", "tps_pay": "215310",
+          "tvq_pay": "215301", "tps_rec": "145110", "tvq_rec": "145101", "cash": "100110", "bnr": "330010"}
+QC_TPS, QC_TVQ = 0.05, 0.09975
+
+async def _qc_acc_name(gl):
+    a = await db.qc9434_accounts.find_one({"gl": gl})
+    return a.get("description", "") if a else ""
+
 
 # ---- Années -------------------------------------------------------------
 @api.get("/qc9434/years")
@@ -4441,11 +4490,51 @@ async def qc_lock_year(year: int, locked: bool = True, user: dict = Depends(requ
     y = await _qc_year_doc(year)
     if not y:
         raise HTTPException(status_code=404, detail="Année introuvable")
+    if locked:
+        await _qc_post_closing(year, user)
+    else:
+        await db.qc9434_entries.delete_many({"year": int(year), "source": "closing"})
     await db.qc9434_years.update_one({"_id": int(year)}, {"$set": {
         "locked": bool(locked), "locked_by": user.get("email") if locked else None,
         "locked_at": datetime.now(timezone.utc).isoformat() if locked else None}})
     await log_action(user, "Verrouiller" if locked else "Déverrouiller", "9434 — Année", str(year))
     return {"success": True, "year": int(year), "locked": bool(locked)}
+
+async def _qc_post_closing(year, user):
+    """Écriture de fermeture : solde les comptes de résultat de l'exercice vers les BNR."""
+    await db.qc9434_entries.delete_many({"year": int(year), "source": "closing"})
+    accts = {d["gl"]: d for d in await db.qc9434_accounts.find().to_list(2000)}
+    docs = await db.qc9434_entries.find({"year": int(year), "source": {"$ne": "closing"}}).to_list(50000)
+    bal = {}
+    for e in docs:
+        for l in e.get("lines", []):
+            gl = (l.get("account") or "").strip()
+            if (accts.get(gl) or {}).get("type") in ("produit", "charge"):
+                bal[gl] = bal.get(gl, 0.0) + float(l.get("debit") or 0) - float(l.get("credit") or 0)
+    lines, td, tc = [], 0.0, 0.0
+    for gl, b in bal.items():
+        b = round(b, 2)
+        if abs(b) < 0.005:
+            continue
+        name = (accts.get(gl) or {}).get("description", "")
+        if b > 0:  # solde débiteur (charge) → créditer pour fermer
+            lines.append({"account": gl, "account_name": name, "tiers": "", "debit": 0.0, "credit": b}); tc += b
+        else:
+            lines.append({"account": gl, "account_name": name, "tiers": "", "debit": -b, "credit": 0.0}); td += -b
+    if not lines:
+        return None
+    diff = round(td - tc, 2)  # bénéfice net (>0 = profit)
+    bnr_name = (accts.get(QC_DEF["bnr"]) or {}).get("description", "Bénéfices non répartis")
+    if diff > 0:
+        lines.append({"account": QC_DEF["bnr"], "account_name": bnr_name, "tiers": "", "debit": 0.0, "credit": diff})
+    elif diff < 0:
+        lines.append({"account": QC_DEF["bnr"], "account_name": bnr_name, "tiers": "", "debit": -diff, "credit": 0.0})
+    date = f"{year}-12-31"
+    dts = [e.get("date") for e in docs if e.get("date")]
+    if dts:
+        date = max(dts)
+    return await _qc_post_entry(year, date, "Écriture de fermeture — transfert du résultat aux BNR",
+        lines, reference="FERMETURE", source="closing", actor=user)
 
 # ---- Écritures (journal général) ---------------------------------------
 @api.get("/qc9434/entries")
@@ -4460,14 +4549,9 @@ async def qc_create_entry(payload: QcEntry, year: int, user: dict = Depends(get_
         raise HTTPException(status_code=404, detail="Année introuvable — créez d'abord l'exercice.")
     if y.get("locked"):
         raise HTTPException(status_code=403, detail=f"L'année {year} est verrouillée. Impossible de saisir de nouvelles écritures.")
-    total = _qc_validate_lines(payload.lines)
-    doc = {"year": int(year), "date": payload.date, "description": payload.description.strip(),
-           "reference": payload.reference.strip(), "lines": [l.model_dump() for l in payload.lines],
-           "total": total, "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email")}
-    res = await db.qc9434_entries.insert_one(doc)
-    await db.qc9434_years.update_one({"_id": int(year)}, {"$inc": {"entry_count": 1}})
-    await log_action(user, "Créer", "9434 — Écriture", f"{payload.date} · {payload.description[:40]} ({total:,.2f} $)")
-    doc["_id"] = res.inserted_id
+    doc = await _qc_post_entry(year, payload.date, payload.description,
+        [l.model_dump() for l in payload.lines], reference=payload.reference, source="manual", actor=user)
+    await log_action(user, "Créer", "9434 — Écriture", f"{doc['num']} · {payload.description[:40]} ({doc['total']:,.2f} $)")
     return _qc_entry_out(doc)
 
 @api.put("/qc9434/entries/{eid}")
@@ -4501,7 +4585,7 @@ async def qc_delete_entry(eid: str, user: dict = Depends(get_current_user)):
 
 # ---- Balance de vérification (générée à partir des écritures) -----------
 async def _qc_trial_balance(year: int):
-    docs = await db.qc9434_entries.find({"year": int(year)}).to_list(20000)
+    docs = await db.qc9434_entries.find({"year": int(year), "source": {"$ne": "closing"}}).to_list(20000)
     agg = {}
     for e in docs:
         for l in e.get("lines", []):
@@ -4576,6 +4660,12 @@ async def _qc_generate_external(key, year):
         rep = await _qc_pnl(year)
         return _qc_report_xlsx(rep, "État des résultats"), f"resultats_9434_{year}.xlsx", \
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    if key == "bilan_pdf":
+        rep = await _qc_bilan(year)
+        return _qc_report_pdf(rep, "BILAN DÉTAILLÉ", year), f"bilan_9434_{year}.pdf", "application/pdf"
+    if key == "pnl_pdf":
+        rep = await _qc_pnl(year)
+        return _qc_report_pdf(rep, "ÉTAT DES RÉSULTATS", year), f"resultats_9434_{year}.pdf", "application/pdf"
     return None, None, None
 
 @api.get("/qc9434/external/catalog")
@@ -4773,7 +4863,7 @@ async def _qc_report_balances(year):
     """Retourne {gl: {movement, opening, cumulative}} + méta comptes."""
     await _qc_seed_accounts()
     accts = {d["gl"]: d for d in await db.qc9434_accounts.find().to_list(2000)}
-    docs = await db.qc9434_entries.find({"year": {"$lte": int(year)}}).to_list(50000)
+    docs = await db.qc9434_entries.find({"year": {"$lte": int(year)}, "source": {"$ne": "closing"}}).to_list(50000)
     bal = {}
     for e in docs:
         cur = e.get("year") == int(year)
@@ -5024,6 +5114,357 @@ async def qc_delete_template(tid: str, user: dict = Depends(get_current_user)):
     await log_action(user, "Supprimer", "9434 — Modèle d'écriture", tid)
     return {"success": True}
 
+# ---- PDF présentation Bilan / Résultats --------------------------------
+def _qc_report_pdf(rep, title, year):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    NAVY = colors.HexColor("#063044"); TEAL = colors.HexColor("#0E9488")
+    styles = getSampleStyleSheet()
+    is_bilan = "cumulative" in rep.get("cols", [])
+    cols = ([("movement", "Exercice"), ("opening", "Antérieur"), ("cumulative", "Cumulatif")]
+            if is_bilan else [("cur", str(year)), ("prev", str(year - 1))])
+    header = ["", ""] + [c[1] for c in cols]
+    rows = [header]
+    st = [("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+          ("FONTSIZE", (0, 0), (-1, -1), 8), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+          ("ALIGN", (2, 0), (-1, -1), "RIGHT"), ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+          ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5), ("LEFTPADDING", (0, 0), (-1, -1), 5)]
+    r = 1
+    for ln in rep["lines"]:
+        is_text = ln["kind"] in ("title", "header")
+        vals = [ln.get("gl", ""), ln["label"]]
+        for k, _ in cols:
+            v = ln.get(k)
+            vals.append("" if (is_text or v is None) else f"{v:,.2f}")
+        rows.append(vals)
+        if ln["kind"] == "title":
+            st += [("BACKGROUND", (0, r), (-1, r), NAVY), ("TEXTCOLOR", (0, r), (-1, r), colors.white), ("FONTNAME", (0, r), (-1, r), "Helvetica-Bold")]
+        elif ln["kind"] == "header":
+            st += [("TEXTCOLOR", (0, r), (-1, r), TEAL), ("FONTNAME", (0, r), (-1, r), "Helvetica-Bold")]
+        elif ln["kind"] in ("total",):
+            st += [("LINEABOVE", (0, r), (-1, r), 1, NAVY), ("FONTNAME", (0, r), (-1, r), "Helvetica-Bold"), ("BACKGROUND", (0, r), (-1, r), colors.HexColor("#E9EDEF"))]
+        elif ln["kind"] in ("subtotal",):
+            st += [("LINEABOVE", (0, r), (-1, r), 0.5, colors.grey), ("FONTNAME", (0, r), (-1, r), "Helvetica-Bold")]
+        elif ln["kind"] == "qp":
+            st += [("TEXTCOLOR", (0, r), (-1, r), colors.grey), ("FONTNAME", (0, r), (-1, r), "Helvetica-Oblique")]
+        r += 1
+    cw = ([18 * mm, 82 * mm, 30 * mm, 30 * mm, 30 * mm] if is_bilan else [18 * mm, 96 * mm, 38 * mm, 38 * mm])
+    tbl = Table(rows, colWidths=cw, repeatRows=1); tbl.setStyle(TableStyle(st))
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=10 * mm)
+    hS = ParagraphStyle("h", parent=styles["Normal"], fontSize=13, fontName="Helvetica-Bold", textColor=NAVY)
+    doc.build([Paragraph("9434-3977 QUÉBEC INC - COMMANDITÉ", hS),
+               Paragraph(f"{title} — Exercice {year}", ParagraphStyle("s", parent=styles["Normal"], fontSize=9)),
+               Spacer(1, 4 * mm), tbl])
+    buf.seek(0)
+    return buf.getvalue()
+
+@api.get("/qc9434/bilan/pdf")
+async def qc_bilan_pdf(year: int, user: dict = Depends(get_current_user)):
+    return StreamingResponse(io.BytesIO(_qc_report_pdf(await _qc_bilan(year), "BILAN DÉTAILLÉ", year)),
+        media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=bilan_9434_{year}.pdf"})
+
+@api.get("/qc9434/pnl/pdf")
+async def qc_pnl_pdf(year: int, user: dict = Depends(get_current_user)):
+    return StreamingResponse(io.BytesIO(_qc_report_pdf(await _qc_pnl(year), "ÉTAT DES RÉSULTATS", year)),
+        media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=resultats_9434_{year}.pdf"})
+
+# ---- Stockage objet (factures fournisseurs) ----------------------------
+_QC_STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+_qc_storage_key = None
+
+def _qc_init_storage():
+    global _qc_storage_key
+    if _qc_storage_key:
+        return _qc_storage_key
+    resp = requests.post(f"{_QC_STORAGE_URL}/init", json={"emergent_key": os.environ.get("EMERGENT_LLM_KEY")}, timeout=30)
+    resp.raise_for_status()
+    _qc_storage_key = resp.json()["storage_key"]
+    return _qc_storage_key
+
+def _qc_put_object(path, data, content_type):
+    key = _qc_init_storage()
+    resp = requests.put(f"{_QC_STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key, "Content-Type": content_type}, data=data, timeout=120)
+    resp.raise_for_status()
+    return resp.json()
+
+def _qc_get_object(path):
+    key = _qc_init_storage()
+    resp = requests.get(f"{_QC_STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+
+# ---- Factures clients (auxiliaire recevable) ---------------------------
+def _round2(x):
+    return round(float(x or 0), 2)
+
+async def _qc_next_invoice_number(year):
+    top = await db.qc9434_invoices.find({"year": int(year)}).sort("num_seq", -1).limit(1).to_list(1)
+    n = (top[0].get("num_seq") or 0) + 1 if top else 1
+    return n, f"{year}-{n:03d}"
+
+def _qc_invoice_out(d):
+    return {"id": str(d["_id"]), "year": d.get("year"), "number": d.get("number"), "date": d.get("date"),
+            "due_date": d.get("due_date"), "client_name": d.get("client_name", ""), "client_att": d.get("client_att", ""),
+            "client_address": d.get("client_address", ""), "description": d.get("description", ""),
+            "amount": d.get("amount", 0), "tps": d.get("tps", 0), "tvq": d.get("tvq", 0), "total": d.get("total", 0),
+            "status": d.get("status", "open"), "paid_at": d.get("paid_at"), "entry_id": str(d.get("entry_id")) if d.get("entry_id") else None,
+            "receipt_entry_id": str(d.get("receipt_entry_id")) if d.get("receipt_entry_id") else None}
+
+class QcInvoiceIn(BaseModel):
+    date: str
+    due_date: str = ""
+    client_name: str
+    client_att: str = ""
+    client_address: str = ""
+    description: str = ""
+    amount: float
+    sales_account: str = QC_DEF["sales"]
+
+@api.get("/qc9434/invoices")
+async def qc_invoices(year: int, user: dict = Depends(get_current_user)):
+    docs = await db.qc9434_invoices.find({"year": int(year)}).sort("num_seq", 1).to_list(2000)
+    return [_qc_invoice_out(d) for d in docs]
+
+@api.post("/qc9434/invoices")
+async def qc_create_invoice(payload: QcInvoiceIn, year: int, user: dict = Depends(get_current_user)):
+    y = await _qc_year_doc(year)
+    if not y:
+        raise HTTPException(status_code=404, detail="Année introuvable — créez d'abord l'exercice.")
+    if y.get("locked"):
+        raise HTTPException(status_code=403, detail=f"L'exercice {year} est verrouillé.")
+    amount = _round2(payload.amount)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Le montant doit être supérieur à zéro.")
+    tps = _round2(amount * QC_TPS); tvq = _round2(amount * QC_TVQ); total = _round2(amount + tps + tvq)
+    num_seq, number = await _qc_next_invoice_number(year)
+    sales = payload.sales_account or QC_DEF["sales"]
+    lines = [
+        {"account": QC_DEF["ar"], "account_name": await _qc_acc_name(QC_DEF["ar"]), "tiers": payload.client_name, "debit": total, "credit": 0.0},
+        {"account": sales, "account_name": await _qc_acc_name(sales), "tiers": payload.client_name, "debit": 0.0, "credit": amount},
+        {"account": QC_DEF["tps_pay"], "account_name": await _qc_acc_name(QC_DEF["tps_pay"]), "tiers": "", "debit": 0.0, "credit": tps},
+        {"account": QC_DEF["tvq_pay"], "account_name": await _qc_acc_name(QC_DEF["tvq_pay"]), "tiers": "", "debit": 0.0, "credit": tvq},
+    ]
+    entry = await _qc_post_entry(year, payload.date, f"Facturation client #{number} — {payload.client_name}", lines,
+        reference=number, source="invoice", actor=user)
+    doc = {"year": int(year), "num_seq": num_seq, "number": number, "date": payload.date, "due_date": payload.due_date,
+           "client_name": payload.client_name, "client_att": payload.client_att, "client_address": payload.client_address,
+           "description": payload.description, "amount": amount, "tps": tps, "tvq": tvq, "total": total,
+           "sales_account": sales, "status": "open", "entry_id": entry["_id"],
+           "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email")}
+    res = await db.qc9434_invoices.insert_one(doc)
+    await db.qc9434_entries.update_one({"_id": entry["_id"]}, {"$set": {"source_id": str(res.inserted_id)}})
+    await log_action(user, "Créer", "9434 — Facture client", f"{number} · {payload.client_name} ({total:,.2f} $)")
+    doc["_id"] = res.inserted_id
+    return _qc_invoice_out(doc)
+
+@api.post("/qc9434/invoices/{iid}/receive")
+async def qc_receive_invoice(iid: str, date: str = "", user: dict = Depends(get_current_user)):
+    inv = await db.qc9434_invoices.find_one({"_id": _oid(iid)})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Facture introuvable")
+    if inv.get("status") == "paid":
+        raise HTTPException(status_code=400, detail="Facture déjà encaissée.")
+    y = await _qc_year_doc(inv["year"])
+    if y and y.get("locked"):
+        raise HTTPException(status_code=403, detail=f"L'exercice {inv['year']} est verrouillé.")
+    total = _round2(inv["total"])
+    lines = [
+        {"account": QC_DEF["cash"], "account_name": await _qc_acc_name(QC_DEF["cash"]), "tiers": inv.get("client_name", ""), "debit": total, "credit": 0.0},
+        {"account": QC_DEF["ar"], "account_name": await _qc_acc_name(QC_DEF["ar"]), "tiers": inv.get("client_name", ""), "debit": 0.0, "credit": total},
+    ]
+    entry = await _qc_post_entry(inv["year"], date or datetime.now(timezone.utc).date().isoformat(),
+        f"Encaissement facture #{inv['number']} — {inv.get('client_name','')}", lines, reference=inv["number"], source="receipt", source_id=iid, actor=user)
+    await db.qc9434_invoices.update_one({"_id": _oid(iid)}, {"$set": {"status": "paid", "paid_at": datetime.now(timezone.utc).isoformat(), "receipt_entry_id": entry["_id"]}})
+    await log_action(user, "Encaisser", "9434 — Facture client", f"{inv['number']} ({total:,.2f} $)")
+    return {"success": True}
+
+@api.get("/qc9434/invoices/{iid}/pdf")
+async def qc_invoice_pdf(iid: str, user: dict = Depends(get_current_user)):
+    inv = await db.qc9434_invoices.find_one({"_id": _oid(iid)})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Facture introuvable")
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    NAVY = colors.HexColor("#063044"); styles = getSampleStyleSheet()
+    H = ParagraphStyle("h", parent=styles["Normal"], fontSize=16, fontName="Helvetica-Bold", textColor=NAVY)
+    N = ParagraphStyle("n", parent=styles["Normal"], fontSize=9, leading=12)
+    B = ParagraphStyle("b", parent=styles["Normal"], fontSize=9, leading=12, fontName="Helvetica-Bold")
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=18 * mm, bottomMargin=18 * mm)
+    el = [Paragraph("9434-3977 QUÉBEC INC.", H), Spacer(1, 2 * mm)]
+    meta = Table([[Paragraph("<b>FACTURE</b>", B), Paragraph(f"Facture No : <b>{inv['number']}</b>", N)],
+                  ["", Paragraph(f"Date : {inv.get('date','')}", N)],
+                  ["", Paragraph(f"Échéance : {inv.get('due_date','') or '—'}", N)]], colWidths=[95 * mm, 75 * mm])
+    meta.setStyle(TableStyle([("ALIGN", (1, 0), (1, -1), "RIGHT")]))
+    el += [meta, Spacer(1, 4 * mm)]
+    el += [Paragraph("Émetteur", B), Paragraph("9434-3977 Québec Inc<br/>75, boulevard René-Lévesque Ouest, 20e étage<br/>Montréal (Québec) H2Z 1A4", N), Spacer(1, 3 * mm)]
+    cli = inv.get("client_name", "")
+    if inv.get("client_att"): cli += f"<br/>Att : {inv['client_att']}"
+    if inv.get("client_address"): cli += "<br/>" + inv["client_address"].replace("\n", "<br/>")
+    el += [Paragraph("Facturé à", B), Paragraph(cli, N), Spacer(1, 5 * mm)]
+    items = [["Description", "Montant"],
+             [inv.get("description", "Frais de gestion"), f"{inv['amount']:,.2f} $"],
+             ["Total des ventes", f"{inv['amount']:,.2f} $"],
+             ["T.P.S. (5,0 %)", f"{inv['tps']:,.2f} $"],
+             ["T.V.Q. (9,975 %)", f"{inv['tvq']:,.2f} $"],
+             ["TOTAL DE LA PRÉSENTE FACTURE", f"{inv['total']:,.2f} $"]]
+    t = Table(items, colWidths=[125 * mm, 45 * mm])
+    t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.5, NAVY), ("LINEABOVE", (0, -1), (-1, -1), 1, NAVY),
+        ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#E9EDEF")),
+        ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
+    el += [t, Spacer(1, 8 * mm)]
+    el += [Paragraph("Numéro d'inscription T.P.S. : 765426465 RT0001<br/>Numéro d'inscription T.V.Q. : 1228200201 TQ0001<br/>NEQ : 1176211903",
+                     ParagraphStyle("f", parent=styles["Normal"], fontSize=8, textColor=colors.grey))]
+    doc.build(el); buf.seek(0)
+    return StreamingResponse(buf, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=facture_{inv['number']}.pdf"})
+
+# ---- Factures fournisseurs (auxiliaire payable) ------------------------
+def _qc_bill_out(d):
+    return {"id": str(d["_id"]), "year": d.get("year"), "number": d.get("number"), "supplier": d.get("supplier", ""),
+            "date": d.get("date"), "due_date": d.get("due_date"), "description": d.get("description", ""),
+            "amount": d.get("amount", 0), "tps": d.get("tps", 0), "tvq": d.get("tvq", 0), "total": d.get("total", 0),
+            "expense_account": d.get("expense_account", ""), "status": d.get("status", "open"), "paid_at": d.get("paid_at"),
+            "file_id": d.get("file_id"), "file_name": d.get("file_name"),
+            "entry_id": str(d.get("entry_id")) if d.get("entry_id") else None}
+
+@api.get("/qc9434/bills")
+async def qc_bills(year: int, user: dict = Depends(get_current_user)):
+    docs = await db.qc9434_bills.find({"year": int(year)}).sort("created_at", 1).to_list(2000)
+    return [_qc_bill_out(d) for d in docs]
+
+@api.post("/qc9434/bills")
+async def qc_create_bill(year: int = Form(...), supplier: str = Form(...), date: str = Form(...),
+        due_date: str = Form(""), description: str = Form(""), amount: float = Form(...),
+        expense_account: str = Form(...), reference: str = Form(""),
+        file: Optional[UploadFile] = File(None), user: dict = Depends(get_current_user)):
+    y = await _qc_year_doc(year)
+    if not y:
+        raise HTTPException(status_code=404, detail="Année introuvable — créez d'abord l'exercice.")
+    if y.get("locked"):
+        raise HTTPException(status_code=403, detail=f"L'exercice {year} est verrouillé.")
+    amt = _round2(amount)
+    if amt <= 0:
+        raise HTTPException(status_code=400, detail="Le montant doit être supérieur à zéro.")
+    tps = _round2(amt * QC_TPS); tvq = _round2(amt * QC_TVQ); total = _round2(amt + tps + tvq)
+    file_id = file_name = None
+    if file is not None:
+        data = await file.read()
+        if data:
+            ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "bin"
+            path = f"qc9434/bills/{year}/{uuid.uuid4()}.{ext}"
+            try:
+                result = _qc_put_object(path, data, file.content_type or "application/octet-stream")
+                file_id = result["path"]; file_name = file.filename
+                await db.qc9434_files.insert_one({"storage_path": file_id, "original_filename": file.filename,
+                    "content_type": file.content_type, "is_deleted": False, "created_at": datetime.now(timezone.utc).isoformat()})
+            except Exception as e:
+                logger.error(f"Upload facture fournisseur échec : {e}")
+                raise HTTPException(status_code=400, detail="Échec du téléversement du fichier.")
+    lines = [
+        {"account": expense_account, "account_name": await _qc_acc_name(expense_account), "tiers": supplier, "debit": amt, "credit": 0.0},
+        {"account": QC_DEF["tps_rec"], "account_name": await _qc_acc_name(QC_DEF["tps_rec"]), "tiers": "", "debit": tps, "credit": 0.0},
+        {"account": QC_DEF["tvq_rec"], "account_name": await _qc_acc_name(QC_DEF["tvq_rec"]), "tiers": "", "debit": tvq, "credit": 0.0},
+        {"account": QC_DEF["ap"], "account_name": await _qc_acc_name(QC_DEF["ap"]), "tiers": supplier, "debit": 0.0, "credit": total},
+    ]
+    entry = await _qc_post_entry(year, date, f"Facture fournisseur — {supplier}" + (f" ({reference})" if reference else ""),
+        lines, reference=reference, source="bill", actor=user)
+    doc = {"year": int(year), "number": reference or entry["num"], "supplier": supplier, "date": date, "due_date": due_date,
+           "description": description, "amount": amt, "tps": tps, "tvq": tvq, "total": total, "expense_account": expense_account,
+           "status": "open", "file_id": file_id, "file_name": file_name, "entry_id": entry["_id"],
+           "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email")}
+    res = await db.qc9434_bills.insert_one(doc)
+    await db.qc9434_entries.update_one({"_id": entry["_id"]}, {"$set": {"source_id": str(res.inserted_id)}})
+    await log_action(user, "Créer", "9434 — Facture fournisseur", f"{supplier} ({total:,.2f} $)")
+    doc["_id"] = res.inserted_id
+    return _qc_bill_out(doc)
+
+@api.post("/qc9434/bills/{bid}/pay")
+async def qc_pay_bill(bid: str, date: str = "", user: dict = Depends(get_current_user)):
+    b = await db.qc9434_bills.find_one({"_id": _oid(bid)})
+    if not b:
+        raise HTTPException(status_code=404, detail="Facture introuvable")
+    if b.get("status") == "paid":
+        raise HTTPException(status_code=400, detail="Facture déjà payée.")
+    y = await _qc_year_doc(b["year"])
+    if y and y.get("locked"):
+        raise HTTPException(status_code=403, detail=f"L'exercice {b['year']} est verrouillé.")
+    total = _round2(b["total"])
+    lines = [
+        {"account": QC_DEF["ap"], "account_name": await _qc_acc_name(QC_DEF["ap"]), "tiers": b.get("supplier", ""), "debit": total, "credit": 0.0},
+        {"account": QC_DEF["cash"], "account_name": await _qc_acc_name(QC_DEF["cash"]), "tiers": b.get("supplier", ""), "debit": 0.0, "credit": total},
+    ]
+    entry = await _qc_post_entry(b["year"], date or datetime.now(timezone.utc).date().isoformat(),
+        f"Paiement fournisseur — {b.get('supplier','')}", lines, reference=b.get("number", ""), source="payment", source_id=bid, actor=user)
+    await db.qc9434_bills.update_one({"_id": _oid(bid)}, {"$set": {"status": "paid", "paid_at": datetime.now(timezone.utc).isoformat(), "payment_entry_id": entry["_id"]}})
+    await log_action(user, "Payer", "9434 — Facture fournisseur", f"{b.get('supplier','')} ({total:,.2f} $)")
+    return {"success": True}
+
+@api.get("/qc9434/bills/{bid}/file")
+async def qc_bill_file(bid: str, auth: str = Query(None), authorization: str = Header(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+    elif auth:
+        token = auth
+    if not token:
+        raise HTTPException(status_code=401, detail="Non autorisé")
+    try:
+        jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+    except Exception:
+        raise HTTPException(status_code=401, detail="Session invalide")
+    b = await db.qc9434_bills.find_one({"_id": _oid(bid)})
+    if not b or not b.get("file_id"):
+        raise HTTPException(status_code=404, detail="Fichier introuvable")
+    data, ct = _qc_get_object(b["file_id"])
+    return Response(content=data, media_type=ct, headers={"Content-Disposition": f"inline; filename={b.get('file_name','facture')}"})
+
+# ---- Import des écritures du modèle Excel ------------------------------
+@api.post("/qc9434/import-model")
+async def qc_import_model(user: dict = Depends(require_admin)):
+    if await db.qc9434_entries.count_documents({}) > 0 or await db.qc9434_years.count_documents({}) > 0:
+        raise HTTPException(status_code=400, detail="Des données existent déjà. Videz d'abord les exercices pour réimporter le modèle.")
+    await _qc_seed_accounts()
+    await db.qc9434_years.insert_one({"_id": 2025, "locked": False, "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email")})
+    await db.qc9434_settings.update_one({"_id": "config"}, {"$set": {"active_year": 2025}}, upsert=True)
+    inv = await qc_create_invoice(QcInvoiceIn(date="2025-10-31", due_date="2025-11-30", client_name="Société en commandite ACCS",
+        client_att="Simon Fournier", client_address="3152 Boulevard des Entreprises\nTerrebonne, Québec J6X 4J8",
+        description="Frais de gestion annuel pour 2025", amount=10000.0), 2025, user)
+    await _qc_post_closing(2025, user)
+    await db.qc9434_years.update_one({"_id": 2025}, {"$set": {"locked": True, "locked_by": user.get("email"), "locked_at": datetime.now(timezone.utc).isoformat()}})
+    await db.qc9434_years.insert_one({"_id": 2026, "locked": False, "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email")})
+    await db.qc9434_settings.update_one({"_id": "config"}, {"$set": {"active_year": 2026}})
+    def L(gl, name, dr, cr, tiers=""):
+        return {"account": gl, "account_name": name, "tiers": tiers, "debit": float(dr), "credit": float(cr)}
+    C = "Caisse populaire (CAD) - # 084129"
+    entries = [
+        ("2026-01-30", "Frais bancaires", [L("100110", C, 0, 5.95), L("580210", "Frais de banque", 5.95, 0)]),
+        ("2026-02-27", "Frais bancaires", [L("100110", C, 0, 5.95), L("580210", "Frais de banque", 5.95, 0)]),
+        ("2026-02-13", "Paiement reçu de SEC ACCS pour facture #2025-001", [L("100110", C, 11497.50, 0, "SEC ACCS"), L("130118", "Comptes à recevoir - Apparentés", 0, 11497.50, "SEC ACCS")]),
+        ("2026-03-31", "Frais bancaires", [L("100110", C, 0, 5.95), L("580210", "Frais de banque", 5.95, 0)]),
+        ("2026-04-30", "Frais bancaires", [L("100110", C, 0, 5.95), L("580210", "Frais de banque", 5.95, 0)]),
+        ("2026-05-31", "Frais bancaires", [L("100110", C, 0, 5.95), L("580210", "Frais de banque", 5.95, 0)]),
+        ("2026-06-10", "Revenus d'intérêts", [L("100110", C, 11.64, 0), L("578220", "Intérêts sur le compte de banque", 0, 11.64)]),
+        ("2026-06-15", "Paiement dividendes SEC ACCS", [L("100110", C, 50, 0), L("160010", "Participation - Société en commandite ACCS", 0, 50)]),
+        ("2026-06-17", "Paiement impôts", [L("100110", C, 0, 284.81), L("215400", "Impôt à payer", 284.81, 0)]),
+    ]
+    for date, desc, lines in entries:
+        await _qc_post_entry(2026, date, desc, lines, source="import", actor=user)
+    await db.qc9434_invoices.update_one({"_id": _oid(inv["id"])}, {"$set": {"status": "paid", "paid_at": "2026-02-13"}})
+    await log_action(user, "Importer", "9434 — Modèle Excel", "Exercices 2025 (verrouillé) + 2026")
+    return {"success": True, "message": "Modèle importé : exercice 2025 (verrouillé) + exercice 2026 (9 écritures)."}
+
+
+
 
 
 
@@ -5084,6 +5525,10 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("email", unique=True)
+    try:
+        _qc_init_storage()
+    except Exception as e:
+        logger.error(f"Init stockage objet échec : {e}")
     admin_email = os.environ["ADMIN_EMAIL"].lower()
     existing = await db.users.find_one({"email": admin_email})
     if not existing:

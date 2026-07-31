@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog";
 import {
-  Plus, Lock, Unlock, Trash2, Pencil, Send, Settings2, Download, Clock, CheckCircle2, AlertTriangle, BookOpen, Scale, FileText, X, Eye, FileDown, Save, Copy,
+  Plus, Lock, Unlock, Trash2, Pencil, Send, Settings2, Download, Clock, CheckCircle2, AlertTriangle, BookOpen, Scale, FileText, X, Eye, FileDown, Save, Copy, Upload, Wallet,
 } from "lucide-react";
 
 const ENTITY = "9434-3977 QC inc.";
@@ -18,6 +18,8 @@ const TODAY = new Date().toISOString().slice(0, 10);
 // Onglets reproduisant le modèle Excel.
 const TABS = [
   { key: "entries", label: "Écritures", icon: BookOpen, ready: true },
+  { key: "ar", label: "Factures clients", icon: FileText, ready: true },
+  { key: "ap", label: "Factures fournisseurs", icon: FileText, ready: true },
   { key: "tb", label: "Balance de vérification", icon: Scale, ready: true },
   { key: "bilan", label: "Bilan détaillé", icon: FileText, ready: true },
   { key: "pnl", label: "États des résultats", icon: FileText, ready: true },
@@ -65,6 +67,10 @@ export default function QcEntity() {
     } catch (e) { toast.error(e.response?.data?.detail || "Action impossible"); }
   };
   const changeYear = (v) => { const n = Number(v); setActiveYear(n); api.qcSetActiveYear({ year: n }).catch(() => {}); };
+  const importModel = async () => {
+    try { const r = await api.qcImportModel(); toast.success(r.message || "Modèle importé"); setActiveYear(2026); loadYears(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Import impossible"); }
+  };
 
   return (
     <div className="space-y-4" data-testid="qc-entity-page">
@@ -110,9 +116,14 @@ export default function QcEntity() {
       {!activeYear && tab !== "external"
         ? <div className="card p-10 text-center" data-testid="qc-no-year">
             <p className="text-sm text-slate-500">Aucun exercice comptable pour {ENTITY}.</p>
-            {isAdmin && <Button onClick={() => setYearDlg(true)} className="mt-3 gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Créer le premier exercice</Button>}
+            {isAdmin && <div className="mt-3 flex flex-wrap justify-center gap-2">
+              <Button onClick={() => setYearDlg(true)} className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Créer le premier exercice</Button>
+              <Button variant="outline" onClick={importModel} data-testid="qc-import-model" className="gap-2"><Download size={14} /> Importer le modèle Excel (2025-2026)</Button>
+            </div>}
           </div>
         : tab === "entries" ? <EntriesView year={activeYear} locked={locked} canEdit={canEdit} />
+        : tab === "ar" ? <InvoicesView year={activeYear} locked={locked} canEdit={canEdit} accounts={[]} />
+        : tab === "ap" ? <BillsView year={activeYear} locked={locked} canEdit={canEdit} />
         : tab === "tb" ? <TrialBalanceView year={activeYear} />
         : tab === "bilan" ? <StatementView year={activeYear} kind="bilan" />
         : tab === "pnl" ? <StatementView year={activeYear} kind="pnl" />
@@ -247,13 +258,14 @@ function EntriesView({ year, locked, canEdit }) {
               <table className="w-full text-sm" data-testid="qc-entries-table">
                 <thead>
                   <tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
-                    <th className="px-3 py-2">Date</th><th className="px-3 py-2">Réf.</th><th className="px-3 py-2">Description</th>
+                    <th className="px-3 py-2">N°</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Réf.</th><th className="px-3 py-2">Description</th>
                     <th className="px-3 py-2">Comptes</th><th className="px-3 py-2 text-right">Montant</th><th className="px-3 py-2"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {entries.map((e) => (
                     <tr key={e.id} className="hover:bg-slate-50" data-testid={`qc-entry-row-${e.id}`}>
+                      <td className="whitespace-nowrap px-3 py-2 font-mono-data text-xs font-600 text-[#0E9488]">{e.num}{e.source && e.source !== "manual" ? <span className="ml-1 rounded bg-slate-100 px-1 text-[9px] uppercase text-slate-500">{e.source === "closing" ? "fermeture" : e.source === "invoice" ? "fact." : e.source === "bill" ? "fourn." : e.source === "receipt" ? "encaiss." : e.source === "payment" ? "paiem." : e.source}</span> : null}</td>
                       <td className="whitespace-nowrap px-3 py-2 font-mono-data text-xs">{e.date}</td>
                       <td className="px-3 py-2 text-xs text-slate-500">{e.reference || "—"}</td>
                       <td className="px-3 py-2">{e.description || "—"}</td>
@@ -415,6 +427,181 @@ function TrialBalanceView({ year }) {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+// ===================== Factures clients (auxiliaire recevable) =====================
+function InvoicesView({ year, locked, canEdit }) {
+  const [rows, setRows] = useState([]);
+  const [dlg, setDlg] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ date: TODAY, due_date: "", client_name: "", client_att: "", client_address: "", description: "", amount: "" });
+  const load = useCallback(() => { if (year) api.qcInvoices({ year }).then(setRows).catch(() => setRows([])); }, [year]);
+  useEffect(() => { load(); }, [load]);
+  const amt = Number(form.amount) || 0;
+  const tps = Math.round(amt * 0.05 * 100) / 100, tvq = Math.round(amt * 0.09975 * 100) / 100, total = Math.round((amt + tps + tvq) * 100) / 100;
+  const save = async () => {
+    if (!form.client_name.trim() || amt <= 0) { toast.error("Client et montant requis"); return; }
+    setSaving(true);
+    try { await api.qcCreateInvoice({ ...form, amount: amt }, { year }); toast.success("Facture créée et comptabilisée"); setDlg(false); setForm({ date: TODAY, due_date: "", client_name: "", client_att: "", client_address: "", description: "", amount: "" }); load(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setSaving(false); }
+  };
+  const receive = async (inv) => { try { await api.qcReceiveInvoice(inv.id, { date: TODAY }); toast.success("Encaissement comptabilisé"); load(); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } };
+  const pdf = async (inv) => { try { const b = await api.qcInvoicePdf(inv.id); const url = URL.createObjectURL(b); const a = document.createElement("a"); a.href = url; a.download = `facture_${inv.number}.pdf`; a.click(); URL.revokeObjectURL(url); } catch { toast.error("PDF indisponible"); } };
+  const openTotal = rows.filter((r) => r.status !== "paid").reduce((s, r) => s + (r.total || 0), 0);
+
+  return (
+    <div className="space-y-3" data-testid="qc-ar-view">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">{rows.length} facture(s) · Solde à recevoir : <strong>{money(openTotal)} $</strong></p>
+        {canEdit && !locked && <Button size="sm" onClick={() => setDlg(true)} data-testid="qc-add-invoice" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouvelle facture</Button>}
+      </div>
+      {rows.length === 0
+        ? <div className="card p-10 text-center text-sm text-slate-400" data-testid="qc-ar-empty">Aucune facture client pour cet exercice.</div>
+        : <div className="card overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-invoices-table">
+            <thead><tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
+              <th className="px-3 py-2">N°</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Client</th><th className="px-3 py-2 text-right">HT</th><th className="px-3 py-2 text-right">Total</th><th className="px-3 py-2">Statut</th><th className="px-3 py-2"></th>
+            </tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((r) => (
+                <tr key={r.id} className="hover:bg-slate-50" data-testid={`qc-invoice-row-${r.id}`}>
+                  <td className="px-3 py-2 font-mono-data text-xs">{r.number}</td>
+                  <td className="px-3 py-2 text-xs">{r.date}</td>
+                  <td className="px-3 py-2">{r.client_name}</td>
+                  <td className="px-3 py-2 text-right font-mono-data">{money(r.amount)}</td>
+                  <td className="px-3 py-2 text-right font-mono-data">{money(r.total)}</td>
+                  <td className="px-3 py-2">{r.status === "paid" ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-600 text-emerald-700">Encaissée</span> : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-600 text-amber-700">Ouverte</span>}</td>
+                  <td className="px-3 py-2"><div className="flex justify-end gap-1">
+                    <button onClick={() => pdf(r)} data-testid={`qc-invoice-pdf-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="PDF"><FileDown size={14} /></button>
+                    {canEdit && !locked && r.status !== "paid" && <button onClick={() => receive(r)} data-testid={`qc-invoice-receive-${r.id}`} className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50" title="Encaisser"><Wallet size={14} /></button>}
+                  </div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div></div>}
+
+      <Dialog open={dlg} onOpenChange={setDlg}>
+        <DialogContent data-testid="qc-invoice-dialog" className="max-w-lg">
+          <DialogHeader><DialogTitle>Nouvelle facture client — Exercice {year}</DialogTitle>
+            <DialogDescription className="text-xs">La comptabilisation (Dr Comptes à recevoir / Cr Ventes + taxes) est automatique et reste modifiable dans les Écritures.</DialogDescription></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="mb-1 block text-xs font-600 text-slate-500">Date</label><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} data-testid="qc-invoice-date" className="h-9" /></div>
+              <div><label className="mb-1 block text-xs font-600 text-slate-500">Échéance</label><Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} data-testid="qc-invoice-due" className="h-9" /></div>
+            </div>
+            <Input value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} placeholder="Nom du client" data-testid="qc-invoice-client" className="h-9" />
+            <Input value={form.client_att} onChange={(e) => setForm({ ...form, client_att: e.target.value })} placeholder="À l'attention de (optionnel)" data-testid="qc-invoice-att" className="h-9" />
+            <Input value={form.client_address} onChange={(e) => setForm({ ...form, client_address: e.target.value })} placeholder="Adresse (optionnel)" className="h-9" />
+            <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Description (ex. Frais de gestion annuel)" data-testid="qc-invoice-desc" className="h-9" />
+            <div><label className="mb-1 block text-xs font-600 text-slate-500">Montant HT ($)</label><Input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} data-testid="qc-invoice-amount" className="h-9" /></div>
+            <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm" data-testid="qc-invoice-totals">
+              <div className="flex justify-between"><span>Total des ventes</span><span className="font-mono-data">{money(amt)} $</span></div>
+              <div className="flex justify-between text-slate-500"><span>T.P.S. (5,0 %)</span><span className="font-mono-data">{money(tps)} $</span></div>
+              <div className="flex justify-between text-slate-500"><span>T.V.Q. (9,975 %)</span><span className="font-mono-data">{money(tvq)} $</span></div>
+              <div className="mt-1 flex justify-between border-t border-slate-200 pt-1 font-700 text-[#063044]"><span>TOTAL</span><span className="font-mono-data">{money(total)} $</span></div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDlg(false)}>Annuler</Button>
+            <Button onClick={save} disabled={saving || amt <= 0 || !form.client_name.trim()} data-testid="qc-invoice-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">{saving ? "…" : "Créer & comptabiliser"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ===================== Factures fournisseurs (auxiliaire payable) =====================
+function BillsView({ year, locked, canEdit }) {
+  const [rows, setRows] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [dlg, setDlg] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ supplier: "", date: TODAY, due_date: "", reference: "", description: "", amount: "", expense_account: "540210" });
+  const [file, setFile] = useState(null);
+  const load = useCallback(() => { if (year) api.qcBills({ year }).then(setRows).catch(() => setRows([])); }, [year]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { api.qcAccounts().then((r) => setAccounts((r.accounts || []).filter((a) => a.type === "charge"))).catch(() => {}); }, []);
+  const amt = Number(form.amount) || 0;
+  const tps = Math.round(amt * 0.05 * 100) / 100, tvq = Math.round(amt * 0.09975 * 100) / 100, total = Math.round((amt + tps + tvq) * 100) / 100;
+  const save = async () => {
+    if (!form.supplier.trim() || amt <= 0 || !form.expense_account) { toast.error("Fournisseur, compte de charge et montant requis"); return; }
+    const fd = new FormData();
+    Object.entries({ ...form, year, amount: amt }).forEach(([k, v]) => fd.append(k, v));
+    if (file) fd.append("file", file);
+    setSaving(true);
+    try { await api.qcCreateBill(fd); toast.success("Facture fournisseur comptabilisée"); setDlg(false); setForm({ supplier: "", date: TODAY, due_date: "", reference: "", description: "", amount: "", expense_account: "540210" }); setFile(null); load(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setSaving(false); }
+  };
+  const pay = async (b) => { try { await api.qcPayBill(b.id, { date: TODAY }); toast.success("Paiement comptabilisé"); load(); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } };
+  const openTotal = rows.filter((r) => r.status !== "paid").reduce((s, r) => s + (r.total || 0), 0);
+  const API = process.env.REACT_APP_BACKEND_URL;
+  const token = localStorage.getItem("token");
+  const viewFile = (b) => window.open(`${API}/api/qc9434/bills/${b.id}/file?auth=${token}`, "_blank");
+
+  return (
+    <div className="space-y-3" data-testid="qc-ap-view">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">{rows.length} facture(s) · Solde à payer : <strong>{money(openTotal)} $</strong></p>
+        {canEdit && !locked && <Button size="sm" onClick={() => setDlg(true)} data-testid="qc-add-bill" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Upload size={14} /> Téléverser une facture</Button>}
+      </div>
+      {rows.length === 0
+        ? <div className="card p-10 text-center text-sm text-slate-400" data-testid="qc-ap-empty">Aucune facture fournisseur pour cet exercice.</div>
+        : <div className="card overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-bills-table">
+            <thead><tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
+              <th className="px-3 py-2">Réf.</th><th className="px-3 py-2">Fournisseur</th><th className="px-3 py-2">Date</th><th className="px-3 py-2 text-right">HT</th><th className="px-3 py-2 text-right">Total</th><th className="px-3 py-2">Statut</th><th className="px-3 py-2"></th>
+            </tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((r) => (
+                <tr key={r.id} className="hover:bg-slate-50" data-testid={`qc-bill-row-${r.id}`}>
+                  <td className="px-3 py-2 font-mono-data text-xs">{r.number}</td>
+                  <td className="px-3 py-2">{r.supplier}</td>
+                  <td className="px-3 py-2 text-xs">{r.date}</td>
+                  <td className="px-3 py-2 text-right font-mono-data">{money(r.amount)}</td>
+                  <td className="px-3 py-2 text-right font-mono-data">{money(r.total)}</td>
+                  <td className="px-3 py-2">{r.status === "paid" ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-600 text-emerald-700">Payée</span> : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-600 text-amber-700">Ouverte</span>}</td>
+                  <td className="px-3 py-2"><div className="flex justify-end gap-1">
+                    {r.file_id && <button onClick={() => viewFile(r)} data-testid={`qc-bill-file-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Voir le fichier"><Eye size={14} /></button>}
+                    {canEdit && !locked && r.status !== "paid" && <button onClick={() => pay(r)} data-testid={`qc-bill-pay-${r.id}`} className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50" title="Payer"><Wallet size={14} /></button>}
+                  </div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div></div>}
+
+      <Dialog open={dlg} onOpenChange={setDlg}>
+        <DialogContent data-testid="qc-bill-dialog" className="max-w-lg">
+          <DialogHeader><DialogTitle>Facture fournisseur — Exercice {year}</DialogTitle>
+            <DialogDescription className="text-xs">Comptabilisation auto : Dr Charge + Dr TPS/TVQ à recevoir / Cr Comptes à payer. Modifiable dans les Écritures.</DialogDescription></DialogHeader>
+          <div className="space-y-3">
+            <Input value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} placeholder="Nom du fournisseur" data-testid="qc-bill-supplier" className="h-9" />
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="mb-1 block text-xs font-600 text-slate-500">Date</label><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} data-testid="qc-bill-date" className="h-9" /></div>
+              <div><label className="mb-1 block text-xs font-600 text-slate-500">N° facture (réf.)</label><Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} data-testid="qc-bill-ref" className="h-9" /></div>
+            </div>
+            <div><label className="mb-1 block text-xs font-600 text-slate-500">Compte de charge</label>
+              <select value={form.expense_account} onChange={(e) => setForm({ ...form, expense_account: e.target.value })} data-testid="qc-bill-account" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[#0E9488] focus:outline-none">
+                {accounts.map((a) => <option key={a.gl} value={a.gl}>{a.gl} · {a.description}</option>)}
+              </select>
+            </div>
+            <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Description (optionnel)" className="h-9" />
+            <div><label className="mb-1 block text-xs font-600 text-slate-500">Montant HT ($)</label><Input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} data-testid="qc-bill-amount" className="h-9" /></div>
+            <div><label className="mb-1 block text-xs font-600 text-slate-500">Fichier de la facture (PDF/image)</label>
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => setFile(e.target.files[0])} data-testid="qc-bill-file-input" className="text-sm" /></div>
+            <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm" data-testid="qc-bill-totals">
+              <div className="flex justify-between"><span>Montant HT</span><span className="font-mono-data">{money(amt)} $</span></div>
+              <div className="flex justify-between text-slate-500"><span>T.P.S. + T.V.Q.</span><span className="font-mono-data">{money(tps + tvq)} $</span></div>
+              <div className="mt-1 flex justify-between border-t border-slate-200 pt-1 font-700 text-[#063044]"><span>TOTAL</span><span className="font-mono-data">{money(total)} $</span></div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDlg(false)}>Annuler</Button>
+            <Button onClick={save} disabled={saving || amt <= 0 || !form.supplier.trim()} data-testid="qc-bill-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">{saving ? "…" : "Comptabiliser"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

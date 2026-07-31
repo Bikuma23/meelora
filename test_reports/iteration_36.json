@@ -1,0 +1,31 @@
+{
+  "summary": "Phase 3 testing of 9434-3977 QC inc. (Commandité) — new features: import-model, invoices (AR), bills (AP with file upload), sequential entry numbering per year, auto closing entry, Bilan/PNL PDFs, external catalog extended. 25/25 new backend pytests PASS + 21/21 phase-2 tests still PASS. Frontend Playwright validated: 8 tabs (entries/ar/ap/tb/bilan/pnl/accounts/external), sequential N° column in journal (2026-0001…), Facture client dialog with live TPS/TVQ/TOTAL (1000 HT → 1149,75), invoice creation and appearance in table, Facture fournisseur dialog with expense-account dropdown and totals, 5 doc-type checkboxes in external contacts (bilan_pdf/pnl_pdf/trial_balance/bilan/pnl), Bilan balanced badge. Backend acceptance criteria confirmed: import-model produced pnl 2026 net cur=-18.11 / prev=10000, bilan balanced, 2025 locked with closing entry, catalog contains 5 keys, seq num AAAA-000N, reports exclude source=closing, locked-year 403 on invoice+bill, PDF endpoints return %PDF, file endpoint requires auth (401 without token, 200 with ?auth= JWT). Object storage upload via EMERGENT_LLM_KEY works.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "qc-bill-dialog", "issues": ["Minor: React hydration warning '<span> cannot be a child of <option>' — caused by the visual-editor injection layer wrapping option children in a <span>. Cosmetic console warning only, dropdown functions correctly."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_qc9434_phase3.py",
+    "/app/backend/tests/test_qc9434_phase2.py",
+    "/app/test_reports/pytest/qc9434_phase3.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "qc_bill_file endpoint accepts token via ?auth= query param — necessary for <img>/<a> tag file preview in browser. Token is verified via JWT decode; acceptable but consider adding token-type check (only access tokens) to prevent refresh-token misuse.",
+    "_qc_post_closing computes P&L balances by iterating all non-closing entries of year and posting a single balancing entry to BNR (330010). Verified balanced. Deleting closing on unlock is idempotent.",
+    "qc_import_model guards on any existing years or entries (400). Non-idempotent by design (single-shot bootstrap). OK.",
+    "server.py is now ~5589 lines — the qc9434 block alone (~1200 lines) should be moved to its own module (backend/qc9434.py) similar to acct_ai.",
+    "Object-storage error handling: upload failure raises 400 but does not fall back to inline storage — acceptable, but consider capturing storage failures more gracefully in UI." 
+  ],
+  "updated_files": ["/app/backend/tests/test_qc9434_phase3.py"],
+  "success_rate": {"backend": "100% (25/25 phase-3, 21/21 phase-2 regression)", "frontend": "100% (all UI checks pass)"},
+  "test_credentials": "admin@accslegro.com / admin123 (used); editor.test / user.test available",
+  "seed_data_creation": "Phase-3 tests created TEST_ invoices/bills, then cleared. Per instruction, all qc9434_years / _entries / _settings / _invoices / _bills / _files collections were WIPED at the end (accounts left intact for re-seed on next GET). Main agent should re-run POST /api/qc9434/import-model to restore the clean model state.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Data was purged at end of iteration; on next run either import-model or accept an empty qc9434 module. test_qc9434_phase3.py assumes the model has been imported (2025 locked + 2026 with 9 entries + active_year=2026). If not, run POST /api/qc9434/import-model as admin before executing. All tests idempotent w.r.t. lock/unlock cycle (last test locks then unlocks 2026)."
+}
