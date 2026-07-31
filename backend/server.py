@@ -3061,6 +3061,7 @@ EXTERNAL_REPORT_CATALOG = [
     {"key": "pnl", "label": "États de résultats — détaillé", "fmt": "pdf"},
     {"key": "pnl_sommaire", "label": "États de résultats — sommaire", "fmt": "pdf"},
     {"key": "bilan", "label": "Bilan — détaillé", "fmt": "pdf"},
+    {"key": "cashflow", "label": "Flux de trésorerie", "fmt": "pdf"},
 ]
 _CATALOG_LABELS = {c["key"]: c["label"] for c in EXTERNAL_REPORT_CATALOG}
 
@@ -3100,6 +3101,15 @@ async def _generate_external_report(key, year, month):
             rep = _pnl_detail_adjust(rep)
         rep = _filter_rep_view(rep, "", False)
         return _acct_pdf(rep).getvalue(), f"{key}_{_pkey(year, month)}.pdf", "application/pdf"
+    if key == "cashflow":
+        oy, om = (year, month - 1) if month > 1 else (year - 1, 12)
+        try:
+            rep = await _cashflow_data(oy, om, year, month)
+        except HTTPException:
+            return None, None, None
+        buf = _cashflow_pdf(rep)
+        data_bytes = buf.getvalue() if hasattr(buf, "getvalue") else buf
+        return data_bytes, f"flux_tresorerie_{_pkey(year, month)}.pdf", "application/pdf"
     return None, None, None
 
 @api.get("/acct/external/catalog")

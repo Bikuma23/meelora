@@ -9,7 +9,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, LineChart, Line } from "recharts";
 import {
-  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download, Search, ChevronDown, ChevronRight, MessageSquare, Pencil, Send, Settings2,
+  Upload, FileSpreadsheet, Lock, Unlock, CheckCircle2, AlertTriangle, Clock, FileText, Layers, Construction, Info, Plus, Minus, TrendingUp, TrendingDown, Wallet, Receipt, PiggyBank, BarChart3, Trash2, CalendarDays, Scale, ArrowRight, ExternalLink, Sparkles, Wand2, Download, Search, ChevronDown, ChevronRight, MessageSquare, Pencil, Send, Settings2, Eye,
 } from "lucide-react";
 import { MONTHS, money, moneyM, usePeriods, PeriodSelect } from "./comptabilite/shared";
 import { AiConfigDialog, VarianceCard, AiChatPanel, AnomaliesCard } from "./comptabilite/AiComponents";
@@ -2062,6 +2062,7 @@ function ExternalSendView() {
   const [emailCfg, setEmailCfg] = useState({ configured: false });
   const [marg, setMarg] = useState({ present: false });
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState({ open: false, url: null, label: "", pdf: true, key: null });
   const fileRef = useRef(null);
   const load = () => api.acctExternalContacts().then((r) => setContacts(r || []));
   useEffect(() => { load(); api.acctExternalCatalog().then(setCatalog).catch(() => {}); api.acctEmailStatus().then(setEmailCfg).catch(() => {}); }, []);
@@ -2094,6 +2095,15 @@ function ExternalSendView() {
     catch (e) { toast.error(e.response?.data?.detail || "Envoi impossible"); }
     finally { setBusy(false); }
   };
+  const openPreview = async (key, label) => {
+    const isPdf = key !== "margination";
+    try {
+      const blob = await api.acctExternalReport({ key, year: y, month: m });
+      const url = URL.createObjectURL(blob);
+      setPreview({ open: true, url, label, pdf: isPdf, key });
+    } catch (e) { toast.error(e.response?.data?.detail || "Aperçu indisponible"); }
+  };
+  const closePreview = () => { if (preview.url) URL.revokeObjectURL(preview.url); setPreview({ open: false, url: null, label: "", pdf: true, key: null }); };
 
   return (
     <div className="space-y-4" data-testid="acct-external-view">
@@ -2134,18 +2144,21 @@ function ExternalSendView() {
                 const isMarg = key === "margination";
                 const missing = isMarg && !marg.present;
                 return (
-                  <div key={key} className="flex items-center justify-between gap-3 px-5 py-3" data-testid={`acct-external-report-${key}`}>
+                  <div key={key} className={`flex items-center justify-between gap-3 px-5 py-3 transition-colors ${missing ? "" : "cursor-pointer hover:bg-slate-50"}`} data-testid={`acct-external-report-${key}`}
+                    onClick={() => { if (!missing) openPreview(key, labelOf(key)); }} title={missing ? "" : "Cliquer pour aperçu"}>
                     <div className="min-w-0">
                       <p className="text-sm font-600 text-slate-700">{labelOf(key)}</p>
                       {isMarg && <p className="text-xs text-slate-400">{marg.present ? `Fichier : ${marg.filename}` : "Aucun fichier téléversé pour cette période"}</p>}
+                      {!isMarg && <p className="text-xs text-[#0E9488]">Cliquer pour aperçu</p>}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {isMarg && isAdmin && (
                         <>
                           <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={uploadMarg} className="hidden" data-testid="acct-margination-file" />
                           <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={busy} data-testid="acct-margination-upload" className="gap-1.5"><Upload size={14} /> {marg.present ? "Remplacer" : "Téléverser"}</Button>
                         </>
                       )}
+                      {!missing && <Button size="sm" variant="ghost" onClick={() => openPreview(key, labelOf(key))} data-testid={`acct-external-preview-${key}`} className="gap-1.5 text-slate-600"><Eye size={14} /> Aperçu</Button>}
                       <Button size="sm" variant="outline" onClick={() => download(key)} disabled={missing} data-testid={`acct-external-download-${key}`} className="gap-1.5"><Download size={14} /> {isMarg ? "Excel" : "PDF"}</Button>
                       {missing ? <span className="text-xs font-600 text-amber-600">Manquant</span> : <span className="text-xs font-600 text-emerald-600">Prêt</span>}
                     </div>
@@ -2158,6 +2171,26 @@ function ExternalSendView() {
         )}
 
       {isAdmin && <ExternalContactsDialog open={manageOpen} onOpenChange={setManageOpen} contacts={contacts} catalog={catalog} onChanged={load} />}
+
+      <Dialog open={preview.open} onOpenChange={(v) => !v && closePreview()}>
+        <DialogContent data-testid="acct-external-preview-dialog" className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Aperçu — {preview.label}</DialogTitle>
+            <DialogDescription className="text-xs">{period} · Ce document sera inclus dans le package envoyé au contact.</DialogDescription>
+          </DialogHeader>
+          {preview.pdf
+            ? <iframe title="apercu" src={preview.url} className="h-[70vh] w-full rounded-lg border border-slate-200" data-testid="acct-preview-frame" />
+            : <div className="flex flex-col items-center gap-3 py-10 text-center" data-testid="acct-preview-xlsx">
+                <FileSpreadsheet size={40} className="text-emerald-600" />
+                <p className="text-sm text-slate-600">L'aperçu en ligne n'est pas disponible pour les fichiers Excel.<br />Téléchargez le fichier pour le visualiser.</p>
+                <Button size="sm" onClick={() => download(preview.key)} className="gap-1.5 bg-[#0E9488] hover:bg-[#0E9488]/90"><Download size={14} /> Télécharger l'Excel</Button>
+              </div>}
+          <DialogFooter>
+            <Button variant="outline" onClick={closePreview}>Fermer</Button>
+            {preview.pdf && <Button onClick={() => download(preview.key)} className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90"><Download size={14} /> Télécharger</Button>}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

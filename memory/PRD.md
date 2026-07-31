@@ -588,6 +588,14 @@ Refonte du hub selon nouvelles demandes + modèle Excel « par responsable » fo
 - [ ] **Limitation connue** : colonne « Budget CA ANNUEL » du P&L présentation = budget cumulatif annualisé linéairement (`bud_ca_cum / mois × 12`) car le budget annuel exact n'est pas importé → léger écart vs budget saisonnier réel. À corriger en important la source du budget annuel.
 - [ ] **À venir** : logo ACCS sur tous les rapports (phase de finalisation) ; activation envoi Resend (clé + expéditeur).
 
+## Envoi Externe — finitions présentation + aperçu + flux (2026-07-30k)
+- [x] **Mise en page présentation fidèle aux images** : P&L — colonnes **Budget CA en texte sarcelle**, colonnes Réel surlignées sarcelle (blanc), bandeaux marine complets (BÉNÉFICE BRUT/BAIIA/BÉNÉFICE NET incl. colonne annuelle), % sarcelle italique, en-têtes propres (REEL sombre / BUDGET CA sarcelle), colonne annuelle vert clair, CONFIDENTIEL. Bilan — titres **ACTIF/PASSIF** sarcelle, libellés exacts, lignes ajoutées (Marge de crédit / Crédit Rotatif séparés, Dépôts Inter-co, Comptes à payer 9379), **libellés Capital Actions corrigés** (montants réels 8 932 980 / 4 810 065 / 1), bilan équilibré 19 756 123,01. `_find` robuste (exact puis contains).
+- [x] **Flux de trésorerie ajouté au catalogue** des rapports envoyables (`GET /acct/external/report?key=cashflow` : période précédente → sélectionnée, `_cashflow_pdf`).
+- [x] **Aperçu au clic** : cliquer une ligne de rapport (ou bouton « Aperçu ») ouvre un dialogue avec le PDF intégré (iframe) + boutons Fermer/Télécharger. Pour la Margination (Excel), message + téléchargement (aperçu en ligne non supporté). data-testid `acct-external-preview-<key>`, `acct-preview-frame`.
+- [x] **Bug corrigé** : décorateur `@api.get("/acct/external/catalog")` accidentellement supprimé lors de l'ajout du cashflow → catalogue 404 (cases vides). Rétabli.
+- [x] Vérifié : PDF présentation inspectés visuellement (conformes), catalogue 7 types, aperçu iframe OK (curl + captures).
+- [ ] **Budget CA ANNUEL exact (à faire)** : toujours annualisé linéairement — nécessite l'import de la **source du budget annuel** (fichier de budget CA annuel non présent dans les données actuelles). En attente d'un fichier/source de la part de l'utilisateur.
+
 ## Backlog restant
 - Rapports personnalisés avancés (choix de colonnes, comparaison multi-scénarios).
 - Édition rapide (double-clic) des taux ; gestion multi-utilisateurs & rôles.

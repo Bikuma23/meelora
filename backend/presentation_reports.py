@@ -39,6 +39,9 @@ def _find(lines, label):
     for ln in lines:
         if (ln.get("label") or "").strip() == label:
             return ln
+    for ln in lines:
+        if label and label.lower() in (ln.get("label") or "").strip().lower():
+            return ln
     return {"values": {}, "label": label}
 
 
@@ -110,13 +113,14 @@ def build_presentation_pnl_pdf(data, year, month_label):
     g2 = f"{month_label.upper()} {year} - CUMULATIF"
     hdS = ParagraphStyle("hd", parent=styles["Normal"], fontSize=6, leading=7, alignment=1, fontName="Helvetica-Bold", textColor=NAVY)
     hdW = ParagraphStyle("hdw", parent=hdS, textColor=WHITE)
-    def hp(txt, white=False):
-        return Paragraph(txt, hdW if white else hdS)
+    hdT = ParagraphStyle("hdt", parent=hdS, textColor=TEAL)
+    def hp(txt, white=False, teal=False):
+        return Paragraph(txt, hdW if white else (hdT if teal else hdS))
     head1 = ["", Paragraph(g1, ParagraphStyle("g", parent=hdS, textColor=TEAL, fontSize=7)), "", "",
              Paragraph(g2, ParagraphStyle("g2", parent=hdS, textColor=TEAL, fontSize=7)), "", "",
              hp(f"BUDGET CA {year}", True)]
-    head2 = ["", hp(f"REEL {year}"), hp(f"BUDGET<br/>CA {year}"), hp("ECART<br/>(REEL VS BUD. CA)"),
-             hp("REEL A DATE"), hp(f"BUDGET<br/>CA {year}"), hp("ECART<br/>(REEL VS BUD. CA)"), hp("ANNUEL", True)]
+    head2 = ["", hp(f"REEL {year}"), hp(f"BUDGET<br/>CA {year}", teal=True), hp("ECART<br/>(REEL VS BUD. CA)"),
+             hp("REEL A DATE"), hp(f"BUDGET<br/>CA {year}", teal=True), hp("ECART<br/>(REEL VS BUD. CA)"), hp("ANNUEL", True)]
 
     rows = [head1, head2]
     style = [
@@ -152,6 +156,9 @@ def build_presentation_pnl_pdf(data, year, month_label):
                       ("TEXTCOLOR", (0, r), (0, r), NAVY)]
         elif kind == "qp":
             style += [("BACKGROUND", (0, r), (6, r), GREY), ("FONTSIZE", (0, r), (-1, r), 6.5)]
+        # colonnes BUDGET CA (2 & 5) en texte sarcelle (sauf bandeaux marine)
+        if kind in ("data", "grey", "qp"):
+            style += [("TEXTCOLOR", (2, r), (2, r), TEAL), ("TEXTCOLOR", (5, r), (5, r), TEAL)]
         # surlignage sarcelle colonne REEL (col1) + REEL A DATE (col4) pour lignes data
         if kind == "data":
             style += [("BACKGROUND", (1, r), (1, r), TEAL), ("TEXTCOLOR", (1, r), (1, r), WHITE),
@@ -159,11 +166,6 @@ def build_presentation_pnl_pdf(data, year, month_label):
         # colonne annuelle vert clair (sauf bandeaux marine où elle reste marine)
         if kind != "navy":
             style += [("BACKGROUND", (7, r), (7, r), LIGHTGREEN)]
-        # négatifs en rouge (sauf lignes navy)
-        if kind != "navy":
-            for ci, v in enumerate(vals):
-                if v < 0 and ci not in (0, 3):
-                    style.append(("TEXTCOLOR", (ci + 1, r), (ci + 1, r), RED))
         r += 1
         # ligne de % en sarcelle italique
         if has_pct:
@@ -201,6 +203,7 @@ def build_presentation_bilan_pdf(data, year, month_label, date_label):
     val = lambda lbl: _v(L(lbl), col)
 
     ACTIF = [
+        ("title", "ACTIF", None),
         ("header", "ACTIF COURT TERME", None),
         ("data", "Encaisse", "ENCAISSE"),
         ("data", "Comptes à recevoir", "COMPTES À RECEVOIR"),
@@ -221,13 +224,17 @@ def build_presentation_bilan_pdf(data, year, month_label, date_label):
         ("total", "Total Autres immobilisations", "TOTAL -  IMMOBILISATIONS"),
     ]
     PASSIF = [
+        ("title", "PASSIF", None),
         ("header", "PASSIF A COURT TERME", None),
-        ("data", "Marge de crédit / Crédit rotatif", "MARGE DE CRÉDIT"),
+        ("data", "Marge de crédit", "Marge de crédit - MC4"),
+        ("data", "Crédit Rotatif", "Marge de crédit - MC5"),
         ("data", "Comptes fournisseurs", "COMPTES FOURNISSEURS"),
-        ("data", "Dépôts clients", "DÉPÔT CLIENTS"),
+        ("data", "Dépôts clients Inter-co Service Hilo Inc.", "Dépôts Clients - Inter-Co - Hilo"),
+        ("data", "Dépôts clients", "Dépôt clients"),
         ("data", "Autres comptes à payer (courus)", "AUTRES COMPTES À PAYER (COURUS)"),
         ("data", "Frais CCQ et avantages sociaux à payer", "FRAIS CCQ À PAYER"),
-        ("data", "Salaires, vacances, commissions, RPBD à payer", "SALAIRES, VACANCES, COMMISSIONS, RPDB À PAYE"),
+        ("data", "Comptes à payer - 9379 5599 Québec Inc", "COMPTES À PAYER - 9379 559 QUÉBEC INC."),
+        ("data", "Salaires, vacances, commissions, RPBD à payer", "SALAIRES, VACANCES, COMMISSIONS"),
         ("data", "TPS/TVQ à payer", "TPS / TVQ À PAYER"),
         ("total", "Total du passif à court terme", "TOTAL PASSIF À COURT TERME"),
         ("gap", "", None),
@@ -236,8 +243,8 @@ def build_presentation_bilan_pdf(data, year, month_label, date_label):
         ("total", "TOTAL PASSIF", "TOTAL DU PASSIF"),
         ("gap", "", None),
         ("header", "CAPITAUX", None),
-        ("data", "Capital Actions - Parts ordinaires - Services Hilo", "Capital Actions - Parts ordinaires - Service"),
-        ("data", "Capital Actions - Parts ordinaires - 9379-5599 Qc Inc", "Capital Actions - Parts ordinaires - 9379-55"),
+        ("data", "Capital Actions - Parts ordinaires - Services Hilo", "Capital Actions - Parts ordinaires - Services Hilo"),
+        ("data", "Capital Actions - Parts ordinaires - 9379-5599 Qc Inc", "Capital Actions - Parts ordinaires - 9379-5599 Qc Inc"),
         ("data", "Capital Actions - Part du commandité", "Capital Actions - Part du commandité"),
         ("data", "Bénéfice net (Perte nette)", "BÉNÉFICES NON-RÉPARTIS"),
         ("total", "Total Capitaux", "TOTAL AVOIR"),
@@ -255,6 +262,9 @@ def build_presentation_bilan_pdf(data, year, month_label, date_label):
             if kind == "header":
                 rows.append([Paragraph(f"<b>{disp}</b>", lblS), ""])
                 st += [("TEXTCOLOR", (0, r), (0, r), NAVY)]
+                r += 1; continue
+            if kind == "title":
+                rows.append([Paragraph(f"<b>{disp}</b>", ParagraphStyle("t", parent=lblS, fontSize=11, textColor=TEAL)), ""])
                 r += 1; continue
             v = val(src)
             rows.append([Paragraph(("  " + disp) if kind == "data" else f"<i>{disp}</i>", lblS), _fmt(v, 2)])
