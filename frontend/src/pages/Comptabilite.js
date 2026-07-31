@@ -2063,6 +2063,7 @@ function ExternalSendView() {
   const [marg, setMarg] = useState({ present: false });
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState({ open: false, url: null, label: "", pdf: true, key: null, sheets: null, active: 0 });
+  const [margSearch, setMargSearch] = useState("");
   const fileRef = useRef(null);
   const load = () => api.acctExternalContacts().then((r) => setContacts(r || []));
   useEffect(() => { load(); api.acctExternalCatalog().then(setCatalog).catch(() => {}); api.acctEmailStatus().then(setEmailCfg).catch(() => {}); }, []);
@@ -2109,7 +2110,7 @@ function ExternalSendView() {
       setPreview({ open: true, url, label, pdf: true, key, sheets: null, active: 0 });
     } catch (e) { toast.error(e.response?.data?.detail || "Aperçu indisponible"); }
   };
-  const closePreview = () => { if (preview.url) URL.revokeObjectURL(preview.url); setPreview({ open: false, url: null, label: "", pdf: true, key: null, sheets: null, active: 0 }); };
+  const closePreview = () => { if (preview.url) URL.revokeObjectURL(preview.url); setPreview({ open: false, url: null, label: "", pdf: true, key: null, sheets: null, active: 0 }); setMargSearch(""); };
   const fmtCell = (c) => typeof c === "number" ? (Number.isInteger(c) ? c.toLocaleString("fr-CA") : c.toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : c;
 
   return (
@@ -2191,34 +2192,59 @@ function ExternalSendView() {
               ? <div data-testid="acct-preview-xlsx-table">
                   <div className="mb-2 flex flex-wrap gap-1.5">
                     {preview.sheets.map((s, i) => (
-                      <button key={i} onClick={() => setPreview((p) => ({ ...p, active: i }))} data-testid={`acct-preview-tab-${i}`}
+                      <button key={i} onClick={() => { setPreview((p) => ({ ...p, active: i })); setMargSearch(""); }} data-testid={`acct-preview-tab-${i}`}
                         className={`rounded-md border px-2.5 py-1 text-xs font-600 transition-colors ${preview.active === i ? "border-[#0E9488] bg-[#0E9488] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488]"}`}>
                         {s.name.trim()}
                       </button>
                     ))}
                   </div>
-                  <div className="max-h-[65vh] overflow-auto rounded-lg border border-slate-200">
-                    <table className="w-full border-collapse text-xs font-mono-data">
-                      <tbody>
-                        {(preview.sheets[preview.active]?.rows || []).map((row, ri) => (
-                          <tr key={ri} className={ri === 0 ? "text-white" : "odd:bg-white even:bg-slate-50"}>
-                            {row.map((c, ci) => {
-                              const isHead = ri === 0;
-                              const isFirstCol = ci === 0;
-                              const cls = [
-                                "whitespace-nowrap border border-slate-100 px-2 py-1",
-                                typeof c === "number" ? "text-right" : "text-left",
-                                isHead ? "sticky top-0 bg-[#063044] text-white" : "",
-                                isFirstCol && !isHead ? "sticky left-0 bg-white" : "",
-                                isHead && isFirstCol ? "z-30" : isHead ? "z-20" : isFirstCol ? "z-10" : "",
-                              ].join(" ");
-                              return <td key={ci} className={cls}>{fmtCell(c)}</td>;
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  {(() => {
+                    const allRows = preview.sheets[preview.active]?.rows || [];
+                    const header = allRows.length ? allRows[0] : null;
+                    const q = margSearch.trim().toLowerCase();
+                    const bodyRows = allRows.slice(1);
+                    const filtered = q
+                      ? bodyRows.filter((row) => row.some((c) => String(c ?? "").toLowerCase().includes(q)))
+                      : bodyRows;
+                    const rows = header ? [header, ...filtered] : filtered;
+                    return (
+                      <>
+                        <div className="mb-2 flex items-center gap-2">
+                          <div className="relative flex-1 max-w-xs">
+                            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <Input value={margSearch} onChange={(e) => setMargSearch(e.target.value)} data-testid="acct-marg-search"
+                              placeholder="Rechercher un compte / client…" className="h-8 pl-8 text-xs" />
+                          </div>
+                          {q && <span data-testid="acct-marg-search-count" className="text-xs text-slate-500">{filtered.length} résultat(s)</span>}
+                        </div>
+                        <div className="max-h-[62vh] overflow-auto rounded-lg border border-slate-200">
+                          <table className="w-full border-collapse text-xs font-mono-data">
+                            <tbody>
+                              {rows.map((row, ri) => (
+                                <tr key={ri} className={ri === 0 ? "text-white" : "odd:bg-white even:bg-slate-50"}>
+                                  {row.map((c, ci) => {
+                                    const isHead = ri === 0;
+                                    const isFirstCol = ci === 0;
+                                    const cls = [
+                                      "whitespace-nowrap border border-slate-100 px-2 py-1",
+                                      typeof c === "number" ? "text-right" : "text-left",
+                                      isHead ? "sticky top-0 bg-[#063044] text-white" : "",
+                                      isFirstCol && !isHead ? "sticky left-0 bg-white" : "",
+                                      isHead && isFirstCol ? "z-30" : isHead ? "z-20" : isFirstCol ? "z-10" : "",
+                                    ].join(" ");
+                                    return <td key={ci} className={cls}>{fmtCell(c)}</td>;
+                                  })}
+                                </tr>
+                              ))}
+                              {q && filtered.length === 0 && (
+                                <tr data-testid="acct-marg-search-empty"><td className="px-3 py-4 text-center text-slate-500" colSpan={header ? header.length : 1}>Aucun résultat pour « {margSearch} »</td></tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               : <div className="flex flex-col items-center gap-3 py-10 text-center" data-testid="acct-preview-xlsx">
                   <FileSpreadsheet size={40} className="text-emerald-600" />

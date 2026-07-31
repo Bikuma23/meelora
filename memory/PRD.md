@@ -606,6 +606,8 @@ Refonte du hub selon nouvelles demandes + modèle Excel « par responsable » fo
 - [x] **Bilan de présentation en PORTRAIT sur 1 page** : `build_presentation_bilan_pdf` (`presentation_reports.py`) passé de `landscape(A4)` à `A4` (portrait). Colonnes ACTIF/PASSIF côte à côte (2 colonnes, `92mm` chacune, tables internes `60mm+30mm`), polices réduites (labels 6,8 / titres 9 / bandeau 8) et paddings resserrés pour tenir sur une seule page portrait. Bandeau TOTAL ACTIF / TOTAL PASSIF ET CAPITAUX réajusté (`38/54/54/38 mm`).
 - [x] **États de résultats de présentation** : conservé en **paysage** (nombreuses colonnes Mois + Cumulatif + Annuel), déjà sur 1 page — inchangé (choix utilisateur).
 - [x] Vérifié via `pdfinfo` + rendu image : Bilan = 1 page, `595 × 841` (portrait), Actif = Passif = 19 756 123,01, aucune donnée coupée ; P&L = 1 page paysage inchangé.
+- [x] **Sous-titre Bilan corrigé** : « En millions $ dollars canadiens (CAD) » → « En dollars canadiens (CAD) » (les montants sont en dollars pleins). Vérifié via `pdftotext`.
+- [x] **Recherche dans l'aperçu Margination** (`ExternalSendView`, `Comptabilite.js`) : champ de recherche (`acct-marg-search`) au-dessus du tableau multi-onglets qui filtre les lignes de la feuille active sur toutes les colonnes (compte/client/description), conserve la ligne d'en-tête, affiche un compteur de résultats (`acct-marg-search-count`) et un état vide (`acct-marg-search-empty`), et se réinitialise au changement d'onglet / à la fermeture. En-têtes/1re colonne figés conservés. Vérifié par capture (« 1 » → 31 résultats).
 
 
 ## Backlog restant

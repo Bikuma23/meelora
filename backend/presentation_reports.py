@@ -308,7 +308,7 @@ def build_presentation_bilan_pdf(data, year, month_label, date_label):
         Paragraph("SOCIÉTÉ EN COMMANDITE ACCS", hS),
         Paragraph("BILAN À CE JOUR", subS),
         Paragraph(f"EN DATE DU {date_label.upper()}", dateS),
-        Paragraph("En millions $ dollars canadiens (CAD)", subS),
+        Paragraph("En dollars canadiens (CAD)", subS),
         Spacer(1, 6 * mm), two_col, Spacer(1, 6 * mm), band,
     ]
     doc.build(elems)
