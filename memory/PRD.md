@@ -700,3 +700,12 @@ Basée sur « Facturation - Frais de gestion 2021 Commandité.xlsx » + import d
 - [x] Ajout des chiffres 2025 FIGÉS (`QC_CF_PREV`, modèle) au flux de trésorerie : net 411, quote-part -95, variation FDR 0, flux exploitation 316, distribution/placement 350, variation nette 666, trésorerie début 8 545 → fin 9 211, détail FDR (clients 1). Exposé via `cf.prev`.
 - [x] Colonne 2025 rendue dans la vue (`qc-ef-cashflow-table` + détail), le PDF et l'Excel. Structure des autres rapports inchangée.
 - [x] Vérifié : API renvoie `cashflow.prev`, PDF/Excel 200, capture confirme les 2 colonnes (2026 réconcilié : 6 735 + 11 232,68 = 17 967,68 ; 2025 : 8 545 + 666 = 9 211).
+
+## Commandité — Saisie des soldes d'ouverture par exercice (2026-08-01)
+- [x] Fonction backend générique `_qc_post_opening(year, targets, actor)` (à-nouveaux par deltas, entrée source="opening", opening_year=Y, année Y-1). `_qc_seed_opening_balances` = wrapper 2026.
+- [x] Endpoints `GET /qc9434/opening/{year}` (trial balance d'ouverture des comptes de bilan) + `PUT /qc9434/opening/{year}` (valide Débit=Crédit puis pose l'à-nouveaux).
+- [x] UI : bouton admin « Soldes d'ouverture » (`qc-opening-btn`) → dialogue `qc-opening-dialog` groupé par section, inputs débit/crédit, indicateur d'équilibre, enregistrement (`qc-opening-save`). Vérifié (2026 = 19 950,50 équilibré).
+
+## Backlog demandé (2026-08-01) — à implémenter
+- [ ] **Extraction IA à l'upload d'une facture fournisseur** : lire le fichier (PDF/image) et pré-remplir fournisseur/date/échéance/montant/taxes + suggérer un compte GL. (Intégration LLM vision requise.)
+- [ ] **Factures multi-lignes** (fournisseurs ET clients) : plusieurs lignes (description + compte GL + montant) par facture, taxes calculées sur le total.

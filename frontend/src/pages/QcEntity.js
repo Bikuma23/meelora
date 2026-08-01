@@ -38,6 +38,73 @@ function fmtSent(iso) {
   catch { return iso; }
 }
 
+function OpeningBalancesDialog({ open, onOpenChange, year, locked, canEdit }) {
+  const [rows, setRows] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (!open || !year) return;
+    setLoading(true);
+    api.qcGetOpening(year).then((d) => setRows(d.rows || [])).catch(() => setRows([])).finally(() => setLoading(false));
+  }, [open, year]);
+  const setVal = (gl, field, v) => setRows((rs) => rs.map((r) => r.gl === gl ? { ...r, [field]: v, [field === "debit" ? "credit" : "debit"]: v ? 0 : r[field === "debit" ? "credit" : "debit"] } : r));
+  const num = (v) => { const n = Number(v); return isNaN(n) ? 0 : n; };
+  const totalD = rows.reduce((s, r) => s + num(r.debit), 0);
+  const totalC = rows.reduce((s, r) => s + num(r.credit), 0);
+  const balanced = Math.abs(totalD - totalC) < 0.01;
+  const SECTIONS = { actif_court: "Actif à court terme", actif_placement: "Placement et immobilisations", passif_court: "Passif à court terme", passif_long: "Passif à long terme", capitaux: "Capitaux propres" };
+  const grouped = Object.keys(SECTIONS).map((sec) => ({ sec, label: SECTIONS[sec], items: rows.filter((r) => r.section === sec) })).filter((g) => g.items.length);
+  const other = rows.filter((r) => !Object.keys(SECTIONS).includes(r.section));
+  if (other.length) grouped.push({ sec: "autre", label: "Autres comptes", items: other });
+  const save = async () => {
+    if (!balanced) { toast.error("Les débits et crédits doivent être égaux."); return; }
+    setSaving(true);
+    try {
+      await api.qcPutOpening(year, { rows: rows.map((r) => ({ gl: r.gl, debit: num(r.debit), credit: num(r.credit) })) });
+      toast.success(`Soldes d'ouverture ${year} enregistrés`);
+      onOpenChange(false);
+    } catch (e) { toast.error(e.response?.data?.detail || "Enregistrement impossible"); } finally { setSaving(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="qc-opening-dialog" className="max-h-[88vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Scale size={16} className="text-[#0E9488]" /> Soldes d'ouverture — exercice {year}</DialogTitle>
+          <DialogDescription className="text-xs">Saisissez le bilan de clôture de l'exercice précédent (report « à-nouveaux »). Les débits doivent égaler les crédits.</DialogDescription>
+        </DialogHeader>
+        {loading ? <p className="py-6 text-center text-sm text-slate-400">Chargement…</p>
+          : <div className="space-y-4">
+              {grouped.map((g) => (
+                <div key={g.sec}>
+                  <p className="mb-1 text-xs font-700 uppercase tracking-wide text-[#0E9488]">{g.label}</p>
+                  <table className="w-full text-sm">
+                    <thead><tr className="text-left text-[11px] uppercase text-slate-400"><th className="py-1">Compte</th><th className="py-1 text-right w-32">Débit</th><th className="py-1 text-right w-32">Crédit</th></tr></thead>
+                    <tbody>
+                      {g.items.map((r) => (
+                        <tr key={r.gl} data-testid={`qc-opening-row-${r.gl}`}>
+                          <td className="py-0.5"><span className="font-mono-data text-xs text-slate-400">{r.gl}</span> {r.description}</td>
+                          <td className="py-0.5"><Input type="number" step="0.01" value={r.debit || ""} disabled={!canEdit} onChange={(e) => setVal(r.gl, "debit", e.target.value)} data-testid={`qc-opening-debit-${r.gl}`} className="h-8 text-right font-mono-data" /></td>
+                          <td className="py-0.5"><Input type="number" step="0.01" value={r.credit || ""} disabled={!canEdit} onChange={(e) => setVal(r.gl, "credit", e.target.value)} data-testid={`qc-opening-credit-${r.gl}`} className="h-8 text-right font-mono-data" /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+              <div className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm font-700 ${balanced ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`} data-testid="qc-opening-totals">
+                <span className="flex items-center gap-1.5">{balanced ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />} {balanced ? "Équilibré" : `Écart : ${money(totalD - totalC)} $`}</span>
+                <span className="font-mono-data">Débit {money(totalD)} · Crédit {money(totalC)}</span>
+              </div>
+            </div>}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Fermer</Button>
+          {canEdit && <Button onClick={save} disabled={saving || !balanced} data-testid="qc-opening-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">{saving ? "…" : "Enregistrer les à-nouveaux"}</Button>}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function QcEntity() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -46,6 +113,7 @@ export default function QcEntity() {
   const [years, setYears] = useState([]);
   const [activeYear, setActiveYear] = useState(null);
   const [yearDlg, setYearDlg] = useState(false);
+  const [openingDlg, setOpeningDlg] = useState(false);
   const [newYear, setNewYear] = useState("");
 
   const loadYears = useCallback(() => api.qcYears().then((r) => {
@@ -101,9 +169,16 @@ export default function QcEntity() {
               {locked ? <><Unlock size={14} /> Déverrouiller</> : <><Lock size={14} /> Verrouiller l'exercice</>}
             </Button>
           )}
+          {isAdmin && curYear && (
+            <Button size="sm" variant="outline" onClick={() => setOpeningDlg(true)} data-testid="qc-opening-btn" className="gap-2">
+              <Scale size={14} /> Soldes d'ouverture
+            </Button>
+          )}
           {isAdmin && <Button size="sm" onClick={() => setYearDlg(true)} data-testid="qc-new-year-btn" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouvel exercice</Button>}
         </div>
       </div>
+
+      {curYear && <OpeningBalancesDialog open={openingDlg} onOpenChange={setOpeningDlg} year={activeYear} locked={locked} canEdit={isAdmin} />}
 
       {/* Onglets : principaux + menu déroulant Rapports */}
       <div className="flex flex-wrap items-center gap-2" data-testid="qc-tabbar">

@@ -4925,32 +4925,35 @@ async def _qc_report_balances(year):
         b["movement"] = round(b["movement"], 2); b["opening"] = round(b["opening"], 2)
     return bal, accts
 
-async def _qc_seed_opening_balances(actor=None):
-    """Établit le solde d'ouverture 2026 = bilan de clôture 2025 du modèle (écriture d'à-nouveaux)."""
-    await db.qc9434_entries.delete_many({"source": "opening"})
-    bal, accts = await _qc_report_balances(2026)
-    gls = set(QC_OPENING_2026) | set(bal)
+async def _qc_post_opening(year, targets, actor=None):
+    """Pose l'à-nouveaux pour que le solde d'ouverture de `year` égale `targets` (base débit, actif +)."""
+    y = int(year)
+    await db.qc9434_entries.delete_many({"source": "opening", "$or": [{"opening_year": y}, {"num": f"OUV-{y}"}]})
+    bal, accts = await _qc_report_balances(y)  # ouverture = report des écritures année < y (hors 'opening' supprimé)
+    gls = set(targets) | set(bal)
     lines = []
     for gl in sorted(gls):
-        target = float(QC_OPENING_2026.get(gl, 0.0))
+        target = round(float(targets.get(gl, 0.0)), 2)
         cur_open = round((bal.get(gl) or {}).get("opening", 0.0), 2)
         delta = round(target - cur_open, 2)
         if abs(delta) < 0.005:
             continue
         name = (accts.get(gl) or {}).get("description", gl)
-        if delta > 0:
-            lines.append({"account": gl, "account_name": name, "tiers": "", "debit": delta, "credit": 0.0})
-        else:
-            lines.append({"account": gl, "account_name": name, "tiers": "", "debit": 0.0, "credit": round(-delta, 2)})
+        lines.append({"account": gl, "account_name": name, "tiers": "",
+                      "debit": delta if delta > 0 else 0.0, "credit": round(-delta, 2) if delta < 0 else 0.0})
     if not lines:
         return None
-    doc = {"year": 2025, "date": "2025-12-31", "num": "OUV-2026", "period": "ouverture",
-           "description": "Solde d'ouverture au 1er janvier 2026 (report de la clôture 2025)",
+    doc = {"year": y - 1, "date": f"{y - 1}-12-31", "num": f"OUV-{y}", "period": "ouverture", "opening_year": y,
+           "description": f"Solde d'ouverture au 1er janvier {y} (report de la clôture {y - 1})",
            "source": "opening", "lines": lines,
            "created_at": datetime.now(timezone.utc).isoformat(),
            "created_by": (actor or {}).get("email", "système")}
     await db.qc9434_entries.insert_one(doc)
     return doc
+
+async def _qc_seed_opening_balances(actor=None):
+    """Établit le solde d'ouverture 2026 = bilan de clôture 2025 du modèle (à-nouveaux)."""
+    return await _qc_post_opening(2026, QC_OPENING_2026, actor)
 
 def _acc_val(accts, gl, default_type):
     a = accts.get(gl) or {}
@@ -5644,6 +5647,41 @@ async def qc_seed_opening(user: dict = Depends(require_admin)):
     doc = await _qc_seed_opening_balances(user)
     await log_action(user, "Recalculer", "9434 — Soldes d'ouverture 2026", "à-nouveaux régénérés")
     return {"success": True, "lines": len((doc or {}).get("lines", [])), "message": "Soldes d'ouverture 2026 régénérés."}
+
+@api.get("/qc9434/opening/{year}")
+async def qc_get_opening(year: int, user: dict = Depends(get_current_user)):
+    y = int(year)
+    bal, accts = await _qc_report_balances(y)
+    rows = []
+    for gl, a in accts.items():
+        if a.get("type") not in ("actif", "passif", "capitaux"):
+            continue
+        op = round((bal.get(gl) or {}).get("opening", 0.0), 2)
+        rows.append({"gl": gl, "description": a.get("description", gl), "section": a.get("section", ""),
+                     "type": a.get("type"), "sort": a.get("sort", 0),
+                     "debit": op if op > 0 else 0.0, "credit": round(-op, 2) if op < 0 else 0.0})
+    rows.sort(key=lambda r: (r["gl"]))
+    td = round(sum(r["debit"] for r in rows), 2); tc = round(sum(r["credit"] for r in rows), 2)
+    return {"year": y, "rows": rows, "total_debit": td, "total_credit": tc, "balanced": abs(td - tc) < 0.01}
+
+@api.put("/qc9434/opening/{year}")
+async def qc_put_opening(year: int, payload: dict, user: dict = Depends(require_admin)):
+    y = int(year)
+    rows = payload.get("rows", [])
+    targets = {}
+    td = tc = 0.0
+    for r in rows:
+        gl = str(r.get("gl", "")).strip()
+        if not gl:
+            continue
+        d = round(float(r.get("debit") or 0), 2); c = round(float(r.get("credit") or 0), 2)
+        td += d; tc += c
+        targets[gl] = round(targets.get(gl, 0.0) + d - c, 2)
+    if abs(round(td - tc, 2)) >= 0.01:
+        raise HTTPException(status_code=400, detail=f"Débits ({td:,.2f}) et crédits ({tc:,.2f}) doivent être égaux (écart {td - tc:,.2f}).")
+    await _qc_post_opening(y, targets, user)
+    await log_action(user, "Modifier", f"9434 — Soldes d'ouverture {y}", f"{len(targets)} compte(s)")
+    return await qc_get_opening(y, user)
 
 
 # ---- Détail d'un compte (drill-down) -----------------------------------
