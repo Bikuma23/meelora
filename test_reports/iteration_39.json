@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 39 — 9434-3977 QC inc. (Commandité). Backend: 10/10 pytests PASS in test_qc9434_phase6.py covering (1) OPENING BALANCES GET /qc9434/opening/2026 returns balanced payload (rows, total_debit=total_credit=19 950,50, balanced:true); PUT with unbalanced rows → 400 with FR detail 'Débits (X) et crédits (Y) doivent être égaux (écart …)'; PUT with balanced rows → 200 + persists (re-GET matches); POST /qc9434/seed-opening → 200 {success:true, lines>0} (used to restore state at end). (2) MULTI-LINE INVOICE POST /qc9434/invoices with items=[{acc 400310, 1000},{acc 400310, 250}] → amount=1250, tps=62.50, tvq=124.69, total=1437.19, items[]=2 lines; GL entry has 5 lines = 1 Dr 130118 (1437.19) + 2 Cr 400310 (1000+250) + 1 Cr TPS + 1 Cr TVQ, all verified. (3) MULTI-LINE BILL POST /qc9434/bills multipart with items_json=[{540210:500},{550108:300}] → amount=800, tps=40, tvq=79.80, total=919.80; GL entry has 5 lines = Dr 540210(500) + Dr 550108(300) + Dr TPS_rec(40) + Dr TVQ_rec(79.80) + Cr 211010(919.80). (4) AI EXTRACT POST /qc9434/bills/extract with PIL-generated PNG containing 'FACTURE FOURNISSEUR / Fournisseur: Test Vendor Inc. / Date / Échéance / Référence / Description / Sous-total 500 / TPS 25 / TVQ 49.88 / Total 574.88' → 200 with full schema {supplier, date, due_date, reference, items[], confidence}; each item.account validated against qc9434 charge GLs. Frontend Playwright (admin, 1920x1080): navigated to /qc/9434 via sidebar; OPENING dialog: qc-opening-btn opens qc-opening-dialog, qc-opening-totals shows ' Équilibré · Débit 19 950,50 · Crédit 19 950,50' (green). Changed first qc-opening-debit-100105 by +500 → banner turned RED with 'Écart : 500,00 $ · Débit 20 450,50 · Crédit 19 950,50', qc-opening-save became DISABLED (button is disabled when !balanced — actually stricter than spec which said 'reste actif mais l'API refuse' — see note below). Restored value → banner back to Équilibré. AR: qc-tab-ar → qc-add-invoice → filled 2 lines (Service A 1000, Service B 250), qc-invoice-totals rendered 'Total des ventes 1 250,00 · TPS 62,50 · TVQ 124,69 · TOTAL 1 437,19'; qc-invoice-save → invoice appears in qc-invoices-table with 'TEST_MultiAR UI'. AP: qc-tab-ap → qc-add-bill dialog has qc-bill-file-input AT TOP (as required), filled 2 lines with select GL 540210=500 and 550108=300, qc-bill-totals shows 'Montant HT 800,00 · TPS+TVQ 119,80 · TOTAL 919,80'; qc-bill-save → row in qc-bills-table with 919,80. Isolation preserved (main-app Comptabilité et Masse salariale intacts).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "qc-opening-dialog", "issues": ["Spec says 'le bouton Enregistrer (qc-opening-save) reste actif mais l'API refuse si non équilibré' — actual behaviour is stricter: the button is DISABLED via `disabled={saving || !balanced}` when the totals are not balanced. This is safer UX but does not match spec text. Consider re-enabling the button to show the 400 error toast as documented (or update the spec)."]},
+      {"screen": "qc-invoice-dialog & qc-bill-dialog", "issues": ["Hydration warning in console: '<span> cannot be a child of <option>' — comes from the instrumentation wrapper injecting <span> inside <option> in LineItemsEditor account <select>. Cosmetic warning only, does not break functionality but pollutes DevTools."]},
+      {"screen": "qc-invoice-dialog & qc-bill-dialog", "issues": ["Legacy from previous iterations: native browser date pickers still used for Date/Échéance instead of shadcn Calendar component. Not a blocker."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_qc9434_phase6.py",
+    "/app/test_reports/pytest/qc9434_phase6.xml"
+  ],
+  "action_items": [
+    "Minor: decide whether qc-opening-save should stay ENABLED-when-unbalanced (matches request text) or DISABLED-when-unbalanced (current, safer). Current behaviour is functionally correct — API still rejects a bad payload with the exact FR 400 message.",
+    "Minor: silence the <span> in <option> hydration warning by rendering the option label as a plain string (e.g. ``{`${a.gl} · ${a.description}`}``) instead of using JSX expressions that get wrapped by the instrumentation tooling."
+  ],
+  "critical_code_review_comments": [
+    "server.py now 6223 lines — the qc9434 block (>2000 lines including opening, invoices/bills multi-lignes, AI extract, cashflow, payments, reminders) really should be extracted to backend/qc9434.py. Flagged repeatedly.",
+    "qc_bill_extract calls GPT-5.4 vision with the FULL list of charge accounts in the system prompt — for a company with many charge GLs the prompt size will grow unbounded. Consider capping to top-N most-used charge accounts or grouping by section to keep the prompt small and improve accuracy.",
+    "qc_bill_extract silently coerces an unknown GL to default_expense when the LLM hallucinates a code — good defensive behaviour, but the frontend has no way to know this happened. Add a per-item flag 'account_fallback: true' in the response so the UI can highlight rows the user should review.",
+    "qc_put_opening does not validate that submitted GLs actually exist in qc9434_accounts — a typo would silently create/target a non-existent GL via _qc_post_opening. Add `if gl not in valid_gls: continue` (or 400).",
+    "InvoicesView.save/BillsView.save do not disable the dialog while saving (only the Save button) — a fast double-click on other action buttons could trigger duplicate saves in rare cases. Consider blocking the whole dialog while saving=true.",
+    "The AI extract endpoint uses 'gpt-5.4' — please confirm this is a supported model in emergentintegrations (the previous phase used gpt-4o / gpt-4o-mini). If not stabilised, add a fallback to gpt-4o on 502."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_qc9434_phase6.py"
+  ],
+  "success_rate": {"backend": "100% (10/10 phase-6 + phase 1-5 untouched)", "frontend": "100% on tested new flows (opening dialog imbalance/rebalance, multi-line AR 1437.19, multi-line AP 919.80, AI file input present)"},
+  "test_credentials": "admin@accslegro.com / admin123",
+  "seed_data_creation": "Backend tests created 1 TEST_MultiAR invoice + 1 TEST_MultiAP bill; UI created 1 'TEST_MultiAR UI' invoice + 1 'TEST_MultiAP UI Supp' bill. All prefixed TEST_. Opening balances RESTORED at end of pytest via POST /qc9434/seed-opening (test_zzz_final_seed_opening). Recommend running /app/scripts/qc_cleanup_testdata.py to purge TEST_ tiers/fournisseurs before demo.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_qc9434_phase6.py is idempotent: needs REACT_APP_BACKEND_URL exported; run with `python -m pytest backend/tests/test_qc9434_phase6.py -o addopts='' -v` because /app/backend/pytest.ini enables xdist and phase 6 uses module-scoped globals _INV_ID/_BILL_ID that require single-worker (loadfile mode). The AI extract test can occasionally 502 if the LLM key is rate-limited — the test does pytest.skip() in that case. 2026 must remain OPEN (unlocked).",
+  "rca of the issue": "N/A — no bugs found. Only 1 minor spec vs implementation divergence documented (qc-opening-save disabled when unbalanced) and 1 cosmetic hydration warning."
+}

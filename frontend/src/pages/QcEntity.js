@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
 import {
-  Plus, Lock, Unlock, Trash2, Pencil, Send, Settings2, Download, Clock, CheckCircle2, AlertTriangle, BookOpen, Scale, FileText, X, Eye, FileDown, Save, Copy, Upload, Wallet, ChevronDown, LayoutList, Mail,
+  Plus, Lock, Unlock, Trash2, Pencil, Send, Settings2, Download, Clock, CheckCircle2, AlertTriangle, BookOpen, Scale, FileText, X, Eye, FileDown, Save, Copy, Upload, Wallet, ChevronDown, LayoutList, Mail, Users, RotateCcw, FileMinus,
 } from "lucide-react";
 
 const ENTITY = "9434-3977 QC inc.";
@@ -21,6 +21,7 @@ const MAIN_TABS = [
   { key: "entries", label: "Écritures", icon: BookOpen },
   { key: "ar", label: "Factures clients", icon: FileText },
   { key: "ap", label: "Factures fournisseurs", icon: FileText },
+  { key: "clients", label: "Clients", icon: Users },
 ];
 const REPORT_TABS = [
   { key: "tb", label: "Balance de vérification", icon: Scale },
@@ -229,6 +230,7 @@ export default function QcEntity() {
         : tab === "entries" ? <EntriesView year={activeYear} locked={locked} canEdit={canEdit} />
         : tab === "ar" ? <InvoicesView year={activeYear} locked={locked} canEdit={canEdit} accounts={[]} />
         : tab === "ap" ? <BillsView year={activeYear} locked={locked} canEdit={canEdit} />
+        : tab === "clients" ? <ClientsView isAdmin={isAdmin} />
         : tab === "tb" ? <TrialBalanceView year={activeYear} />
         : tab === "bilan" ? <StatementView year={activeYear} kind="bilan" />
         : tab === "pnl" ? <StatementView year={activeYear} kind="pnl" />
@@ -585,6 +587,9 @@ function TrialBalanceView({ year }) {
 
 // ===================== Factures clients (auxiliaire recevable) =====================
 function InvoiceStatus({ status }) {
+  if (status === "reversed") return <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-600 text-slate-600" data-testid="qc-status-reversed">Extournée</span>;
+  if (status === "credit") return <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-600 text-violet-700" data-testid="qc-status-credit">Note de crédit</span>;
+  if (status === "applied") return <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-600 text-violet-700" data-testid="qc-status-applied">NC appliquée</span>;
   if (status === "paid") return <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-600 text-emerald-700" data-testid="qc-status-paid">Encaissée</span>;
   if (status === "partial") return <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-600 text-sky-700" data-testid="qc-status-partial">Partielle</span>;
   return <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-600 text-amber-700" data-testid="qc-status-open">Ouverte</span>;
@@ -629,29 +634,95 @@ function PaymentHistoryDialog({ open, onOpenChange, kind, id, label }) {
   );
 }
 
+const emptyItem = () => ({ description: "", account: "", amount: "" });
+
+function LineItemsEditor({ items, setItems, accounts, testid, defaultAccount = "" }) {
+  const upd = (i, k, v) => setItems(items.map((it, idx) => (idx === i ? { ...it, [k]: v } : it)));
+  const add = () => setItems([...items, { ...emptyItem(), account: defaultAccount }]);
+  const rm = (i) => setItems(items.length > 1 ? items.filter((_, idx) => idx !== i) : items);
+  const subtotal = items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+  return (
+    <div data-testid={testid}>
+      <div className="mb-1 flex items-center justify-between">
+        <label className="text-xs font-600 text-slate-500">Lignes de la facture</label>
+        <Button size="sm" variant="ghost" onClick={add} data-testid={`${testid}-add`} className="h-7 gap-1 text-[#0E9488] hover:bg-[#0E9488]/10"><Plus size={12} /> Ajouter</Button>
+      </div>
+      <div className="space-y-2">
+        {items.map((it, i) => (
+          <div key={i} className="flex items-center gap-2" data-testid={`${testid}-row-${i}`}>
+            <Input value={it.description} onChange={(e) => upd(i, "description", e.target.value)} placeholder="Description" data-testid={`${testid}-desc-${i}`} className="h-8 flex-1" />
+            <select value={it.account} onChange={(e) => upd(i, "account", e.target.value)} data-testid={`${testid}-account-${i}`} className="h-8 w-40 shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs focus:border-[#0E9488] focus:outline-none">
+              <option value="">Compte…</option>
+              {accounts.map((a) => <option key={a.gl} value={a.gl}>{`${a.gl} · ${a.description}`}</option>)}
+            </select>
+            <Input type="number" step="0.01" value={it.amount} onChange={(e) => upd(i, "amount", e.target.value)} placeholder="0.00" data-testid={`${testid}-amount-${i}`} className="h-8 w-24 shrink-0 text-right font-mono-data" />
+            <button onClick={() => rm(i)} data-testid={`${testid}-remove-${i}`} className="shrink-0 rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500" title="Supprimer"><Trash2 size={14} /></button>
+          </div>
+        ))}
+      </div>
+      <p className="mt-1 text-right text-xs text-slate-400">Sous-total : <span className="font-mono-data">{money(subtotal)} $</span></p>
+    </div>
+  );
+}
+
+const canEditInvoice = (r) => r.type !== "credit_note" && r.status !== "reversed" && (r.paid_amount || 0) === 0 && (r.credited_amount || 0) === 0;
+const canReverseInvoice = (r) => r.type !== "credit_note" && r.status !== "reversed" && (r.paid_amount || 0) === 0;
+const canCreditInvoice = (r) => r.type !== "credit_note" && r.status !== "reversed";
+
 function InvoicesView({ year, locked, canEdit }) {
   const [rows, setRows] = useState([]);
   const [dlg, setDlg] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ date: TODAY, due_date: "", client_name: "", client_att: "", client_address: "", client_email: "", description: "", amount: "" });
+  const emptyForm = { date: TODAY, due_date: "", client_id: "", ar_account: "", client_name: "", client_att: "", client_address: "", client_email: "", items: [{ ...emptyItem(), account: "400310" }] };
+  const [form, setForm] = useState(emptyForm);
+  const [editing, setEditing] = useState(null);
+  const [accounts, setAccounts] = useState([]);
+  const [clients, setClients] = useState([]);
   const [history, setHistory] = useState(null);
   const [reminding, setReminding] = useState(false);
+  const [creditTarget, setCreditTarget] = useState(undefined); // undefined = closed, null = standalone, obj = linked
+  const [reverseTarget, setReverseTarget] = useState(null);
   const load = useCallback(() => { if (year) api.qcInvoices({ year }).then(setRows).catch(() => setRows([])); }, [year]);
   useEffect(() => { load(); }, [load]);
-  const amt = Number(form.amount) || 0;
+  useEffect(() => { api.qcAccounts().then((r) => setAccounts((r.accounts || []).filter((a) => a.type === "produit"))).catch(() => {}); api.qcClients().then(setClients).catch(() => {}); }, []);
+  const amt = form.items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
   const tps = Math.round(amt * 0.05 * 100) / 100, tvq = Math.round(amt * 0.09975 * 100) / 100, total = Math.round((amt + tps + tvq) * 100) / 100;
-  const overdue = (r) => r.status !== "paid" && r.due_date && r.due_date < TODAY;
+  const overdue = (r) => r.type !== "credit_note" && r.status !== "paid" && r.status !== "reversed" && r.due_date && r.due_date < TODAY;
+  const onPickClient = (cid) => {
+    if (!cid) { setForm((f) => ({ ...f, client_id: "" })); return; }
+    const c = clients.find((x) => x.id === cid);
+    if (!c) return;
+    setForm((f) => ({ ...f, client_id: c.id, ar_account: c.ar_account || "", client_name: c.name || "", client_att: c.att || "", client_address: c.address || "", client_email: c.email || "" }));
+  };
+  const openNew = () => { setEditing(null); setForm(emptyForm); setDlg(true); };
+  const openEdit = (inv) => {
+    setEditing(inv);
+    setForm({ date: inv.date || TODAY, due_date: inv.due_date || "", client_id: inv.client_id || "", ar_account: inv.ar_account || "",
+      client_name: inv.client_name || "", client_att: inv.client_att || "", client_address: inv.client_address || "", client_email: inv.client_email || "",
+      items: (inv.items && inv.items.length ? inv.items : [{ description: inv.description || "", account: inv.sales_account || "400310", amount: inv.amount || 0 }]).map((it) => ({ description: it.description || "", account: it.account || "400310", amount: it.amount })) });
+    setDlg(true);
+  };
   const save = async () => {
-    if (!form.client_name.trim() || amt <= 0) { toast.error("Client et montant requis"); return; }
+    const items = form.items.filter((it) => (Number(it.amount) || 0) > 0).map((it) => ({ description: it.description, account: it.account || "400310", amount: Number(it.amount) }));
+    if (!form.client_name.trim() || items.length === 0) { toast.error("Client et au moins une ligne avec montant requis"); return; }
     setSaving(true);
-    try { await api.qcCreateInvoice({ ...form, amount: amt }, { year }); toast.success("Facture créée et comptabilisée"); setDlg(false); setForm({ date: TODAY, due_date: "", client_name: "", client_att: "", client_address: "", client_email: "", description: "", amount: "" }); load(); }
-    catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setSaving(false); }
+    const body = { date: form.date, due_date: form.due_date, client_id: form.client_id || null, ar_account: form.ar_account || null, client_name: form.client_name, client_att: form.client_att, client_address: form.client_address, client_email: form.client_email, items };
+    try {
+      if (editing) { await api.qcUpdateInvoice(editing.id, body); toast.success("Facture modifiée"); }
+      else { await api.qcCreateInvoice(body, { year }); toast.success("Facture créée et comptabilisée"); }
+      setDlg(false); setEditing(null); setForm(emptyForm); load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setSaving(false); }
   };
   const receive = async (inv) => {
     const input = window.prompt(`Montant à encaisser (solde ${money(inv.balance)} $) — laisser vide pour le solde complet :`, "");
     if (input === null) return;
     const a = input.trim() === "" ? 0 : Number(input);
     try { await api.qcReceiveInvoice(inv.id, { date: TODAY, amount: a }); toast.success("Encaissement comptabilisé"); load(); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); }
+  };
+  const reverse = async () => {
+    if (!reverseTarget) return;
+    try { const r = await api.qcReverseInvoice(reverseTarget.id, { date: TODAY }); toast.success(r.message || "Facture extournée"); load(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setReverseTarget(null); }
   };
   const emailInvoice = async (inv) => { try { const r = await api.qcEmailInvoice(inv.id); toast.success(r.message || "Envoyée"); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } };
   const sendReminders = async () => {
@@ -660,14 +731,17 @@ function InvoicesView({ year, locked, canEdit }) {
     catch (e) { toast.error(e.response?.data?.detail || "Envoi impossible"); } finally { setReminding(false); }
   };
   const pdf = async (inv) => { try { const b = await api.qcInvoicePdf(inv.id); const url = URL.createObjectURL(b); const a = document.createElement("a"); a.href = url; a.download = `facture_${inv.number}.pdf`; a.click(); URL.revokeObjectURL(url); } catch { toast.error("PDF indisponible"); } };
-  const openTotal = rows.filter((r) => r.status !== "paid").reduce((s, r) => s + (r.balance || 0), 0);
+  const openTotal = rows.filter((r) => r.status !== "paid" && r.status !== "reversed").reduce((s, r) => s + (r.balance || 0), 0);
   const overdueCount = rows.filter(overdue).length;
 
   return (
     <div className="space-y-3" data-testid="qc-ar-view">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-500">{rows.length} facture(s) · Solde à recevoir : <strong>{money(openTotal)} $</strong></p>
-        {canEdit && !locked && <Button size="sm" onClick={() => setDlg(true)} data-testid="qc-add-invoice" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouvelle facture</Button>}
+        {canEdit && !locked && <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => setCreditTarget(null)} data-testid="qc-add-credit-note" className="gap-2"><FileMinus size={14} /> Note de crédit</Button>
+          <Button size="sm" onClick={openNew} data-testid="qc-add-invoice" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouvelle facture</Button>
+        </div>}
       </div>
       {overdueCount > 0 && <div data-testid="qc-ar-overdue-banner" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-600 text-red-700"><span className="flex items-center gap-2"><AlertTriangle size={16} /> {overdueCount} facture(s) en retard (échéance dépassée).</span>{canEdit && <Button size="sm" onClick={sendReminders} disabled={reminding} data-testid="qc-ar-remind-btn" className="gap-1.5 bg-red-600 hover:bg-red-700"><Mail size={14} /> {reminding ? "Envoi…" : "Relancer les retards"}</Button>}</div>}
       {rows.length === 0
@@ -679,20 +753,24 @@ function InvoicesView({ year, locked, canEdit }) {
             <tbody className="divide-y divide-slate-100">
               {rows.map((r) => {
                 const od = overdue(r);
+                const isCN = r.type === "credit_note";
                 return (
-                <tr key={r.id} className="hover:bg-slate-50" data-testid={`qc-invoice-row-${r.id}`}>
-                  <td className="px-3 py-2 font-mono-data text-xs">{r.number}</td>
+                <tr key={r.id} className={`hover:bg-slate-50 ${r.status === "reversed" ? "text-slate-400" : ""}`} data-testid={`qc-invoice-row-${r.id}`}>
+                  <td className="px-3 py-2 font-mono-data text-xs">{r.number}{isCN && r.linked_number ? <span className="ml-1 text-[10px] text-violet-600">↩ {r.linked_number}</span> : null}</td>
                   <td className="px-3 py-2 text-xs">{r.date}</td>
-                  <td className={`px-3 py-2 text-xs ${od ? "font-700 text-red-600" : "text-slate-500"}`}>{r.due_date || "—"}{od && <span className="ml-1 rounded bg-red-100 px-1 text-[10px] font-700 text-red-700">RETARD</span>}</td>
-                  <td className="px-3 py-2">{r.client_name}</td>
+                  <td className={`px-3 py-2 text-xs ${od ? "font-700 text-red-600" : "text-slate-500"}`}>{isCN ? "—" : (r.due_date || "—")}{od && <span className="ml-1 rounded bg-red-100 px-1 text-[10px] font-700 text-red-700">RETARD</span>}</td>
+                  <td className={`px-3 py-2 ${r.status === "reversed" ? "line-through" : ""}`}>{r.client_name}</td>
                   <td className="px-3 py-2 text-right font-mono-data">{money(r.total)}</td>
                   <td className="px-3 py-2 text-right font-mono-data">{money(r.balance)}</td>
                   <td className="px-3 py-2"><InvoiceStatus status={r.status} /></td>
                   <td className="px-3 py-2"><div className="flex justify-end gap-1">
                     <button onClick={() => setHistory({ id: r.id, label: r.number })} data-testid={`qc-invoice-history-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Historique des encaissements"><Clock size={14} /></button>
-                    <button onClick={() => pdf(r)} data-testid={`qc-invoice-pdf-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="PDF"><FileDown size={14} /></button>
-                    {r.client_email && <button onClick={() => emailInvoice(r)} data-testid={`qc-invoice-email-${r.id}`} className="rounded p-1.5 text-[#0E9488] hover:bg-[#0E9488]/10" title={`Envoyer à ${r.client_email}`}><Mail size={14} /></button>}
-                    {canEdit && !locked && r.status !== "paid" && <button onClick={() => receive(r)} data-testid={`qc-invoice-receive-${r.id}`} className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50" title="Encaisser"><Wallet size={14} /></button>}
+                    {!isCN && <button onClick={() => pdf(r)} data-testid={`qc-invoice-pdf-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="PDF"><FileDown size={14} /></button>}
+                    {!isCN && r.client_email && <button onClick={() => emailInvoice(r)} data-testid={`qc-invoice-email-${r.id}`} className="rounded p-1.5 text-[#0E9488] hover:bg-[#0E9488]/10" title={`Envoyer à ${r.client_email}`}><Mail size={14} /></button>}
+                    {canEdit && !locked && !isCN && r.status !== "paid" && r.status !== "reversed" && <button onClick={() => receive(r)} data-testid={`qc-invoice-receive-${r.id}`} className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50" title="Encaisser"><Wallet size={14} /></button>}
+                    {canEdit && !locked && canEditInvoice(r) && <button onClick={() => openEdit(r)} data-testid={`qc-invoice-edit-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Modifier"><Pencil size={14} /></button>}
+                    {canEdit && !locked && canCreditInvoice(r) && <button onClick={() => setCreditTarget(r)} data-testid={`qc-invoice-credit-${r.id}`} className="rounded p-1.5 text-violet-600 hover:bg-violet-50" title="Note de crédit"><FileMinus size={14} /></button>}
+                    {canEdit && !locked && canReverseInvoice(r) && <button onClick={() => setReverseTarget(r)} data-testid={`qc-invoice-reverse-${r.id}`} className="rounded p-1.5 text-orange-600 hover:bg-orange-50" title="Extourner"><RotateCcw size={14} /></button>}
                   </div></td>
                 </tr>
               );})}
@@ -701,11 +779,34 @@ function InvoicesView({ year, locked, canEdit }) {
 
       <PaymentHistoryDialog open={!!history} onOpenChange={(v) => !v && setHistory(null)} kind="invoice" id={history?.id} label={history?.label} />
 
-      <Dialog open={dlg} onOpenChange={setDlg}>
+      <CreditNoteDialog open={creditTarget !== undefined} invoice={creditTarget} year={year} accounts={accounts} clients={clients}
+        onClose={() => setCreditTarget(undefined)} onDone={() => { setCreditTarget(undefined); load(); }} />
+
+      <AlertDialog open={!!reverseTarget} onOpenChange={(v) => !v && setReverseTarget(null)}>
+        <AlertDialogContent data-testid="qc-reverse-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Extourner la facture {reverseTarget?.number} ?</AlertDialogTitle>
+            <AlertDialogDescription>L'écriture inverse sera comptabilisée : le solde sera annulé et la facture marquée « Extournée ». Action réservée aux factures sans encaissement.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="qc-reverse-cancel">Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={reverse} data-testid="qc-reverse-confirm" className="bg-orange-600 hover:bg-orange-700">Extourner</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={dlg} onOpenChange={(v) => { setDlg(v); if (!v) setEditing(null); }}>
         <DialogContent data-testid="qc-invoice-dialog" className="max-w-lg">
-          <DialogHeader><DialogTitle>Nouvelle facture client — Exercice {year}</DialogTitle>
+          <DialogHeader><DialogTitle>{editing ? `Modifier la facture ${editing.number}` : "Nouvelle facture client"} — Exercice {year}</DialogTitle>
             <DialogDescription className="text-xs">La comptabilisation (Dr Comptes à recevoir / Cr Ventes + taxes) est automatique et reste modifiable dans les Écritures.</DialogDescription></DialogHeader>
           <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-600 text-slate-500">Client du carnet (optionnel — applique son compte AR)</label>
+              <select value={form.client_id} onChange={(e) => onPickClient(e.target.value)} data-testid="qc-invoice-client-select" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm focus:border-[#0E9488] focus:outline-none">
+                <option value="">— Saisie libre —</option>
+                {clients.filter((c) => c.active !== false).map((c) => <option key={c.id} value={c.id}>{`${c.name} · CR ${c.ar_account}`}</option>)}
+              </select>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="mb-1 block text-xs font-600 text-slate-500">Date</label><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} data-testid="qc-invoice-date" className="h-9" /></div>
               <div><label className="mb-1 block text-xs font-600 text-slate-500">Échéance</label><Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} data-testid="qc-invoice-due" className="h-9" /></div>
@@ -714,8 +815,7 @@ function InvoicesView({ year, locked, canEdit }) {
             <Input value={form.client_att} onChange={(e) => setForm({ ...form, client_att: e.target.value })} placeholder="À l'attention de (optionnel)" data-testid="qc-invoice-att" className="h-9" />
             <Input type="email" value={form.client_email} onChange={(e) => setForm({ ...form, client_email: e.target.value })} placeholder="Courriel du client (pour l'envoi par courriel)" data-testid="qc-invoice-email-input" className="h-9" />
             <Input value={form.client_address} onChange={(e) => setForm({ ...form, client_address: e.target.value })} placeholder="Adresse (optionnel)" className="h-9" />
-            <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Description (ex. Frais de gestion annuel)" data-testid="qc-invoice-desc" className="h-9" />
-            <div><label className="mb-1 block text-xs font-600 text-slate-500">Montant HT ($)</label><Input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} data-testid="qc-invoice-amount" className="h-9" /></div>
+            <LineItemsEditor items={form.items} setItems={(items) => setForm({ ...form, items })} accounts={accounts} defaultAccount="400310" testid="qc-invoice-items" />
             <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm" data-testid="qc-invoice-totals">
               <div className="flex justify-between"><span>Total des ventes</span><span className="font-mono-data">{money(amt)} $</span></div>
               <div className="flex justify-between text-slate-500"><span>T.P.S. (5,0 %)</span><span className="font-mono-data">{money(tps)} $</span></div>
@@ -724,11 +824,169 @@ function InvoicesView({ year, locked, canEdit }) {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDlg(false)}>Annuler</Button>
-            <Button onClick={save} disabled={saving || amt <= 0 || !form.client_name.trim()} data-testid="qc-invoice-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">{saving ? "…" : "Créer & comptabiliser"}</Button>
+            <Button variant="outline" onClick={() => { setDlg(false); setEditing(null); }}>Annuler</Button>
+            <Button onClick={save} disabled={saving || amt <= 0 || !form.client_name.trim()} data-testid="qc-invoice-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">{saving ? "…" : editing ? "Enregistrer les modifications" : "Créer & comptabiliser"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ===================== Note de crédit (liée ou autonome) =====================
+function CreditNoteDialog({ open, invoice, year, accounts, clients, onClose, onDone }) {
+  const linked = invoice || null; // objet facture si liée, sinon null (autonome)
+  const [saving, setSaving] = useState(false);
+  const empty = { date: TODAY, client_id: "", ar_account: "", client_name: "", client_att: "", client_address: "", client_email: "", items: [{ ...emptyItem(), account: "400310" }] };
+  const [form, setForm] = useState(empty);
+  useEffect(() => {
+    if (!open) return;
+    if (linked) setForm({ date: TODAY, client_id: linked.client_id || "", ar_account: linked.ar_account || "", client_name: linked.client_name || "", client_att: linked.client_att || "", client_address: linked.client_address || "", client_email: linked.client_email || "", items: [{ ...emptyItem(), account: linked.sales_account || "400310" }] });
+    else setForm(empty);
+  }, [open, invoice]); // eslint-disable-line
+  const onPickClient = (cid) => {
+    if (!cid) { setForm((f) => ({ ...f, client_id: "" })); return; }
+    const c = clients.find((x) => x.id === cid);
+    if (!c) return;
+    setForm((f) => ({ ...f, client_id: c.id, ar_account: c.ar_account || "", client_name: c.name || "", client_att: c.att || "", client_address: c.address || "", client_email: c.email || "" }));
+  };
+  const amt = form.items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+  const tps = Math.round(amt * 0.05 * 100) / 100, tvq = Math.round(amt * 0.09975 * 100) / 100, total = Math.round((amt + tps + tvq) * 100) / 100;
+  const remaining = linked ? (linked.balance || 0) : null;
+  const save = async () => {
+    const items = form.items.filter((it) => (Number(it.amount) || 0) > 0).map((it) => ({ description: it.description, account: it.account || "400310", amount: Number(it.amount) }));
+    if (!form.client_name.trim() || items.length === 0) { toast.error("Client et au moins une ligne avec montant requis"); return; }
+    setSaving(true);
+    const body = { date: form.date, client_name: form.client_name, client_att: form.client_att, client_address: form.client_address, client_email: form.client_email, client_id: form.client_id || null, ar_account: form.ar_account || null, items, invoice_id: linked ? linked.id : null };
+    try { await api.qcCreateCreditNote(body, { year }); toast.success("Note de crédit comptabilisée"); onDone(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setSaving(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent data-testid="qc-credit-note-dialog" className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{linked ? `Note de crédit — facture ${linked.number}` : "Nouvelle note de crédit"}</DialogTitle>
+          <DialogDescription className="text-xs">{linked ? `Solde de la facture liée : ${money(remaining)} $. L'écriture inverse (Dr Ventes/taxes, Cr Comptes clients) réduit le solde de la facture.` : "Note de crédit autonome (non liée à une facture)."}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          {!linked && <div>
+            <label className="mb-1 block text-xs font-600 text-slate-500">Client du carnet (optionnel)</label>
+            <select value={form.client_id} onChange={(e) => onPickClient(e.target.value)} data-testid="qc-cn-client-select" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm focus:border-[#0E9488] focus:outline-none">
+              <option value="">— Saisie libre —</option>
+              {clients.filter((c) => c.active !== false).map((c) => <option key={c.id} value={c.id}>{`${c.name} · CR ${c.ar_account}`}</option>)}
+            </select>
+          </div>}
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="mb-1 block text-xs font-600 text-slate-500">Date</label><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} data-testid="qc-cn-date" className="h-9" /></div>
+            <div><label className="mb-1 block text-xs font-600 text-slate-500">Client</label><Input value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} disabled={!!linked} placeholder="Nom du client" data-testid="qc-cn-client" className="h-9" /></div>
+          </div>
+          <LineItemsEditor items={form.items} setItems={(items) => setForm({ ...form, items })} accounts={accounts} defaultAccount="400310" testid="qc-cn-items" />
+          <div className="rounded-lg bg-violet-50 px-3 py-2 text-sm" data-testid="qc-cn-totals">
+            <div className="flex justify-between"><span>Total des crédits</span><span className="font-mono-data">{money(amt)} $</span></div>
+            <div className="flex justify-between text-slate-500"><span>T.P.S. (5,0 %)</span><span className="font-mono-data">{money(tps)} $</span></div>
+            <div className="flex justify-between text-slate-500"><span>T.V.Q. (9,975 %)</span><span className="font-mono-data">{money(tvq)} $</span></div>
+            <div className="mt-1 flex justify-between border-t border-violet-200 pt-1 font-700 text-violet-700"><span>TOTAL À CRÉDITER</span><span className="font-mono-data">{money(total)} $</span></div>
+            {linked && total > remaining + 0.005 && <p className="mt-1 text-xs font-600 text-red-600">Le total dépasse le solde de la facture ({money(remaining)} $).</p>}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Annuler</Button>
+          <Button onClick={save} disabled={saving || amt <= 0 || !form.client_name.trim() || (linked && total > remaining + 0.005)} data-testid="qc-cn-save" className="bg-violet-600 hover:bg-violet-700">{saving ? "…" : "Créer la note de crédit"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ===================== Carnet de clients =====================
+function ClientsView({ isAdmin }) {
+  const [rows, setRows] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [dlg, setDlg] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [delTarget, setDelTarget] = useState(null);
+  const empty = { name: "", att: "", address: "", email: "", ar_account: "", active: true };
+  const [form, setForm] = useState(empty);
+  const load = useCallback(() => api.qcClients().then(setRows).catch(() => setRows([])), []);
+  useEffect(() => { load(); api.qcAccounts().then((r) => setAccounts((r.accounts || []).filter((a) => a.type === "actif"))).catch(() => {}); }, [load]);
+  const openNew = () => { setEditing(null); setForm(empty); setDlg(true); };
+  const openEdit = (c) => { setEditing(c); setForm({ name: c.name || "", att: c.att || "", address: c.address || "", email: c.email || "", ar_account: c.ar_account || "", active: c.active !== false }); setDlg(true); };
+  const save = async () => {
+    if (!form.name.trim()) { toast.error("Le nom du client est requis"); return; }
+    setSaving(true);
+    try {
+      if (editing) { await api.qcUpdateClient(editing.id, form); toast.success("Client modifié"); }
+      else { await api.qcCreateClient(form); toast.success("Client créé"); }
+      setDlg(false); setEditing(null); load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setSaving(false); }
+  };
+  const del = async () => { if (!delTarget) return; try { await api.qcDeleteClient(delTarget.id); toast.success("Client supprimé"); load(); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setDelTarget(null); } };
+  const accName = (gl) => { const a = accounts.find((x) => x.gl === gl); return a ? `${a.gl} · ${a.description}` : gl; };
+  return (
+    <div className="space-y-3" data-testid="qc-clients-view">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-slate-500">{rows.length} client(s) au carnet.</p>
+        {isAdmin && <Button size="sm" onClick={openNew} data-testid="qc-add-client" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouveau client</Button>}
+      </div>
+      {rows.length === 0
+        ? <div className="card p-10 text-center text-sm text-slate-400" data-testid="qc-clients-empty">Aucun client. {isAdmin ? "Ajoutez-en un pour attribuer un compte de comptes-clients dédié." : ""}</div>
+        : <div className="card overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-clients-table">
+            <thead><tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
+              <th className="px-3 py-2">Nom</th><th className="px-3 py-2">À l'attention</th><th className="px-3 py-2">Courriel</th><th className="px-3 py-2">Compte clients (AR)</th><th className="px-3 py-2">Statut</th><th className="px-3 py-2"></th>
+            </tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((c) => (
+                <tr key={c.id} className="hover:bg-slate-50" data-testid={`qc-client-row-${c.id}`}>
+                  <td className="px-3 py-2 font-600">{c.name}</td>
+                  <td className="px-3 py-2 text-slate-500">{c.att || "—"}</td>
+                  <td className="px-3 py-2 text-slate-500">{c.email || "—"}</td>
+                  <td className="px-3 py-2 font-mono-data text-xs">{accName(c.ar_account)}</td>
+                  <td className="px-3 py-2">{c.active !== false ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-600 text-emerald-700">Actif</span> : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-600 text-slate-500">Inactif</span>}</td>
+                  <td className="px-3 py-2"><div className="flex justify-end gap-1">
+                    {isAdmin && <button onClick={() => openEdit(c)} data-testid={`qc-client-edit-${c.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Modifier"><Pencil size={14} /></button>}
+                    {isAdmin && <button onClick={() => setDelTarget(c)} data-testid={`qc-client-delete-${c.id}`} className="rounded p-1.5 text-red-500 hover:bg-red-50" title="Supprimer"><Trash2 size={14} /></button>}
+                  </div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div></div>}
+
+      <Dialog open={dlg} onOpenChange={(v) => { setDlg(v); if (!v) setEditing(null); }}>
+        <DialogContent data-testid="qc-client-dialog" className="max-w-md">
+          <DialogHeader><DialogTitle>{editing ? "Modifier le client" : "Nouveau client"}</DialogTitle>
+            <DialogDescription className="text-xs">Le compte de comptes-clients (AR) sélectionné est utilisé automatiquement à la facturation de ce client.</DialogDescription></DialogHeader>
+          <div className="space-y-3">
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nom du client" data-testid="qc-client-name" className="h-9" />
+            <Input value={form.att} onChange={(e) => setForm({ ...form, att: e.target.value })} placeholder="À l'attention de (optionnel)" data-testid="qc-client-att" className="h-9" />
+            <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Courriel (optionnel)" data-testid="qc-client-email" className="h-9" />
+            <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Adresse (optionnel)" data-testid="qc-client-address" className="h-9" />
+            <div>
+              <label className="mb-1 block text-xs font-600 text-slate-500">Compte de comptes-clients (AR)</label>
+              <select value={form.ar_account} onChange={(e) => setForm({ ...form, ar_account: e.target.value })} data-testid="qc-client-ar" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm focus:border-[#0E9488] focus:outline-none">
+                <option value="">— Compte par défaut —</option>
+                {accounts.map((a) => <option key={a.gl} value={a.gl}>{`${a.gl} · ${a.description}`}</option>)}
+              </select>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} data-testid="qc-client-active" /> Client actif</label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDlg(false); setEditing(null); }}>Annuler</Button>
+            <Button onClick={save} disabled={saving || !form.name.trim()} data-testid="qc-client-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">{saving ? "…" : editing ? "Enregistrer" : "Créer"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!delTarget} onOpenChange={(v) => !v && setDelTarget(null)}>
+        <AlertDialogContent data-testid="qc-client-delete-dialog">
+          <AlertDialogHeader><AlertDialogTitle>Supprimer ce client ?</AlertDialogTitle>
+            <AlertDialogDescription>{delTarget?.name} sera retiré du carnet. Les factures déjà émises ne sont pas affectées.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={del} data-testid="qc-client-delete-confirm" className="bg-red-600 hover:bg-red-700">Supprimer</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -739,20 +997,35 @@ function BillsView({ year, locked, canEdit }) {
   const [accounts, setAccounts] = useState([]);
   const [dlg, setDlg] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ supplier: "", date: TODAY, due_date: "", reference: "", description: "", amount: "", expense_account: "540210" });
+  const [form, setForm] = useState({ supplier: "", date: TODAY, due_date: "", reference: "", items: [{ ...emptyItem(), account: "540210" }] });
   const [file, setFile] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const load = useCallback(() => { if (year) api.qcBills({ year }).then(setRows).catch(() => setRows([])); }, [year]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { api.qcAccounts().then((r) => setAccounts((r.accounts || []).filter((a) => a.type === "charge"))).catch(() => {}); }, []);
-  const amt = Number(form.amount) || 0;
+  const amt = form.items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
   const tps = Math.round(amt * 0.05 * 100) / 100, tvq = Math.round(amt * 0.09975 * 100) / 100, total = Math.round((amt + tps + tvq) * 100) / 100;
+  const resetForm = () => { setForm({ supplier: "", date: TODAY, due_date: "", reference: "", items: [{ ...emptyItem(), account: "540210" }] }); setFile(null); };
+  const analyze = async (f) => {
+    if (!f) return;
+    setAnalyzing(true);
+    try {
+      const d = await api.qcBillExtract(f);
+      const items = (d.items || []).map((it) => ({ description: it.description || "", account: it.account || "540210", amount: it.amount || "" }));
+      setForm((prev) => ({ ...prev, supplier: d.supplier || prev.supplier, date: d.date || prev.date, due_date: d.due_date || prev.due_date, reference: d.reference || prev.reference, items: items.length ? items : prev.items }));
+      toast.success(`Facture analysée (confiance ${Math.round((d.confidence || 0) * 100)}%) — vérifiez les champs`);
+    } catch (e) { toast.error(e.response?.data?.detail || "Analyse impossible"); } finally { setAnalyzing(false); }
+  };
+  const onFile = (f) => { setFile(f); if (f) analyze(f); };
   const save = async () => {
-    if (!form.supplier.trim() || amt <= 0 || !form.expense_account) { toast.error("Fournisseur, compte de charge et montant requis"); return; }
+    const items = form.items.filter((it) => (Number(it.amount) || 0) > 0 && it.account).map((it) => ({ description: it.description, account: it.account, amount: Number(it.amount) }));
+    if (!form.supplier.trim() || items.length === 0) { toast.error("Fournisseur et au moins une ligne (compte + montant) requis"); return; }
     const fd = new FormData();
-    Object.entries({ ...form, year, amount: amt }).forEach(([k, v]) => fd.append(k, v));
+    fd.append("year", year); fd.append("supplier", form.supplier); fd.append("date", form.date);
+    fd.append("due_date", form.due_date); fd.append("reference", form.reference); fd.append("items_json", JSON.stringify(items));
     if (file) fd.append("file", file);
     setSaving(true);
-    try { await api.qcCreateBill(fd); toast.success("Facture fournisseur comptabilisée"); setDlg(false); setForm({ supplier: "", date: TODAY, due_date: "", reference: "", description: "", amount: "", expense_account: "540210" }); setFile(null); load(); }
+    try { await api.qcCreateBill(fd); toast.success("Facture fournisseur comptabilisée"); setDlg(false); resetForm(); load(); }
     catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setSaving(false); }
   };
   const pay = async (b) => {
@@ -811,21 +1084,19 @@ function BillsView({ year, locked, canEdit }) {
           <DialogHeader><DialogTitle>Facture fournisseur — Exercice {year}</DialogTitle>
             <DialogDescription className="text-xs">Comptabilisation auto : Dr Charge + Dr TPS/TVQ à recevoir / Cr Comptes à payer. Modifiable dans les Écritures.</DialogDescription></DialogHeader>
           <div className="space-y-3">
+            <div className="rounded-lg border border-dashed border-[#0E9488]/40 bg-[#0E9488]/5 px-3 py-2.5">
+              <label className="mb-1 flex items-center gap-1.5 text-xs font-600 text-[#0E9488]"><Upload size={13} /> Fichier de la facture (PDF/image) — analyse automatique</label>
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={(e) => onFile(e.target.files[0])} data-testid="qc-bill-file-input" className="text-sm" />
+              {analyzing && <p className="mt-1 flex items-center gap-1.5 text-xs font-600 text-[#0E9488]" data-testid="qc-bill-analyzing"><span className="h-3 w-3 animate-spin rounded-full border-2 border-[#0E9488] border-t-transparent" /> Lecture du document par l'IA…</p>}
+              {file && !analyzing && <p className="mt-1 text-xs text-slate-500">📎 {file.name} — champs pré-remplis, vérifiez-les avant de comptabiliser.</p>}
+            </div>
             <Input value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} placeholder="Nom du fournisseur" data-testid="qc-bill-supplier" className="h-9" />
             <div className="grid grid-cols-2 gap-3">
               <div><label className="mb-1 block text-xs font-600 text-slate-500">Date</label><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} data-testid="qc-bill-date" className="h-9" /></div>
               <div><label className="mb-1 block text-xs font-600 text-slate-500">Échéance</label><Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} data-testid="qc-bill-due" className="h-9" /></div>
             </div>
             <div><label className="mb-1 block text-xs font-600 text-slate-500">N° facture (réf.)</label><Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} data-testid="qc-bill-ref" className="h-9" /></div>
-            <div><label className="mb-1 block text-xs font-600 text-slate-500">Compte de charge</label>
-              <select value={form.expense_account} onChange={(e) => setForm({ ...form, expense_account: e.target.value })} data-testid="qc-bill-account" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[#0E9488] focus:outline-none">
-                {accounts.map((a) => <option key={a.gl} value={a.gl}>{a.gl} · {a.description}</option>)}
-              </select>
-            </div>
-            <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Description (optionnel)" className="h-9" />
-            <div><label className="mb-1 block text-xs font-600 text-slate-500">Montant HT ($)</label><Input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} data-testid="qc-bill-amount" className="h-9" /></div>
-            <div><label className="mb-1 block text-xs font-600 text-slate-500">Fichier de la facture (PDF/image)</label>
-              <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => setFile(e.target.files[0])} data-testid="qc-bill-file-input" className="text-sm" /></div>
+            <LineItemsEditor items={form.items} setItems={(items) => setForm({ ...form, items })} accounts={accounts} defaultAccount="540210" testid="qc-bill-items" />
             <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm" data-testid="qc-bill-totals">
               <div className="flex justify-between"><span>Montant HT</span><span className="font-mono-data">{money(amt)} $</span></div>
               <div className="flex justify-between text-slate-500"><span>T.P.S. + T.V.Q.</span><span className="font-mono-data">{money(tps + tvq)} $</span></div>

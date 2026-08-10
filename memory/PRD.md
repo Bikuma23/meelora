@@ -709,3 +709,16 @@ Basée sur « Facturation - Frais de gestion 2021 Commandité.xlsx » + import d
 ## Backlog demandé (2026-08-01) — à implémenter
 - [ ] **Extraction IA à l'upload d'une facture fournisseur** : lire le fichier (PDF/image) et pré-remplir fournisseur/date/échéance/montant/taxes + suggérer un compte GL. (Intégration LLM vision requise.)
 - [ ] **Factures multi-lignes** (fournisseurs ET clients) : plusieurs lignes (description + compte GL + montant) par facture, taxes calculées sur le total.
+
+## Commandité — Phase 6 : Carnet clients, Notes de crédit, Extourne, Modification de factures (2026-08-10)
+- [x] **Frontend complété** (backend déjà livré/testé iter 39) dans `QcEntity.js` :
+  - **Onglet « Clients »** (`ClientsView`, tab `qc-tab-clients`) : carnet CRUD admin — nom, à l'attention, courriel, adresse, **compte de comptes-clients (AR) dédié** (sélecteur des comptes de type actif), actif/inactif. Écriture réservée aux admins (backend `require_admin`).
+  - **Facture client — sélection d'un client** (`qc-invoice-client-select`) : pré-remplit nom/att/courriel/adresse et applique automatiquement le compte AR du client (saisie libre toujours possible).
+  - **Actions par facture** : Modifier (`qc-invoice-edit-*`, visible seulement si `paid_amount==0 && credited_amount==0`), Note de crédit (`qc-invoice-credit-*`), Extourner (`qc-invoice-reverse-*`, visible seulement si `paid_amount==0`). Helpers `canEditInvoice/canReverseInvoice/canCreditInvoice`.
+  - **`CreditNoteDialog`** : notes de crédit **liées** (client verrouillé, plafonnées au solde de la facture) ou **autonomes** (bouton `qc-add-credit-note`, sélecteur de client). Écriture inverse Dr Ventes/taxes / Cr Comptes clients.
+  - **Extourne** : `AlertDialog` de confirmation (`qc-reverse-dialog`), marque la facture « Extournée » et annule le solde.
+  - **`InvoiceStatus`** enrichi : statuts `reversed` (Extournée), `credit` (Note de crédit), `applied` (NC appliquée) + rendu des NC (montant négatif, flèche vers la facture liée).
+- [x] `api.js` : ajout `qcClients/qcCreateClient/qcUpdateClient/qcDeleteClient`, `qcUpdateInvoice`, `qcReverseInvoice`, `qcCreateCreditNote`.
+- [x] Correctif cosmétique : libellés d'`<option>` en concaténation de chaîne (silence l'avertissement React « <span> in <option> »).
+- [x] **Vérifié** : testing_agent iteration_40 = **100 % (10/10 flux)** — CRUD clients, création/modification de factures, notes de crédit liées + autonomes, extourne, application de la règle `paid_amount` (Modifier/Extourner masqués après tout encaissement, Note de crédit conservée), aucune régression (Écritures/BV/Bilan/Résultats). Exercice 2026 laissé ouvert.
+- Note tests : données de démonstration `TEST_*` créées via l'UI (1 client, ~4 factures, 3 notes de crédit) — à purger avant démo.
