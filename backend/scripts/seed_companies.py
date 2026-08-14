@@ -33,7 +33,7 @@ COMMIT = "--commit" in sys.argv
 SEED_COMPANIES = [
     {
         "legacy_prefix": "acct",  # sert à identifier ce doc lors du backfill (étape 2)
-        "name": "Entité principale (module Comptabilité existant)",
+        "name": "Meelora",
         "jurisdiction": "CA-QC",
         "currency": "CAD",
         "locale": "fr-CA",
