@@ -6786,28 +6786,73 @@ def _is_admin_only_path(path: str) -> bool:
             or path == "/api/budget/lock"
             or path.startswith("/api/years"))
 
+def _legacy_prefix_for_path(path: str):
+    """Résout le préfixe legacy de la société ciblée par une route financière."""
+    if path == "/api/acct" or path.startswith("/api/acct/"):
+        return "acct"
+    if path == "/api/qc9434" or path.startswith("/api/qc9434/"):
+        return "qc9434"
+    return None
+
 @app.middleware("http")
 async def write_guard(request: Request, call_next):
     path = request.url.path
-    if request.method in ("POST", "PUT", "DELETE", "PATCH") and path.startswith("/api") and path not in WRITE_ALLOW_ALL:
-        token = request.cookies.get("access_token")
-        if not token:
-            auth = request.headers.get("Authorization", "")
-            if auth.startswith("Bearer "):
-                token = auth[7:]
-        if token:
+    if not path.startswith("/api"):
+        return await call_next(request)
+
+    legacy = _legacy_prefix_for_path(path)
+    is_write = request.method in ("POST", "PUT", "DELETE", "PATCH")
+    # Le lookup utilisateur n'est nécessaire que pour une route financière legacy
+    # (contrôle d'accès société, toutes méthodes) ou une écriture (garde de rôle).
+    if not legacy and not is_write:
+        return await call_next(request)
+
+    token = request.cookies.get("access_token")
+    if not token:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:]
+
+    user_doc = None
+    if token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+            user_doc = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        except Exception:
+            user_doc = None
+
+    # 1. Enforcement d'accès société sur les routes financières legacy (toutes méthodes).
+    #    L'autorité de sécurité est company_access ; l'admin accède à toutes les sociétés
+    #    de son workspace. On n'agit que si un utilisateur valide est identifié — sinon
+    #    la route renverra 401 via Depends(get_current_user).
+    if legacy and user_doc is not None:
+        if _normalized_role(user_doc.get("role")) != "admin":
+            workspace_id = user_doc.get("workspace_id")
             try:
-                payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
-                u = await db.users.find_one({"_id": ObjectId(payload["sub"])})
-                role = (u or {}).get("role")
-                if u:
-                    if _is_admin_only_path(path):
-                        if role != "admin":
-                            return JSONResponse(status_code=403, content={"detail": "Action réservée aux administrateurs"})
-                    elif _normalized_role(role) not in ("admin", "user"):
-                        return JSONResponse(status_code=403, content={"detail": "Modification non autorisée"})
+                company_id = await _company_id(legacy)
             except Exception:
-                pass
+                company_id = None
+            if not workspace_id:
+                return JSONResponse(status_code=403, content={"detail": "Contexte workspace requis"})
+            if company_id is not None:
+                access = await db.company_access.find_one({
+                    "workspace_id": workspace_id,
+                    "company_id": company_id,
+                    "user_id": str(user_doc["_id"]),
+                    "active": True,
+                })
+                if not access:
+                    return JSONResponse(status_code=403, content={"detail": "Accès à cette société non autorisé"})
+
+    # 2. Garde d'écriture par rôle (comportement existant).
+    if is_write and path not in WRITE_ALLOW_ALL:
+        if user_doc is not None:
+            role = user_doc.get("role")
+            if _is_admin_only_path(path):
+                if role != "admin":
+                    return JSONResponse(status_code=403, content={"detail": "Action réservée aux administrateurs"})
+            elif _normalized_role(role) not in ("admin", "user"):
+                return JSONResponse(status_code=403, content={"detail": "Modification non autorisée"})
     return await call_next(request)
 
 app.add_middleware(

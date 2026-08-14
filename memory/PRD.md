@@ -839,3 +839,11 @@ admin@accslegro.com/admin123 · julie@accslegro.com/julie123 (Meelora only) · m
 3. `legacy_prefix` maintenu comme pont (retiré à la migration Financial Core).
 
 ### STATUT : Phase 1 production-ready. **STOP — EN ATTENTE D'APPROBATION EXPLICITE AVANT PHASE 2 (Financial Core).**
+
+## PHASE 1+ — DURCISSEMENT ACCÈS LEGACY (2026-08-14) ✅ FAIT & VALIDÉ
+À la demande explicite du client : chaque route financière legacy applique désormais `company_access`.
+- **Middleware `write_guard` (server.py)** étendu : pour tout `/api/acct/*` (société `acct`) et `/api/qc9434/*` (société `qc9434`), TOUTES méthodes → résolution `_company_id(prefix)` puis vérification d'une affectation `company_access` active (workspace_id+company_id+user_id+active). **Admin bypass** (toutes sociétés du workspace). User sans affectation active → 403 « Accès à cette société non autorisé » ; user sans workspace → 403 « Contexte workspace requis ». Optimisé : lookup user seulement si route financière OU écriture.
+- **Helper** `_legacy_prefix_for_path(path)` ; réutilise `_normalized_role` (editor→user).
+- **Validé (curl)** : matrice READ+WRITE — admin=200 partout ; Julie (acct only) acct=200 / qc9434=403 (GET et POST) ; Marc (acct+qc9434)=200 partout ; routes NON-financières (employees/departments) inchangées ; scoping `/api/companies` intact ; 44/44 tests unitaires Phase 1 OK.
+- **Nettoyage** : suppression de l'artefact `tests/test_phase1_e2e_review.py` (test d'intégration généré par le testing agent, frappait le backend live et polluait la DB à chaque `pytest` — créait des mandats/désactivait des accès). DB remise propre : 3 users (admin/julie/marc), 2 sociétés, 0 mandat, 3 accès actifs, logs préservés.
+- **Reste (Phase 2 Financial Core)** : les routes legacy ciblent encore UNE société fixe par préfixe (`_company_id`) ; le vrai multi-société par route (sélecteur/param company_id) viendra avec la normalisation Financial Core.
