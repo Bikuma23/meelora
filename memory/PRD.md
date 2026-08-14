@@ -847,3 +847,16 @@ admin@accslegro.com/admin123 · julie@accslegro.com/julie123 (Meelora only) · m
 - **Validé (curl)** : matrice READ+WRITE — admin=200 partout ; Julie (acct only) acct=200 / qc9434=403 (GET et POST) ; Marc (acct+qc9434)=200 partout ; routes NON-financières (employees/departments) inchangées ; scoping `/api/companies` intact ; 44/44 tests unitaires Phase 1 OK.
 - **Nettoyage** : suppression de l'artefact `tests/test_phase1_e2e_review.py` (test d'intégration généré par le testing agent, frappait le backend live et polluait la DB à chaque `pytest` — créait des mandats/désactivait des accès). DB remise propre : 3 users (admin/julie/marc), 2 sociétés, 0 mandat, 3 accès actifs, logs préservés.
 - **Reste (Phase 2 Financial Core)** : les routes legacy ciblent encore UNE société fixe par préfixe (`_company_id`) ; le vrai multi-société par route (sélecteur/param company_id) viendra avec la normalisation Financial Core.
+
+## P1.11 — LEGACY FINANCIAL ACCESS HARDENING + Sign-off Phase 1 (2026-08-14) ✅ VALIDÉ (testing_agent iteration_50)
+Durcissement finalisé via le **helper centralisé** `require_company_access` (et non plus une requête inline).
+- **Middleware `write_guard`** (server.py) : pour `/api/acct/*` et `/api/qc9434/*` (toutes méthodes), `_company_id(legacy_prefix)` sert UNIQUEMENT de pont pour résoudre la société, puis `build_auth_user(user_doc, workspace_doc)` + `await require_company_access(db, company_id, auth_user)` ; `HTTPException`→`JSONResponse`. Admin bypass ; user non affecté→403 ; cross-workspace/inexistant→404 (via `require_same_workspace`, pas de fuite d'existence). Aucun moteur/collection/formule financière modifié.
+- **Fix log P1.9** : `POST /api/companies/import/commit` journalise désormais `company.created` par société importée, en plus de `mandate.created` (créé par le service) et `company.bulk_imported` (batch).
+- **Validation testing_agent (iteration_50, backend 87% — 5 mineurs hors périmètre)** :
+  - P1.11 : admin=200 ; Julie (acct only) acct=200/qc9434=403 (READ+WRITE) ; Marc=200 les deux ; **user non affecté=403 partout**. ✅
+  - Smoke financier admin (dashboard/kpis/pnl-monthly/cashflow ; qc9434 trial-balance/bilan/pnl/entries/invoices) = 200 non vides → **formules inchangées**. ✅
+  - P1.9 E2E COMMIT (code société unique) : preview valid=1 → commit created=1 → company + mandate actif (principal Julie, collab Marc) + company_access synchronisé + logs → **nettoyage ciblé** → baseline restaurée. Aucune donnée historique touchée. ✅
+- **Points mineurs relevés (informational, hors P1.11)** : pas d'endpoints DELETE companies/mandates (enhancement) ; DELETE user = soft-deactivate P1.7 (comportement voulu) ; `GET /users/{id}/company-access` [] = artefact transitoire du test (vérifié OK ensuite) ; `company.created` manquant à l'import = **corrigé**.
+- **Nettoyage post-tests** : dérive de données restaurée (société acct→"Meelora"/CA, users julie→"Julie Test", marc→"Marc Test") ; script one-off dans `/app/test_reports/scratch/` (PAS dans tests/, non collecté par pytest). Baseline finale : users=3, companies=2, mandates=0, active company_access=3, 44/44 tests unitaires.
+
+### ✅ PHASE 1 — FINAL SECURITY SIGN-OFF : APPROUVÉ. **STOP — Phase 2 en attente d'approbation explicite du client.**

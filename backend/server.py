@@ -32,7 +32,7 @@ from core.companies import CompanyCreate, CompanyUpdate, list_companies_for_user
 from core.mandates import MandateCreate, MandateUpdate, list_mandates_for_user, get_mandate_for_user, create_mandate_for_admin, update_mandate_for_admin
 from core.logs import write_log, list_logs_for_admin
 from core.access_management import UserCompanyAccessUpdate, list_user_company_access, replace_user_company_access
-from core.permissions import require_tenant_context
+from core.permissions import require_tenant_context, require_company_access
 from core.company_imports import preview_company_import, commit_company_import
 
 mongo_url = os.environ['MONGO_URL']
@@ -771,6 +771,13 @@ async def preview_companies_import(file: UploadFile = File(...), user: dict = De
 async def commit_companies_import(file: UploadFile = File(...), user: dict = Depends(require_admin)):
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm")): raise HTTPException(status_code=422, detail="Format attendu: .xlsx")
     result = await commit_company_import(db, user, await file.read())
+    # P1.9: journaliser chaque société créée (company.created) en plus de l'évènement batch.
+    for item in result.get("items", []):
+        company = item.get("company") or {}
+        await log_action(user, "create", "company", company.get("name") or company.get("legal_name", ""),
+                         details=f"Société créée via import: {company.get('id')}",
+                         company_id=company.get("id"), entity_id=company.get("id"),
+                         event_type="company.created")
     await log_action(user, "import", "company", file.filename, details=f"Import sociétés: {result['created']} créée(s)", event_type="company.bulk_imported")
     return result
 
@@ -6821,28 +6828,23 @@ async def write_guard(request: Request, call_next):
         except Exception:
             user_doc = None
 
-    # 1. Enforcement d'accès société sur les routes financières legacy (toutes méthodes).
-    #    L'autorité de sécurité est company_access ; l'admin accède à toutes les sociétés
-    #    de son workspace. On n'agit que si un utilisateur valide est identifié — sinon
-    #    la route renverra 401 via Depends(get_current_user).
+    # 1. P1.11 — Enforcement d'accès société sur les routes financières legacy (toutes méthodes).
+    #    Le legacy_prefix / _company_id sert UNIQUEMENT de pont pour résoudre la société ;
+    #    l'autorisation passe systématiquement par le helper centralisé require_company_access
+    #    (admin = toutes les sociétés du workspace ; cross-workspace/inexistant = 404 sans fuite).
+    #    On n'agit que si un utilisateur valide est identifié — sinon la route renverra 401.
     if legacy and user_doc is not None:
-        if _normalized_role(user_doc.get("role")) != "admin":
-            workspace_id = user_doc.get("workspace_id")
+        try:
+            company_id = await _company_id(legacy)
+        except Exception:
+            company_id = None
+        if company_id is not None:
+            workspace_doc = await load_workspace_for_user(db, user_doc)
+            auth_user = build_auth_user(user_doc, workspace_doc)
             try:
-                company_id = await _company_id(legacy)
-            except Exception:
-                company_id = None
-            if not workspace_id:
-                return JSONResponse(status_code=403, content={"detail": "Contexte workspace requis"})
-            if company_id is not None:
-                access = await db.company_access.find_one({
-                    "workspace_id": workspace_id,
-                    "company_id": company_id,
-                    "user_id": str(user_doc["_id"]),
-                    "active": True,
-                })
-                if not access:
-                    return JSONResponse(status_code=403, content={"detail": "Accès à cette société non autorisé"})
+                await require_company_access(db, company_id, auth_user)
+            except HTTPException as exc:
+                return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
     # 2. Garde d'écriture par rôle (comportement existant).
     if is_write and path not in WRITE_ALLOW_ALL:

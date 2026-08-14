@@ -1,0 +1,35 @@
+{
+  "summary": "P1.11 legacy financial access hardening + P1.9 Excel import COMMIT cycle validated end-to-end against the live backend. 34/39 assertions passed. P1.11 fully validated: admin bypass, Julie scoped to acct only (403 on qc9434), Marc access to both, unassigned temp user 403 on all /acct/* and /qc9434/*. Financial smoke unchanged (all 9 endpoints 200 + non-empty). P1.9 preview OK (valid=1, errors=0), commit OK (created=1) with company id cmp_... and mandate mnd_... created; company appears in GET /api/companies, mandate is active with Julie as principal_user_id and Marc in collaborator_user_ids (verified directly in DB), logs contain mandate.created and company.bulk_imported. Two verification gaps and one cleanup gap detected (see issues). Baseline fully restored to clean state via targeted DB cleanup (companies=2, mandates=0, users=3, active company_access=3).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "DELETE /api/companies/{id} and DELETE /api/mandates/{id}", "issue": "Not exposed (405/404). Admin cannot delete a company or mandate created by import via HTTP API — cleanup requires direct DB access. For a fiduciary workspace, an admin-only DELETE (or archive) endpoint would let ops undo an erroneous import."},
+      {"endpoint": "DELETE /api/users/{uid}", "issue": "Returned 200 but the user (temp-p111@accslegro.com) was NOT removed from the DB (still visible in GET /api/users afterwards). Either the endpoint is a soft-delete without hiding from the list, or the id shape passed did not match. Behaviour is inconsistent with a 200 response."},
+      {"endpoint": "GET /api/users/{julie_id}/company-access", "issue": "Returned an empty list even though DB clearly has the active row for Julie on the newly imported company. Endpoint appears to not return newly created access rows (missing join / stale filter). DB truth: Julie has active access on cmp_f893c... after commit."},
+      {"endpoint": "GET /api/logs", "issue": "mandate.created and company.bulk_imported events are present, but company.created event is NOT emitted during a fiduciary import commit. Expected all three per spec (company.created / mandate.created / company.bulk_imported)."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/test_reports/scratch/p111_p19_e2e.py"],
+  "action_items": [
+    "Emit a company.created log event inside commit_company_import when a new company is created (currently only mandate.created and company.bulk_imported are logged).",
+    "Fix GET /api/users/{uid}/company-access — it returned [] for Julie post-import even though DB row exists (active=true) on the new company.",
+    "Investigate DELETE /api/users/{uid}: returned 200 but the user document was not removed (still listed in GET /api/users). Either hard-delete or ensure list endpoint filters soft-deleted users.",
+    "Consider adding admin-only DELETE endpoints for /api/companies/{id} and /api/mandates/{id} (currently 405) to allow undoing an erroneous fiduciary import via the API rather than direct DB.",
+    "No changes required in P1.11 access-control middleware or in financial formulas — both validated."
+  ],
+  "critical_code_review_comments": [
+    "P1.11 middleware behaves correctly: admin bypass, unassigned user gets 403 on all legacy financial routes, per-company scoping (Julie 403 on qc9434) is enforced on both READ and WRITE (POST /qc9434/accounts).",
+    "Financial endpoints (acct dashboard/kpis/pnl-monthly/cashflow and qc9434 trial-balance/bilan/pnl/entries/invoices) all return 200 with non-empty payloads for 2026 — access-control refactor did not alter financial output.",
+    "commit_company_import correctly: creates the company (cmp_*), creates one active mandate (mnd_*) with the right principal/collaborator, and writes 2 active company_access rows (principal + collaborator) — verified directly in Mongo.",
+    "Logs pipeline emits mandate.created and company.bulk_imported but is missing company.created — inconsistent event coverage."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "87%", "frontend": "N/A (skipped per request)"},
+  "test_credentials": "admin@accslegro.com/admin123, julie@accslegro.com/julie123, marc@accslegro.com/marc123 (all working). Temp user temp-p111@accslegro.com/temp123 created for the unassigned-access test and cleaned up.",
+  "seed_data_creation": "None persisted. All test-created data (company cmp_f893c4035e6a4331b3240d898947665e, mandate mnd_7ff034feab274752af09c359512892f7, 2 company_access rows on that company, temp user temp-p111@accslegro.com) removed via targeted MongoDB deletes after tests. Post-cleanup baseline verified: companies=2 (Meelora, 9434-3977 QC inc.), mandates=0, users=3, active company_access=3 (Julie principal Meelora; Marc collaborator Meelora + principal 9434). No pytest file was left in /app/backend/tests/; the one-off script lives in /app/test_reports/scratch/p111_p19_e2e.py and does NOT run under pytest collection.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Do NOT move /app/test_reports/scratch/p111_p19_e2e.py into /app/backend/tests — it is destructive against the live DB (creates a company + mandate + temp user) and would pollute baseline on every pytest run. Run it manually only when re-validating P1.11+P1.9. Backend has NO DELETE endpoints for companies or mandates — cleanup must be done via direct Mongo (mongodb://localhost:27017 / test_database). Clean baseline: users=3, companies=2, mandates=0, active company_access=3.",
+  "rca of the issue": "The three non-blocking issues (missing company.created log, empty /users/{id}/company-access response, users DELETE returning 200 without removal) are independent of the P1.11 middleware change. The middleware itself and require_company_access enforcement are correct. Root cause of missing company.created log is that commit_company_import calls create_mandate_for_admin (which logs mandate.created) and emits company.bulk_imported at the batch level, but never emits a per-company company.created event — likely the log call was omitted when factoring the import flow."
+}
