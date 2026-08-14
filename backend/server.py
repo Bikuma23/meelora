@@ -61,6 +61,11 @@ from core.financial.data_imports import (
     preview_accounts_import, commit_accounts_import, list_imports, get_import,
     ensure_indexes as _ensure_data_import_indexes,
 )
+from core.financial.trial_balance import (
+    TBCommitRequest,
+    preview_trial_balance_import, commit_trial_balance_import, list_trial_balance,
+    ensure_indexes as _ensure_trial_balance_indexes,
+)
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -1076,6 +1081,67 @@ async def list_company_imports(company_id: str, data_type: Optional[str] = None,
 async def get_company_import(company_id: str, import_id: str, user: dict = Depends(get_current_user)):
     return await get_import(db, company_id, import_id, user)
 
+
+# ---------------------------------------------------------------------------
+# P2.5 — Normalized Trial Balance (trial_balance_lines) via data_imports lifecycle.
+# Structural TB import (preview/commit) = workspace admin only (aligné P2.4).
+# ---------------------------------------------------------------------------
+@api.post("/companies/{company_id}/imports/trial-balance/preview")
+async def preview_company_tb_import(company_id: str, financial_year_id: str = Form(...),
+                                    financial_period_id: str = Form(...),
+                                    source_type: str = Form("excel"),
+                                    file: UploadFile = File(...),
+                                    user: dict = Depends(require_admin)):
+    content = await file.read()
+    result = await preview_trial_balance_import(
+        db, company_id, user, content, file.filename or "trial_balance",
+        financial_year_id, financial_period_id, source_type)
+    ev = "trial_balance.validated" if result.get("status") == "valid" else "trial_balance.previewed"
+    await log_action(user, "preview", "trial_balance", result.get("id", ""),
+                     details=f"Aperçu balance: {result.get('counts')} · contrôles {result.get('controls')}",
+                     company_id=company_id, entity_id=result.get("id"), event_type=ev,
+                     metadata={"data_type": "trial_balance", "source_type": source_type,
+                               "financial_year_id": financial_year_id,
+                               "financial_period_id": financial_period_id,
+                               "controls": result.get("controls")})
+    if result.get("status") == "failed":
+        await log_action(user, "preview", "trial_balance", result.get("id", ""),
+                         details=f"Aperçu balance en échec: {result.get('error_summary')}",
+                         company_id=company_id, entity_id=result.get("id"),
+                         event_type="trial_balance.failed",
+                         metadata={"data_type": "trial_balance",
+                                   "financial_period_id": financial_period_id})
+    return result
+
+
+@api.post("/companies/{company_id}/imports/trial-balance/commit")
+async def commit_company_tb_import(company_id: str, payload: TBCommitRequest,
+                                   user: dict = Depends(require_admin)):
+    result = await commit_trial_balance_import(db, company_id, user, payload.import_id)
+    ev = {"completed": "trial_balance.completed",
+          "completed_with_warnings": "trial_balance.completed",
+          "failed": "trial_balance.failed"}.get(result.get("status"), "trial_balance.completed")
+    await log_action(user, "commit", "trial_balance", result.get("id", ""),
+                     details=f"Balance finalisée: {result.get('records_created')} ligne(s)",
+                     company_id=company_id, entity_id=result.get("id"), event_type=ev,
+                     metadata={"data_type": "trial_balance",
+                               "financial_year_id": result.get("financial_year_id"),
+                               "financial_period_id": result.get("financial_period_id"),
+                               "controls": result.get("controls")})
+    return result
+
+
+@api.get("/companies/{company_id}/trial-balance")
+async def get_company_trial_balance(company_id: str, financial_period_id: Optional[str] = None,
+                                    import_id: Optional[str] = None, account_id: Optional[str] = None,
+                                    user: dict = Depends(get_current_user)):
+    return await list_trial_balance(db, company_id, user, financial_period_id=financial_period_id,
+                                    import_id=import_id, account_id=account_id)
+
+
+@api.get("/companies/{company_id}/imports/{import_id}/trial-balance")
+async def get_import_trial_balance(company_id: str, import_id: str, user: dict = Depends(get_current_user)):
+    return await list_trial_balance(db, company_id, user, import_id=import_id)
 
 
 # ---------------------------------------------------------------------------
@@ -7202,6 +7268,7 @@ async def startup():
         await _ensure_account_indexes(db)
         await _ensure_membership_indexes(db)
         await _ensure_data_import_indexes(db)
+        await _ensure_trial_balance_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     try:

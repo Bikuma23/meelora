@@ -956,3 +956,20 @@ Sépare l'identité globale (users) de l'appartenance workspace et société.
 - [x] **Smoke live** : preview (codes `0090`/`7777` préservés, devise héritée CAD) → commit (2 créés, completed_with_warnings) → re-commit idempotent (`already_committed`) → historique 1 → accounts vérifiés ; imports/accounts de test supprimés (baseline propre : 0 account, 0 data_import).
 
 ### 🛑 P2.4 IMPLÉMENTÉ. STOP — NE PAS DÉMARRER P2.5 (Balance de vérification normalisée) avant approbation explicite du client.
+
+## P2.5 — Balance de vérification normalisée (trial_balance_lines) — 2026-08-14
+- [x] **Module** `core/financial/trial_balance.py` : couche normalisée `trial_balance_lines` bâtie sur le cycle de vie P2.4 (`data_imports`, data_type=`trial_balance`). Chaque import référence un exercice + une période et résout chaque `account_code` source contre le plan comptable normalisé P2.3 (jamais de création silencieuse).
+- [x] **Convention nette (jamais inversée par type de compte)** : `period_net = period_debit − period_credit` ; `ytd_net = ytd_debit − ytd_credit`. La présentation/solde normal reste au reporting futur.
+- [x] **Sources** : account_code (requis), account_name (opt.), period_debit/credit, period_net (opt., cohérence validée à ±0,01), ytd_debit/credit, ytd_net (opt., cohérence validée). YTD source préservé quand fourni ; net calculé si omis.
+- [x] **Contexte financier validé** : exercice appartient à la société, période appartient à l'exercice ET à la société (mismatch → 422 ; introuvable/cross-workspace → 404). Import lié à company/workspace.
+- [x] **Contrôles de balance** (bloquants par défaut) : period_total_debit/credit + period_difference ; ytd_total_debit/credit + ytd_difference ; tolérance 0,01. Une balance déséquilibrée n'est jamais importée silencieusement.
+- [x] **Doublons dans le fichier** : exact → warning + déduplication ; en conflit → erreur bloquante (préférence rejet vs agrégation cachée).
+- [x] **APIs** : `POST /api/companies/{id}/imports/trial-balance/preview` (multipart : file + financial_year_id + financial_period_id ; n'écrit **jamais** de lignes), `POST .../imports/trial-balance/commit`, `GET .../trial-balance?financial_period_id&import_id&account_id` (+ totaux de contrôle), `GET .../imports/{import_id}/trial-balance`.
+- [x] **Idempotence / versioning** : commit lié à `import_id` ; retry sur le même import → no-op (`already_committed`) ; **plusieurs versions par période autorisées** (chaque import commit crée son propre jeu de lignes ; lignée jamais écrasée). Pas de suppression physique.
+- [x] **Index** `trial_balance_lines` : (ws+company+period+import), UNIQUE (ws+company+import+account) — empêche les doublons intra-import sans bloquer les versions multiples —, (ws+company+period+account).
+- [x] **Sécurité P1.12** : preview/commit = workspace admin uniquement (aligné P2.4) ; lecture = membre société autorisé (dual-read) ; company-local admin ≠ import structurel ; platform_role sans membership → aucun accès ; cross-workspace 404. Pas de conversion FX.
+- [x] **Logs** : `trial_balance.previewed/validated/completed/failed` (workspace_id, company_id, financial_year_id, financial_period_id, import_id, acteur, totaux de contrôle).
+- [x] **Tests** : `test_p2_5_trial_balance.py` **34/34**. Suite in-memory permanente **194/194 verte** (Phase 1 + P1.11 + P1.12 + P2.1..P2.5).
+- [x] **Smoke live** : FY→périodes→comptes→preview (équilibré, contrôles OK)→commit (2 lignes)→re-commit idempotent→lecture avec totaux ; toutes les données de test supprimées (baseline propre). Legacy `acct` summary HTTP 200 ; aucune collection `acct_*`/`qc9434_*` touchée.
+
+### 🛑 P2.5 IMPLÉMENTÉ. STOP — NE PAS DÉMARRER P2.6 (Journal / Transactions normalisés) avant approbation explicite du client.
