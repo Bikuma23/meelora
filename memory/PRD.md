@@ -750,3 +750,10 @@ Basée sur « Facturation - Frais de gestion 2021 Commandité.xlsx » + import d
 - [x] **Vérifié** : testing_agent iteration_44 = **100% frontend**, aucune régression (11 items de nav, sélecteur société, cartes KPI, tableaux, format québécois, graphiques recolorés).
 - [ ] **En attente utilisateur** : PNG officiel du logo Meelora à intégrer (logo SVG provisoire fidèle à la charte en place, `data-testid='brand-logo'`).
 
+
+## Finalisation Meelora — Logo officiel + PDF + Thème sombre (2026-08-14)
+- [x] **Logo officiel PNG intégré** : fichier fourni par l'utilisateur (webp transparent 2000×667) traité via Pillow → variantes générées dans `frontend/public/` : `meelora-logo.png` (mark+wordmark sans tagline), `meelora-mark.png` (icône M), `meelora-logo-full.png` (avec tagline), `favicon.png` (64px), `logo192.png`. Copies aplaties blanc dans `backend/assets/` pour les PDF. Composant `MeeloraLogo` bascule sur `<img>`. Login (carte blanche + logo full / mobile), sidebar, footer (mark), favicon + apple-touch-icon dans `index.html`. Vérifié : images chargées (naturalWidth>0).
+- [x] **Rapports PDF — logo + palette Meelora** : `presentation_reports.py` palette mise à jour (NAVY #0F172A, TEAL→GREEN #22C55E, ORANGE→AMBER #FBBF24, GREY #F3F4F6, LIGHTGREEN→MINT #A7F3DD) + helper `_logo()`. `server.py` : recolor backend (#0E1526/#14B8A6/#0E9488/#F59E0B/#063044 → palette Meelora) + helper module `_pdf_logo()` inséré dans TOUS les générateurs PDF : budget, fiche employé, fiches, gestionnaire, acct (résultats/bilan/cashflow), qc (journal, bilan/pnl, relevé client, facture, états financiers). Vérifié curl : qc bilan (270KB), qc journal, acct bilan (280KB) = PDF valides avec logo.
+- [x] **Thème sombre adapté Meelora** (`index.css`) : fond navy #0F172A, cartes #16233A / bordures #243B5A, accents Mint→vert translucide, focus-ring + `--ring` (clair & sombre) passés en vert `142 71% 45%`. Boutons/accents restent verts #22C55E. Vérifié : bascule `.dark`, aucun texte illisible.
+- [x] **Vérifié** : testing_agent iteration_45 = **100% frontend** (6/6 critères), aucune régression.
+

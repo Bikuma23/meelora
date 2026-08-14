@@ -49,6 +49,23 @@ async def _company_id(legacy_prefix: str) -> str:
         _company_id_cache[legacy_prefix] = doc["id"]
     return _company_id_cache[legacy_prefix]
 
+
+def _pdf_logo(width_mm=38):
+    """Logo Meelora (sans tagline) pour les en-têtes PDF (reportlab)."""
+    try:
+        import os as _os
+        from reportlab.platypus import Image as _RLImage
+        from reportlab.lib.units import mm as _mm
+        p = _os.path.join(_os.path.dirname(__file__), "assets", "meelora-logo.png")
+        img = _RLImage(p)
+        img.drawWidth = width_mm * _mm
+        img.drawHeight = width_mm * _mm * img.imageHeight / img.imageWidth
+        img.hAlign = "LEFT"
+        return img
+    except Exception:
+        from reportlab.platypus import Spacer as _Spacer
+        return _Spacer(1, 0)
+
 app = FastAPI(title="Budget Salaires Pro")
 api = APIRouter(prefix="/api")
 
@@ -575,11 +592,11 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
     bt = totals["budget_total"] or 1
     decomposition = [
         {"label": "Salaire", "value": totals["salaire_base"], "pct": round(totals["salaire_base"] / bt * 100, 1), "color": "#2563EB"},
-        {"label": "Vacances", "value": totals["vacances"], "pct": round(totals["vacances"] / bt * 100, 1), "color": "#14B8A6"},
-        {"label": "Primes & Boni", "value": totals["primes"], "pct": round(totals["primes"] / bt * 100, 1), "color": "#F59E0B"},
+        {"label": "Vacances", "value": totals["vacances"], "pct": round(totals["vacances"] / bt * 100, 1), "color": "#22C55E"},
+        {"label": "Primes & Boni", "value": totals["primes"], "pct": round(totals["primes"] / bt * 100, 1), "color": "#FBBF24"},
         {"label": "Avantages soc.", "value": totals["avantages"], "pct": round(totals["avantages"] / bt * 100, 1), "color": "#8B5CF6"},
         {"label": "CSST", "value": totals["csst"], "pct": round(totals["csst"] / bt * 100, 1), "color": "#EF4444"},
-        {"label": "RPDB (REER)", "value": totals["reer"], "pct": round(totals["reer"] / bt * 100, 1), "color": "#14B8A6"},
+        {"label": "RPDB (REER)", "value": totals["reer"], "pct": round(totals["reer"] / bt * 100, 1), "color": "#22C55E"},
     ]
     top5 = sorted(lines, key=lambda x: -x["total_budgeted"])[:5]
     top5 = [{"name": l["name"], "title": l["title"], "department": l["department"],
@@ -1493,11 +1510,11 @@ def build_budget_pdf(data, year, dept_label):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=18 * mm, bottomMargin=15 * mm, leftMargin=15 * mm, rightMargin=15 * mm)
     styles = getSampleStyleSheet()
-    NAVY = colors.HexColor("#0E1526"); TEAL = colors.HexColor("#14B8A6")
+    NAVY = colors.HexColor("#0F172A"); TEAL = colors.HexColor("#22C55E")
     h = ParagraphStyle("h", parent=styles["Title"], textColor=NAVY, fontSize=18)
     sub = ParagraphStyle("sub", parent=styles["Normal"], textColor=colors.HexColor("#64748B"), fontSize=9)
     sec = ParagraphStyle("sec", parent=styles["Heading2"], textColor=NAVY, fontSize=12, spaceBefore=10)
-    el = [Paragraph(f"Rapport budgétaire {year}", h),
+    el = [_pdf_logo(38), Spacer(1, 3 * mm), Paragraph(f"Rapport budgétaire {year}", h),
           Paragraph(f"{dept_label} · généré le {datetime.now().strftime('%Y-%m-%d %H:%M')}", sub), Spacer(1, 8)]
     k = data["kpis"]; t = data["totals"]
     kpi_tbl = Table([["Effectif", "Masse salariale", "Budget global", "Salaire moyen"],
@@ -1540,12 +1557,12 @@ def build_employee_fiche_pdf(ln, year, scenario_label):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=18 * mm, bottomMargin=15 * mm, leftMargin=18 * mm, rightMargin=18 * mm)
     styles = getSampleStyleSheet()
-    NAVY = colors.HexColor("#0E1526"); TEAL = colors.HexColor("#14B8A6")
+    NAVY = colors.HexColor("#0F172A"); TEAL = colors.HexColor("#22C55E")
     h = ParagraphStyle("h", parent=styles["Title"], textColor=NAVY, fontSize=17)
     sub = ParagraphStyle("sub", parent=styles["Normal"], textColor=colors.HexColor("#64748B"), fontSize=9)
     sec = ParagraphStyle("sec", parent=styles["Heading2"], textColor=NAVY, fontSize=11, spaceBefore=10)
     ccq = ln["is_ccq"]
-    el = [Paragraph(f"{ln['name']} — #{str(ln['employee_number']).zfill(3)}", h),
+    el = [_pdf_logo(38), Spacer(1, 3 * mm), Paragraph(f"{ln['name']} — #{str(ln['employee_number']).zfill(3)}", h),
           Paragraph(f"{scenario_label} {year} · {ln['employment_type']} · {ln['department_label']} · généré le {datetime.now().strftime('%Y-%m-%d %H:%M')}", sub), Spacer(1, 8)]
 
     def block(title, rows, color):
@@ -1578,7 +1595,7 @@ def build_employee_fiche_pdf(ln, year, scenario_label):
     charges.append(["Total avantages sociaux", _money(ln["avantages"])])
 
     el += [block("Salaire", salaire, NAVY), Spacer(1, 6),
-           block("Primes & rémunération additionnelle", primes, colors.HexColor("#F59E0B")), Spacer(1, 6),
+           block("Primes & rémunération additionnelle", primes, colors.HexColor("#FBBF24")), Spacer(1, 6),
            block("Cotisations & avantages (max. assurables)", charges, colors.HexColor("#8B5CF6")), Spacer(1, 10)]
     tot = Table([["MASSE SALARIALE TOTALE", _money(ln["total_cost"])]], colWidths=[100 * mm, 60 * mm])
     tot.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), NAVY), ("TEXTCOLOR", (0, 0), (0, -1), colors.white),
@@ -1638,11 +1655,11 @@ def build_fiches_pdf(data, year, scenario_label, scope):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=14 * mm, bottomMargin=12 * mm, leftMargin=12 * mm, rightMargin=12 * mm)
     styles = getSampleStyleSheet()
-    NAVY = colors.HexColor("#0E1526"); TEAL = colors.HexColor("#14B8A6")
+    NAVY = colors.HexColor("#0F172A"); TEAL = colors.HexColor("#22C55E")
     h = ParagraphStyle("h", parent=styles["Title"], textColor=NAVY, fontSize=16)
     sub = ParagraphStyle("sub", parent=styles["Normal"], textColor=colors.HexColor("#64748B"), fontSize=9)
     sec = ParagraphStyle("sec", parent=styles["Heading2"], textColor=NAVY, fontSize=11, spaceBefore=8)
-    el = [Paragraph(f"Fiches détaillées — {scenario_label} {year}", h),
+    el = [_pdf_logo(38), Spacer(1, 3 * mm), Paragraph(f"Fiches détaillées — {scenario_label} {year}", h),
           Paragraph(f"{scope} · généré le {datetime.now().strftime('%Y-%m-%d %H:%M')}", sub), Spacer(1, 6)]
     widths = [12 * mm, 46 * mm, 24 * mm, 24 * mm, 14 * mm, 26 * mm, 22 * mm, 22 * mm, 24 * mm, 20 * mm, 20 * mm, 20 * mm, 26 * mm]
     num_keys = ["base_salary", "new_salary", "vacation", "primes_total", "avantages", "csst", "reer", "assurance", "total_cost"]
@@ -2934,14 +2951,14 @@ def _build_manager_pdf(data):
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    NAVY = colors.HexColor("#063044"); GREY = colors.HexColor("#EEF1F5"); RED = colors.HexColor("#DC2626")
+    NAVY = colors.HexColor("#0F172A"); GREY = colors.HexColor("#EEF1F5"); RED = colors.HexColor("#DC2626")
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=14 * mm, rightMargin=14 * mm, topMargin=14 * mm, bottomMargin=12 * mm)
     styles = getSampleStyleSheet()
     h = ParagraphStyle("h", parent=styles["Title"], fontSize=15, textColor=NAVY, spaceAfter=2)
     sub = ParagraphStyle("sub", parent=styles["Normal"], fontSize=9, textColor=colors.HexColor("#64748B"))
     cellS = ParagraphStyle("cell", parent=styles["Normal"], fontSize=8, leading=10)
-    elems = [Paragraph(f"Suivi Budget frais d'exploitation - {data['manager']['name']}", h)]
+    elems = [_pdf_logo(38), Spacer(1, 3 * mm), Paragraph(f"Suivi Budget frais d'exploitation - {data['manager']['name']}", h)]
     prov = "" if data["locked"] else " · données provisoires"
     elems.append(Paragraph(f"Réel {data['month_label']} {data['year']} (Cumulatif) · Budget {data['rev_label']}{prov}", sub))
     elems.append(Spacer(1, 6 * mm))
@@ -3754,7 +3771,7 @@ def _row_view_style(ln, bold_totals=True):
     elif st.get("c"):
         color = st["c"]
     elif ln["kind"] == "header":
-        color = "#063044"
+        color = "#0F172A"
     else:
         color = None
     color = color[-6:].upper() if color else None
@@ -4100,7 +4117,7 @@ def _acct_pdf(rep):
     }
     if rep["kind"] == "bilan":
         col_labels["cumulatif"] = "Cumulatif"
-    NAVY = colors.HexColor("#063044"); RED = colors.HexColor("#DC2626")
+    NAVY = colors.HexColor("#0F172A"); RED = colors.HexColor("#DC2626")
     styles = getSampleStyleSheet()
     title = ParagraphStyle("t", parent=styles["Title"], textColor=NAVY, fontSize=13)
     sub = ParagraphStyle("s", parent=styles["Normal"], textColor=colors.HexColor("#64748B"), fontSize=8)
@@ -4149,7 +4166,7 @@ def _acct_pdf(rep):
             ("LINEBELOW", (0, 0), (-1, 0), 0.4, grid),
         ] + span_ops
     bold_totals = "sommaire" not in rep["kind"]
-    GREEN = colors.HexColor("#0E9488")
+    GREEN = colors.HexColor("#22C55E")
     for ln in rep["lines"]:
         ri = len(data)
         vs = _row_view_style(ln, bold_totals)
@@ -4210,6 +4227,7 @@ def _acct_pdf(rep):
     el.append(tbl)
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=10 * mm, bottomMargin=8 * mm, leftMargin=8 * mm, rightMargin=8 * mm)
+    el.insert(0, _pdf_logo(38)); el.insert(1, Spacer(1, 3 * mm))
     doc.build(el)
     buf.seek(0)
     return buf
@@ -4220,7 +4238,7 @@ def _bilan_sommaire_pdf(rep):
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    NAVY = colors.HexColor("#063044"); RED = colors.HexColor("#DC2626")
+    NAVY = colors.HexColor("#0F172A"); RED = colors.HexColor("#DC2626")
     styles = getSampleStyleSheet()
     title = ParagraphStyle("t", parent=styles["Title"], textColor=NAVY, fontSize=13)
     sub = ParagraphStyle("s", parent=styles["Normal"], textColor=colors.HexColor("#64748B"), fontSize=8)
@@ -4269,6 +4287,7 @@ def _bilan_sommaire_pdf(rep):
     el.append(tbl)
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=12 * mm, bottomMargin=10 * mm, leftMargin=8 * mm, rightMargin=8 * mm)
+    el.insert(0, _pdf_logo(38)); el.insert(1, Spacer(1, 3 * mm))
     doc.build(el)
     buf.seek(0)
     return buf
@@ -4279,7 +4298,7 @@ def _cashflow_pdf(rep):
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    NAVY = colors.HexColor("#063044"); RED = colors.HexColor("#DC2626")
+    NAVY = colors.HexColor("#0F172A"); RED = colors.HexColor("#DC2626")
     styles = getSampleStyleSheet()
     title = ParagraphStyle("t", parent=styles["Title"], textColor=NAVY, fontSize=13)
     sub = ParagraphStyle("s", parent=styles["Normal"], textColor=colors.HexColor("#64748B"), fontSize=8)
@@ -4340,6 +4359,7 @@ def _cashflow_pdf(rep):
     el.append(tbl)
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=14 * mm, bottomMargin=12 * mm, leftMargin=15 * mm, rightMargin=15 * mm)
+    el.insert(0, _pdf_logo(38)); el.insert(1, Spacer(1, 3 * mm))
     doc.build(el)
     buf.seek(0)
     return buf
@@ -5164,7 +5184,7 @@ async def qc_journal_pdf(year: int, user: dict = Depends(get_current_user)):
     docs = await db.qc9434_entries.find({"year": int(year), "company_id": await _company_id("qc9434")}).sort([("date", 1), ("created_at", 1)]).to_list(50000)
     styles = getSampleStyleSheet()
     small = ParagraphStyle("s", parent=styles["Normal"], fontSize=7.5, leading=9)
-    NAVY = colors.HexColor("#063044"); GREY = colors.HexColor("#E9EDEF")
+    NAVY = colors.HexColor("#0F172A"); GREY = colors.HexColor("#E9EDEF")
     rows = [["Date", "Réf.", "Compte", "Libellé / Description", "Tiers", "Débit", "Crédit"]]
     style = [("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
              ("FONTSIZE", (0, 0), (-1, -1), 7.5), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
@@ -5233,7 +5253,7 @@ def _qc_report_pdf(rep, title, year):
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    NAVY = colors.HexColor("#063044"); TEAL = colors.HexColor("#0E9488")
+    NAVY = colors.HexColor("#0F172A"); TEAL = colors.HexColor("#22C55E")
     styles = getSampleStyleSheet()
     is_bilan = "cumulative" in rep.get("cols", [])
     cols = ([("movement", "Exercice"), ("opening", "Antérieur"), ("cumulative", "Cumulatif")]
@@ -5268,7 +5288,7 @@ def _qc_report_pdf(rep, title, year):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=10 * mm)
     hS = ParagraphStyle("h", parent=styles["Normal"], fontSize=13, fontName="Helvetica-Bold", textColor=NAVY)
-    doc.build([Paragraph("9434-3977 QUÉBEC INC - COMMANDITÉ", hS),
+    doc.build([_pdf_logo(38), Spacer(1, 3 * mm), Paragraph("9434-3977 QUÉBEC INC - COMMANDITÉ", hS),
                Paragraph(f"{title} — Exercice {year}", ParagraphStyle("s", parent=styles["Normal"], fontSize=9)),
                Spacer(1, 4 * mm), tbl])
     buf.seek(0)
@@ -5533,14 +5553,14 @@ async def qc_client_statement_pdf(cid: str, year: Optional[int] = None, user: di
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    NAVY = colors.HexColor("#063044"); VIOLET = colors.HexColor("#7C3AED"); styles = getSampleStyleSheet()
+    NAVY = colors.HexColor("#0F172A"); VIOLET = colors.HexColor("#7C3AED"); styles = getSampleStyleSheet()
     H = ParagraphStyle("h", parent=styles["Normal"], fontSize=15, fontName="Helvetica-Bold", textColor=NAVY)
     N = ParagraphStyle("n", parent=styles["Normal"], fontSize=9, leading=12)
     B = ParagraphStyle("b", parent=styles["Normal"], fontSize=9, leading=12, fontName="Helvetica-Bold")
     cl = data["client"]
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=16 * mm, bottomMargin=16 * mm)
-    el = [Paragraph("9434-3977 QUÉBEC INC.", H), Spacer(1, 1 * mm),
+    el = [_pdf_logo(38), Spacer(1, 3 * mm), Paragraph("9434-3977 QUÉBEC INC.", H), Spacer(1, 1 * mm),
           Paragraph("RELEVÉ DE COMPTE" + (f" — Exercice {data['year']}" if data["year"] else ""), B), Spacer(1, 4 * mm)]
     who = cl["name"]
     if cl.get("att"): who += f"<br/>Att : {cl['att']}"
@@ -5762,13 +5782,13 @@ async def qc_invoice_pdf(iid: str, user: dict = Depends(get_current_user)):
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    NAVY = colors.HexColor("#063044"); styles = getSampleStyleSheet()
+    NAVY = colors.HexColor("#0F172A"); styles = getSampleStyleSheet()
     H = ParagraphStyle("h", parent=styles["Normal"], fontSize=16, fontName="Helvetica-Bold", textColor=NAVY)
     N = ParagraphStyle("n", parent=styles["Normal"], fontSize=9, leading=12)
     B = ParagraphStyle("b", parent=styles["Normal"], fontSize=9, leading=12, fontName="Helvetica-Bold")
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=18 * mm, bottomMargin=18 * mm)
-    el = [Paragraph("9434-3977 QUÉBEC INC.", H), Spacer(1, 2 * mm)]
+    el = [_pdf_logo(38), Spacer(1, 3 * mm), Paragraph("9434-3977 QUÉBEC INC.", H), Spacer(1, 2 * mm)]
     meta = Table([[Paragraph("<b>FACTURE</b>", B), Paragraph(f"Facture No : <b>{inv['number']}</b>", N)],
                   ["", Paragraph(f"Date : {inv.get('date','')}", N)],
                   ["", Paragraph(f"Échéance : {inv.get('due_date','') or '—'}", N)]], colWidths=[95 * mm, 75 * mm])
@@ -6247,7 +6267,7 @@ def _qc_ef_pdf(ef):
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    NAVY = colors.HexColor("#063044"); y = ef["year"]; c = ef["cur"]; p = ef["prev"]; b = ef["bilan"]; bn = ef["bnr"]
+    NAVY = colors.HexColor("#0F172A"); y = ef["year"]; c = ef["cur"]; p = ef["prev"]; b = ef["bilan"]; bn = ef["bnr"]
     styles = getSampleStyleSheet()
     TITLE = ParagraphStyle("t", parent=styles["Normal"], fontSize=14, fontName="Helvetica-Bold", textColor=NAVY, alignment=1)
     SUB = ParagraphStyle("s", parent=styles["Normal"], fontSize=9, alignment=1, textColor=colors.grey)
@@ -6261,7 +6281,7 @@ def _qc_ef_pdf(ef):
         st = [("FONTSIZE", (0, 0), (-1, -1), 9), ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
               ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]
         return t, st
-    el = [Spacer(1, 40 * mm), Paragraph("9434-3977 QUÉBEC INC. - COMMANDITÉ", TITLE), Spacer(1, 6 * mm),
+    el = [_pdf_logo(52), Spacer(1, 22 * mm), Paragraph("9434-3977 QUÉBEC INC. - COMMANDITÉ", TITLE), Spacer(1, 6 * mm),
           Paragraph("ÉTATS FINANCIERS (non-audités)", H), Paragraph(f"31 décembre {y}", SUB), PageBreak()]
     el += [Paragraph("9434-3977 QUÉBEC INC. - COMMANDITÉ", H), Spacer(1, 2 * mm),
            Paragraph("ÉTAT DES RÉSULTATS ET DES BÉNÉFICES NON-RÉPARTIS", H),

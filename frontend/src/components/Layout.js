@@ -65,15 +65,15 @@ const NAV_BOTTOM = [
   { key: "journal", label: "Journal", sub: "Historique des modifications", icon: ScrollText },
 ];
 
-export function MeeloraLogo({ compact = false }) {
+export function MeeloraLogo({ compact = false, className = "" }) {
   return (
-    <span className="flex items-center gap-2" data-testid="brand-logo">
-      <svg width="34" height="34" viewBox="0 0 48 48" fill="none" aria-label="Meelora">
-        <path d="M8 40V15c0-3.2 3.8-4.9 6.1-2.7L24 21l9.9-8.7C36.2 10.1 40 11.8 40 15v25" stroke="#22C55E" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx="33.5" cy="33.5" r="5.5" fill="#FBBF24" />
-      </svg>
-      {!compact && <span className="font-display text-2xl font-900 lowercase tracking-tight text-[#0F172A]">meelora</span>}
-    </span>
+    <img
+      src={compact ? "/meelora-mark.png" : "/meelora-logo.png"}
+      alt="Meelora"
+      data-testid="brand-logo"
+      draggable={false}
+      className={`${compact ? "h-7" : "h-8"} w-auto select-none ${className}`}
+    />
   );
 }
 

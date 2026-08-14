@@ -60,16 +60,16 @@ input, button, select, textarea, table, th, td { font-family: "Satoshi", "Segoe 
 .card { background:#fff; border:1px solid #E8ECF1; border-radius:16px; box-shadow:0 2px 12px rgba(15,41,47,.05); transition: box-shadow .2s ease, transform .2s ease; }
 .card-hover:hover { box-shadow:0 10px 30px rgba(15,41,47,.10); transform: translateY(-2px); }
 
-*:focus-visible { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(21,175,151,.55); border-radius: 8px; }
+*:focus-visible { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(34,197,94,.55); border-radius: 8px; }
 
-/* ---- Thème sombre (par utilisateur) ---- */
-.dark body { background-color:#0B1120; color:#E2E8F0; }
-.dark .card { background:#111827; border-color:#1F2937; box-shadow:none; }
-.dark .bg-white { background-color:#111827 !important; }
+/* ---- Thème sombre (par utilisateur) — palette Meelora (navy #0F172A + vert #22C55E) ---- */
+.dark body { background-color:#0F172A; color:#E2E8F0; }
+.dark .card { background:#16233A; border-color:#243B5A; box-shadow:none; }
+.dark .bg-white { background-color:#16233A !important; }
 .dark .bg-slate-50 { background-color:#0F172A !important; }
-.dark .bg-slate-100 { background-color:#1E293B !important; }
-.dark .bg-\[\#F1F5F9\] { background-color:#0B1120 !important; }
-.dark .bg-\[\#F1F5F9\]\/90 { background-color:rgba(11,17,32,.9) !important; }
+.dark .bg-slate-100 { background-color:#1E2C48 !important; }
+.dark .bg-\[\#F1F5F9\] { background-color:#0F172A !important; }
+.dark .bg-\[\#F1F5F9\]\/90 { background-color:rgba(15,23,42,.9) !important; }
 .dark .text-slate-800 { color:#F1F5F9 !important; }
 .dark .text-slate-700 { color:#E2E8F0 !important; }
 .dark .text-slate-600 { color:#CBD5E1 !important; }
@@ -84,11 +84,14 @@ input, button, select, textarea, table, th, td { font-family: "Satoshi", "Segoe 
 .dark .hover\:bg-slate-50:hover { background-color:#1E293B !important; }
 .dark .hover\:bg-slate-100:hover { background-color:#243044 !important; }
 /* Refonte : classes arbitraires à adapter au thème sombre */
-.dark .bg-\[\#F3F4F6\] { background-color:#0B1120 !important; }
-.dark .bg-white\/80 { background-color:rgba(17,24,39,.85) !important; }
-.dark .bg-white\/70 { background-color:rgba(17,24,39,.8) !important; }
+.dark .bg-\[\#F3F4F6\] { background-color:#0F172A !important; }
+.dark .bg-white\/80 { background-color:rgba(22,35,58,.85) !important; }
+.dark .bg-white\/70 { background-color:rgba(22,35,58,.8) !important; }
 .dark .text-\[\#0F172A\] { color:#E2E8F0 !important; }
-.dark .bg-\[\#eef1f5\] { background-color:#243044 !important; }
+.dark .bg-\[\#eef1f5\] { background-color:#1E2C48 !important; }
+/* Accents Mint en sombre → vert translucide */
+.dark .bg-\[\#A7F3DD\]\/40 { background-color:rgba(34,197,94,.18) !important; }
+.dark .bg-\[\#A7F3DD\]\/25 { background-color:rgba(34,197,94,.12) !important; }
 
 @layer base {
   :root {
@@ -100,7 +103,7 @@ input, button, select, textarea, table, th, td { font-family: "Satoshi", "Segoe 
     --muted: 210 40% 96%; --muted-foreground: 215 16% 47%;
     --accent: 210 40% 96%; --accent-foreground: 222 47% 11%;
     --destructive: 0 84% 60%; --destructive-foreground: 0 0% 98%;
-    --border: 214 32% 91%; --input: 214 32% 91%; --ring: 173 80% 40%;
+    --border: 214 32% 91%; --input: 214 32% 91%; --ring: 142 71% 45%;
     --radius: 0.6rem;
   }
   .dark {
@@ -112,7 +115,7 @@ input, button, select, textarea, table, th, td { font-family: "Satoshi", "Segoe 
     --muted: 217 33% 18%; --muted-foreground: 215 20% 65%;
     --accent: 217 33% 20%; --accent-foreground: 210 40% 96%;
     --destructive: 0 63% 45%; --destructive-foreground: 0 0% 98%;
-    --border: 217 33% 20%; --input: 217 33% 22%; --ring: 173 80% 40%;
+    --border: 217 33% 20%; --input: 217 33% 22%; --ring: 142 71% 45%;
   }
 }
 @layer base { * { @apply border-border; } }

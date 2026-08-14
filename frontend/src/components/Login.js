@@ -42,12 +42,8 @@ export default function Login() {
           style={{ backgroundImage: "url('https://images.unsplash.com/photo-1599398766380-23b3144142c7?crop=entropy&cs=srgb&fm=jpg&q=85&w=1400')" }}
         />
         <div className="absolute inset-0 bg-[#0F172A]/85" />
-        <div className="relative z-10 flex items-center gap-3">
-          <svg width="42" height="42" viewBox="0 0 48 48" fill="none"><path d="M8 40V15c0-3.2 3.8-4.9 6.1-2.7L24 21l9.9-8.7C36.2 10.1 40 11.8 40 15v25" stroke="#22C55E" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"/><circle cx="33.5" cy="33.5" r="5.5" fill="#FBBF24"/></svg>
-          <div>
-            <h1 className="font-display text-2xl font-900 lowercase leading-none text-white">meelora</h1>
-            <p className="overline text-[#FBBF24]">Votre entreprise, clairement.</p>
-          </div>
+        <div className="relative z-10 inline-flex items-center rounded-2xl bg-white px-5 py-4 shadow-lg" data-testid="login-brand">
+          <img src="/meelora-logo-full.png" alt="Meelora — Votre entreprise, clairement." className="h-16 w-auto" />
         </div>
 
         <div className="relative z-10">
@@ -73,12 +69,8 @@ export default function Login() {
       {/* Formulaire */}
       <div className="flex w-full items-center justify-center p-6 lg:w-1/2">
         <div className="w-full max-w-md">
-          <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <svg width="40" height="40" viewBox="0 0 48 48" fill="none"><path d="M8 40V15c0-3.2 3.8-4.9 6.1-2.7L24 21l9.9-8.7C36.2 10.1 40 11.8 40 15v25" stroke="#22C55E" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"/><circle cx="33.5" cy="33.5" r="5.5" fill="#FBBF24"/></svg>
-            <div>
-              <h1 className="font-display text-2xl font-900 lowercase leading-none text-[#0F172A]">meelora</h1>
-              <p className="overline text-[#22C55E]">Votre entreprise, clairement.</p>
-            </div>
+          <div className="mb-8 flex items-center lg:hidden">
+            <img src="/meelora-logo.png" alt="Meelora" className="h-9 w-auto" />
           </div>
           <form onSubmit={submit} className="card p-8" data-testid="login-form">
             <p className="overline mb-2">{t("Espace sécurisé")}</p>

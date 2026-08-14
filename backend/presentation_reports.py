@@ -3,20 +3,36 @@ Reproduit la mise en page des modèles fournis (bandeaux marine, surlignage sarc
 % en sarcelle italique, colonnes mois + cumulatif + budget annuel).
 Le logo sera ajouté dans une phase ultérieure (non intégré pour l'instant)."""
 import io
+import os
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import mm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-NAVY = colors.HexColor("#0B3B4A")
-TEAL = colors.HexColor("#1AA79A")
-GREY = colors.HexColor("#E9EDEF")
-LIGHTGREEN = colors.HexColor("#EAF1DE")
-ORANGE = colors.HexColor("#C6862C")
+NAVY = colors.HexColor("#0F172A")
+TEAL = colors.HexColor("#22C55E")
+GREY = colors.HexColor("#F3F4F6")
+LIGHTGREEN = colors.HexColor("#A7F3DD")
+ORANGE = colors.HexColor("#FBBF24")
 RED = colors.HexColor("#C00000")
 WHITE = colors.white
-DARKTX = colors.HexColor("#1e293b")
+DARKTX = colors.HexColor("#0F172A")
+
+LOGO_PATH = os.path.join(os.path.dirname(__file__), "assets", "meelora-logo.png")
+
+
+def _logo(width_mm=40):
+    """Logo Meelora (sans tagline) redimensionné en largeur pour l'en-tête PDF."""
+    try:
+        img = RLImage(LOGO_PATH)
+        w = width_mm * mm
+        img.drawHeight = w * img.imageHeight / img.imageWidth
+        img.drawWidth = w
+        img.hAlign = "LEFT"
+        return img
+    except Exception:
+        return Spacer(1, 0)
 
 
 def _fmt(v, dec=0):
@@ -191,7 +207,7 @@ def build_presentation_pnl_pdf(data, year, month_label):
          Paragraph(f"{data.get('month_label','').upper()} {year}", dateS), Paragraph("En dollars canadiens (CAD)", subS)],
         Paragraph("CONFIDENTIEL", confS)]], colWidths=[210 * mm, 60 * mm])
     header_tbl.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    doc.build([header_tbl, Spacer(1, 2.5 * mm), tbl])
+    doc.build([_logo(42), Spacer(1, 2 * mm), header_tbl, Spacer(1, 2.5 * mm), tbl])
     buf.seek(0)
     return buf.getvalue()
 
@@ -305,6 +321,7 @@ def build_presentation_bilan_pdf(data, year, month_label, date_label):
     subS = ParagraphStyle("s", parent=styles["Normal"], fontSize=8, textColor=DARKTX)
     dateS = ParagraphStyle("d", parent=styles["Normal"], fontSize=8, textColor=ORANGE, fontName="Helvetica-Bold")
     elems = [
+        _logo(40), Spacer(1, 2 * mm),
         Paragraph("SOCIÉTÉ EN COMMANDITE ACCS", hS),
         Paragraph("BILAN À CE JOUR", subS),
         Paragraph(f"EN DATE DU {date_label.upper()}", dateS),
