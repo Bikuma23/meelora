@@ -4,8 +4,8 @@ import { useLang } from "../context/LanguageContext";
 import { ScrollText, Plus, Pencil, Trash2, Download } from "lucide-react";
 
 const ACTION_STYLE = {
-  "Créer": { bg: "#F8A9421a", color: "#0E9488", icon: Plus },
-  "Modifier": { bg: "#0630441a", color: "#063044", icon: Pencil },
+  "Créer": { bg: "#FBBF241a", color: "#22C55E", icon: Plus },
+  "Modifier": { bg: "#0F172A1a", color: "#0F172A", icon: Pencil },
   "Supprimer": { bg: "#EF44441a", color: "#EF4444", icon: Trash2 },
 };
 
@@ -45,17 +45,17 @@ export default function Journal() {
         <p className="text-sm text-slate-500"><b className="text-slate-800">{filtered.length}</b> {t("modification(s) enregistrée(s)")}{(entityFilter || userFilter) ? ` / ${entries.length}` : ""}</p>
         <div className="flex flex-wrap items-center gap-2">
           <select value={entityFilter} onChange={(e) => setEntityFilter(e.target.value)} data-testid="journal-filter-entity"
-            className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+            className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#22C55E] focus:outline-none">
             <option value="">{t("Toutes les entités")}</option>
             {entityOptions.map((o) => <option key={o} value={o}>{t(o)}</option>)}
           </select>
           <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)} data-testid="journal-filter-user"
-            className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+            className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#22C55E] focus:outline-none">
             <option value="">{t("Tous les utilisateurs")}</option>
             {userOptions.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
           <button onClick={exportCsv} disabled={!filtered.length} data-testid="journal-export-csv"
-            className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#0E9488] px-3 text-sm font-600 text-white transition-colors hover:bg-[#0E9488]/90 disabled:cursor-not-allowed disabled:opacity-40">
+            className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#22C55E] px-3 text-sm font-600 text-white transition-colors hover:bg-[#22C55E]/90 disabled:cursor-not-allowed disabled:opacity-40">
             <Download size={15} /> {t("Exporter")}
           </button>
         </div>

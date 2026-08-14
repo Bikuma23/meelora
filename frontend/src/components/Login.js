@@ -34,21 +34,19 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#F4F6F8]">
+    <div className="flex min-h-screen bg-[#F3F4F6]">
       {/* Panneau de marque — héros */}
       <div className="relative hidden w-1/2 flex-col justify-between overflow-hidden p-12 lg:flex">
         <div
           className="absolute inset-0 bg-cover bg-center"
           style={{ backgroundImage: "url('https://images.unsplash.com/photo-1599398766380-23b3144142c7?crop=entropy&cs=srgb&fm=jpg&q=85&w=1400')" }}
         />
-        <div className="absolute inset-0 bg-[#063044]/85" />
+        <div className="absolute inset-0 bg-[#0F172A]/85" />
         <div className="relative z-10 flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#F8A942]">
-            <DollarSign size={22} className="text-white" strokeWidth={2.4} />
-          </span>
+          <svg width="42" height="42" viewBox="0 0 48 48" fill="none"><path d="M8 40V15c0-3.2 3.8-4.9 6.1-2.7L24 21l9.9-8.7C36.2 10.1 40 11.8 40 15v25" stroke="#22C55E" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"/><circle cx="33.5" cy="33.5" r="5.5" fill="#FBBF24"/></svg>
           <div>
-            <h1 className="font-display text-lg font-600 text-white">Budget Salaires</h1>
-            <p className="overline text-[#F8A942]">Terrebonne · Québec</p>
+            <h1 className="font-display text-2xl font-900 lowercase leading-none text-white">meelora</h1>
+            <p className="overline text-[#FBBF24]">Votre entreprise, clairement.</p>
           </div>
         </div>
 
@@ -57,36 +55,34 @@ export default function Login() {
             <p className="overline mb-4 text-white/70">{t("Plateforme financière")}</p>
             <h2 className="font-display text-4xl font-300 leading-[1.15] text-white">
               {t("De la paie au bilan,")}<br />{t("tout au")}{" "}
-              <span className="font-400 underline decoration-[#15AF97] decoration-2 underline-offset-4">{t("même endroit")}</span>.
+              <span className="font-400 underline decoration-[#22C55E] decoration-2 underline-offset-4">{t("même endroit")}</span>.
             </h2>
           </div>
           <div className="mt-8 space-y-3">
             {[[TrendingUp, "Calculs de paie et charges en temps réel"], [BarChart3, "Bilan, État des résultats & flux de trésorerie"], [ShieldCheck, "Accès par rôle et journal d'audit"]].map(([Ic, text], i) => (
-              <div key={i} className="flex items-center gap-3 border-l-2 border-[#15AF97] pl-3 text-sm text-slate-200">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10"><Ic size={16} className="text-[#15AF97]" /></span>
+              <div key={i} className="flex items-center gap-3 border-l-2 border-[#22C55E] pl-3 text-sm text-slate-200">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10"><Ic size={16} className="text-[#22C55E]" /></span>
                 {t(text)}
               </div>
             ))}
           </div>
         </div>
-        <p className="relative z-10 text-xs text-slate-300">© {new Date().getFullYear()} Budget Salaires</p>
+        <p className="relative z-10 text-xs text-slate-300">© {new Date().getFullYear()} Meelora inc.</p>
       </div>
 
       {/* Formulaire */}
       <div className="flex w-full items-center justify-center p-6 lg:w-1/2">
         <div className="w-full max-w-md">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#063044]">
-              <DollarSign size={22} className="text-white" strokeWidth={2.4} />
-            </span>
+            <svg width="40" height="40" viewBox="0 0 48 48" fill="none"><path d="M8 40V15c0-3.2 3.8-4.9 6.1-2.7L24 21l9.9-8.7C36.2 10.1 40 11.8 40 15v25" stroke="#22C55E" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"/><circle cx="33.5" cy="33.5" r="5.5" fill="#FBBF24"/></svg>
             <div>
-              <h1 className="font-display text-lg font-600 text-slate-900">Budget Salaires</h1>
-              <p className="overline text-[#F8A942]">Terrebonne · Québec</p>
+              <h1 className="font-display text-2xl font-900 lowercase leading-none text-[#0F172A]">meelora</h1>
+              <p className="overline text-[#22C55E]">Votre entreprise, clairement.</p>
             </div>
           </div>
           <form onSubmit={submit} className="card p-8" data-testid="login-form">
             <p className="overline mb-2">{t("Espace sécurisé")}</p>
-            <h2 className="font-display mb-1 text-3xl font-300 text-[#063044]">{t("Bon retour")}</h2>
+            <h2 className="font-display mb-1 text-3xl font-300 text-[#0F172A]">{t("Bon retour")}</h2>
             <p className="mb-6 text-sm text-slate-500">{t("Connectez-vous à votre tableau de bord.")}</p>
             <div className="space-y-4">
               <div>
@@ -101,7 +97,7 @@ export default function Login() {
               </div>
               {error && <p data-testid="login-error" className="text-sm font-500 text-red-600">{error}</p>}
               <Button data-testid="login-submit" type="submit" disabled={loading}
-                className="w-full gap-2 rounded-md bg-[#15AF97] font-600 text-white hover:bg-[#15AF97]/90">
+                className="w-full gap-2 rounded-md bg-[#22C55E] font-600 text-white hover:bg-[#22C55E]/90">
                 <LogIn size={16} /> {loading ? t("Connexion…") : t("Se connecter")}
               </Button>
             </div>

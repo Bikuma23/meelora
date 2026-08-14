@@ -36,7 +36,7 @@ function DeptForm({ open, onOpenChange, initial, onSubmit }) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md" data-testid="dept-form-dialog">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Building2 size={18} className="text-[#063044]" /> {initial ? t("Modifier le département") : t("Nouveau département")}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><Building2 size={18} className="text-[#0F172A]" /> {initial ? t("Modifier le département") : t("Nouveau département")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-1">
           <p className="flex items-center gap-1.5 text-xs font-700 uppercase tracking-wide text-slate-500"><Info size={13} /> {t("Identification")}</p>
@@ -70,7 +70,7 @@ function DeptForm({ open, onOpenChange, initial, onSubmit }) {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{t("Annuler")}</Button>
-          <Button data-testid="dept-save-btn" className="bg-[#063044] hover:bg-[#063044]/90" onClick={submit}>{initial ? t("Mettre à jour") : t("Créer")}</Button>
+          <Button data-testid="dept-save-btn" className="bg-[#0F172A] hover:bg-[#0F172A]/90" onClick={submit}>{initial ? t("Mettre à jour") : t("Créer")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -138,7 +138,7 @@ export default function Departements() {
           {canEdit && <>
           <input ref={fileRef} type="file" accept=".xlsx" className="hidden" data-testid="dept-import-input" onChange={onImport} />
           <Button variant="outline" className="gap-1.5" data-testid="dept-import-btn" onClick={() => fileRef.current?.click()}><Upload size={15} /> {t("Importer Excel")}</Button>
-          <Button data-testid="add-dept-btn" className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90" onClick={() => setDialog({ open: true, item: null })}>
+          <Button data-testid="add-dept-btn" className="gap-1.5 bg-[#0F172A] hover:bg-[#0F172A]/90" onClick={() => setDialog({ open: true, item: null })}>
             <Plus size={16} /> {t("Nouveau département")}
           </Button>
           </>}
@@ -173,7 +173,7 @@ export default function Departements() {
                 <td className="px-4 py-3">
                   {canEdit ? (
                   <div className="flex justify-end gap-1">
-                    <button data-testid={`edit-dept-${d.code}`} onClick={() => setDialog({ open: true, item: d })} className="p-1.5 text-slate-400 hover:text-[#063044]"><Pencil size={15} /></button>
+                    <button data-testid={`edit-dept-${d.code}`} onClick={() => setDialog({ open: true, item: d })} className="p-1.5 text-slate-400 hover:text-[#0F172A]"><Pencil size={15} /></button>
                     <button data-testid={`delete-dept-${d.code}`} onClick={() => del(d)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
                   </div>
                   ) : <div className="text-right text-slate-300">—</div>}

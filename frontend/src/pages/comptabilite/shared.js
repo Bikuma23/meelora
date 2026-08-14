@@ -39,7 +39,7 @@ export function PeriodSelect({ periods, value, onChange, testId = "acct" }) {
   const setMonth = (nm) => onChange(`${y}-${String(Number(nm)).padStart(2, "0")}`);
   return (
     <div className="flex items-center gap-2">
-      <CalendarDays size={15} className="text-[#063044]" />
+      <CalendarDays size={15} className="text-[#0F172A]" />
       <Select value={y ? String(y) : ""} onValueChange={setYear}>
         <SelectTrigger data-testid={`${testId}-year-select`} className="w-24"><SelectValue placeholder="Année" /></SelectTrigger>
         <SelectContent>

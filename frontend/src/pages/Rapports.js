@@ -17,7 +17,7 @@ const VENTIL = [
 const SCEN = [["actuel", "Salaires actuels"], ["ca", "Budget CA"], ["revue1", "Revue Budgétaire 1"], ["revue2", "Revue Budgétaire 2"]];
 const TYPES = ["all", "CCQ", "Régulier temps plein", "Régulier temps partiel", "Stagiaire"];
 const TABS = [["synthese", "Synthèse", LayoutDashboard], ["pnl", "État des résultats (P&L)", BarChart3], ["classe", "Masse par classe", Layers], ["compare", "Comparatif scénarios", GitCompareArrows], ["custom", "Constructeur personnalisé", Table2]];
-const COLORS = ["#063044", "#15AF97", "#F8A942", "#808080"];
+const COLORS = ["#0F172A", "#22C55E", "#FBBF24", "#808080"];
 const fmtK = (v) => `${Math.round(v / 1000)}k`;
 
 export default function Rapports() {
@@ -100,7 +100,7 @@ export default function Rapports() {
       <div className="flex flex-wrap gap-2" data-testid="report-tabs">
         {TABS.map(([k, l, Icon]) => (
           <button key={k} data-testid={`tab-${k}`} onClick={() => setTab(k)}
-            className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-600 transition-colors ${tab === k ? "bg-[#063044] text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
+            className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-600 transition-colors ${tab === k ? "bg-[#0F172A] text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
             <Icon size={15} /> {t(l)}
           </button>
         ))}
@@ -109,7 +109,7 @@ export default function Rapports() {
       {tab === "synthese" && data && (
         <>
           <div className="flex flex-wrap gap-2">
-            <Button data-testid="export-excel-btn" disabled={busy} onClick={() => dl("excel", "rapport")} className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={16} /> {t("Synthèse Excel")}</Button>
+            <Button data-testid="export-excel-btn" disabled={busy} onClick={() => dl("excel", "rapport")} className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90"><FileSpreadsheet size={16} /> {t("Synthèse Excel")}</Button>
             <Button data-testid="export-pdf-btn" disabled={busy} onClick={() => dl("pdf", "rapport")} className="gap-2 bg-[#EF4444] hover:bg-[#EF4444]/90"><FileText size={16} /> {t("Synthèse PDF")}</Button>
             <Button data-testid="export-fiches-excel-btn" disabled={busy} variant="outline" onClick={() => dl("fiches-excel", "fiches")} className="gap-2"><FileSpreadsheet size={16} /> {t("Fiches (Excel)")}</Button>
             <Button data-testid="export-fiches-pdf-btn" disabled={busy} variant="outline" onClick={() => dl("fiches-pdf", "fiches")} className="gap-2"><FileText size={16} /> {t("Fiches (PDF)")}</Button>
@@ -123,7 +123,7 @@ export default function Rapports() {
             <div className="card p-5"><h3 className="mb-3 text-sm font-700">{t("Ventilation")} ({scopeLabel})</h3>
               <div className="divide-y divide-slate-100">
                 {VENTIL.map(([k, l]) => <div key={k} className="flex justify-between py-1.5 text-sm"><span className="text-slate-500">{t(l)}</span><span className="font-mono-data">{fmtCAD(data.totals[k])}</span></div>)}
-                <div className="flex justify-between py-2 text-sm font-700"><span>{t("Budget total")}</span><span className="font-mono-data text-[#0E9488]">{fmtCAD(data.totals.budget_total)}</span></div>
+                <div className="flex justify-between py-2 text-sm font-700"><span>{t("Budget total")}</span><span className="font-mono-data text-[#22C55E]">{fmtCAD(data.totals.budget_total)}</span></div>
               </div></div>
             <div className="card p-5"><h3 className="mb-3 text-sm font-700">{t("Budget par département")}</h3>
               <div className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
@@ -137,14 +137,14 @@ export default function Rapports() {
         <div className="card p-5" data-testid="pnl-report">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-700">{t("État des résultats — ventilation mensuelle par compte GL")}</h3>
-            <Button data-testid="pnl-excel-btn" size="sm" disabled={busy} onClick={() => dl("pnl-excel", "pnl", {})} className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
+            <Button data-testid="pnl-excel-btn" size="sm" disabled={busy} onClick={() => dl("pnl-excel", "pnl", {})} className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90"><FileSpreadsheet size={15} /> Excel</Button>
           </div>
           {!pnl ? <p className="text-sm text-slate-500">{t("Chargement…")}</p> : (
             <>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={pnl.months.map((m, i) => ({ mois: m, total: pnl.totals.monthly[i] }))}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="mois" tick={{ fontSize: 11 }} /><YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v) => fmtCAD(v)} /><Bar dataKey="total" fill="#063044" radius={[4, 4, 0, 0]} />
+                  <Tooltip formatter={(v) => fmtCAD(v)} /><Bar dataKey="total" fill="#0F172A" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
               <div className="mt-4 overflow-x-auto">
@@ -152,7 +152,7 @@ export default function Rapports() {
                   <thead><tr className="border-b border-slate-200 text-slate-400"><th className="px-2 py-1.5 text-left font-600">{t("Compte GL")}</th>{pnl.months.map((m) => <th key={m} className="px-2 py-1.5 text-right font-600">{m}</th>)}<th className="px-2 py-1.5 text-right font-700">{t("Total")}</th></tr></thead>
                   <tbody className="font-mono-data">
                     {pnl.rows.map((r) => <tr key={r.gl} className="border-b border-slate-100" data-testid={`pnl-row-${r.gl}`}><td className="px-2 py-1.5 text-left font-700 text-slate-700">{r.gl}</td>{r.monthly.map((v, i) => <td key={i} className="px-2 py-1.5 text-right">{fmtCAD(v)}</td>)}<td className="px-2 py-1.5 text-right font-700">{fmtCAD(r.total)}</td></tr>)}
-                    <tr className="border-t-2 border-slate-300 bg-slate-50 font-700"><td className="px-2 py-2 text-left">TOTAL</td>{pnl.totals.monthly.map((v, i) => <td key={i} className="px-2 py-2 text-right">{fmtCAD(v)}</td>)}<td className="px-2 py-2 text-right text-[#0E9488]">{fmtCAD(pnl.totals.total)}</td></tr>
+                    <tr className="border-t-2 border-slate-300 bg-slate-50 font-700"><td className="px-2 py-2 text-left">TOTAL</td>{pnl.totals.monthly.map((v, i) => <td key={i} className="px-2 py-2 text-right">{fmtCAD(v)}</td>)}<td className="px-2 py-2 text-right text-[#22C55E]">{fmtCAD(pnl.totals.total)}</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -165,7 +165,7 @@ export default function Rapports() {
         <div className="card p-5" data-testid="class-report">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-700">{t("Masse salariale par classe de sécurité CSST")} {byClass ? `· ${t("max assurable")} ${fmtCAD(byClass.csst_max_assurable)}` : ""}</h3>
-            <Button data-testid="class-excel-btn" size="sm" disabled={busy} onClick={() => dl("by-class-excel", "masse_classe", {})} className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
+            <Button data-testid="class-excel-btn" size="sm" disabled={busy} onClick={() => dl("by-class-excel", "masse_classe", {})} className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90"><FileSpreadsheet size={15} /> Excel</Button>
           </div>
           {!byClass ? <p className="text-sm text-slate-500">{t("Chargement…")}</p> : (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -192,7 +192,7 @@ export default function Rapports() {
         <div className="card p-5" data-testid="compare-report">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-700">{t("Comparatif des scénarios — Budget CA · Revue 1 · Revue 2")} ({scopeLabel})</h3>
-            <Button data-testid="compare-excel-btn" size="sm" disabled={busy} onClick={() => dl("scenario-compare-excel", "comparatif", {})} className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileSpreadsheet size={15} /> Excel</Button>
+            <Button data-testid="compare-excel-btn" size="sm" disabled={busy} onClick={() => dl("scenario-compare-excel", "comparatif", {})} className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90"><FileSpreadsheet size={15} /> Excel</Button>
           </div>
           {!compare ? <p className="text-sm text-slate-500">{t("Chargement…")}</p> : (
             <div className="overflow-x-auto">
@@ -213,18 +213,18 @@ export default function Rapports() {
                       <td className="px-3 py-1.5 text-left"><span className="text-slate-400">{r.department}</span> <span className="text-slate-700">{r.label}</span></td>
                       <td className="px-3 py-1.5 text-right">{fmtCAD(r.ca)}</td>
                       <td className="px-3 py-1.5 text-right">{fmtCAD(r.revue1)}</td>
-                      <td className="px-3 py-1.5 text-right" style={{ color: r.ecart_r1 > 0 ? "#DC2626" : r.ecart_r1 < 0 ? "#0E9488" : "#94A3B8" }}>{r.ecart_r1 > 0 ? "+" : ""}{fmtCAD(r.ecart_r1)}<span className="ml-1 text-[10px] opacity-70">({r.ecart_r1_pct > 0 ? "+" : ""}{r.ecart_r1_pct}%)</span></td>
+                      <td className="px-3 py-1.5 text-right" style={{ color: r.ecart_r1 > 0 ? "#DC2626" : r.ecart_r1 < 0 ? "#22C55E" : "#94A3B8" }}>{r.ecart_r1 > 0 ? "+" : ""}{fmtCAD(r.ecart_r1)}<span className="ml-1 text-[10px] opacity-70">({r.ecart_r1_pct > 0 ? "+" : ""}{r.ecart_r1_pct}%)</span></td>
                       <td className="px-3 py-1.5 text-right">{fmtCAD(r.revue2)}</td>
-                      <td className="px-3 py-1.5 text-right" style={{ color: r.ecart_r2 > 0 ? "#DC2626" : r.ecart_r2 < 0 ? "#0E9488" : "#94A3B8" }}>{r.ecart_r2 > 0 ? "+" : ""}{fmtCAD(r.ecart_r2)}<span className="ml-1 text-[10px] opacity-70">({r.ecart_r2_pct > 0 ? "+" : ""}{r.ecart_r2_pct}%)</span></td>
+                      <td className="px-3 py-1.5 text-right" style={{ color: r.ecart_r2 > 0 ? "#DC2626" : r.ecart_r2 < 0 ? "#22C55E" : "#94A3B8" }}>{r.ecart_r2 > 0 ? "+" : ""}{fmtCAD(r.ecart_r2)}<span className="ml-1 text-[10px] opacity-70">({r.ecart_r2_pct > 0 ? "+" : ""}{r.ecart_r2_pct}%)</span></td>
                     </tr>
                   ))}
                   <tr className="border-t-2 border-slate-300 bg-slate-50 font-700" data-testid="compare-total-row">
                     <td className="px-3 py-2 text-left">TOTAL</td>
                     <td className="px-3 py-2 text-right">{fmtCAD(compare.totals.ca)}</td>
                     <td className="px-3 py-2 text-right">{fmtCAD(compare.totals.revue1)}</td>
-                    <td className="px-3 py-2 text-right" style={{ color: compare.totals.ecart_r1 > 0 ? "#DC2626" : "#0E9488" }}>{compare.totals.ecart_r1 > 0 ? "+" : ""}{fmtCAD(compare.totals.ecart_r1)} ({compare.totals.ecart_r1_pct > 0 ? "+" : ""}{compare.totals.ecart_r1_pct}%)</td>
+                    <td className="px-3 py-2 text-right" style={{ color: compare.totals.ecart_r1 > 0 ? "#DC2626" : "#22C55E" }}>{compare.totals.ecart_r1 > 0 ? "+" : ""}{fmtCAD(compare.totals.ecart_r1)} ({compare.totals.ecart_r1_pct > 0 ? "+" : ""}{compare.totals.ecart_r1_pct}%)</td>
                     <td className="px-3 py-2 text-right">{fmtCAD(compare.totals.revue2)}</td>
-                    <td className="px-3 py-2 text-right" style={{ color: compare.totals.ecart_r2 > 0 ? "#DC2626" : "#0E9488" }}>{compare.totals.ecart_r2 > 0 ? "+" : ""}{fmtCAD(compare.totals.ecart_r2)} ({compare.totals.ecart_r2_pct > 0 ? "+" : ""}{compare.totals.ecart_r2_pct}%)</td>
+                    <td className="px-3 py-2 text-right" style={{ color: compare.totals.ecart_r2 > 0 ? "#DC2626" : "#22C55E" }}>{compare.totals.ecart_r2 > 0 ? "+" : ""}{fmtCAD(compare.totals.ecart_r2)} ({compare.totals.ecart_r2_pct > 0 ? "+" : ""}{compare.totals.ecart_r2_pct}%)</td>
                   </tr>
                 </tbody>
               </table>
@@ -242,7 +242,7 @@ export default function Rapports() {
             ) : (
               <div className="flex flex-wrap gap-2">
                 {templates.map((tpl) => (
-                  <div key={tpl.id} data-testid={`template-${tpl.id}`} className="group flex items-center gap-1 rounded-full border border-[#0E9488]/40 bg-[#0E9488]/10 py-1 pl-3 pr-1.5 text-xs font-600 text-[#0E7168]">
+                  <div key={tpl.id} data-testid={`template-${tpl.id}`} className="group flex items-center gap-1 rounded-full border border-[#22C55E]/40 bg-[#22C55E]/10 py-1 pl-3 pr-1.5 text-xs font-600 text-[#0E7168]">
                     <button data-testid={`template-apply-${tpl.id}`} onClick={() => applyTemplate(tpl)} className="hover:underline">{tpl.name}</button>
                     {isAdmin && <button data-testid={`template-del-${tpl.id}`} onClick={() => deleteTemplate(tpl)} className="rounded-full px-1 text-slate-400 hover:bg-red-100 hover:text-red-500" title={t("Supprimer")}>✕</button>}
                   </div>
@@ -251,8 +251,8 @@ export default function Rapports() {
             )}
             <div className="mt-3 flex items-end gap-2">
               <input data-testid="template-name" value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder={isAdmin ? t("Nom du modèle (ex. Masse par département)") : t("Enregistrement réservé aux administrateurs")} disabled={!isAdmin}
-                className="h-9 flex-1 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[#063044] disabled:bg-slate-50 disabled:text-slate-400" />
-              <Button data-testid="save-template-btn" onClick={saveTemplate} disabled={!isAdmin} className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Save size={15} /> {t("Enregistrer le modèle")}</Button>
+                className="h-9 flex-1 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[#0F172A] disabled:bg-slate-50 disabled:text-slate-400" />
+              <Button data-testid="save-template-btn" onClick={saveTemplate} disabled={!isAdmin} className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90"><Save size={15} /> {t("Enregistrer le modèle")}</Button>
             </div>
           </div>
           <div className="card p-5">
@@ -261,7 +261,7 @@ export default function Rapports() {
             <div className="mt-2 flex flex-wrap gap-2">
               {allCols.map((c) => (
                 <button key={c.key} data-testid={`col-${c.key}`} onClick={() => toggleCol(c.key)}
-                  className={`rounded-full border px-3 py-1 text-xs font-600 ${cols.includes(c.key) ? "border-[#063044] bg-[#063044]/10 text-[#063044]" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>{c.label}</button>
+                  className={`rounded-full border px-3 py-1 text-xs font-600 ${cols.includes(c.key) ? "border-[#0F172A] bg-[#0F172A]/10 text-[#0F172A]" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>{c.label}</button>
               ))}
             </div>
             <div className="mt-4 flex flex-wrap items-end gap-3">
@@ -271,7 +271,7 @@ export default function Rapports() {
               <div><label className="text-[11px] uppercase text-slate-500">{t("Regrouper par")}</label>
                 <Select value={groupBy || "none"} onValueChange={(v) => setGroupBy(v === "none" ? "" : v)}><SelectTrigger className="mt-1 w-48" data-testid="custom-group"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="none">{t("Aucun regroupement")}</SelectItem><SelectItem value="department">{t("Département")}</SelectItem><SelectItem value="employment_type">{t("Type")}</SelectItem><SelectItem value="security_class">{t("Classe de sécurité")}</SelectItem></SelectContent></Select></div>
-              <Button data-testid="run-custom-btn" onClick={runCustom} className="gap-2 bg-[#063044] hover:bg-[#063044]/90"><Table2 size={15} /> {t("Générer")}</Button>
+              <Button data-testid="run-custom-btn" onClick={runCustom} className="gap-2 bg-[#0F172A] hover:bg-[#0F172A]/90"><Table2 size={15} /> {t("Générer")}</Button>
               <Button data-testid="custom-excel-btn" variant="outline" disabled={busy} onClick={() => dl("custom-excel", "rapport_perso", { columns: cols.join(","), employment_type: empType, group_by: groupBy })} className="gap-2"><FileSpreadsheet size={15} /> Excel</Button>
             </div>
           </div>

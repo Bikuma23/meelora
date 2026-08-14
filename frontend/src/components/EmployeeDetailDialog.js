@@ -59,7 +59,7 @@ export default function EmployeeDetailDialog({ open, onOpenChange, employee, dep
               <Row label={t("Type d'emploi")} value={t(typeLabel(e.employment_type))} />
               {e.is_ccq && <Row label={t("Catégorie CCQ")} value={e.ccq_category || "—"} />}
               <Row label={t("Sexe à la naissance")} value={e.sex_at_birth ? t(e.sex_at_birth) : "—"} />
-              <Row label={t("Statut")} value={e.active === false ? t("Inactif") : t("Actif")} accent={e.active === false ? "#EF4444" : "#0E9488"} />
+              <Row label={t("Statut")} value={e.active === false ? t("Inactif") : t("Actif")} accent={e.active === false ? "#EF4444" : "#22C55E"} />
             </Section>
             <Section title={t("Classe de sécurité CNESST")}>
               <Row label={t("Code")} value={e.security_class || "—"} />
@@ -91,7 +91,7 @@ export default function EmployeeDetailDialog({ open, onOpenChange, employee, dep
 
           <div className="space-y-4">
             <Section title={t("Rémunération")}>
-              <Row label={t("Salaire annuel actuel")} value={fmtCAD(e.current_annual_salary)} accent="#063044" />
+              <Row label={t("Salaire annuel actuel")} value={fmtCAD(e.current_annual_salary)} accent="#0F172A" />
               <Row label={t("Taux de vacances")} value={`${(e.vacation_rate * 100).toFixed(2)} %`} />
               <Row label={t("Jours maladie / personnels")} value={e.sick_personal_days} />
               <Row label={t("Jours fériés")} value={e.holiday_days} />
@@ -119,7 +119,7 @@ export default function EmployeeDetailDialog({ open, onOpenChange, employee, dep
               </Button>
             )}
             {canEdit && (
-              <Button data-testid="employee-detail-edit-btn" onClick={() => { onOpenChange(false); onEdit(e); }} className="flex-1 gap-1.5 bg-[#063044] hover:bg-[#063044]/90">
+              <Button data-testid="employee-detail-edit-btn" onClick={() => { onOpenChange(false); onEdit(e); }} className="flex-1 gap-1.5 bg-[#0F172A] hover:bg-[#0F172A]/90">
                 <Pencil size={15} /> {t("Modifier cet employé")}
               </Button>
             )}

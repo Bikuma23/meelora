@@ -189,8 +189,8 @@ export default function SalairesBudget() {
   }, {})).sort((a, c) => (parseInt(a.department, 10) || 0) - (parseInt(c.department, 10) || 0));
 
   const cards = [
-    ["Salaire de base", b.totals.salaire_base, "#063044"],
-    ["Vacances", b.totals.vacances, "#F8A942"],
+    ["Salaire de base", b.totals.salaire_base, "#0F172A"],
+    ["Vacances", b.totals.vacances, "#FBBF24"],
     ["Primes & Boni", b.totals.primes, "#F59E0B"],
     ["Avantages soc.", b.totals.avantages, "#8B5CF6"],
     ["Budget total", b.totals.budget_total, null],
@@ -230,7 +230,7 @@ export default function SalairesBudget() {
 
       <div className="card flex flex-wrap items-end gap-4 p-4" data-testid="global-aug-panel">
         <div className="flex items-center gap-2 self-center pr-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0630441a] text-[#063044]"><TrendingUp size={16} /></span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0F172A1a] text-[#0F172A]"><TrendingUp size={16} /></span>
           <div>
             <p className="text-sm font-700 leading-tight">{t("Augmentation globale")}</p>
             <p className="text-[11px] text-slate-500">{t("Appliquée à tous —")} {t(LABEL[scenario])} {year}</p>
@@ -244,7 +244,7 @@ export default function SalairesBudget() {
           <Label className="text-[11px] uppercase text-slate-500">Standard (%)</Label>
           <Input data-testid="global-aug-std" type="number" step="0.1" disabled={!canEdit} className="mt-1 font-mono-data" value={augStd} onChange={(e) => setAugStd(e.target.value)} />
         </div>
-        <Button data-testid="global-aug-apply" onClick={applyAug} disabled={!canEdit || applying} className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90">
+        <Button data-testid="global-aug-apply" onClick={applyAug} disabled={!canEdit || applying} className="gap-1.5 bg-[#0F172A] hover:bg-[#0F172A]/90">
           <TrendingUp size={15} /> {applying ? t("Application…") : t("Appliquer à tous")}
         </Button>
         <p className="w-full text-[11px] text-slate-400 sm:w-auto sm:flex-1 sm:text-right">{t("Écrase l'augmentation de chaque employé pour ce scénario. Vous pourrez ensuite ajuster individuellement via la fiche.")}</p>
@@ -288,7 +288,7 @@ export default function SalairesBudget() {
                     <span className={`inline-flex items-center gap-1 ${col.align === "right" ? "flex-row-reverse" : ""}`}>
                       {t(col.label)}
                       {sort.key === col.key
-                        ? (sort.dir === "asc" ? <ChevronUp size={13} className="text-[#063044]" /> : <ChevronDown size={13} className="text-[#063044]" />)
+                        ? (sort.dir === "asc" ? <ChevronUp size={13} className="text-[#0F172A]" /> : <ChevronDown size={13} className="text-[#0F172A]" />)
                         : <ChevronsUpDown size={12} className="opacity-40" />}
                     </span>
                   </th>
@@ -300,20 +300,20 @@ export default function SalairesBudget() {
               {sortedLines.map((ln) => (
                 <tr key={ln.employee_number} onClick={() => openDetail(ln)} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" data-testid={`budget-row-${ln.employee_number}`}>
                   <td className="px-4 py-2.5 font-mono-data text-slate-400">{String(ln.employee_number).padStart(3, "0")}</td>
-                  <td className="px-4 py-2.5 font-600">{ln.name}{ln.overridden && <span className="ml-2 rounded bg-[#F8A9421a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">{t("Ajusté")}</span>}{ln.prorated && <span className="ml-2 rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active} {t("mois")}</span>}</td>
+                  <td className="px-4 py-2.5 font-600">{ln.name}{ln.overridden && <span className="ml-2 rounded bg-[#FBBF241a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#22C55E]">{t("Ajusté")}</span>}{ln.prorated && <span className="ml-2 rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active} {t("mois")}</span>}</td>
                   <td className="px-4 py-2.5 font-mono-data text-slate-500">{ln.department}</td>
-                  <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#063044" : "#64748B" }}>{ln.is_ccq ? "CCQ" : t(typeLabel(ln.employment_type))}</span></td>
+                  <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#0F172A" : "#64748B" }}>{ln.is_ccq ? "CCQ" : t(typeLabel(ln.employment_type))}</span></td>
                   <td className="px-4 py-2.5 text-right"><EditableCell canEdit={canEdit} value={ln.new_salary} display={fmtCAD(ln.new_salary)} step="1" testId={`qedit-salary-${ln.employee_number}`} onSave={(v) => quickSave(ln, { augmentation: (ln.base_salary * (ln.employment_rate || 1)) ? v / (ln.base_salary * (ln.employment_rate || 1)) - 1 : 0 })} /></td>
                   <td className="px-4 py-2.5 text-right"><EditableCell canEdit={canEdit} value={+(ln.augmentation * 100).toFixed(3)} display={`${(ln.augmentation * 100).toFixed(2)} %`} step="0.1" testId={`qedit-aug-${ln.employee_number}`} onSave={(v) => quickSave(ln, { augmentation: v / 100 })} /></td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.vacation)}</td>
                   <td className="px-4 py-2.5 text-right"><EditableCell canEdit={canEdit} value={+(ln.vacation_rate * 100).toFixed(3)} display={`${(ln.vacation_rate * 100).toFixed(2)} %`} step="0.1" testId={`qedit-vac-${ln.employee_number}`} onSave={(v) => quickSave(ln, { vacation_rate: v / 100 })} /></td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.primes_total)}</td>
-                  <td className="px-4 py-2.5 text-right font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(ln.salaire_brut)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono-data font-600" style={{ color: "#22C55E" }}>{fmtCAD(ln.salaire_brut)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(ln.avantages)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data font-700">{fmtCAD(ln.total_budgeted)}</td>
                   <td className="px-4 py-2.5 text-right">
                     <button data-testid={`edit-line-${ln.employee_number}`} disabled={!canEdit} onClick={(ev) => { ev.stopPropagation(); setFiche({ open: true, line: ln }); }}
-                      className="p-1.5 text-slate-400 hover:text-[#063044] disabled:cursor-not-allowed disabled:opacity-30">
+                      className="p-1.5 text-slate-400 hover:text-[#0F172A] disabled:cursor-not-allowed disabled:opacity-30">
                       {canEdit ? <Pencil size={15} /> : <Lock size={15} />}
                     </button>
                   </td>
@@ -328,7 +328,7 @@ export default function SalairesBudget() {
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.vacation, 0))}</td>
                 <td className="px-4 py-3"></td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.primes_total, 0))}</td>
-                <td className="px-4 py-3 text-right font-mono-data" style={{ color: "#0E9488" }}>{fmtCAD(sortedLines.reduce((s, l) => s + l.salaire_brut, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono-data" style={{ color: "#22C55E" }}>{fmtCAD(sortedLines.reduce((s, l) => s + l.salaire_brut, 0))}</td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.avantages, 0))}</td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(sortedLines.reduce((s, l) => s + l.total_budgeted, 0))}</td>
                 <td className="px-4 py-3"></td>
@@ -366,7 +366,7 @@ export default function SalairesBudget() {
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(g.new_salary)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(g.vacation)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(g.primes_total)}</td>
-                  <td className="px-4 py-2.5 text-right font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(g.salaire_brut)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono-data font-600" style={{ color: "#22C55E" }}>{fmtCAD(g.salaire_brut)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data">{fmtCAD(g.avantages)}</td>
                   <td className="px-4 py-2.5 text-right font-mono-data font-700">{fmtCAD(g.total_budgeted)}</td>
                 </tr>
@@ -377,7 +377,7 @@ export default function SalairesBudget() {
                     <td className="px-4 py-2 text-right font-mono-data text-slate-500">{fmtCAD(ln.new_salary)}</td>
                     <td className="px-4 py-2 text-right font-mono-data text-slate-500">{fmtCAD(ln.vacation)}</td>
                     <td className="px-4 py-2 text-right font-mono-data text-slate-500">{fmtCAD(ln.primes_total)}</td>
-                    <td className="px-4 py-2 text-right font-mono-data" style={{ color: "#0E9488" }}>{fmtCAD(ln.salaire_brut)}</td>
+                    <td className="px-4 py-2 text-right font-mono-data" style={{ color: "#22C55E" }}>{fmtCAD(ln.salaire_brut)}</td>
                     <td className="px-4 py-2 text-right font-mono-data text-slate-500">{fmtCAD(ln.avantages)}</td>
                     <td className="px-4 py-2 text-right font-mono-data font-600">{fmtCAD(ln.total_budgeted)}</td>
                   </tr>
@@ -392,7 +392,7 @@ export default function SalairesBudget() {
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(deptGroups.reduce((s, g) => s + g.new_salary, 0))}</td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(deptGroups.reduce((s, g) => s + g.vacation, 0))}</td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(deptGroups.reduce((s, g) => s + g.primes_total, 0))}</td>
-                <td className="px-4 py-3 text-right font-mono-data" style={{ color: "#0E9488" }}>{fmtCAD(deptGroups.reduce((s, g) => s + g.salaire_brut, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono-data" style={{ color: "#22C55E" }}>{fmtCAD(deptGroups.reduce((s, g) => s + g.salaire_brut, 0))}</td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(deptGroups.reduce((s, g) => s + g.avantages, 0))}</td>
                 <td className="px-4 py-3 text-right font-mono-data">{fmtCAD(deptGroups.reduce((s, g) => s + g.total_budgeted, 0))}</td>
               </tr>
@@ -411,13 +411,13 @@ export default function SalairesBudget() {
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     <span className="font-mono-data text-[11px] text-slate-400">#{String(ln.employee_number).padStart(3, "0")}</span>
                     <span className="font-mono-data text-[11px] text-slate-400">· {t("Dépt")} {ln.department}</span>
-                    <span className="rounded px-1.5 py-0.5 text-[9px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#063044" : "#64748B" }}>{ln.is_ccq ? "CCQ" : t(typeLabel(ln.employment_type))}</span>
-                    {ln.overridden && <span className="rounded bg-[#F8A9421a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#0E9488]">{t("Ajusté")}</span>}
+                    <span className="rounded px-1.5 py-0.5 text-[9px] font-600 uppercase text-white" style={{ backgroundColor: ln.is_ccq ? "#0F172A" : "#64748B" }}>{ln.is_ccq ? "CCQ" : t(typeLabel(ln.employment_type))}</span>
+                    {ln.overridden && <span className="rounded bg-[#FBBF241a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#22C55E]">{t("Ajusté")}</span>}
                     {ln.prorated && <span className="rounded bg-[#F59E0B1a] px-1.5 py-0.5 text-[9px] font-700 uppercase text-[#B45309]">Pro-rata {ln.months_active}m</span>}
                   </div>
                 </div>
                 <button data-testid={`edit-line-card-${ln.employee_number}`} disabled={!canEdit} onClick={(ev) => { ev.stopPropagation(); setFiche({ open: true, line: ln }); }}
-                  className="shrink-0 rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-[#063044] disabled:opacity-30">
+                  className="shrink-0 rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-[#0F172A] disabled:opacity-30">
                   {canEdit ? <Pencil size={15} /> : <Lock size={15} />}
                 </button>
               </div>
@@ -425,7 +425,7 @@ export default function SalairesBudget() {
                 {[["Nouveau salaire", ln.new_salary], ["Vacances", ln.vacation], ["Primes", ln.primes_total], ["Avantages", ln.avantages]].map(([l, v]) => (
                   <div key={l} className="flex justify-between"><span className="text-slate-500">{t(l)}</span><span className="font-mono-data">{fmtCAD(v)}</span></div>
                 ))}
-                <div className="col-span-2 mt-1 flex justify-between border-t border-slate-100 pt-1.5"><span className="font-600 text-slate-600">{t("Salaire brut")}</span><span className="font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(ln.salaire_brut)}</span></div>
+                <div className="col-span-2 mt-1 flex justify-between border-t border-slate-100 pt-1.5"><span className="font-600 text-slate-600">{t("Salaire brut")}</span><span className="font-mono-data font-600" style={{ color: "#22C55E" }}>{fmtCAD(ln.salaire_brut)}</span></div>
                 <div className="col-span-2 flex justify-between"><span className="font-700">{t("Coût total")}</span><span className="font-mono-data font-700">{fmtCAD(ln.total_budgeted)}</span></div>
               </div>
             </div>
@@ -452,7 +452,7 @@ export default function SalairesBudget() {
                   {[["Nouveau salaire", g.new_salary], ["Vacances", g.vacation], ["Primes", g.primes_total], ["Avantages", g.avantages]].map(([l, v]) => (
                     <div key={l} className="flex justify-between"><span className="text-slate-500">{t(l)}</span><span className="font-mono-data">{fmtCAD(v)}</span></div>
                   ))}
-                  <div className="col-span-2 mt-1 flex justify-between border-t border-slate-100 pt-1.5"><span className="font-600 text-slate-600">{t("Salaire brut")}</span><span className="font-mono-data font-600" style={{ color: "#0E9488" }}>{fmtCAD(g.salaire_brut)}</span></div>
+                  <div className="col-span-2 mt-1 flex justify-between border-t border-slate-100 pt-1.5"><span className="font-600 text-slate-600">{t("Salaire brut")}</span><span className="font-mono-data font-600" style={{ color: "#22C55E" }}>{fmtCAD(g.salaire_brut)}</span></div>
                   <div className="col-span-2 flex justify-between"><span className="font-700">{t("Coût total")}</span><span className="font-mono-data font-700">{fmtCAD(g.total_budgeted)}</span></div>
                 </div>
               </div>

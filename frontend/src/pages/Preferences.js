@@ -12,7 +12,7 @@ const EMP_SORT = { employee_number: "#", title: "Titre", name: "Nom", department
 const BUD_SORT = { employee_number: "#", name: "Nom", department: "Dépt", employment_type: "Type", new_salary: "Nouveau salaire", vacation: "Vacances", primes_total: "Primes", salaire_brut: "Salaire brut total", avantages: "Avantages", total_budgeted: "Coût total" };
 const DIR = { asc: "croissant", desc: "décroissant" };
 const DEFAULTS = { theme: "light", default_year: null, budget_scenario: "ca", employees_sort: { key: "employee_number", dir: "asc" }, budget_sort: { key: "employee_number", dir: "asc" } };
-const AVATAR_COLORS = ["#F8A942", "#063044", "#8B5CF6", "#F59E0B", "#EC4899", "#EF4444", "#0EA5E9", "#64748B"];
+const AVATAR_COLORS = ["#FBBF24", "#0F172A", "#8B5CF6", "#F59E0B", "#EC4899", "#EF4444", "#0EA5E9", "#64748B"];
 
 export default function Preferences() {
   const { user } = useAuth();
@@ -46,7 +46,7 @@ export default function Preferences() {
 
   if (!prefs) return <p className="font-mono-data text-sm text-slate-500">{t("Chargement…")}</p>;
   const theme = prefs.theme === "dark" ? "dark" : "light";
-  const avatarColor = prefs.avatar_color || "#F8A942";
+  const avatarColor = prefs.avatar_color || "#FBBF24";
 
   return (
     <div className="max-w-3xl space-y-5" data-testid="preferences-page">
@@ -55,7 +55,7 @@ export default function Preferences() {
         <div>
           <div className="flex items-center gap-2">
             <p className="font-700">{user?.name}</p>
-            <span className="rounded-full px-2 py-0.5 text-[10px] font-700 uppercase" style={{ backgroundColor: (user?.role === "admin" ? "#063044" : user?.role === "editor" ? "#0E9488" : "#64748B") + "22", color: user?.role === "admin" ? "#063044" : user?.role === "editor" ? "#0E9488" : "#64748B" }} data-testid="profile-role-badge">{user?.role === "admin" ? t("Administrateur") : user?.role === "editor" ? t("Éditeur") : t("Utilisateur")}</span>
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-700 uppercase" style={{ backgroundColor: (user?.role === "admin" ? "#0F172A" : user?.role === "editor" ? "#22C55E" : "#64748B") + "22", color: user?.role === "admin" ? "#0F172A" : user?.role === "editor" ? "#22C55E" : "#64748B" }} data-testid="profile-role-badge">{user?.role === "admin" ? t("Administrateur") : user?.role === "editor" ? t("Éditeur") : t("Utilisateur")}</span>
           </div>
           <p className="text-xs text-slate-500">{user?.email}</p>
         </div>
@@ -75,15 +75,15 @@ export default function Preferences() {
       </div>
 
       <div className="card p-5" data-testid="lang-card">
-        <h3 className="mb-1 flex items-center gap-2 text-sm font-700"><Languages size={16} className="text-[#15AF97]" /> {t("Langue")}</h3>
+        <h3 className="mb-1 flex items-center gap-2 text-sm font-700"><Languages size={16} className="text-[#22C55E]" /> {t("Langue")}</h3>
         <p className="mb-3 text-xs text-slate-500">{t("Choisissez la langue de l'interface. Ce réglage est propre à votre compte.")}</p>
         <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
           <button data-testid="lang-fr-btn" onClick={() => changeLang("fr")}
-            className={`rounded-lg px-4 py-2 text-sm font-600 transition-colors ${lang === "fr" ? "bg-[#063044] text-white shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+            className={`rounded-lg px-4 py-2 text-sm font-600 transition-colors ${lang === "fr" ? "bg-[#0F172A] text-white shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
             {t("Français")}
           </button>
           <button data-testid="lang-en-btn" onClick={() => changeLang("en")}
-            className={`rounded-lg px-4 py-2 text-sm font-600 transition-colors ${lang === "en" ? "bg-[#063044] text-white shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+            className={`rounded-lg px-4 py-2 text-sm font-600 transition-colors ${lang === "en" ? "bg-[#0F172A] text-white shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
             {t("Anglais (US)")}
           </button>
         </div>
@@ -106,7 +106,7 @@ export default function Preferences() {
 
       <div className="card p-5" data-testid="prefs-summary-card">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-sm font-700"><SlidersHorizontal size={16} className="text-[#063044]" /> {t("Mes réglages enregistrés")}</h3>
+          <h3 className="flex items-center gap-2 text-sm font-700"><SlidersHorizontal size={16} className="text-[#0F172A]" /> {t("Mes réglages enregistrés")}</h3>
           <Button data-testid="reset-prefs-btn" variant="outline" size="sm" className="gap-1.5" onClick={reset}><RotateCcw size={14} /> {t("Réinitialiser")}</Button>
         </div>
         <div className="divide-y divide-slate-100">

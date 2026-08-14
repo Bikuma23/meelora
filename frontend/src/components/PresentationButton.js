@@ -14,7 +14,7 @@ export function PresentationButton({ className = "" }) {
   return (
     <button onClick={toggle} data-testid="presentation-btn" title="Mode plein écran / présentation"
       className={`inline-flex items-center justify-center rounded-full border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 ${className}`}>
-      <Maximize size={15} className="text-[#0E9488]" />
+      <Maximize size={15} className="text-[#22C55E]" />
     </button>
   );
 }

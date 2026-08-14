@@ -53,7 +53,7 @@ export default function ImportErrorsDialog({ open, onOpenChange, errors = [], fi
           <Button data-testid="import-errors-export-btn" variant="outline" onClick={exportCsv} className="gap-1.5">
             <Download size={15} /> Exporter les erreurs (CSV)
           </Button>
-          <Button data-testid="import-errors-close-btn" onClick={() => onOpenChange(false)} className="bg-[#063044] hover:bg-[#063044]/90">
+          <Button data-testid="import-errors-close-btn" onClick={() => onOpenChange(false)} className="bg-[#0F172A] hover:bg-[#0F172A]/90">
             J'ai compris
           </Button>
         </DialogFooter>

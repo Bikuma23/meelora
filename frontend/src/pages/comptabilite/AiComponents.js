@@ -19,7 +19,7 @@ export function EntryDialog({ open, onOpenChange, year, month, index }) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="variance-entry-dialog" className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#0E9488]" /> Détail de l'écriture</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#22C55E]" /> Détail de l'écriture</DialogTitle>
           <DialogDescription>{entry ? `${entry.date}${entry.numero ? ` · N° ${entry.numero}` : ""}${entry.type ? ` · ${entry.type}` : ""}` : "Chargement…"}</DialogDescription>
         </DialogHeader>
         {loading ? <p className="text-xs text-slate-400">Chargement de l'écriture…</p>
@@ -34,7 +34,7 @@ export function EntryDialog({ open, onOpenChange, year, month, index }) {
               </tr></thead>
               <tbody>
                 {(entry.lines || []).map((l) => (
-                  <tr key={l.idx} className={`border-b border-slate-50 ${l.idx === index ? "bg-[#0E9488]/10" : ""}`}>
+                  <tr key={l.idx} className={`border-b border-slate-50 ${l.idx === index ? "bg-[#22C55E]/10" : ""}`}>
                     <td className="px-2 py-1 font-mono-data text-slate-600">{l.account}</td>
                     <td className="px-2 py-1 text-slate-700">{l.description}</td>
                     <td className="px-2 py-1 text-right font-mono-data text-slate-700">{l.debit ? money(l.debit) : ""}</td>
@@ -122,7 +122,7 @@ export function AiConfigDialog({ open, onOpenChange }) {
         </div>
         <DialogFooter className="gap-2">
           {(cfg.has_openai_key || cfg.has_azure_key) && <Button variant="outline" data-testid="ai-clear-keys" onClick={clearKeys} className="text-red-600">Effacer les clés</Button>}
-          <Button data-testid="ai-config-save" onClick={save} disabled={saving} className="bg-[#063044] hover:bg-[#063044]/90">{saving ? "…" : "Enregistrer"}</Button>
+          <Button data-testid="ai-config-save" onClick={save} disabled={saving} className="bg-[#0F172A] hover:bg-[#0F172A]/90">{saving ? "…" : "Enregistrer"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -184,8 +184,8 @@ export function VarianceCard({ year, month }) {
   return (
     <div className="card p-5" data-testid="ai-variance-card">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-sm font-700 text-slate-700"><FileText size={15} className="text-[#0E9488]" /> Analyse de variance (IA)</h3>
-        <Button size="sm" onClick={gen} disabled={loading || !selected.length} data-testid="ai-variance-btn" className="bg-[#063044] hover:bg-[#063044]/90">{loading ? "Analyse…" : "Générer"}</Button>
+        <h3 className="flex items-center gap-2 text-sm font-700 text-slate-700"><FileText size={15} className="text-[#22C55E]" /> Analyse de variance (IA)</h3>
+        <Button size="sm" onClick={gen} disabled={loading || !selected.length} data-testid="ai-variance-btn" className="bg-[#0F172A] hover:bg-[#0F172A]/90">{loading ? "Analyse…" : "Générer"}</Button>
       </div>
       <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="ai-variance-scenarios">
         <span className="text-[11px] font-700 uppercase tracking-wider text-slate-400">Scénarios budgétaires :</span>
@@ -196,12 +196,12 @@ export function VarianceCard({ year, month }) {
             <button key={s.id} onClick={() => toggleScenario(s.id)} disabled={!hasData || loading}
               title={!hasData ? "Aucune donnée pour ce scénario sur cette période" : "Cliquez pour inclure ou exclure ce scénario"}
               data-testid={`ai-variance-scenario-${s.id}`} aria-pressed={active}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-600 transition-colors ${active ? "border-[#063044] bg-[#063044] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488] hover:text-[#0E9488]"} ${(!hasData || loading) ? "cursor-not-allowed opacity-40 hover:border-slate-300 hover:text-slate-600" : ""}`}>
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-600 transition-colors ${active ? "border-[#0F172A] bg-[#0F172A] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#22C55E] hover:text-[#22C55E]"} ${(!hasData || loading) ? "cursor-not-allowed opacity-40 hover:border-slate-300 hover:text-slate-600" : ""}`}>
               {active && <Check size={12} />}{s.label}
             </button>
           );
         })}
-        {isCompare && <span className="inline-flex items-center gap-1 rounded-full bg-[#0E9488]/10 px-2.5 py-1 text-[11px] font-700 text-[#0E9488]" data-testid="ai-variance-compare-badge"><Sparkles size={12} /> Comparaison ({selected.length})</span>}
+        {isCompare && <span className="inline-flex items-center gap-1 rounded-full bg-[#22C55E]/10 px-2.5 py-1 text-[11px] font-700 text-[#22C55E]" data-testid="ai-variance-compare-badge"><Sparkles size={12} /> Comparaison ({selected.length})</span>}
       </div>
       {thr && <p className="mb-2 text-[11px] text-slate-400" data-testid="ai-variance-threshold">Seuil de déclenchement : écart ≥ <span className="font-600 text-slate-500">{money(thr.amount)} $</span> ou ≥ <span className="font-600 text-slate-500">{thr.pct} %</span> (configurable dans les réglages IA)</p>}
       {!selected.length ? <p className="text-xs text-slate-400" data-testid="ai-variance-hint">Sélectionnez un ou plusieurs scénarios budgétaires ci-dessus (2 scénarios ou plus = comparaison), puis cliquez « Générer » pour commenter les écarts réel vs budget les plus significatifs.</p>
@@ -248,12 +248,12 @@ export function VarianceCard({ year, month }) {
                                   <tr key={i} className={`border-b border-slate-100 ${t.inhabituelle ? "bg-amber-50" : ""}`} data-testid={`ai-variance-txn-${poste}-${i}`}>
                                     <td className="px-3 py-1.5 font-mono-data text-slate-500">{t.date}</td>
                                     <td className="px-3 py-1.5 text-slate-700">{t.inhabituelle && <AlertTriangle size={11} className="mr-1 inline text-[#B45309]" />}{t.description}</td>
-                                    <td className="px-3 py-1.5 text-right font-mono-data" style={{ color: (t.montant || 0) < 0 ? "#DC2626" : "#0E9488" }}>{money(t.montant)}</td>
+                                    <td className="px-3 py-1.5 text-right font-mono-data" style={{ color: (t.montant || 0) < 0 ? "#DC2626" : "#22C55E" }}>{money(t.montant)}</td>
                                     <td className="px-3 py-1.5 text-right">
                                       {t.idx !== undefined && t.idx !== null && (
                                         <button onClick={() => setEntryView({ open: true, index: t.idx })} data-testid={`ai-variance-entry-btn-${poste}-${i}`}
                                           title="Voir l'écriture dans le grand livre"
-                                          className="inline-flex items-center gap-1 text-[11px] font-600 text-[#063044] hover:underline"><ExternalLink size={12} /> Voir</button>
+                                          className="inline-flex items-center gap-1 text-[11px] font-600 text-[#0F172A] hover:underline"><ExternalLink size={12} /> Voir</button>
                                       )}
                                     </td>
                                   </tr>
@@ -291,12 +291,12 @@ export function AiChatPanel({ year, month }) {
   };
   return (
     <div className="card flex flex-col p-5" data-testid="ai-chat-card">
-      <h3 className="mb-2 flex items-center gap-2 text-sm font-700 text-slate-700"><Info size={15} className="text-[#0E9488]" /> Questions sur les données (IA)</h3>
+      <h3 className="mb-2 flex items-center gap-2 text-sm font-700 text-slate-700"><Info size={15} className="text-[#22C55E]" /> Questions sur les données (IA)</h3>
       <div className="mb-3 max-h-64 min-h-[80px] space-y-2 overflow-y-auto rounded-lg bg-slate-50 p-3" data-testid="ai-chat-messages">
         {msgs.length === 0 && <p className="text-xs text-slate-400">Ex. « Quelle a été l'évolution des charges sur les 6 derniers mois ? »</p>}
         {msgs.map((m, i) => (
           <div key={i} className={`text-sm ${m.role === "user" ? "text-right" : ""}`}>
-            <span className={`inline-block rounded-lg px-3 py-1.5 ${m.role === "user" ? "bg-[#063044] text-white" : "bg-white text-slate-700 shadow-sm"}`}>{m.text}</span>
+            <span className={`inline-block rounded-lg px-3 py-1.5 ${m.role === "user" ? "bg-[#0F172A] text-white" : "bg-white text-slate-700 shadow-sm"}`}>{m.text}</span>
             {m.role === "ai" && m.sources?.length > 0 && (
               <div className="mt-1.5 flex flex-wrap gap-1.5" data-testid={`ai-chat-sources-${i}`}>
                 <span className="text-[10px] font-700 uppercase tracking-wider text-slate-400">Sources :</span>
@@ -304,7 +304,7 @@ export function AiChatPanel({ year, month }) {
                   <span key={j} data-testid={`ai-chat-source-${i}-${j}`}
                     className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-600">
                     <span className="font-600">{s.poste}</span>
-                    {s.valeur !== null && s.valeur !== undefined && <span className="font-mono-data text-[#0E9488]">{money(s.valeur)}</span>}
+                    {s.valeur !== null && s.valeur !== undefined && <span className="font-mono-data text-[#22C55E]">{money(s.valeur)}</span>}
                   </span>
                 ))}
               </div>
@@ -315,7 +315,7 @@ export function AiChatPanel({ year, month }) {
       </div>
       <div className="flex gap-2">
         <Input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask()} data-testid="ai-chat-input" className="h-9" placeholder="Poser une question…" />
-        <Button onClick={ask} disabled={loading} data-testid="ai-chat-send" className="h-9 bg-[#063044] hover:bg-[#063044]/90">Envoyer</Button>
+        <Button onClick={ask} disabled={loading} data-testid="ai-chat-send" className="h-9 bg-[#0F172A] hover:bg-[#0F172A]/90">Envoyer</Button>
       </div>
     </div>
   );
@@ -338,10 +338,10 @@ export function AnomaliesCard({ periods }) {
   return (
     <div className="card p-5" data-testid="acct-anomalies-card">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-sm font-700 text-slate-700"><Sparkles size={15} className="text-[#0E9488]" /> Détection d'anomalies (IA)</h3>
+        <h3 className="flex items-center gap-2 text-sm font-700 text-slate-700"><Sparkles size={15} className="text-[#22C55E]" /> Détection d'anomalies (IA)</h3>
         <div className="flex items-center gap-2">
           <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId="acct-anomalies" />
-          <Button size="sm" onClick={detect} disabled={loading} data-testid="acct-anomalies-btn" className="bg-[#063044] hover:bg-[#063044]/90">{loading ? "Analyse…" : "Détecter"}</Button>
+          <Button size="sm" onClick={detect} disabled={loading} data-testid="acct-anomalies-btn" className="bg-[#0F172A] hover:bg-[#0F172A]/90">{loading ? "Analyse…" : "Détecter"}</Button>
         </div>
       </div>
       {!data ? <p className="text-xs text-slate-400">Repère les comptes dont le solde s'écarte fortement de leur moyenne des 6 derniers mois. Signalements non bloquants.</p>
@@ -362,7 +362,7 @@ export function AnomaliesCard({ periods }) {
                       <td className="px-3 py-2"><span className="font-mono-data text-slate-500">{an.account}</span> <span className="text-slate-700">{an.name}</span></td>
                       <td className="px-3 py-2 text-right font-mono-data">{money(an.value)}</td>
                       <td className="px-3 py-2 text-right font-mono-data text-slate-500">{money(an.moyenne)}</td>
-                      <td className="px-3 py-2 text-right font-mono-data" style={{ color: an.ecart < 0 ? "#DC2626" : "#0E9488" }}>{money(an.ecart)}</td>
+                      <td className="px-3 py-2 text-right font-mono-data" style={{ color: an.ecart < 0 ? "#DC2626" : "#22C55E" }}>{money(an.ecart)}</td>
                       <td className="px-3 py-2 text-right font-mono-data font-700 text-[#B45309]">{an.z}</td>
                     </tr>
                   ))}

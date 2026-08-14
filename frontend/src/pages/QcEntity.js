@@ -70,14 +70,14 @@ function OpeningBalancesDialog({ open, onOpenChange, year, locked, canEdit }) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="qc-opening-dialog" className="max-h-[88vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Scale size={16} className="text-[#0E9488]" /> Soldes d'ouverture — exercice {year}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><Scale size={16} className="text-[#22C55E]" /> Soldes d'ouverture — exercice {year}</DialogTitle>
           <DialogDescription className="text-xs">Saisissez le bilan de clôture de l'exercice précédent (report « à-nouveaux »). Les débits doivent égaler les crédits.</DialogDescription>
         </DialogHeader>
         {loading ? <p className="py-6 text-center text-sm text-slate-400">Chargement…</p>
           : <div className="space-y-4">
               {grouped.map((g) => (
                 <div key={g.sec}>
-                  <p className="mb-1 text-xs font-700 uppercase tracking-wide text-[#0E9488]">{g.label}</p>
+                  <p className="mb-1 text-xs font-700 uppercase tracking-wide text-[#22C55E]">{g.label}</p>
                   <table className="w-full text-sm">
                     <thead><tr className="text-left text-[11px] uppercase text-slate-400"><th className="py-1">Compte</th><th className="py-1 text-right w-32">Débit</th><th className="py-1 text-right w-32">Crédit</th></tr></thead>
                     <tbody>
@@ -99,7 +99,7 @@ function OpeningBalancesDialog({ open, onOpenChange, year, locked, canEdit }) {
             </div>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Fermer</Button>
-          {canEdit && <Button onClick={save} disabled={saving || !balanced} data-testid="qc-opening-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">{saving ? "…" : "Enregistrer les à-nouveaux"}</Button>}
+          {canEdit && <Button onClick={save} disabled={saving || !balanced} data-testid="qc-opening-save" className="bg-[#22C55E] hover:bg-[#22C55E]/90">{saving ? "…" : "Enregistrer les à-nouveaux"}</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -175,7 +175,7 @@ export default function QcEntity() {
               <Scale size={14} /> Soldes d'ouverture
             </Button>
           )}
-          {isAdmin && <Button size="sm" onClick={() => setYearDlg(true)} data-testid="qc-new-year-btn" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouvel exercice</Button>}
+          {isAdmin && <Button size="sm" onClick={() => setYearDlg(true)} data-testid="qc-new-year-btn" className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90"><Plus size={14} /> Nouvel exercice</Button>}
         </div>
       </div>
 
@@ -187,7 +187,7 @@ export default function QcEntity() {
           const Icon = tp.icon; const on = tab === tp.key;
           return (
             <button key={tp.key} onClick={() => setTab(tp.key)} data-testid={`qc-tab-${tp.key}`}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-600 transition-colors ${on ? "border-[#063044] bg-[#063044] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488] hover:text-[#0E9488]"}`}>
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-600 transition-colors ${on ? "border-[#0F172A] bg-[#0F172A] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#22C55E] hover:text-[#22C55E]"}`}>
               <Icon size={14} /> {tp.label}
             </button>
           );
@@ -199,7 +199,7 @@ export default function QcEntity() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button data-testid="qc-tab-rapports"
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-600 transition-colors ${reportOn ? "border-[#063044] bg-[#063044] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488] hover:text-[#0E9488]"}`}>
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-600 transition-colors ${reportOn ? "border-[#0F172A] bg-[#0F172A] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#22C55E] hover:text-[#22C55E]"}`}>
                   <LayoutList size={14} /> Rapports{active ? ` · ${active.label}` : ""} <ChevronDown size={14} />
                 </button>
               </DropdownMenuTrigger>
@@ -208,7 +208,7 @@ export default function QcEntity() {
                   const Icon = tp.icon;
                   return (
                     <DropdownMenuItem key={tp.key} onClick={() => setTab(tp.key)} data-testid={`qc-tab-${tp.key}`}
-                      className={`gap-2 ${tab === tp.key ? "bg-[#0E9488]/10 font-600 text-[#0E9488]" : ""}`}>
+                      className={`gap-2 ${tab === tp.key ? "bg-[#22C55E]/10 font-600 text-[#22C55E]" : ""}`}>
                       <Icon size={14} /> {tp.label}
                     </DropdownMenuItem>
                   );
@@ -223,7 +223,7 @@ export default function QcEntity() {
         ? <div className="card p-10 text-center" data-testid="qc-no-year">
             <p className="text-sm text-slate-500">Aucun exercice comptable pour {ENTITY}.</p>
             {isAdmin && <div className="mt-3 flex flex-wrap justify-center gap-2">
-              <Button onClick={() => setYearDlg(true)} className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Créer le premier exercice</Button>
+              <Button onClick={() => setYearDlg(true)} className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90"><Plus size={14} /> Créer le premier exercice</Button>
               <Button variant="outline" onClick={importModel} data-testid="qc-import-model" className="gap-2"><Download size={14} /> Importer le modèle Excel (2025-2026)</Button>
             </div>}
           </div>
@@ -252,7 +252,7 @@ export default function QcEntity() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setYearDlg(false)}>Annuler</Button>
-            <Button onClick={createYear} data-testid="qc-year-create" className="bg-[#0E9488] hover:bg-[#0E9488]/90">Créer</Button>
+            <Button onClick={createYear} data-testid="qc-year-create" className="bg-[#22C55E] hover:bg-[#22C55E]/90">Créer</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -278,13 +278,13 @@ function AccountDetailModal({ year, account, scope, onClose }) {
     <Dialog open={!!account} onOpenChange={(v) => !v && onClose()}>
       <DialogContent data-testid="qc-account-detail-modal" className="max-h-[88vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#0E9488]" /> Détail du compte {account} {d?.name ? `— ${d.name}` : ""}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#22C55E]" /> Détail du compte {account} {d?.name ? `— ${d.name}` : ""}</DialogTitle>
           <DialogDescription className="text-xs">{curScope === "cumulative" ? "Écritures cumulatives jusqu'à la fin de l'exercice" : `Écritures de l'exercice ${year}`} · Solde : {d ? money(d.balance) : "…"} $</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex overflow-hidden rounded-lg border border-slate-200" data-testid="qc-detail-scope-toggle">
-            <button onClick={() => setCurScope("movement")} data-testid="qc-detail-scope-movement" className={`px-3 py-1.5 text-xs font-600 ${curScope === "movement" ? "bg-[#0E9488] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>Exercice {year}</button>
-            <button onClick={() => setCurScope("cumulative")} data-testid="qc-detail-scope-cumulative" className={`px-3 py-1.5 text-xs font-600 ${curScope === "cumulative" ? "bg-[#0E9488] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>Cumulatif</button>
+            <button onClick={() => setCurScope("movement")} data-testid="qc-detail-scope-movement" className={`px-3 py-1.5 text-xs font-600 ${curScope === "movement" ? "bg-[#22C55E] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>Exercice {year}</button>
+            <button onClick={() => setCurScope("cumulative")} data-testid="qc-detail-scope-cumulative" className={`px-3 py-1.5 text-xs font-600 ${curScope === "cumulative" ? "bg-[#22C55E] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>Cumulatif</button>
           </div>
           <div className="relative flex-1 min-w-[180px]">
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher (n°, date, description, tiers, montant)…" data-testid="qc-detail-search" className="h-8 pl-3 text-sm" />
@@ -293,14 +293,14 @@ function AccountDetailModal({ year, account, scope, onClose }) {
         {!d ? <p className="py-6 text-center text-sm text-slate-400">Chargement…</p>
           : (d.rows || []).length === 0 ? <p className="py-6 text-center text-sm text-slate-400" data-testid="qc-detail-empty">Aucune écriture pour ce compte.</p>
           : <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-detail-table">
-              <thead><tr className="bg-[#063044] text-left text-xs uppercase text-white">
+              <thead><tr className="bg-[#0F172A] text-left text-xs uppercase text-white">
                 <th className="px-3 py-2">N°</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Description</th><th className="px-3 py-2">Tiers</th><th className="px-3 py-2 text-right">Débit</th><th className="px-3 py-2 text-right">Crédit</th><th className="px-3 py-2 text-right">Solde</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {rows.length === 0 ? <tr data-testid="qc-detail-no-match"><td colSpan={7} className="py-6 text-center text-sm text-slate-400">Aucun résultat pour « {query} ».</td></tr>
                   : rows.map((r, i) => (
                   <tr key={i} className="hover:bg-slate-50" data-testid={`qc-detail-row-${i}`}>
-                    <td className="px-3 py-1.5 font-mono-data text-xs text-[#0E9488]">{r.num}</td>
+                    <td className="px-3 py-1.5 font-mono-data text-xs text-[#22C55E]">{r.num}</td>
                     <td className="px-3 py-1.5 text-xs">{r.date}</td>
                     <td className="px-3 py-1.5">{r.description}</td>
                     <td className="px-3 py-1.5 text-xs text-slate-500">{r.tiers || "—"}</td>
@@ -310,7 +310,7 @@ function AccountDetailModal({ year, account, scope, onClose }) {
                   </tr>
                 ))}
               </tbody>
-              <tfoot><tr className="border-t-2 border-[#063044] bg-slate-50 font-700">
+              <tfoot><tr className="border-t-2 border-[#0F172A] bg-slate-50 font-700">
                 <td className="px-3 py-2" colSpan={4}>{q ? `TOTAL FILTRÉ (${rows.length})` : "TOTAL"}</td>
                 <td className="px-3 py-2 text-right font-mono-data">{money(q ? fDebit : d.total_debit)}</td>
                 <td className="px-3 py-2 text-right font-mono-data">{money(q ? fCredit : d.total_credit)}</td>
@@ -328,7 +328,7 @@ function PlaceholderView({ label }) {
   return (
     <div className="card p-10 text-center" data-testid="qc-placeholder">
       <FileText size={36} className="mx-auto text-slate-300" />
-      <h3 className="mt-3 font-display text-base font-700 text-[#063044]">{label}</h3>
+      <h3 className="mt-3 font-display text-base font-700 text-[#0F172A]">{label}</h3>
       <p className="mt-1 text-sm text-slate-500">Cet écran sera construit à partir du <strong>modèle Excel</strong> de la structure comptable à venir.</p>
       <p className="mt-0.5 text-xs text-slate-400">Les écritures saisies alimenteront automatiquement ce rapport une fois la structure connue.</p>
     </div>
@@ -419,7 +419,7 @@ function EntriesView({ year, locked, canEdit }) {
         <p className="text-sm text-slate-500">{entries.length} écriture(s) · Exercice {year}</p>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={journalPdf} data-testid="qc-journal-pdf" className="gap-2"><FileDown size={14} /> Journal PDF</Button>
-          {canEdit && !locked && <Button size="sm" onClick={openNew} data-testid="qc-add-entry" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouvelle écriture</Button>}
+          {canEdit && !locked && <Button size="sm" onClick={openNew} data-testid="qc-add-entry" className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90"><Plus size={14} /> Nouvelle écriture</Button>}
         </div>
       </div>
 
@@ -429,7 +429,7 @@ function EntriesView({ year, locked, canEdit }) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm" data-testid="qc-entries-table">
                 <thead>
-                  <tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
+                  <tr className="bg-[#0F172A] text-left text-xs uppercase tracking-wide text-white">
                     <th className="px-3 py-2">N°</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Réf.</th><th className="px-3 py-2">Description</th>
                     <th className="px-3 py-2">Comptes</th><th className="px-3 py-2 text-right">Montant</th><th className="px-3 py-2"></th>
                   </tr>
@@ -437,13 +437,13 @@ function EntriesView({ year, locked, canEdit }) {
                 <tbody className="divide-y divide-slate-100">
                   {entries.map((e) => (
                     <tr key={e.id} className="hover:bg-slate-50" data-testid={`qc-entry-row-${e.id}`}>
-                      <td className="whitespace-nowrap px-3 py-2 font-mono-data text-xs font-600 text-[#0E9488]">{e.num}{e.source && e.source !== "manual" ? <span className="ml-1 rounded bg-slate-100 px-1 text-[9px] uppercase text-slate-500">{e.source === "closing" ? "fermeture" : e.source === "invoice" ? "fact." : e.source === "bill" ? "fourn." : e.source === "receipt" ? "encaiss." : e.source === "payment" ? "paiem." : e.source}</span> : null}</td>
+                      <td className="whitespace-nowrap px-3 py-2 font-mono-data text-xs font-600 text-[#22C55E]">{e.num}{e.source && e.source !== "manual" ? <span className="ml-1 rounded bg-slate-100 px-1 text-[9px] uppercase text-slate-500">{e.source === "closing" ? "fermeture" : e.source === "invoice" ? "fact." : e.source === "bill" ? "fourn." : e.source === "receipt" ? "encaiss." : e.source === "payment" ? "paiem." : e.source}</span> : null}</td>
                       <td className="whitespace-nowrap px-3 py-2 font-mono-data text-xs">{e.date}</td>
                       <td className="px-3 py-2 text-xs text-slate-500">{e.reference || "—"}</td>
                       <td className="px-3 py-2">{e.description || "—"}</td>
                       <td className="px-3 py-2 text-xs text-slate-500">
                         {(e.lines || []).map((l, i) => (
-                          <div key={i}>{l.account}{l.account_name ? ` · ${l.account_name}` : ""}{l.tiers ? ` · ${l.tiers}` : ""} <span className={l.debit ? "text-[#063044]" : "text-[#0E9488]"}>{l.debit ? `Dt ${money(l.debit)}` : `Ct ${money(l.credit)}`}</span></div>
+                          <div key={i}>{l.account}{l.account_name ? ` · ${l.account_name}` : ""}{l.tiers ? ` · ${l.tiers}` : ""} <span className={l.debit ? "text-[#0F172A]" : "text-[#22C55E]"}>{l.debit ? `Dt ${money(l.debit)}` : `Ct ${money(l.credit)}`}</span></div>
                         ))}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-right font-mono-data">{money(e.total)}</td>
@@ -481,7 +481,7 @@ function EntriesView({ year, locked, canEdit }) {
                 <span className="text-xs font-600 text-slate-500"><Copy size={13} className="mr-1 inline" />Modèles :</span>
                 {templates.map((t) => (
                   <span key={t.id} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white pl-2.5 pr-1 py-0.5 text-xs">
-                    <button onClick={() => applyTemplate(t)} data-testid={`qc-tpl-apply-${t.id}`} className="font-600 text-[#0E9488] hover:underline">{t.name}</button>
+                    <button onClick={() => applyTemplate(t)} data-testid={`qc-tpl-apply-${t.id}`} className="font-600 text-[#22C55E] hover:underline">{t.name}</button>
                     <button onClick={() => delTemplate(t)} className="text-slate-300 hover:text-red-500"><X size={12} /></button>
                   </span>
                 ))}
@@ -497,7 +497,7 @@ function EntriesView({ year, locked, canEdit }) {
                     <tr key={i} data-testid={`qc-line-${i}`}>
                       <td className="px-2 py-1">
                         <select value={l.account} onChange={(e) => onAccountChange(i, e.target.value)} data-testid={`qc-line-account-${i}`}
-                          className="h-8 w-32 rounded-md border border-slate-300 bg-white px-1.5 text-sm focus:border-[#0E9488] focus:outline-none">
+                          className="h-8 w-32 rounded-md border border-slate-300 bg-white px-1.5 text-sm focus:border-[#22C55E] focus:outline-none">
                           <option value="">—</option>
                           {accountOptions.map((o) => <option key={o.account} value={o.account}>{o.account}</option>)}
                         </select>
@@ -513,7 +513,7 @@ function EntriesView({ year, locked, canEdit }) {
                 <tfoot>
                   <tr className="border-t border-slate-200 font-600">
                     <td className="px-2 py-1.5" colSpan={3}>
-                      <button onClick={addLine} data-testid="qc-add-line" className="inline-flex items-center gap-1 text-xs text-[#0E9488] hover:underline"><Plus size={13} /> Ajouter une ligne</button>
+                      <button onClick={addLine} data-testid="qc-add-line" className="inline-flex items-center gap-1 text-xs text-[#22C55E] hover:underline"><Plus size={13} /> Ajouter une ligne</button>
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono-data" data-testid="qc-total-debit">{money(totalDebit)}</td>
                     <td className="px-2 py-1.5 text-right font-mono-data" data-testid="qc-total-credit">{money(totalCredit)}</td>
@@ -533,7 +533,7 @@ function EntriesView({ year, locked, canEdit }) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDlg(false)}>Annuler</Button>
-            <Button onClick={save} disabled={!balanced || saving} data-testid="qc-entry-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">{saving ? "…" : "Enregistrer"}</Button>
+            <Button onClick={save} disabled={!balanced || saving} data-testid="qc-entry-save" className="bg-[#22C55E] hover:bg-[#22C55E]/90">{saving ? "…" : "Enregistrer"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -575,15 +575,15 @@ function TrialBalanceView({ year }) {
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="qc-tb-table">
-            <thead><tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
+            <thead><tr className="bg-[#0F172A] text-left text-xs uppercase tracking-wide text-white">
               <th className="px-3 py-2">Compte</th><th className="px-3 py-2">Nom du compte</th>
               <th className="px-3 py-2 text-right">Débit</th><th className="px-3 py-2 text-right">Crédit</th><th className="px-3 py-2 text-right">Solde</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
               {tb.rows.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-slate-400">Aucun compte (saisissez des écritures).</td></tr>}
               {tb.rows.map((r) => (
-                <tr key={r.account} className="cursor-pointer hover:bg-[#0E9488]/5" onClick={() => setDrill(r.account)} data-testid={`qc-tb-row-${r.account}`} title="Voir le détail des écritures">
-                  <td className="px-3 py-1.5 font-mono-data text-xs text-[#0E9488] underline decoration-dotted">{r.account}</td>
+                <tr key={r.account} className="cursor-pointer hover:bg-[#22C55E]/5" onClick={() => setDrill(r.account)} data-testid={`qc-tb-row-${r.account}`} title="Voir le détail des écritures">
+                  <td className="px-3 py-1.5 font-mono-data text-xs text-[#22C55E] underline decoration-dotted">{r.account}</td>
                   <td className="px-3 py-1.5">{r.account_name || "—"}</td>
                   <td className="px-3 py-1.5 text-right font-mono-data">{r.debit ? money(r.debit) : "—"}</td>
                   <td className="px-3 py-1.5 text-right font-mono-data">{r.credit ? money(r.credit) : "—"}</td>
@@ -591,7 +591,7 @@ function TrialBalanceView({ year }) {
                 </tr>
               ))}
             </tbody>
-            <tfoot><tr className="border-t-2 border-[#063044] bg-slate-50 font-700">
+            <tfoot><tr className="border-t-2 border-[#0F172A] bg-slate-50 font-700">
               <td className="px-3 py-2" colSpan={2}>TOTAL</td>
               <td className="px-3 py-2 text-right font-mono-data">{money(tb.total_debit)}</td>
               <td className="px-3 py-2 text-right font-mono-data">{money(tb.total_credit)}</td>
@@ -635,19 +635,19 @@ function PaymentHistoryDialog({ open, onOpenChange, kind, id, label }) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="qc-payment-history-dialog" className="max-h-[85vh] max-w-lg overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Clock size={16} className="text-[#0E9488]" /> Historique des {verb.toLowerCase()}s — {label}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><Clock size={16} className="text-[#22C55E]" /> Historique des {verb.toLowerCase()}s — {label}</DialogTitle>
           <DialogDescription className="text-xs">{doc ? <>Total {money(doc.total)} $ · Réglé {money(doc.paid_amount)} $ · Solde {money(doc.balance)} $ · <InvoiceStatus status={doc.status} /></> : "Chargement…"}</DialogDescription>
         </DialogHeader>
         {!data ? <p className="py-6 text-center text-sm text-slate-400">Chargement…</p>
           : payments.length === 0 ? <p className="py-6 text-center text-sm text-slate-400" data-testid="qc-payment-empty">Aucun {verb.toLowerCase()} enregistré pour l'instant.</p>
           : <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-payment-table">
-              <thead><tr className="bg-[#063044] text-left text-xs uppercase text-white"><th className="px-3 py-2">Écriture</th><th className="px-3 py-2">Date</th><th className="px-3 py-2 text-right">Montant</th></tr></thead>
+              <thead><tr className="bg-[#0F172A] text-left text-xs uppercase text-white"><th className="px-3 py-2">Écriture</th><th className="px-3 py-2">Date</th><th className="px-3 py-2 text-right">Montant</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {payments.map((p, i) => (
-                  <tr key={i} data-testid={`qc-payment-row-${i}`}><td className="px-3 py-1.5 font-mono-data text-xs text-[#0E9488]">{p.num}</td><td className="px-3 py-1.5 text-xs">{p.date}</td><td className="px-3 py-1.5 text-right font-mono-data">{money(p.amount)}</td></tr>
+                  <tr key={i} data-testid={`qc-payment-row-${i}`}><td className="px-3 py-1.5 font-mono-data text-xs text-[#22C55E]">{p.num}</td><td className="px-3 py-1.5 text-xs">{p.date}</td><td className="px-3 py-1.5 text-right font-mono-data">{money(p.amount)}</td></tr>
                 ))}
               </tbody>
-              <tfoot><tr className="border-t-2 border-[#063044] bg-slate-50 font-700"><td className="px-3 py-2" colSpan={2}>Total réglé</td><td className="px-3 py-2 text-right font-mono-data">{money(payments.reduce((s, p) => s + (p.amount || 0), 0))}</td></tr></tfoot>
+              <tfoot><tr className="border-t-2 border-[#0F172A] bg-slate-50 font-700"><td className="px-3 py-2" colSpan={2}>Total réglé</td><td className="px-3 py-2 text-right font-mono-data">{money(payments.reduce((s, p) => s + (p.amount || 0), 0))}</td></tr></tfoot>
             </table></div>}
         <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Fermer</Button></DialogFooter>
       </DialogContent>
@@ -666,13 +666,13 @@ function LineItemsEditor({ items, setItems, accounts, testid, defaultAccount = "
     <div data-testid={testid}>
       <div className="mb-1 flex items-center justify-between">
         <label className="text-xs font-600 text-slate-500">Lignes de la facture</label>
-        <Button size="sm" variant="ghost" onClick={add} data-testid={`${testid}-add`} className="h-7 gap-1 text-[#0E9488] hover:bg-[#0E9488]/10"><Plus size={12} /> Ajouter</Button>
+        <Button size="sm" variant="ghost" onClick={add} data-testid={`${testid}-add`} className="h-7 gap-1 text-[#22C55E] hover:bg-[#22C55E]/10"><Plus size={12} /> Ajouter</Button>
       </div>
       <div className="space-y-2">
         {items.map((it, i) => (
           <div key={i} className="flex items-center gap-2" data-testid={`${testid}-row-${i}`}>
             <Input value={it.description} onChange={(e) => upd(i, "description", e.target.value)} placeholder="Description" data-testid={`${testid}-desc-${i}`} className="h-8 flex-1" />
-            <select value={it.account} onChange={(e) => upd(i, "account", e.target.value)} data-testid={`${testid}-account-${i}`} className="h-8 w-40 shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs focus:border-[#0E9488] focus:outline-none">
+            <select value={it.account} onChange={(e) => upd(i, "account", e.target.value)} data-testid={`${testid}-account-${i}`} className="h-8 w-40 shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs focus:border-[#22C55E] focus:outline-none">
               <option value="">Compte…</option>
               {accounts.map((a) => <option key={a.gl} value={a.gl}>{`${a.gl} · ${a.description}`}</option>)}
             </select>
@@ -761,14 +761,14 @@ function InvoicesView({ year, locked, canEdit }) {
         <p className="text-sm text-slate-500">{rows.length} facture(s) · Solde à recevoir : <strong>{money(openTotal)} $</strong></p>
         {canEdit && !locked && <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => setCreditTarget(null)} data-testid="qc-add-credit-note" className="gap-2"><FileMinus size={14} /> Note de crédit</Button>
-          <Button size="sm" onClick={openNew} data-testid="qc-add-invoice" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouvelle facture</Button>
+          <Button size="sm" onClick={openNew} data-testid="qc-add-invoice" className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90"><Plus size={14} /> Nouvelle facture</Button>
         </div>}
       </div>
       {overdueCount > 0 && <div data-testid="qc-ar-overdue-banner" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-600 text-red-700"><span className="flex items-center gap-2"><AlertTriangle size={16} /> {overdueCount} facture(s) en retard (échéance dépassée).</span>{canEdit && <Button size="sm" onClick={sendReminders} disabled={reminding} data-testid="qc-ar-remind-btn" className="gap-1.5 bg-red-600 hover:bg-red-700"><Mail size={14} /> {reminding ? "Envoi…" : "Relancer les retards"}</Button>}</div>}
       {rows.length === 0
         ? <div className="card p-10 text-center text-sm text-slate-400" data-testid="qc-ar-empty">Aucune facture client pour cet exercice.</div>
         : <div className="card overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-invoices-table">
-            <thead><tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
+            <thead><tr className="bg-[#0F172A] text-left text-xs uppercase tracking-wide text-white">
               <th className="px-3 py-2">N°</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Échéance</th><th className="px-3 py-2">Client</th><th className="px-3 py-2 text-right">Total</th><th className="px-3 py-2 text-right">Solde</th><th className="px-3 py-2">Statut</th><th className="px-3 py-2"></th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
@@ -787,7 +787,7 @@ function InvoicesView({ year, locked, canEdit }) {
                   <td className="px-3 py-2"><div className="flex justify-end gap-1">
                     <button onClick={() => setHistory({ id: r.id, label: r.number })} data-testid={`qc-invoice-history-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Historique des encaissements"><Clock size={14} /></button>
                     {!isCN && <button onClick={() => pdf(r)} data-testid={`qc-invoice-pdf-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="PDF"><FileDown size={14} /></button>}
-                    {!isCN && r.client_email && <button onClick={() => emailInvoice(r)} data-testid={`qc-invoice-email-${r.id}`} className="rounded p-1.5 text-[#0E9488] hover:bg-[#0E9488]/10" title={`Envoyer à ${r.client_email}`}><Mail size={14} /></button>}
+                    {!isCN && r.client_email && <button onClick={() => emailInvoice(r)} data-testid={`qc-invoice-email-${r.id}`} className="rounded p-1.5 text-[#22C55E] hover:bg-[#22C55E]/10" title={`Envoyer à ${r.client_email}`}><Mail size={14} /></button>}
                     {canEdit && !locked && !isCN && r.status !== "paid" && r.status !== "reversed" && <button onClick={() => receive(r)} data-testid={`qc-invoice-receive-${r.id}`} className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50" title="Encaisser"><Wallet size={14} /></button>}
                     {canEdit && !locked && canEditInvoice(r) && <button onClick={() => openEdit(r)} data-testid={`qc-invoice-edit-${r.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Modifier"><Pencil size={14} /></button>}
                     {canEdit && !locked && canCreditInvoice(r) && <button onClick={() => setCreditTarget(r)} data-testid={`qc-invoice-credit-${r.id}`} className="rounded p-1.5 text-violet-600 hover:bg-violet-50" title="Note de crédit"><FileMinus size={14} /></button>}
@@ -825,7 +825,7 @@ function InvoicesView({ year, locked, canEdit }) {
           <div className="space-y-3">
             <div>
               <label className="mb-1 block text-xs font-600 text-slate-500">Client du carnet (optionnel — applique son compte AR)</label>
-              <select value={form.client_id} onChange={(e) => onPickClient(e.target.value)} data-testid="qc-invoice-client-select" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm focus:border-[#0E9488] focus:outline-none">
+              <select value={form.client_id} onChange={(e) => onPickClient(e.target.value)} data-testid="qc-invoice-client-select" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm focus:border-[#22C55E] focus:outline-none">
                 <option value="">— Saisie libre —</option>
                 {clients.filter((c) => c.active !== false).map((c) => <option key={c.id} value={c.id}>{`${c.name} · CR ${c.ar_account}`}</option>)}
               </select>
@@ -843,12 +843,12 @@ function InvoicesView({ year, locked, canEdit }) {
               <div className="flex justify-between"><span>Total des ventes</span><span className="font-mono-data">{money(amt)} $</span></div>
               <div className="flex justify-between text-slate-500"><span>T.P.S. (5,0 %)</span><span className="font-mono-data">{money(tps)} $</span></div>
               <div className="flex justify-between text-slate-500"><span>T.V.Q. (9,975 %)</span><span className="font-mono-data">{money(tvq)} $</span></div>
-              <div className="mt-1 flex justify-between border-t border-slate-200 pt-1 font-700 text-[#063044]"><span>TOTAL</span><span className="font-mono-data">{money(total)} $</span></div>
+              <div className="mt-1 flex justify-between border-t border-slate-200 pt-1 font-700 text-[#0F172A]"><span>TOTAL</span><span className="font-mono-data">{money(total)} $</span></div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setDlg(false); setEditing(null); }}>Annuler</Button>
-            <Button onClick={save} disabled={saving || amt <= 0 || !form.client_name.trim()} data-testid="qc-invoice-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">{saving ? "…" : editing ? "Enregistrer les modifications" : "Créer & comptabiliser"}</Button>
+            <Button onClick={save} disabled={saving || amt <= 0 || !form.client_name.trim()} data-testid="qc-invoice-save" className="bg-[#22C55E] hover:bg-[#22C55E]/90">{saving ? "…" : editing ? "Enregistrer les modifications" : "Créer & comptabiliser"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -932,7 +932,7 @@ function CreditNoteDialog({ open, invoice, year, accounts, clients, onClose, onD
         <div className="space-y-3">
           {!linked && <div>
             <label className="mb-1 block text-xs font-600 text-slate-500">Client du carnet (optionnel)</label>
-            <select value={form.client_id} onChange={(e) => onPickClient(e.target.value)} data-testid="qc-cn-client-select" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm focus:border-[#0E9488] focus:outline-none">
+            <select value={form.client_id} onChange={(e) => onPickClient(e.target.value)} data-testid="qc-cn-client-select" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm focus:border-[#22C55E] focus:outline-none">
               <option value="">— Saisie libre —</option>
               {clients.filter((c) => c.active !== false).map((c) => <option key={c.id} value={c.id}>{`${c.name} · CR ${c.ar_account}`}</option>)}
             </select>
@@ -998,13 +998,13 @@ function ClientsView({ isAdmin, year }) {
         <p className="text-sm text-slate-500">{rows.length} client(s) au carnet.</p>
         {isAdmin && <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => setPurgeOpen(true)} data-testid="qc-purge-test-btn" className="gap-2 text-red-600 hover:bg-red-50"><Trash2 size={14} /> Purger données test</Button>
-          <Button size="sm" onClick={openNew} data-testid="qc-add-client" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouveau client</Button>
+          <Button size="sm" onClick={openNew} data-testid="qc-add-client" className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90"><Plus size={14} /> Nouveau client</Button>
         </div>}
       </div>
       {rows.length === 0
         ? <div className="card p-10 text-center text-sm text-slate-400" data-testid="qc-clients-empty">Aucun client. {isAdmin ? "Ajoutez-en un pour attribuer un compte de comptes-clients dédié." : ""}</div>
         : <div className="card overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-clients-table">
-            <thead><tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
+            <thead><tr className="bg-[#0F172A] text-left text-xs uppercase tracking-wide text-white">
               <th className="px-3 py-2">Nom</th><th className="px-3 py-2">À l'attention</th><th className="px-3 py-2">Courriel</th><th className="px-3 py-2">Compte clients (AR)</th><th className="px-3 py-2">Statut</th><th className="px-3 py-2"></th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
@@ -1016,7 +1016,7 @@ function ClientsView({ isAdmin, year }) {
                   <td className="px-3 py-2 font-mono-data text-xs">{accName(c.ar_account)}</td>
                   <td className="px-3 py-2">{c.active !== false ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-600 text-emerald-700">Actif</span> : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-600 text-slate-500">Inactif</span>}</td>
                   <td className="px-3 py-2"><div className="flex justify-end gap-1">
-                    <button onClick={() => setStmtClient(c)} data-testid={`qc-client-statement-${c.id}`} className="rounded p-1.5 text-[#0E9488] hover:bg-[#0E9488]/10" title="Relevé de compte"><FileText size={14} /></button>
+                    <button onClick={() => setStmtClient(c)} data-testid={`qc-client-statement-${c.id}`} className="rounded p-1.5 text-[#22C55E] hover:bg-[#22C55E]/10" title="Relevé de compte"><FileText size={14} /></button>
                     {isAdmin && <button onClick={() => openEdit(c)} data-testid={`qc-client-edit-${c.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Modifier"><Pencil size={14} /></button>}
                     {isAdmin && <button onClick={() => setDelTarget(c)} data-testid={`qc-client-delete-${c.id}`} className="rounded p-1.5 text-red-500 hover:bg-red-50" title="Supprimer"><Trash2 size={14} /></button>}
                   </div></td>
@@ -1036,7 +1036,7 @@ function ClientsView({ isAdmin, year }) {
             <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Adresse (optionnel)" data-testid="qc-client-address" className="h-9" />
             <div>
               <label className="mb-1 block text-xs font-600 text-slate-500">Compte de comptes-clients (AR)</label>
-              <select value={form.ar_account} onChange={(e) => setForm({ ...form, ar_account: e.target.value })} data-testid="qc-client-ar" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm focus:border-[#0E9488] focus:outline-none">
+              <select value={form.ar_account} onChange={(e) => setForm({ ...form, ar_account: e.target.value })} data-testid="qc-client-ar" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm focus:border-[#22C55E] focus:outline-none">
                 <option value="">— Compte par défaut —</option>
                 {accounts.map((a) => <option key={a.gl} value={a.gl}>{`${a.gl} · ${a.description}`}</option>)}
               </select>
@@ -1045,7 +1045,7 @@ function ClientsView({ isAdmin, year }) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setDlg(false); setEditing(null); }}>Annuler</Button>
-            <Button onClick={save} disabled={saving || !form.name.trim()} data-testid="qc-client-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">{saving ? "…" : editing ? "Enregistrer" : "Créer"}</Button>
+            <Button onClick={save} disabled={saving || !form.name.trim()} data-testid="qc-client-save" className="bg-[#22C55E] hover:bg-[#22C55E]/90">{saving ? "…" : editing ? "Enregistrer" : "Créer"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1095,13 +1095,13 @@ function ClientStatementDialog({ client, year, onClose }) {
     <Dialog open={!!client} onOpenChange={(v) => !v && onClose()}>
       <DialogContent data-testid="qc-statement-dialog" className="max-h-[88vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#0E9488]" /> Relevé de compte — {client?.name}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#22C55E]" /> Relevé de compte — {client?.name}</DialogTitle>
           <DialogDescription className="text-xs">{year ? `Exercice ${year}` : "Tous les exercices"} · Compte clients {client?.ar_account}</DialogDescription>
         </DialogHeader>
         {loading ? <p className="py-6 text-center text-sm text-slate-400">Chargement…</p>
           : !data || data.rows.length === 0 ? <p className="py-6 text-center text-sm text-slate-400" data-testid="qc-statement-empty">Aucune facture ni note de crédit pour ce client.</p>
           : <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-statement-table">
-              <thead><tr className="bg-[#063044] text-left text-xs uppercase text-white">
+              <thead><tr className="bg-[#0F172A] text-left text-xs uppercase text-white">
                 <th className="px-3 py-2">N°</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Type</th><th className="px-3 py-2 text-right">Total</th><th className="px-3 py-2 text-right">Réglé</th><th className="px-3 py-2 text-right">Crédité</th><th className="px-3 py-2 text-right">Solde</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-100">
@@ -1117,7 +1117,7 @@ function ClientStatementDialog({ client, year, onClose }) {
                   </tr>
                 ))}
               </tbody>
-              <tfoot><tr className="border-t-2 border-[#063044] bg-slate-50 font-700 text-[#063044]" data-testid="qc-statement-totals">
+              <tfoot><tr className="border-t-2 border-[#0F172A] bg-slate-50 font-700 text-[#0F172A]" data-testid="qc-statement-totals">
                 <td className="px-3 py-2" colSpan={3}>TOTAUX</td>
                 <td className="px-3 py-2 text-right font-mono-data">{money(t?.billed)}</td>
                 <td className="px-3 py-2 text-right font-mono-data">{money(t?.paid)}</td>
@@ -1125,11 +1125,11 @@ function ClientStatementDialog({ client, year, onClose }) {
                 <td className="px-3 py-2 text-right font-mono-data">{money(t?.balance)}</td>
               </tr></tfoot>
             </table>
-            <p className="mt-3 rounded-lg bg-[#0E9488]/10 px-3 py-2 text-right text-sm font-700 text-[#063044]" data-testid="qc-statement-balance">Solde dû : {money(t?.balance)} $</p>
+            <p className="mt-3 rounded-lg bg-[#22C55E]/10 px-3 py-2 text-right text-sm font-700 text-[#0F172A]" data-testid="qc-statement-balance">Solde dû : {money(t?.balance)} $</p>
           </div>}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Fermer</Button>
-          {data && data.rows.length > 0 && <Button onClick={pdf} data-testid="qc-statement-pdf" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileDown size={14} /> Télécharger le relevé (PDF)</Button>}
+          {data && data.rows.length > 0 && <Button onClick={pdf} data-testid="qc-statement-pdf" className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90"><FileDown size={14} /> Télécharger le relevé (PDF)</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1189,13 +1189,13 @@ function BillsView({ year, locked, canEdit }) {
     <div className="space-y-3" data-testid="qc-ap-view">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-500">{rows.length} facture(s) · Solde à payer : <strong>{money(openTotal)} $</strong></p>
-        {canEdit && !locked && <Button size="sm" onClick={() => setDlg(true)} data-testid="qc-add-bill" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Upload size={14} /> Téléverser une facture</Button>}
+        {canEdit && !locked && <Button size="sm" onClick={() => setDlg(true)} data-testid="qc-add-bill" className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90"><Upload size={14} /> Téléverser une facture</Button>}
       </div>
       {overdueCount > 0 && <div data-testid="qc-ap-overdue-banner" className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-600 text-red-700"><AlertTriangle size={16} /> {overdueCount} facture(s) fournisseur en retard (échéance dépassée).</div>}
       {rows.length === 0
         ? <div className="card p-10 text-center text-sm text-slate-400" data-testid="qc-ap-empty">Aucune facture fournisseur pour cet exercice.</div>
         : <div className="card overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-bills-table">
-            <thead><tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
+            <thead><tr className="bg-[#0F172A] text-left text-xs uppercase tracking-wide text-white">
               <th className="px-3 py-2">Réf.</th><th className="px-3 py-2">Fournisseur</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Échéance</th><th className="px-3 py-2 text-right">Total</th><th className="px-3 py-2 text-right">Solde</th><th className="px-3 py-2">Statut</th><th className="px-3 py-2"></th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
@@ -1227,10 +1227,10 @@ function BillsView({ year, locked, canEdit }) {
           <DialogHeader><DialogTitle>Facture fournisseur — Exercice {year}</DialogTitle>
             <DialogDescription className="text-xs">Comptabilisation auto : Dr Charge + Dr TPS/TVQ à recevoir / Cr Comptes à payer. Modifiable dans les Écritures.</DialogDescription></DialogHeader>
           <div className="space-y-3">
-            <div className="rounded-lg border border-dashed border-[#0E9488]/40 bg-[#0E9488]/5 px-3 py-2.5">
-              <label className="mb-1 flex items-center gap-1.5 text-xs font-600 text-[#0E9488]"><Upload size={13} /> Fichier de la facture (PDF/image) — analyse automatique</label>
+            <div className="rounded-lg border border-dashed border-[#22C55E]/40 bg-[#22C55E]/5 px-3 py-2.5">
+              <label className="mb-1 flex items-center gap-1.5 text-xs font-600 text-[#22C55E]"><Upload size={13} /> Fichier de la facture (PDF/image) — analyse automatique</label>
               <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={(e) => onFile(e.target.files[0])} data-testid="qc-bill-file-input" className="text-sm" />
-              {analyzing && <p className="mt-1 flex items-center gap-1.5 text-xs font-600 text-[#0E9488]" data-testid="qc-bill-analyzing"><span className="h-3 w-3 animate-spin rounded-full border-2 border-[#0E9488] border-t-transparent" /> Lecture du document par l'IA…</p>}
+              {analyzing && <p className="mt-1 flex items-center gap-1.5 text-xs font-600 text-[#22C55E]" data-testid="qc-bill-analyzing"><span className="h-3 w-3 animate-spin rounded-full border-2 border-[#22C55E] border-t-transparent" /> Lecture du document par l'IA…</p>}
               {file && !analyzing && <p className="mt-1 text-xs text-slate-500">📎 {file.name} — champs pré-remplis, vérifiez-les avant de comptabiliser.</p>}
             </div>
             <Input value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} placeholder="Nom du fournisseur" data-testid="qc-bill-supplier" className="h-9" />
@@ -1243,12 +1243,12 @@ function BillsView({ year, locked, canEdit }) {
             <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm" data-testid="qc-bill-totals">
               <div className="flex justify-between"><span>Montant HT</span><span className="font-mono-data">{money(amt)} $</span></div>
               <div className="flex justify-between text-slate-500"><span>T.P.S. + T.V.Q.</span><span className="font-mono-data">{money(tps + tvq)} $</span></div>
-              <div className="mt-1 flex justify-between border-t border-slate-200 pt-1 font-700 text-[#063044]"><span>TOTAL</span><span className="font-mono-data">{money(total)} $</span></div>
+              <div className="mt-1 flex justify-between border-t border-slate-200 pt-1 font-700 text-[#0F172A]"><span>TOTAL</span><span className="font-mono-data">{money(total)} $</span></div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDlg(false)}>Annuler</Button>
-            <Button onClick={save} disabled={saving || amt <= 0 || !form.supplier.trim()} data-testid="qc-bill-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">{saving ? "…" : "Comptabiliser"}</Button>
+            <Button onClick={save} disabled={saving || amt <= 0 || !form.supplier.trim()} data-testid="qc-bill-save" className="bg-[#22C55E] hover:bg-[#22C55E]/90">{saving ? "…" : "Comptabiliser"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1277,10 +1277,10 @@ function StatementView({ year, kind }) {
     ? [["movement", "Exercice"], ["opening", "Antérieur"], ["cumulative", "Cumulatif"]]
     : [["cur", String(year)], ["prev", String(year - 1)]];
   const rowCls = (k) => {
-    if (k === "title") return "bg-[#063044] text-white font-700";
-    if (k === "total") return "border-t-2 border-[#063044] bg-slate-100 font-700";
+    if (k === "title") return "bg-[#0F172A] text-white font-700";
+    if (k === "total") return "border-t-2 border-[#0F172A] bg-slate-100 font-700";
     if (k === "subtotal") return "border-t border-slate-300 font-600";
-    if (k === "header") return "font-600 text-[#0E9488]";
+    if (k === "header") return "font-600 text-[#22C55E]";
     if (k === "diff") return "text-xs text-slate-400";
     if (k === "qp") return "text-xs italic text-slate-500";
     return "";
@@ -1290,13 +1290,13 @@ function StatementView({ year, kind }) {
       <div className="flex items-center justify-between">
         {isBilan
           ? <span data-testid="qc-bilan-balanced" className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-600 ${rep.balanced ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{rep.balanced ? <><CheckCircle2 size={13} /> Bilan équilibré</> : <><AlertTriangle size={13} /> Écart de bilan</>}</span>
-          : <span className="text-sm font-600 text-[#063044]">Bénéfice net : {money(rep.net?.cur)} $</span>}
+          : <span className="text-sm font-600 text-[#0F172A]">Bénéfice net : {money(rep.net?.cur)} $</span>}
         <Button size="sm" variant="outline" onClick={dl} data-testid={`qc-${kind}-excel`} className="gap-2"><Download size={14} /> Excel</Button>
       </div>
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm" data-testid={`qc-${kind}-table`}>
-            <thead><tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
+            <thead><tr className="bg-[#0F172A] text-left text-xs uppercase tracking-wide text-white">
               <th className="px-3 py-2 w-20">Compte</th><th className="px-3 py-2">Libellé</th>
               {cols.map(([k, lbl]) => <th key={k} className="px-3 py-2 text-right">{lbl}</th>)}
             </tr></thead>
@@ -1305,8 +1305,8 @@ function StatementView({ year, kind }) {
                 const isText = ln.kind === "title" || ln.kind === "header";
                 const clickable = ln.kind === "data" && ln.gl;
                 return (
-                  <tr key={i} className={`${rowCls(ln.kind)} ${clickable ? "cursor-pointer hover:bg-[#0E9488]/5" : ""}`} onClick={clickable ? () => setDrill(ln.gl) : undefined} data-testid={`qc-${kind}-line-${i}`} title={clickable ? "Voir le détail des écritures" : undefined}>
-                    <td className={`px-3 py-1.5 font-mono-data text-xs ${clickable ? "text-[#0E9488] underline decoration-dotted" : ""}`}>{ln.gl || ""}</td>
+                  <tr key={i} className={`${rowCls(ln.kind)} ${clickable ? "cursor-pointer hover:bg-[#22C55E]/5" : ""}`} onClick={clickable ? () => setDrill(ln.gl) : undefined} data-testid={`qc-${kind}-line-${i}`} title={clickable ? "Voir le détail des écritures" : undefined}>
+                    <td className={`px-3 py-1.5 font-mono-data text-xs ${clickable ? "text-[#22C55E] underline decoration-dotted" : ""}`}>{ln.gl || ""}</td>
                     <td className="px-3 py-1.5">{ln.label}</td>
                     {isText ? cols.map(([k]) => <td key={k}></td>)
                       : cols.map(([k]) => <td key={k} className={`px-3 py-1.5 text-right font-mono-data ${(ln[k] || 0) < 0 ? "text-red-600" : ""}`}>{ln[k] === undefined || ln[k] === null ? "" : money(ln[k])}</td>)}
@@ -1347,9 +1347,9 @@ function EtatsFinanciersView({ year }) {
   if (!ef) return <div className="card p-8 text-center text-sm text-slate-400" data-testid="qc-ef-loading">Chargement…</div>;
   const balanced = Math.abs((ef.bilan.total_actif || 0) - (ef.bilan.total_pc || 0)) < 1;
   const R = ({ label, cur, prev, kind }) => {
-    const cls = kind === "total" ? "border-t-2 border-[#063044] bg-slate-100 font-700"
+    const cls = kind === "total" ? "border-t-2 border-[#0F172A] bg-slate-100 font-700"
       : kind === "subtotal" ? "border-t border-slate-300 font-600"
-      : kind === "header" ? "font-600 text-[#0E9488]" : "";
+      : kind === "header" ? "font-600 text-[#22C55E]" : "";
     return (
       <tr className={cls}>
         <td className={`px-3 py-1.5 ${kind === "indent" ? "pl-6 text-slate-600" : ""}`}>{label}</td>
@@ -1372,7 +1372,7 @@ function EtatsFinanciersView({ year }) {
 
       {/* État des résultats */}
       <div className="card overflow-hidden">
-        <div className="border-b border-slate-100 bg-[#063044] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">État des résultats et des bénéfices non répartis</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · Exercice terminé le 31 décembre {year} · Non-audités · En dollars canadiens</p></div>
+        <div className="border-b border-slate-100 bg-[#0F172A] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">État des résultats et des bénéfices non répartis</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · Exercice terminé le 31 décembre {year} · Non-audités · En dollars canadiens</p></div>
         <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ef-resultats">
           <thead><tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <th className="px-3 py-2">Poste</th><th className="px-3 py-2 text-right">{year}</th><th className="px-3 py-2 text-right">{py}</th>
@@ -1398,7 +1398,7 @@ function EtatsFinanciersView({ year }) {
 
       {/* Bilan */}
       <div className="card overflow-hidden">
-        <div className="border-b border-slate-100 bg-[#063044] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">Bilan</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · au 31 décembre {year} · Non-audités · En dollars canadiens</p></div>
+        <div className="border-b border-slate-100 bg-[#0F172A] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">Bilan</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · au 31 décembre {year} · Non-audités · En dollars canadiens</p></div>
         <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ef-bilan">
           <thead><tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <th className="px-3 py-2">Poste</th><th className="px-3 py-2 text-right">{year}</th><th className="px-3 py-2 text-right">{py}</th>
@@ -1427,8 +1427,8 @@ function EtatsFinanciersView({ year }) {
         <div className="border-t border-slate-100 px-4 py-3">
           <p className="text-xs font-600 text-slate-500">Au nom du Conseil d'administration</p>
           <div className="mt-2 flex flex-wrap gap-8" data-testid="qc-ef-signatures">
-            <div><p className="border-t border-slate-400 pt-1 text-sm font-700 text-[#063044]">{ef.admins?.a1_name || "—"}</p><p className="text-xs text-slate-400">{ef.admins?.a1_title || "Administrateur"}</p></div>
-            <div><p className="border-t border-slate-400 pt-1 text-sm font-700 text-[#063044]">{ef.admins?.a2_name || "—"}</p><p className="text-xs text-slate-400">{ef.admins?.a2_title || "Administrateur"}</p></div>
+            <div><p className="border-t border-slate-400 pt-1 text-sm font-700 text-[#0F172A]">{ef.admins?.a1_name || "—"}</p><p className="text-xs text-slate-400">{ef.admins?.a1_title || "Administrateur"}</p></div>
+            <div><p className="border-t border-slate-400 pt-1 text-sm font-700 text-[#0F172A]">{ef.admins?.a2_name || "—"}</p><p className="text-xs text-slate-400">{ef.admins?.a2_title || "Administrateur"}</p></div>
           </div>
         </div>
       </div>
@@ -1449,7 +1449,7 @@ function EtatsFinanciersView({ year }) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSigDlg(false)}>Annuler</Button>
-            <Button onClick={saveSig} disabled={savingSig} data-testid="qc-ef-sig-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">{savingSig ? "…" : "Enregistrer"}</Button>
+            <Button onClick={saveSig} disabled={savingSig} data-testid="qc-ef-sig-save" className="bg-[#22C55E] hover:bg-[#22C55E]/90">{savingSig ? "…" : "Enregistrer"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1459,7 +1459,7 @@ function EtatsFinanciersView({ year }) {
         const cf = ef.cashflow; const cpf = cf.prev || {}; const cpd = cpf.wc_detail || {};
         return (
           <div className="card overflow-hidden" data-testid="qc-ef-cashflow">
-            <div className="border-b border-slate-100 bg-[#063044] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">États des flux de trésorerie</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · Exercice terminé le 31 décembre {year} · Non-audités · En dollars canadiens · méthode indirecte</p></div>
+            <div className="border-b border-slate-100 bg-[#0F172A] px-4 py-2.5"><h3 className="font-display text-sm font-700 text-white">États des flux de trésorerie</h3><p className="text-[11px] text-slate-300">9434-3977 Québec Inc. · Exercice terminé le 31 décembre {year} · Non-audités · En dollars canadiens · méthode indirecte</p></div>
             {!cf.reconciled && <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-600 text-amber-700">Note : léger écart de réconciliation (trésorerie au bilan {money(cf.bilan_cash)} $).</div>}
             <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ef-cashflow-table">
               <thead><tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><th className="px-3 py-2">Poste</th><th className="px-3 py-2 text-right">{year}</th><th className="px-3 py-2 text-right">{py}</th></tr></thead>
@@ -1479,7 +1479,7 @@ function EtatsFinanciersView({ year }) {
                 <R label="Trésorerie à la fin de l'exercice" kind="total" cur={cf.cash_close} prev={cpf.cash_close} />
               </tbody>
             </table></div>
-            <div className="border-t border-slate-100 px-4 py-2"><p className="text-xs font-700 uppercase text-[#0E9488]">Informations supplémentaires — Variation des éléments hors caisse</p></div>
+            <div className="border-t border-slate-100 px-4 py-2"><p className="text-xs font-700 uppercase text-[#22C55E]">Informations supplémentaires — Variation des éléments hors caisse</p></div>
             <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ef-cashflow-detail">
               <tbody className="divide-y divide-slate-50">
                 <R label="Clients – Société en commandite ACCS" kind="indent" cur={cf.wc_detail.clients} prev={cpd.clients} />
@@ -1524,7 +1524,7 @@ function PlanComptableView({ canEdit }) {
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="qc-accounts-table">
-            <thead><tr className="bg-[#063044] text-left text-xs uppercase tracking-wide text-white">
+            <thead><tr className="bg-[#0F172A] text-left text-xs uppercase tracking-wide text-white">
               <th className="px-3 py-2">GL</th><th className="px-3 py-2">Description</th><th className="px-3 py-2">Type</th><th className="px-3 py-2">Section de rapport</th><th className="px-3 py-2"></th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
@@ -1550,7 +1550,7 @@ function PlanComptableView({ canEdit }) {
       </div>
       {canEdit && (
         <div className="card space-y-3 p-4" data-testid="qc-account-form">
-          <p className="text-xs font-700 text-[#063044]">{editGl ? `Modifier le compte ${editGl}` : "Nouveau compte"}</p>
+          <p className="text-xs font-700 text-[#0F172A]">{editGl ? `Modifier le compte ${editGl}` : "Nouveau compte"}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
             <Input value={form.gl} disabled={!!editGl} onChange={(e) => setForm({ ...form, gl: e.target.value.replace(/\D/g, "") })} placeholder="N° GL" data-testid="qc-account-gl" className="h-9" />
             <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Description" data-testid="qc-account-desc" className="h-9 sm:col-span-3" />
@@ -1558,19 +1558,19 @@ function PlanComptableView({ canEdit }) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-600 text-slate-500">Type</label>
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} data-testid="qc-account-type" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[#0E9488] focus:outline-none">
+              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} data-testid="qc-account-type" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[#22C55E] focus:outline-none">
                 {TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
             <div>
               <label className="mb-1 block text-xs font-600 text-slate-500">Section de rapport</label>
-              <select value={form.section} onChange={(e) => setForm({ ...form, section: e.target.value })} data-testid="qc-account-section" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[#0E9488] focus:outline-none">
+              <select value={form.section} onChange={(e) => setForm({ ...form, section: e.target.value })} data-testid="qc-account-section" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[#22C55E] focus:outline-none">
                 {Object.entries(sections).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={save} data-testid="qc-account-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">Enregistrer</Button>
+            <Button size="sm" onClick={save} data-testid="qc-account-save" className="bg-[#22C55E] hover:bg-[#22C55E]/90">Enregistrer</Button>
             {editGl && <Button size="sm" variant="outline" onClick={reset}>Annuler</Button>}
           </div>
         </div>
@@ -1598,29 +1598,29 @@ function QcExtPreviewDialog({ open, onOpenChange, reportKey, label, year, onDown
     fetcher.then(setData).catch(() => setData(null)).finally(() => setLoading(false));
   }, [open, reportKey, year, family]);
 
-  const lineCls = (k) => k === "title" ? "bg-[#063044] text-white font-700"
-    : k === "total" ? "border-t-2 border-[#063044] bg-slate-100 font-700"
+  const lineCls = (k) => k === "title" ? "bg-[#0F172A] text-white font-700"
+    : k === "total" ? "border-t-2 border-[#0F172A] bg-slate-100 font-700"
     : k === "subtotal" ? "border-t border-slate-300 font-600"
-    : k === "header" ? "font-600 text-[#0E9488]" : "";
+    : k === "header" ? "font-600 text-[#22C55E]" : "";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="qc-ext-preview-dialog" className="max-h-[88vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Eye size={16} className="text-[#0E9488]" /> Aperçu — {label}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><Eye size={16} className="text-[#22C55E]" /> Aperçu — {label}</DialogTitle>
           <DialogDescription className="text-xs">Exercice {year} · Aperçu du document qui sera transmis au contact.</DialogDescription>
         </DialogHeader>
         {loading ? <p className="py-8 text-center text-sm text-slate-400">Chargement…</p>
           : !data ? <p className="py-8 text-center text-sm text-slate-400" data-testid="qc-ext-preview-empty">Aperçu indisponible.</p>
           : family === "tb" ? (
             <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-ext-preview-tb">
-              <thead><tr className="bg-[#063044] text-left text-xs uppercase text-white"><th className="px-3 py-2">Compte</th><th className="px-3 py-2">Libellé</th><th className="px-3 py-2 text-right">Débit</th><th className="px-3 py-2 text-right">Crédit</th></tr></thead>
+              <thead><tr className="bg-[#0F172A] text-left text-xs uppercase text-white"><th className="px-3 py-2">Compte</th><th className="px-3 py-2">Libellé</th><th className="px-3 py-2 text-right">Débit</th><th className="px-3 py-2 text-right">Crédit</th></tr></thead>
               <tbody className="divide-y divide-slate-50">
                 {(data.rows || []).map((r, i) => (
                   <tr key={i}><td className="px-3 py-1.5 font-mono-data text-xs">{r.account}</td><td className="px-3 py-1.5">{r.account_name}</td><td className="px-3 py-1.5 text-right font-mono-data">{r.debit ? money(r.debit) : "—"}</td><td className="px-3 py-1.5 text-right font-mono-data">{r.credit ? money(r.credit) : "—"}</td></tr>
                 ))}
               </tbody>
-              <tfoot><tr className="border-t-2 border-[#063044] bg-slate-100 font-700"><td className="px-3 py-2" colSpan={2}>TOTAL</td><td className="px-3 py-2 text-right font-mono-data">{money(data.total_debit)}</td><td className="px-3 py-2 text-right font-mono-data">{money(data.total_credit)}</td></tr></tfoot>
+              <tfoot><tr className="border-t-2 border-[#0F172A] bg-slate-100 font-700"><td className="px-3 py-2" colSpan={2}>TOTAL</td><td className="px-3 py-2 text-right font-mono-data">{money(data.total_debit)}</td><td className="px-3 py-2 text-right font-mono-data">{money(data.total_credit)}</td></tr></tfoot>
             </table></div>
           ) : family === "ef" ? <EfPreview ef={data} year={year} />
           : (
@@ -1642,7 +1642,7 @@ function QcExtPreviewDialog({ open, onOpenChange, reportKey, label, year, onDown
           )}
         <DialogFooter>
           {reportKey && <Button variant="outline" onClick={() => onDownload(reportKey)} className="gap-2"><Download size={14} /> Télécharger</Button>}
-          <Button onClick={() => onOpenChange(false)} className="bg-[#0E9488] hover:bg-[#0E9488]/90">Fermer</Button>
+          <Button onClick={() => onOpenChange(false)} className="bg-[#22C55E] hover:bg-[#22C55E]/90">Fermer</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1655,7 +1655,7 @@ function EfPreview({ ef, year }) {
   return (
     <div className="space-y-4" data-testid="qc-ext-preview-ef">
       <div className="overflow-x-auto">
-        <p className="mb-1 text-xs font-700 uppercase text-[#0E9488]">État des résultats</p>
+        <p className="mb-1 text-xs font-700 uppercase text-[#22C55E]">État des résultats</p>
         <table className="w-full text-sm"><thead><tr className="bg-slate-50 text-xs uppercase text-slate-500"><th className="px-3 py-1.5 text-left">Poste</th><th className="px-3 py-1.5 text-right">{year}</th><th className="px-3 py-1.5 text-right">{year - 1}</th></tr></thead>
           <tbody className="divide-y divide-slate-50">
             <Row l="Produits" a={c.rev} b={p.rev} />
@@ -1667,7 +1667,7 @@ function EfPreview({ ef, year }) {
           </tbody></table>
       </div>
       <div className="overflow-x-auto">
-        <p className="mb-1 text-xs font-700 uppercase text-[#0E9488]">Bilan</p>
+        <p className="mb-1 text-xs font-700 uppercase text-[#22C55E]">Bilan</p>
         <table className="w-full text-sm"><tbody className="divide-y divide-slate-50">
           <Row l="Total de l'actif" a={bl.total_actif} bold />
           <Row l="Total du passif" a={bl.total_passif} />
@@ -1722,7 +1722,7 @@ function QcExternalView({ years, isAdmin }) {
           <div>
             <label className="mb-1 block text-[11px] font-600 uppercase tracking-wider text-slate-400">Contact externe</label>
             <select value={cid} onChange={(e) => setCid(e.target.value)} data-testid="qc-external-select"
-              className="h-9 min-w-[220px] rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+              className="h-9 min-w-[220px] rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#22C55E] focus:outline-none">
               <option value="">— Choisir —</option>
               {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}{c.report_types?.length ? ` (${c.report_types.length})` : ""}</option>)}
             </select>
@@ -1736,7 +1736,7 @@ function QcExternalView({ years, isAdmin }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {cid && contact && <Button size="sm" onClick={sendAll} disabled={busy || !emailCfg.configured} title={emailCfg.configured ? `Envoyer à ${contact.email || "(aucun courriel)"}` : "Service d'email non configuré"} data-testid="qc-external-email" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Send size={15} /> {busy ? "…" : "Envoyer le package"}</Button>}
+          {cid && contact && <Button size="sm" onClick={sendAll} disabled={busy || !emailCfg.configured} title={emailCfg.configured ? `Envoyer à ${contact.email || "(aucun courriel)"}` : "Service d'email non configuré"} data-testid="qc-external-email" className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90"><Send size={15} /> {busy ? "…" : "Envoyer le package"}</Button>}
           {cid && <Button size="sm" variant="outline" onClick={() => setHistOpen(true)} data-testid="qc-external-history-btn" className="gap-2"><Clock size={15} /> Historique{history.length ? ` (${history.length})` : ""}</Button>}
           {isAdmin && <Button size="sm" variant="outline" onClick={() => setManageOpen(true)} data-testid="qc-external-manage" className="gap-2"><Settings2 size={15} /> Gérer les contacts</Button>}
         </div>
@@ -1749,7 +1749,7 @@ function QcExternalView({ years, isAdmin }) {
           <div className="card overflow-hidden" data-testid="qc-external-package">
             <div className="border-b border-slate-100 px-5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="font-display text-base font-700 text-[#063044]">Package — {contact.name}</h3>
+                <h3 className="font-display text-base font-700 text-[#0F172A]">Package — {contact.name}</h3>
                 {ls
                   ? <span data-testid="qc-external-last-sent" className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-600 text-emerald-700"><CheckCircle2 size={13} /> Dernier envoi : {fmt(ls.sent_at)} · {ls.year} · {ls.doc_count || 0} doc(s)</span>
                   : <span data-testid="qc-external-last-sent" className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-600 text-slate-500"><Clock size={13} /> Aucun envoi enregistré</span>}
@@ -1758,10 +1758,10 @@ function QcExternalView({ years, isAdmin }) {
             </div>
             <div className="divide-y divide-slate-50">
               {(contact.report_types || []).map((key) => (
-                <div key={key} onClick={() => setPreview({ key, label: labelOf(key) })} title="Cliquer pour prévisualiser" className="flex cursor-pointer items-center justify-between gap-3 px-5 py-3 hover:bg-[#0E9488]/5" data-testid={`qc-external-report-${key}`}>
-                  <p className="flex items-center gap-2 text-sm font-600 text-slate-700"><Eye size={14} className="text-[#0E9488]" /> {labelOf(key)}</p>
+                <div key={key} onClick={() => setPreview({ key, label: labelOf(key) })} title="Cliquer pour prévisualiser" className="flex cursor-pointer items-center justify-between gap-3 px-5 py-3 hover:bg-[#22C55E]/5" data-testid={`qc-external-report-${key}`}>
+                  <p className="flex items-center gap-2 text-sm font-600 text-slate-700"><Eye size={14} className="text-[#22C55E]" /> {labelOf(key)}</p>
                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                    <Button size="sm" variant="ghost" onClick={() => setPreview({ key, label: labelOf(key) })} data-testid={`qc-external-preview-${key}`} className="gap-1.5 text-[#0E9488] hover:bg-[#0E9488]/10"><Eye size={14} /> Aperçu</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setPreview({ key, label: labelOf(key) })} data-testid={`qc-external-preview-${key}`} className="gap-1.5 text-[#22C55E] hover:bg-[#22C55E]/10"><Eye size={14} /> Aperçu</Button>
                     <Button size="sm" variant="outline" onClick={() => download(key)} data-testid={`qc-external-download-${key}`} className="gap-1.5"><Download size={14} /> {fmtOf(key) === "pdf" ? "PDF" : "Excel"}</Button>
                     <span className="text-xs font-600 text-emerald-600">Prêt</span>
                   </div>
@@ -1779,7 +1779,7 @@ function QcExternalView({ years, isAdmin }) {
       <Dialog open={histOpen} onOpenChange={setHistOpen}>
         <DialogContent data-testid="qc-external-history-dialog" className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Clock size={16} className="text-[#0E9488]" /> Historique des envois — {contact?.name || ""}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><Clock size={16} className="text-[#22C55E]" /> Historique des envois — {contact?.name || ""}</DialogTitle>
             <DialogDescription className="text-xs">Journal des documents financiers transmis à ce contact.</DialogDescription>
           </DialogHeader>
           {history.length === 0
@@ -1788,7 +1788,7 @@ function QcExternalView({ years, isAdmin }) {
                 {history.map((h, i) => (
                   <div key={i} className="rounded-lg border border-slate-200 px-3 py-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-sm font-600 text-[#063044]">Exercice {h.year}</span>
+                      <span className="text-sm font-600 text-[#0F172A]">Exercice {h.year}</span>
                       <span className="text-xs text-slate-500">{fmt(h.sent_at)}</span>
                     </div>
                     <p className="mt-1 text-xs text-slate-500">Vers {h.email} · par {h.sent_by} · {h.doc_count || 0} document(s)</p>
@@ -1835,22 +1835,22 @@ function QcContactsDialog({ open, onOpenChange, contacts, catalog, onChanged }) 
             </div>
           ))}
         </div>
-        <div className="space-y-3 rounded-lg border border-[#0E9488]/30 bg-[#0E9488]/5 p-3" data-testid="qc-contact-form">
-          <p className="text-xs font-700 text-[#063044]">{editId ? "Modifier le contact" : "Nouveau contact"}</p>
+        <div className="space-y-3 rounded-lg border border-[#22C55E]/30 bg-[#22C55E]/5 p-3" data-testid="qc-contact-form">
+          <p className="text-xs font-700 text-[#0F172A]">{editId ? "Modifier le contact" : "Nouveau contact"}</p>
           <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nom du contact" data-testid="qc-contact-name" className="h-9" />
           <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Courriel" data-testid="qc-contact-email" className="h-9" />
           <div>
             <p className="mb-1 text-xs font-600 text-slate-500">Documents à envoyer</p>
             <div className="flex flex-wrap gap-2">
               {catalog.map((c) => (
-                <label key={c.key} className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-2 py-1.5 text-sm text-slate-700 hover:border-[#0E9488]" data-testid={`qc-contact-type-${c.key}`}>
+                <label key={c.key} className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-2 py-1.5 text-sm text-slate-700 hover:border-[#22C55E]" data-testid={`qc-contact-type-${c.key}`}>
                   <input type="checkbox" checked={form.report_types.includes(c.key)} onChange={() => toggleType(c.key)} /> {c.label}
                 </label>
               ))}
             </div>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={save} data-testid="qc-contact-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">Enregistrer</Button>
+            <Button size="sm" onClick={save} data-testid="qc-contact-save" className="bg-[#22C55E] hover:bg-[#22C55E]/90">Enregistrer</Button>
             {editId && <Button size="sm" variant="outline" onClick={reset}>Annuler</Button>}
           </div>
         </div>

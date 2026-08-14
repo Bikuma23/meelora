@@ -1,33 +1,33 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700,900&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --navy: #063044;
+  --navy: #0F172A;
   --navy-soft: #1A3B42;
-  --teal: #063044;
-  --blue: #063044;
-  --brand: #063044;
+  --teal: #0F172A;
+  --blue: #0F172A;
+  --brand: #0F172A;
   --brand-soft: #1A3B42;
-  --coral: #F8A942;
+  --coral: #FBBF24;
   --coral-soft: #F4978E;
 }
 
 body {
   margin: 0;
-  font-family: Calibri, Carlito, "Segoe UI", "Trebuchet MS", sans-serif;
+  font-family: "Satoshi", "Segoe UI", "Trebuchet MS", sans-serif;
   -webkit-font-smoothing: antialiased;
-  background-color: #F4F6F8;
+  background-color: #F3F4F6;
   color: #0F172A;
   font-variant-numeric: tabular-nums;
 }
 
-.font-display { font-family: "Montserrat", "Segoe UI", sans-serif; letter-spacing: -0.01em; }
-.font-mono-data { font-family: Calibri, Carlito, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
-/* Calibri sur le corps et les données ; Montserrat réservé aux titres (.font-display) */
-.font-sans, .font-mono { font-family: Calibri, Carlito, "Segoe UI", sans-serif !important; }
-input, button, select, textarea, table, th, td { font-family: Calibri, Carlito, "Segoe UI", sans-serif; }
+.font-display { font-family: "Satoshi", "Segoe UI", sans-serif; letter-spacing: -0.01em; }
+.font-mono-data { font-family: "Satoshi", "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
+/* Satoshi partout (marque Meelora) */
+.font-sans, .font-mono { font-family: "Satoshi", "Segoe UI", sans-serif !important; }
+input, button, select, textarea, table, th, td { font-family: "Satoshi", "Segoe UI", sans-serif; }
 /* Poids numériques (utilisés dans toute l'app : font-300 … font-900) */
 .font-300{font-weight:300}
 .font-400{font-weight:400}
@@ -46,7 +46,7 @@ input, button, select, textarea, table, th, td { font-family: Calibri, Carlito, 
 .dark .acct-hover-rows tbody tr:hover { background-color: #1E293B; }
 .dark .overline { color: #94A3B8; }
 
-::selection { background: #15AF97; color: #fff; }
+::selection { background: #22C55E; color: #fff; }
 
 /* Barre de défilement : simple trait gris, fin */
 * { scrollbar-width: thin; scrollbar-color: #808080 transparent; }
@@ -84,10 +84,10 @@ input, button, select, textarea, table, th, td { font-family: Calibri, Carlito, 
 .dark .hover\:bg-slate-50:hover { background-color:#1E293B !important; }
 .dark .hover\:bg-slate-100:hover { background-color:#243044 !important; }
 /* Refonte : classes arbitraires à adapter au thème sombre */
-.dark .bg-\[\#F4F6F8\] { background-color:#0B1120 !important; }
+.dark .bg-\[\#F3F4F6\] { background-color:#0B1120 !important; }
 .dark .bg-white\/80 { background-color:rgba(17,24,39,.85) !important; }
 .dark .bg-white\/70 { background-color:rgba(17,24,39,.8) !important; }
-.dark .text-\[\#063044\] { color:#E2E8F0 !important; }
+.dark .text-\[\#0F172A\] { color:#E2E8F0 !important; }
 .dark .bg-\[\#eef1f5\] { background-color:#243044 !important; }
 
 @layer base {

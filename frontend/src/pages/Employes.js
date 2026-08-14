@@ -114,7 +114,7 @@ function EmpForm({ open, onOpenChange, initial, departments, securityClasses = [
           <Field label={t("Date de naissance")} error={errors.birth_date} testId="f-birth"><Input data-testid="f-birth" type="date" className="font-mono-data" value={f.birth_date} onChange={(e) => set("birth_date", e.target.value)} /></Field>
           <Field label={t("Âge (calculé)")} testId="f-age-box">
             <div className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3">
-              <Cake size={15} className="text-[#063044]" />
+              <Cake size={15} className="text-[#0F172A]" />
               <span data-testid="f-age" className="ml-auto font-mono-data text-sm font-700">{age != null ? `${age} ${t("ans")}` : "—"}</span>
             </div>
           </Field>
@@ -161,7 +161,7 @@ function EmpForm({ open, onOpenChange, initial, departments, securityClasses = [
           <Field label={t("Date d'embauche")} error={errors.hire_date} testId="f-hire"><Input data-testid="f-hire" type="date" className="font-mono-data" value={f.hire_date} onChange={(e) => set("hire_date", e.target.value)} /></Field>
           <Field label={t("Ancienneté (calculée)")} testId="f-seniority-box">
             <div className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3">
-              <CalendarClock size={15} className="text-[#063044]" />
+              <CalendarClock size={15} className="text-[#0F172A]" />
               <span data-testid="f-seniority" className="ml-auto font-mono-data text-sm font-700">{sen != null ? `${sen} ${t(sen > 1 ? "ans" : "an")}` : "—"}</span>
             </div>
           </Field>
@@ -187,7 +187,7 @@ function EmpForm({ open, onOpenChange, initial, departments, securityClasses = [
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{t("Annuler")}</Button>
-          <Button data-testid="employee-save-btn" className="bg-[#063044] hover:bg-[#063044]/90" onClick={submit}>{t("Enregistrer")}</Button>
+          <Button data-testid="employee-save-btn" className="bg-[#0F172A] hover:bg-[#0F172A]/90" onClick={submit}>{t("Enregistrer")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -356,7 +356,7 @@ export default function Employes() {
           {canEdit && <>
           <input ref={fileRef} type="file" accept=".xlsx" className="hidden" data-testid="employee-import-input" onChange={onImport} />
           <Button variant="outline" className="gap-1.5" data-testid="employee-import-btn" onClick={() => fileRef.current?.click()}><Upload size={15} /> {t("Importer Excel")}</Button>
-          <Button data-testid="add-employee-btn" className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90" onClick={() => setDialog({ open: true, item: null })}><Plus size={16} /> {t("Ajouter")}</Button>
+          <Button data-testid="add-employee-btn" className="gap-1.5 bg-[#0F172A] hover:bg-[#0F172A]/90" onClick={() => setDialog({ open: true, item: null })}><Plus size={16} /> {t("Ajouter")}</Button>
           </>}
         </div>
       </div>
@@ -372,7 +372,7 @@ export default function Employes() {
                     <span className={`inline-flex items-center gap-1 ${al === "right" ? "flex-row-reverse" : ""}`}>
                       {h}
                       {key && (sort.key === key
-                        ? (sort.dir === "asc" ? <ChevronUp size={13} className="text-[#063044]" /> : <ChevronDown size={13} className="text-[#063044]" />)
+                        ? (sort.dir === "asc" ? <ChevronUp size={13} className="text-[#0F172A]" /> : <ChevronDown size={13} className="text-[#0F172A]" />)
                         : <ChevronsUpDown size={12} className="opacity-40" />)}
                     </span>
                   </th>
@@ -386,7 +386,7 @@ export default function Employes() {
                   <td className="px-4 py-2.5 text-[13px] text-slate-600">{e.title || "—"}</td>
                   <td className="px-4 py-2.5 font-600">{e.name}{e.active === false && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-700 uppercase text-red-600">{t("Inactif")}</span>}</td>
                   <td className="px-4 py-2.5 text-[13px]">{e.department}</td>
-                  <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#063044" : "#64748B" }}>{e.is_ccq ? "CCQ" : t(typeLabel(e.employment_type))}</span></td>
+                  <td className="px-4 py-2.5"><span className="rounded px-1.5 py-0.5 text-[10px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#0F172A" : "#64748B" }}>{e.is_ccq ? "CCQ" : t(typeLabel(e.employment_type))}</span></td>
                   <td className="px-4 py-2.5" data-testid={`employee-secclass-${e.employee_number}`}>
                     {e.security_class ? (
                       <div className="flex flex-col leading-tight">
@@ -402,7 +402,7 @@ export default function Employes() {
                   <td className="px-4 py-2.5">
                     {canEdit ? (
                     <div className="flex justify-end gap-1">
-                      <button data-testid={`edit-employee-${e.employee_number}`} onClick={(ev) => { ev.stopPropagation(); setDialog({ open: true, item: e }); }} className="p-1.5 text-slate-400 hover:text-[#063044]"><Pencil size={15} /></button>
+                      <button data-testid={`edit-employee-${e.employee_number}`} onClick={(ev) => { ev.stopPropagation(); setDialog({ open: true, item: e }); }} className="p-1.5 text-slate-400 hover:text-[#0F172A]"><Pencil size={15} /></button>
                       <button data-testid={`delete-employee-${e.employee_number}`} onClick={(ev) => { ev.stopPropagation(); setConfirmDel(e); }} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
                     </div>
                     ) : <div className="text-right text-slate-300">—</div>}
@@ -424,12 +424,12 @@ export default function Employes() {
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     <span className="font-mono-data text-[11px] text-slate-400">#{String(e.employee_number).padStart(3, "0")}</span>
                     <span className="font-mono-data text-[11px] text-slate-400">· {t("Dépt")} {e.department}</span>
-                    <span className="rounded px-1.5 py-0.5 text-[9px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#063044" : "#64748B" }}>{e.is_ccq ? "CCQ" : t(typeLabel(e.employment_type))}</span>
+                    <span className="rounded px-1.5 py-0.5 text-[9px] font-600 uppercase text-white" style={{ backgroundColor: e.is_ccq ? "#0F172A" : "#64748B" }}>{e.is_ccq ? "CCQ" : t(typeLabel(e.employment_type))}</span>
                   </div>
                 </div>
                 {canEdit && (
                 <div className="flex shrink-0 gap-1">
-                  <button data-testid={`edit-employee-card-${e.employee_number}`} onClick={(ev) => { ev.stopPropagation(); setDialog({ open: true, item: e }); }} className="rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-[#063044]"><Pencil size={15} /></button>
+                  <button data-testid={`edit-employee-card-${e.employee_number}`} onClick={(ev) => { ev.stopPropagation(); setDialog({ open: true, item: e }); }} className="rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-[#0F172A]"><Pencil size={15} /></button>
                   <button data-testid={`delete-employee-card-${e.employee_number}`} onClick={(ev) => { ev.stopPropagation(); setConfirmDel(e); }} className="rounded-lg border border-slate-200 p-2 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
                 </div>
                 )}

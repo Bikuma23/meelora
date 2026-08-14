@@ -27,10 +27,10 @@ function ExportMenu({ onPdf, onExcel, disabled, className = "", testid = "acct-e
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
         <DropdownMenuItem data-testid={`${testid}-pdf`} onClick={onPdf} className="cursor-pointer gap-2">
-          <FileText size={15} className="text-[#063044]" /> PDF
+          <FileText size={15} className="text-[#0F172A]" /> PDF
         </DropdownMenuItem>
         <DropdownMenuItem data-testid={`${testid}-excel`} onClick={onExcel} className="cursor-pointer gap-2">
-          <FileSpreadsheet size={15} className="text-[#0E9488]" /> Excel
+          <FileSpreadsheet size={15} className="text-[#22C55E]" /> Excel
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -71,17 +71,17 @@ function KpiCard({ label, value, series, idx, positiveIsGood = true, icon: Icon,
   const good = delta == null ? true : (up === positiveIsGood);
   return (
     <div className="card card-hover relative overflow-hidden p-4 pl-5" data-testid={testid}>
-      <span className="absolute left-0 top-0 h-full w-1 bg-[#15AF97]" />
+      <span className="absolute left-0 top-0 h-full w-1 bg-[#22C55E]" />
       <div className="flex items-start justify-between gap-2">
         <span className="overline leading-tight">{label}</span>
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#15AF97]/10 text-[#15AF97]"><Icon size={16} /></span>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#22C55E]/10 text-[#22C55E]"><Icon size={16} /></span>
       </div>
-      <p className="font-display mt-2 truncate text-xl font-700 tracking-tight text-[#063044]" title={money(value)}>{money(value)}</p>
+      <p className="font-display mt-2 truncate text-xl font-700 tracking-tight text-[#0F172A]" title={money(value)}>{money(value)}</p>
       <div className="mt-1 flex items-center gap-1.5 text-xs font-600" style={{ color: delta == null ? "#94A3B8" : (good ? "#10B981" : "#EF4444") }}>
         {delta != null && (up ? <TrendingUp size={14} /> : <TrendingDown size={14} />)}
         {delta != null ? `${up ? "+" : ""}${delta.toFixed(1)}% vs période préc.` : "Aucune donnée antérieure"}
       </div>
-      <Sparkline data={series.slice(0, (idx >= 0 ? idx : series.length - 1) + 1)} color={good ? "#063044" : "#F8A942"} />
+      <Sparkline data={series.slice(0, (idx >= 0 ? idx : series.length - 1) + 1)} color={good ? "#0F172A" : "#FBBF24"} />
     </div>
   );
 }
@@ -119,7 +119,7 @@ function IndicatorCard({ title, caption, mainText, sub, unavailable, reason, pro
       className={`card group relative flex flex-col gap-2 p-5 text-left transition-shadow ${unavailable ? "cursor-default opacity-90" : "cursor-pointer hover:shadow-md"}`}>
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-700 uppercase tracking-wide text-slate-500">{title}</span>
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#063044]/8 text-[#063044]"><Icon size={16} /></span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0F172A]/8 text-[#0F172A]"><Icon size={16} /></span>
       </div>
       {unavailable ? (
         <div className="flex items-start gap-1.5 py-1 text-xs text-amber-600" data-testid={`${testid}-unavailable`}>
@@ -127,7 +127,7 @@ function IndicatorCard({ title, caption, mainText, sub, unavailable, reason, pro
         </div>
       ) : (
         <>
-          <span className="font-mono-data text-2xl font-800 text-[#063044]" data-testid={`${testid}-value`}>{mainText}</span>
+          <span className="font-mono-data text-2xl font-800 text-[#0F172A]" data-testid={`${testid}-value`}>{mainText}</span>
           {sub && <span className="font-mono-data text-xs font-600 text-slate-500">{sub}</span>}
           {trendNode}
         </>
@@ -136,7 +136,7 @@ function IndicatorCard({ title, caption, mainText, sub, unavailable, reason, pro
       {provisional && !unavailable && (
         <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-700 text-amber-700"><AlertTriangle size={11} /> Provisoire</span>
       )}
-      {!unavailable && <span className="text-[11px] font-600 text-[#0E9488] opacity-0 transition-opacity group-hover:opacity-100">Voir le détail →</span>}
+      {!unavailable && <span className="text-[11px] font-600 text-[#22C55E] opacity-0 transition-opacity group-hover:opacity-100">Voir le détail →</span>}
     </button>
   );
 }
@@ -144,7 +144,7 @@ function IndicatorCard({ title, caption, mainText, sub, unavailable, reason, pro
 const DRow = ({ label, value, strong, mono = true }) => (
   <div className={`flex items-center justify-between gap-4 py-1.5 ${strong ? "border-t border-slate-200 font-700" : ""}`}>
     <span className={`text-sm ${strong ? "text-slate-800" : "text-slate-500"}`}>{label}</span>
-    <span className={`text-sm ${mono ? "font-mono-data" : ""} ${strong ? "text-[#063044]" : "text-slate-700"}`}>{value}</span>
+    <span className={`text-sm ${mono ? "font-mono-data" : ""} ${strong ? "text-[#0F172A]" : "text-slate-700"}`}>{value}</span>
   </div>
 );
 
@@ -225,14 +225,14 @@ function KpiDetailDialog({ open, onOpenChange, type, kpi }) {
             </DialogHeader>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <p className="mb-1 text-[11px] font-700 uppercase tracking-wide text-[#063044]">Actif à court terme</p>
+                <p className="mb-1 text-[11px] font-700 uppercase tracking-wide text-[#0F172A]">Actif à court terme</p>
                 <div className="rounded-lg bg-slate-50 px-3 py-1">
                   {(fdr.actif_ct || []).map((l, i) => <DRow key={i} label={l.label} value={money(l.value)} />)}
                   <DRow label="Total actif court terme" value={money(fdr.current_assets)} strong />
                 </div>
               </div>
               <div>
-                <p className="mb-1 text-[11px] font-700 uppercase tracking-wide text-[#063044]">Passif à court terme</p>
+                <p className="mb-1 text-[11px] font-700 uppercase tracking-wide text-[#0F172A]">Passif à court terme</p>
                 <div className="rounded-lg bg-slate-50 px-3 py-1">
                   {(fdr.passif_ct || []).map((l, i) => <DRow key={i} label={l.label} value={money(l.value)} />)}
                   <DRow label="Total passif court terme" value={money(fdr.current_liabilities)} strong />
@@ -243,14 +243,14 @@ function KpiDetailDialog({ open, onOpenChange, type, kpi }) {
               <DRow label={`Retenues contractuelles exclues${fdr.retenues_label ? ` (${fdr.retenues_label})` : ""}`} value={money(fdr.retenues)} />
               {!fdr.retenues_found && <p className="py-1 text-[11px] text-amber-600">Aucun compte de retenues contractuelles identifié dans le mapping — exclusion nulle appliquée.</p>}
             </div>
-            <div className="rounded-lg bg-[#063044]/5 px-4 py-1">
+            <div className="rounded-lg bg-[#0F172A]/5 px-4 py-1">
               <DRow label="Actif court terme (hors retenues)" value={money(fdr.current_assets_excl)} />
               <DRow label="FDR = Actif CT (hors retenues) − Passif CT" value={money(fdr.value)} strong />
               <DRow label="Ratio de fonds de roulement" value={fdr.ratio != null ? `${fdr.ratio}` : "—"} strong />
             </div>
             {fdr.bfr && fdr.bfr.available ? (
-              <div className="rounded-lg bg-[#0E9488]/8 px-4 py-1">
-                <p className="pt-1 text-[11px] font-700 uppercase tracking-wide text-[#0E9488]">Besoin en fonds de roulement (BFR)</p>
+              <div className="rounded-lg bg-[#22C55E]/8 px-4 py-1">
+                <p className="pt-1 text-[11px] font-700 uppercase tracking-wide text-[#22C55E]">Besoin en fonds de roulement (BFR)</p>
                 <DRow label="Comptes clients courants (hors retenues)" value={money(fdr.bfr.ar_courant)} />
                 <DRow label="+ Inventaire" value={money(fdr.bfr.inventory)} />
                 <DRow label="− Comptes fournisseurs" value={money(fdr.bfr.ap)} />
@@ -287,13 +287,13 @@ function DsoCard({ kpi, provisional, onOpen, onSaved }) {
     <div className="card relative flex flex-col gap-2 p-5" data-testid="indicator-dso">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-700 uppercase tracking-wide text-slate-500">DSO — Recouvrement clients</span>
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#063044]/8 text-[#063044]"><Clock size={16} /></span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0F172A]/8 text-[#0F172A]"><Clock size={16} /></span>
       </div>
       {!dso.available ? (
         <div className="flex items-start gap-1.5 py-1 text-xs text-amber-600" data-testid="indicator-dso-unavailable"><AlertTriangle size={14} className="mt-0.5 shrink-0" /><span>{dso.reason}</span></div>
       ) : (
         <>
-          <span className="font-mono-data text-2xl font-800 text-[#063044]" data-testid="indicator-dso-value">{fmtDays(dso.value)}</span>
+          <span className="font-mono-data text-2xl font-800 text-[#0F172A]" data-testid="indicator-dso-value">{fmtDays(dso.value)}</span>
           <span className="font-mono-data text-xs font-600 text-slate-500">CC courants nets {money(dso.ar_courant_net)} · ventes 12m {money(dso.sales_12m)}</span>
           <TrendBadge testid="trend-dso" trend={kpi.trend?.dso} higherIsBetter={false} unit="days" />
         </>
@@ -306,7 +306,7 @@ function DsoCard({ kpi, provisional, onOpen, onSaved }) {
         <div className="flex items-center gap-2">
           <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} data-testid="dso-dispute-input"
             className="h-8 w-40 font-mono-data text-sm" placeholder="0" onClick={(e) => e.stopPropagation()} />
-          <Button size="sm" onClick={save} disabled={!dirty || saving} data-testid="dso-dispute-save" className="h-8 bg-[#063044] hover:bg-[#063044]/90">
+          <Button size="sm" onClick={save} disabled={!dirty || saving} data-testid="dso-dispute-save" className="h-8 bg-[#0F172A] hover:bg-[#0F172A]/90">
             {saving ? "…" : "Enregistrer"}
           </Button>
           {parseFloat(amount) > 0 && (
@@ -323,7 +323,7 @@ function DsoCard({ kpi, provisional, onOpen, onSaved }) {
         )}
       </div>
 
-      {dso.available && <button onClick={onOpen} data-testid="indicator-dso-detail" className="w-fit text-[11px] font-600 text-[#0E9488] hover:underline">Voir le détail →</button>}
+      {dso.available && <button onClick={onOpen} data-testid="indicator-dso-detail" className="w-fit text-[11px] font-600 text-[#22C55E] hover:underline">Voir le détail →</button>}
     </div>
   );
 }
@@ -348,13 +348,13 @@ function DpoCard({ kpi, provisional, onOpen, onSaved }) {
     <div className="card relative flex flex-col gap-2 p-5" data-testid="indicator-dpo">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-700 uppercase tracking-wide text-slate-500">DPO — Paiement fournisseurs</span>
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#063044]/8 text-[#063044]"><Clock size={16} /></span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0F172A]/8 text-[#0F172A]"><Clock size={16} /></span>
       </div>
       {!dpo.available ? (
         <div className="flex items-start gap-1.5 py-1 text-xs text-amber-600" data-testid="indicator-dpo-unavailable"><AlertTriangle size={14} className="mt-0.5 shrink-0" /><span>{dpo.reason}</span></div>
       ) : (
         <>
-          <span className="font-mono-data text-2xl font-800 text-[#063044]" data-testid="indicator-dpo-value">{fmtDays(dpo.value)}</span>
+          <span className="font-mono-data text-2xl font-800 text-[#0F172A]" data-testid="indicator-dpo-value">{fmtDays(dpo.value)}</span>
           <span className="font-mono-data text-xs font-600 text-slate-500">CF nets {money(dpo.ap_net)} · achats 12m {money(dpo.purchases_12m)}</span>
           <TrendBadge testid="trend-dpo" trend={kpi.trend?.dpo} higherIsBetter={true} unit="days" />
         </>
@@ -367,7 +367,7 @@ function DpoCard({ kpi, provisional, onOpen, onSaved }) {
         <div className="flex items-center gap-2">
           <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} data-testid="dpo-dispute-input"
             className="h-8 w-40 font-mono-data text-sm" placeholder="0" />
-          <Button size="sm" onClick={save} disabled={!dirty || saving} data-testid="dpo-dispute-save" className="h-8 bg-[#063044] hover:bg-[#063044]/90">{saving ? "…" : "Enregistrer"}</Button>
+          <Button size="sm" onClick={save} disabled={!dirty || saving} data-testid="dpo-dispute-save" className="h-8 bg-[#0F172A] hover:bg-[#0F172A]/90">{saving ? "…" : "Enregistrer"}</Button>
           {parseFloat(amount) > 0 && (
             <Button size="sm" variant="ghost" data-testid="dpo-dispute-reset" className="h-8 text-slate-500" onClick={() => { setAmount("0"); setNote(""); }}>Remettre à 0</Button>
           )}
@@ -382,7 +382,7 @@ function DpoCard({ kpi, provisional, onOpen, onSaved }) {
         )}
       </div>
 
-      {dpo.available && <button onClick={onOpen} data-testid="indicator-dpo-detail" className="w-fit text-[11px] font-600 text-[#0E9488] hover:underline">Voir le détail →</button>}
+      {dpo.available && <button onClick={onOpen} data-testid="indicator-dpo-detail" className="w-fit text-[11px] font-600 text-[#22C55E] hover:underline">Voir le détail →</button>}
     </div>
   );
 }
@@ -409,7 +409,7 @@ function TaxSettingsDialog({ open, onOpenChange, current, onSaved }) {
         </DialogHeader>
         <div className="flex items-center gap-2">
           <Input type="number" step="0.00001" value={val} onChange={(e) => setVal(e.target.value)} data-testid="tax-factor-input" className="h-9 w-40 font-mono-data" />
-          <Button onClick={save} disabled={saving || !(parseFloat(val) > 0)} data-testid="tax-factor-save" className="bg-[#063044] hover:bg-[#063044]/90">Enregistrer</Button>
+          <Button onClick={save} disabled={saving || !(parseFloat(val) > 0)} data-testid="tax-factor-save" className="bg-[#0F172A] hover:bg-[#0F172A]/90">Enregistrer</Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -421,7 +421,7 @@ function ProjChart({ title, data, color, note, onOpen, testid }) {
     <div className="card p-3" data-testid={testid}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <h3 className="text-xs font-700">{title}</h3>
-        <button onClick={onOpen} data-testid={`${testid}-detail`} className="inline-flex items-center gap-1 rounded-full bg-[#F8A942]/15 px-2 py-0.5 text-[9px] font-700 uppercase tracking-wide text-[#B45309] hover:bg-[#F8A942]/25">Détail</button>
+        <button onClick={onOpen} data-testid={`${testid}-detail`} className="inline-flex items-center gap-1 rounded-full bg-[#FBBF24]/15 px-2 py-0.5 text-[9px] font-700 uppercase tracking-wide text-[#B45309] hover:bg-[#FBBF24]/25">Détail</button>
       </div>
       <div style={{ width: "100%", height: 165 }}>
         <ResponsiveContainer>
@@ -459,7 +459,7 @@ function ProjectionDetailDialog({ open, onOpenChange, series, proj }) {
               <span className="text-sm text-slate-600">{b.month_label} {b.year}</span>
               <span className="font-mono-data text-sm text-slate-800">{money(b[k])}</span>
               <button data-testid={`proj-goto-${b.year}-${b.month}`} onClick={() => acctGoto(series.key === "cash" ? "acct_bilan" : "acct_pnl", `${b.year}-${String(b.month).padStart(2, "0")}`)}
-                className="inline-flex items-center gap-1 text-[11px] font-600 text-[#0E9488] hover:underline">source <ArrowRight size={12} /></button>
+                className="inline-flex items-center gap-1 text-[11px] font-600 text-[#22C55E] hover:underline">source <ArrowRight size={12} /></button>
             </div>
           ))}
         </div>
@@ -524,9 +524,9 @@ export function AcctDashboard() {
     return [...base, ...proje];
   };
   const projSeries = [
-    { key: "cash", title: "Trésorerie (encaisse)", color: "#0E9488", testid: "proj-cash", note: `Solde d'encaisse projeté en tenant compte du DSO (${proj?.lag_in_months ?? "—"} mois) et du DPO (${proj?.lag_out_months ?? "—"} mois).` },
-    { key: "sales", title: "Ventes", color: "#063044", testid: "proj-sales", note: "Ventes mensuelles réelles puis projetées (tendance)." },
-    { key: "charges", title: "Frais (hors COGS)", color: "#F8A942", testid: "proj-charges", note: "Total des charges d'exploitation, hors coût des marchandises vendues." },
+    { key: "cash", title: "Trésorerie (encaisse)", color: "#22C55E", testid: "proj-cash", note: `Solde d'encaisse projeté en tenant compte du DSO (${proj?.lag_in_months ?? "—"} mois) et du DPO (${proj?.lag_out_months ?? "—"} mois).` },
+    { key: "sales", title: "Ventes", color: "#0F172A", testid: "proj-sales", note: "Ventes mensuelles réelles puis projetées (tendance)." },
+    { key: "charges", title: "Frais (hors COGS)", color: "#FBBF24", testid: "proj-charges", note: "Total des charges d'exploitation, hors coût des marchandises vendues." },
     { key: "cogs", title: "COGS (coût des marchandises vendues)", color: "#808080", testid: "proj-cogs", note: "Coût des marchandises vendues, mensuel." },
   ];
   const openKpi = (type) => setKpiDialog({ open: true, type });
@@ -542,7 +542,7 @@ export function AcctDashboard() {
           {isAdmin && (
             <button onClick={() => setAiDialog(true)} data-testid="ai-config-btn" title="Configuration de l'assistant IA"
               className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 font-600 text-slate-500 hover:bg-slate-50">
-              <Sparkles size={13} className="text-[#0E9488]" /> Assistant IA
+              <Sparkles size={13} className="text-[#22C55E]" /> Assistant IA
             </button>
           )}
         </div>
@@ -565,9 +565,9 @@ export function AcctDashboard() {
           {proj && !proj.insufficient && (
             <div className="space-y-2" data-testid="acct-projections">
               <div className="flex flex-wrap items-center gap-2">
-                <TrendingUp size={15} className="text-[#0E9488]" />
+                <TrendingUp size={15} className="text-[#22C55E]" />
                 <h3 className="text-xs font-700 uppercase tracking-wider text-slate-500">Projection 12 mois</h3>
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#F8A942]/15 px-2 py-0.5 text-[9px] font-700 uppercase tracking-wide text-[#B45309]">Statistique · {proj.n_base} mois</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#FBBF24]/15 px-2 py-0.5 text-[9px] font-700 uppercase tracking-wide text-[#B45309]">Statistique · {proj.n_base} mois</span>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 {projSeries.map((s) => (
@@ -591,8 +591,8 @@ export function AcctDashboard() {
                       <YAxis tick={{ fontSize: 9 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={44} />
                       <Tooltip formatter={(v) => money(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Bar dataKey="Réel" fill="#063044" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Budget CA" fill="#F8A942" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Réel" fill="#0F172A" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Budget CA" fill="#FBBF24" radius={[4, 4, 0, 0]} />
                       <Bar dataKey="Budget Rév-1" fill="#808080" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -611,8 +611,8 @@ export function AcctDashboard() {
                       <YAxis tick={{ fontSize: 9 }} tickFormatter={(v) => `${(v / 1000).toLocaleString("fr-CA")} k`} width={44} />
                       <Tooltip formatter={(v) => money(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Line type="monotone" dataKey="Bénéfice net (mois)" stroke="#063044" strokeWidth={2} dot={{ r: 2 }} />
-                      <Line type="monotone" dataKey="Bénéfice net (cumulatif)" stroke="#F8A942" strokeWidth={2} dot={{ r: 2 }} />
+                      <Line type="monotone" dataKey="Bénéfice net (mois)" stroke="#0F172A" strokeWidth={2} dot={{ r: 2 }} />
+                      <Line type="monotone" dataKey="Bénéfice net (cumulatif)" stroke="#FBBF24" strokeWidth={2} dot={{ r: 2 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -645,7 +645,7 @@ export function AcctDashboard() {
                   className={`card group relative flex flex-col gap-2 p-4 text-left transition-shadow ${kpi.fdr.available ? "cursor-pointer hover:shadow-md" : "cursor-default opacity-90"}`}>
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-700 uppercase tracking-wide text-slate-500">Fonds de roulement / BFR</span>
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#063044]/8 text-[#063044]"><Scale size={16} /></span>
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0F172A]/8 text-[#0F172A]"><Scale size={16} /></span>
                   </div>
                   {!kpi.fdr.available ? (
                     <div className="flex items-start gap-1.5 py-1 text-xs text-amber-600" data-testid="indicator-fdr-unavailable"><AlertTriangle size={14} className="mt-0.5 shrink-0" /><span>{kpi.fdr.reason}</span></div>
@@ -653,13 +653,13 @@ export function AcctDashboard() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <span className="text-[10px] font-700 uppercase tracking-wide text-slate-400">FDR</span>
-                        <p className="font-mono-data text-lg font-800 text-[#063044]" data-testid="indicator-fdr-value">{money(kpi.fdr.value)}</p>
+                        <p className="font-mono-data text-lg font-800 text-[#0F172A]" data-testid="indicator-fdr-value">{money(kpi.fdr.value)}</p>
                         <span className="font-mono-data text-[11px] font-600 text-slate-500">Ratio {kpi.fdr.ratio ?? "—"}</span>
                         <div className="mt-1"><TrendBadge testid="trend-fdr" trend={kpi.trend?.fdr} higherIsBetter={true} unit="money" /></div>
                       </div>
                       <div>
                         <span className="text-[10px] font-700 uppercase tracking-wide text-slate-400">BFR</span>
-                        <p className="font-mono-data text-lg font-800 text-[#0E9488]" data-testid="indicator-bfr-value">{kpi.fdr.bfr?.available ? money(kpi.fdr.bfr.value) : "—"}</p>
+                        <p className="font-mono-data text-lg font-800 text-[#22C55E]" data-testid="indicator-bfr-value">{kpi.fdr.bfr?.available ? money(kpi.fdr.bfr.value) : "—"}</p>
                         <span className="font-mono-data text-[11px] font-600 text-slate-500">Cycle opérationnel</span>
                         {kpi.fdr.bfr?.available && <div className="mt-1"><TrendBadge testid="trend-bfr" trend={kpi.trend?.bfr} higherIsBetter={false} unit="money" /></div>}
                       </div>
@@ -667,7 +667,7 @@ export function AcctDashboard() {
                   )}
                   <span className="text-[11px] leading-snug text-slate-400">Retenues contractuelles exclues : <span className="font-mono-data text-slate-500">{money(kpi.fdr.retenues)}</span></span>
                   {!kpi.locked && kpi.fdr.available && <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-700 text-amber-700"><AlertTriangle size={11} /> Provisoire</span>}
-                  {kpi.fdr.available && <span className="text-[11px] font-600 text-[#0E9488] opacity-0 transition-opacity group-hover:opacity-100">Voir le détail →</span>}
+                  {kpi.fdr.available && <span className="text-[11px] font-600 text-[#22C55E] opacity-0 transition-opacity group-hover:opacity-100">Voir le détail →</span>}
                 </button>
               </div>
             </div>
@@ -719,7 +719,7 @@ function LedgerPreviewDialog({ open, onOpenChange, year, month }) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="ledger-preview-dialog" className="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#0E9488]" /> Grand livre — {month ? MONTHS[month - 1] : ""} {year}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#22C55E]" /> Grand livre — {month ? MONTHS[month - 1] : ""} {year}</DialogTitle>
           <DialogDescription>{data ? `${(data.grand_total || 0).toLocaleString("fr-CA")} transactions · ${data.account_count} comptes — cliquez une ligne pour voir l'écriture` : "Chargement…"}</DialogDescription>
         </DialogHeader>
         <div className="flex items-center gap-2">
@@ -748,13 +748,13 @@ function LedgerPreviewDialog({ open, onOpenChange, year, month }) {
                   const isOpen = openIdx === t.idx;
                   return (
                   <Fragment key={t.idx}>
-                  <tr className={`cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 ${isOpen ? "bg-[#0E9488]/5" : ""}`}
+                  <tr className={`cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 ${isOpen ? "bg-[#22C55E]/5" : ""}`}
                       data-testid={`ledger-row-${t.idx}`} onClick={() => toggleEntry(t)}>
                     <td className="px-2 py-1.5 text-slate-400">{isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
                     <td className="px-3 py-1.5 font-mono-data text-slate-500">{t.date}</td>
                     <td className="px-3 py-1.5 font-mono-data text-slate-600">{t.account}</td>
                     <td className="px-3 py-1.5 text-slate-700">{t.unusual && <AlertTriangle size={11} className="mr-1 inline text-[#B45309]" />}{t.description}</td>
-                    <td className="px-3 py-1.5 text-right font-mono-data" style={{ color: (t.amount || 0) < 0 ? "#DC2626" : "#0E9488" }}>{money(t.amount)}</td>
+                    <td className="px-3 py-1.5 text-right font-mono-data" style={{ color: (t.amount || 0) < 0 ? "#DC2626" : "#22C55E" }}>{money(t.amount)}</td>
                   </tr>
                   {isOpen && (
                     <tr data-testid={`ledger-entry-${t.idx}`}>
@@ -777,7 +777,7 @@ function LedgerPreviewDialog({ open, onOpenChange, year, month }) {
                               </tr></thead>
                               <tbody>
                                 {entry.lines.map((l) => (
-                                  <tr key={l.idx} className={`border-b border-slate-50 ${l.idx === t.idx ? "bg-[#0E9488]/10" : ""}`}>
+                                  <tr key={l.idx} className={`border-b border-slate-50 ${l.idx === t.idx ? "bg-[#22C55E]/10" : ""}`}>
                                     <td className="px-2 py-1 font-mono-data text-slate-600">{l.account}</td>
                                     <td className="px-2 py-1 text-slate-700">{l.description}</td>
                                     <td className="px-2 py-1 text-right font-mono-data text-slate-700">{l.debit ? money(l.debit) : ""}</td>
@@ -985,7 +985,7 @@ export function AcctBV() {
           </div>
           <label className="inline-flex">
             <input type="file" accept=".xlsx" className="hidden" onChange={onBV} disabled={busy} data-testid="acct-bv-input" />
-            <span className={`inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#063044] px-4 py-2 text-sm font-600 text-white hover:bg-[#063044]/90 ${busy ? "opacity-60" : ""}`}><Upload size={15} /> {busy ? "Traitement…" : "Uploader la BV (.xlsx)"}</span>
+            <span className={`inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#0F172A] px-4 py-2 text-sm font-600 text-white hover:bg-[#0F172A]/90 ${busy ? "opacity-60" : ""}`}><Upload size={15} /> {busy ? "Traitement…" : "Uploader la BV (.xlsx)"}</span>
           </label>
         </div>
         {result && (
@@ -1001,14 +1001,14 @@ export function AcctBV() {
 
       <div className="card p-5" data-testid="acct-ledger-card">
         <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="flex items-center gap-2 text-sm font-700"><FileText size={15} className="text-[#0E9488]" /> Grand livre détaillé <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-600 uppercase tracking-wide text-slate-500">Optionnel</span></h3>
-          <button onClick={dlLedgerTemplate} data-testid="acct-ledger-template-btn" className="inline-flex items-center gap-1.5 text-xs font-600 text-[#063044] hover:underline"><Download size={13} /> Modèle</button>
+          <h3 className="flex items-center gap-2 text-sm font-700"><FileText size={15} className="text-[#22C55E]" /> Grand livre détaillé <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-600 uppercase tracking-wide text-slate-500">Optionnel</span></h3>
+          <button onClick={dlLedgerTemplate} data-testid="acct-ledger-template-btn" className="inline-flex items-center gap-1.5 text-xs font-600 text-[#0F172A] hover:underline"><Download size={13} /> Modèle</button>
         </div>
         <p className="mb-3 text-xs text-slate-500">Import mensuel facultatif du rapport de transactions ({MONTHS[month - 1]} {year}) pour enrichir l'analyse de variance IA. N'affecte aucun calcul (Bilan, P&amp;L, KPI). Seules les transactions du mois sélectionné sont conservées (un rapport annuel complet est accepté).</p>
         <div className="flex flex-wrap items-center gap-3">
           <label className="inline-flex">
             <input type="file" accept=".xlsx" className="hidden" onChange={onLedgerAll} disabled={ledgerBusy} data-testid="acct-ledger-all-input" />
-            <span className={`inline-flex items-center gap-2 rounded-lg border border-[#063044] px-4 py-2 text-sm font-600 text-[#063044] ${ledgerBusy ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-[#063044]/5"}`} title="Répartit automatiquement les transactions par mois (mois verrouillés ignorés)">
+            <span className={`inline-flex items-center gap-2 rounded-lg border border-[#0F172A] px-4 py-2 text-sm font-600 text-[#0F172A] ${ledgerBusy ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-[#0F172A]/5"}`} title="Répartit automatiquement les transactions par mois (mois verrouillés ignorés)">
               <Layers size={15} /> Importer toutes les périodes
             </span>
           </label>
@@ -1058,7 +1058,7 @@ export function AcctBV() {
                       : <span className="inline-flex items-center gap-1 text-amber-600"><Unlock size={13} /> Provisoire</span>}
                   </td>
                   <td className="px-5 py-2.5 text-right font-mono-data">{p.account_count ?? "—"}</td>
-                  <td className="px-5 py-2.5 text-right font-mono-data" style={{ color: p.balanced ? "#0E9488" : "#DC2626" }}>{money(p.diff)}</td>
+                  <td className="px-5 py-2.5 text-right font-mono-data" style={{ color: p.balanced ? "#22C55E" : "#DC2626" }}>{money(p.diff)}</td>
                   <td className="px-5 py-2.5 text-center" data-testid={`acct-period-ledger-${p.id}`}>
                     {p.ledger_count ? (
                       <button onClick={() => setLedgerPreview({ open: true, year: p.year, month: p.month })} data-testid={`acct-period-ledger-btn-${p.id}`}
@@ -1113,7 +1113,7 @@ export function AcctBV() {
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-500">Budget à envoyer :</span>
             <select value={sendRev} onChange={(e) => setSendRev(e.target.value)} data-testid="acct-sendreports-rev"
-              className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+              className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#22C55E] focus:outline-none">
               <option value="rev1">Budget Rév-1</option>
               <option value="ca">Budget CA</option>
               <option value="rev2">Budget Rév-2</option>
@@ -1121,7 +1121,7 @@ export function AcctBV() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSendDialog({ open: false, year: null, month: null })} data-testid="acct-sendreports-later">Plus tard</Button>
-            <Button onClick={sendAllReports} disabled={!emailCfg.configured || sending} data-testid="acct-sendreports-all" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90">
+            <Button onClick={sendAllReports} disabled={!emailCfg.configured || sending} data-testid="acct-sendreports-all" className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90">
               <Send size={15} /> {sending ? "Envoi…" : "Envoyer à tous les responsables"}
             </Button>
           </DialogFooter>
@@ -1163,11 +1163,11 @@ export function AcctBV() {
                 <div className="flex items-center gap-1.5">
                   <input list="acct-target-list" data-testid={`acct-assign-${a.account}`} placeholder="Regrouper avec le compte…"
                     value={assignText[a.account] || ""}
-                    className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-[#063044]"
+                    className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-[#0F172A]"
                     onChange={(e) => { const val = e.target.value; setAssignText((s) => ({ ...s, [a.account]: val })); const m = val.match(/^(\d+)/); setAssign((s) => ({ ...s, [a.account]: m ? Number(m[1]) : "" })); }} />
                   <button type="button" data-testid={`acct-suggest-${a.account}`} onClick={() => suggestMapping(a)} disabled={!!suggesting[a.account]}
                     title="Suggérer une catégorie (IA)"
-                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#0E9488]/40 px-2 py-1.5 text-xs font-600 text-[#0E9488] hover:bg-[#0E9488]/10 disabled:opacity-50">
+                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#22C55E]/40 px-2 py-1.5 text-xs font-600 text-[#22C55E] hover:bg-[#22C55E]/10 disabled:opacity-50">
                     <Wand2 size={13} /> {suggesting[a.account] ? "…" : "Suggérer"}
                   </button>
                 </div>
@@ -1195,11 +1195,11 @@ function excelRowStyle(ln, boldTotals = true) {
   if (bold) cls.push("font-700");
   if (st.t) cls.push("border-t border-slate-300");
   if (st.u) cls.push("border-b-2 border-slate-300");
-  const bg = isDark ? "#063044" : isGrey ? "#eef1f5" : undefined;
+  const bg = isDark ? "#0F172A" : isGrey ? "#eef1f5" : undefined;
   let color;
   if (isDark) color = st.c || "#FFFFFF";
   else if (st.c) color = st.c;
-  else if (ln.kind === "header") color = "#063044";
+  else if (ln.kind === "header") color = "#0F172A";
   else color = undefined;
   const headerDefault = !isDark && !isGrey && !st.c && ln.kind === "header";
   // Ligne-poste non totalisée du sommaire : rendue comme une ligne de données (poids normal, slate-700).
@@ -1315,7 +1315,7 @@ function ReportView({ type, title }) {
                 return (
                   <button key={g.id} type="button" data-testid={`acct-colgroup-${g.id}`}
                     onClick={() => setHiddenGroups((s) => ({ ...s, [g.id]: !s[g.id] }))}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-600 transition-colors ${hidden ? "border-slate-200 bg-white text-slate-400" : "border-[#063044]/30 bg-[#063044]/10 text-[#063044]"}`}>
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-600 transition-colors ${hidden ? "border-slate-200 bg-white text-slate-400" : "border-[#0F172A]/30 bg-[#0F172A]/10 text-[#0F172A]"}`}>
                     {hidden ? <Plus size={13} /> : <Minus size={13} />} {g.label}
                   </button>
                 );
@@ -1325,9 +1325,9 @@ function ReportView({ type, title }) {
         </div>
         <div className="flex items-center gap-2">
           <PresentationButton />
-          <ExportMenu onPdf={exportPdf} onExcel={exportExcel} disabled={!rep} testid="acct-export" className="bg-[#0E9488] hover:bg-[#0E9488]/90" />
+          <ExportMenu onPdf={exportPdf} onExcel={exportExcel} disabled={!rep} testid="acct-export" className="bg-[#22C55E] hover:bg-[#22C55E]/90" />
           {type.includes("pnl") && period && (
-            <Button size="sm" onClick={() => setAiOpen(true)} data-testid="acct-report-ai-btn" title="Analyse IA" className="px-2.5 bg-[#063044] hover:bg-[#063044]/90"><Sparkles size={15} /></Button>
+            <Button size="sm" onClick={() => setAiOpen(true)} data-testid="acct-report-ai-btn" title="Analyse IA" className="px-2.5 bg-[#0F172A] hover:bg-[#0F172A]/90"><Sparkles size={15} /></Button>
           )}
         </div>
       </div>
@@ -1369,7 +1369,7 @@ function ReportView({ type, title }) {
                   const isQp = qpIdxs.indexOf(i) >= 0;
                   const qpB = (pos) => {
                     if (!isQp || pos === "none") return "";
-                    let c = "border-[#0E9488] ";
+                    let c = "border-[#22C55E] ";
                     if (pos === "first") c += "border-l ";
                     if (pos === "last") c += "border-r ";
                     if (i === qpFirst) c += "border-t ";
@@ -1383,7 +1383,7 @@ function ReportView({ type, title }) {
                     className={`group ${isQp ? "" : "border-b border-slate-50"} ${s.cls}`}
                     style={{ background: isQp ? "transparent" : s.bg, fontWeight: (isQp || isPct) ? 400 : undefined, fontStyle: isPct ? "italic" : undefined, fontSize: isQp ? "0.72rem" : undefined }}>
                     <td className={`px-4 py-1.5 text-left ${qpB("none")}`} style={{ color: s.isDark ? "#94A3B8" : "#94A3B8" }}>{ln.account || ""}</td>
-                    <td className={`px-4 py-1.5 text-left font-sans ${qpB("first")} ${s.headerDefault ? "text-[#063044]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`} style={{ color: isPct ? "#0E9488" : (s.headerDefault ? undefined : (s.color || undefined)) }}>
+                    <td className={`px-4 py-1.5 text-left font-sans ${qpB("first")} ${s.headerDefault ? "text-[#0F172A]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`} style={{ color: isPct ? "#22C55E" : (s.headerDefault ? undefined : (s.color || undefined)) }}>
                       <span className="inline-flex items-center gap-1.5">
                         <span>{ln.label}</span>
                         {ln.kind === "data" && ln.account && (() => {
@@ -1392,7 +1392,7 @@ function ReportView({ type, title }) {
                             <button type="button" data-testid={`acct-comment-btn-${ln.account}`}
                               onClick={() => setCommentLine({ account: ln.account, label: ln.label })}
                               title={cnt > 0 ? `${cnt} commentaire(s)` : "Ajouter un commentaire"}
-                              className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-700 transition-opacity transition-colors ${cnt > 0 ? "bg-[#0E9488]/12 text-[#0E9488] hover:bg-[#0E9488]/20" : "text-[#0E9488]/70 opacity-0 hover:bg-[#0E9488]/10 hover:text-[#0E9488] focus:opacity-100 group-hover:opacity-100"}`}>
+                              className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-700 transition-opacity transition-colors ${cnt > 0 ? "bg-[#22C55E]/12 text-[#22C55E] hover:bg-[#22C55E]/20" : "text-[#22C55E]/70 opacity-0 hover:bg-[#22C55E]/10 hover:text-[#22C55E] focus:opacity-100 group-hover:opacity-100"}`}>
                               <MessageSquare size={12} />{cnt > 0 ? cnt : ""}
                             </button>
                           );
@@ -1400,7 +1400,7 @@ function ReportView({ type, title }) {
                       </span>
                     </td>
                     {visibleCols.map((k, ci) => (
-                      <td key={k} className={`px-4 py-1.5 text-right ${qpB(ci === lastColIdx ? "last" : "mid")} ${(isEcart(k) || isPct) ? "italic" : ""} ${!isQp && showSep(k) ? "border-l-2 border-slate-200" : ""}`} style={{ color: isPct ? "#0E9488" : excelCellColor(s, ln.values[k], isEcart(k)) }}>{ln.kind === "header" ? "" : (isPct ? pctFmt(ln.values[k]) : money(ln.values[k]))}</td>
+                      <td key={k} className={`px-4 py-1.5 text-right ${qpB(ci === lastColIdx ? "last" : "mid")} ${(isEcart(k) || isPct) ? "italic" : ""} ${!isQp && showSep(k) ? "border-l-2 border-slate-200" : ""}`} style={{ color: isPct ? "#22C55E" : excelCellColor(s, ln.values[k], isEcart(k)) }}>{ln.kind === "header" ? "" : (isPct ? pctFmt(ln.values[k]) : money(ln.values[k]))}</td>
                     ))}
                   </tr>
                   );
@@ -1437,7 +1437,7 @@ function ReportView({ type, title }) {
         <Dialog open={aiOpen} onOpenChange={setAiOpen}>
           <DialogContent data-testid="acct-report-ai-dialog" className="max-h-[90vh] max-w-3xl overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2"><Sparkles size={18} className="text-[#0E9488]" /> Analyse IA — {title}</DialogTitle>
+              <DialogTitle className="flex items-center gap-2"><Sparkles size={18} className="text-[#22C55E]" /> Analyse IA — {title}</DialogTitle>
               <DialogDescription className="text-xs">Analyse des variances et questions sur les données pour la période sélectionnée.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -1488,7 +1488,7 @@ function LineCommentDialog({ open, onOpenChange, report, account, lineLabel, per
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="line-comment-dialog" className="flex max-h-[85vh] max-w-lg flex-col overflow-hidden">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><MessageSquare size={16} className="text-[#0E9488]" /> Commentaires</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><MessageSquare size={16} className="text-[#22C55E]" /> Commentaires</DialogTitle>
           <DialogDescription>{lineLabel} · compte {account} {curLabel ? `— période ${curLabel}` : ""}</DialogDescription>
         </DialogHeader>
         <div className="flex-1 space-y-2 overflow-y-auto pr-1" data-testid="line-comment-list">
@@ -1498,19 +1498,19 @@ function LineCommentDialog({ open, onOpenChange, report, account, lineLabel, per
               const isCurrent = c.year === y && c.month === m;
               const mine = c.author === currentEmail;
               return (
-                <div key={c.id} data-testid={`line-comment-${c.id}`} className={`rounded-lg border p-2.5 ${isCurrent ? "border-[#0E9488]/40 bg-[#0E9488]/5" : "border-slate-200 bg-white"}`}>
+                <div key={c.id} data-testid={`line-comment-${c.id}`} className={`rounded-lg border p-2.5 ${isCurrent ? "border-[#22C55E]/40 bg-[#22C55E]/5" : "border-slate-200 bg-white"}`}>
                   <div className="mb-1 flex items-center justify-between gap-2 text-[11px]">
                     <span className="font-700 text-slate-600">{c.author_name}</span>
                     <span className="flex items-center gap-2 text-slate-400">
-                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-600 ${isCurrent ? "bg-[#0E9488]/15 text-[#0E9488]" : "bg-slate-100 text-slate-500"}`}>{c.month_label} {c.year}</span>
+                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-600 ${isCurrent ? "bg-[#22C55E]/15 text-[#22C55E]" : "bg-slate-100 text-slate-500"}`}>{c.month_label} {c.year}</span>
                       {c.updated_at && <span className="italic">modifié</span>}
                     </span>
                   </div>
                   {editId === c.id ? (
                     <div className="space-y-1.5">
-                      <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-200 p-2 text-sm outline-none focus:border-[#0E9488]" />
+                      <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-200 p-2 text-sm outline-none focus:border-[#22C55E]" />
                       <div className="flex gap-2">
-                        <Button size="sm" onClick={() => saveEdit(c.id)} className="h-7 bg-[#063044] text-xs hover:bg-[#063044]/90">Enregistrer</Button>
+                        <Button size="sm" onClick={() => saveEdit(c.id)} className="h-7 bg-[#0F172A] text-xs hover:bg-[#0F172A]/90">Enregistrer</Button>
                         <Button size="sm" variant="outline" onClick={() => setEditId(null)} className="h-7 text-xs">Annuler</Button>
                       </div>
                     </div>
@@ -1519,7 +1519,7 @@ function LineCommentDialog({ open, onOpenChange, report, account, lineLabel, per
                       <p className="whitespace-pre-wrap text-sm text-slate-700">{c.text}</p>
                       {canEdit && (mine || isAdmin) && (
                         <div className="mt-1 flex gap-3 text-[11px]">
-                          <button onClick={() => { setEditId(c.id); setEditText(c.text); }} data-testid={`line-comment-edit-${c.id}`} className="inline-flex items-center gap-1 text-slate-400 hover:text-[#0E9488]"><Pencil size={11} /> Modifier</button>
+                          <button onClick={() => { setEditId(c.id); setEditText(c.text); }} data-testid={`line-comment-edit-${c.id}`} className="inline-flex items-center gap-1 text-slate-400 hover:text-[#22C55E]"><Pencil size={11} /> Modifier</button>
                           <button onClick={() => del(c.id)} data-testid={`line-comment-del-${c.id}`} className="inline-flex items-center gap-1 text-slate-400 hover:text-red-500"><Trash2 size={11} /> Supprimer</button>
                         </div>
                       )}
@@ -1532,9 +1532,9 @@ function LineCommentDialog({ open, onOpenChange, report, account, lineLabel, per
         {canEdit ? (
           <div className="mt-2 border-t border-slate-100 pt-2">
             <textarea data-testid="line-comment-input" value={text} onChange={(e) => setText(e.target.value)} rows={2}
-              placeholder={`Ajouter un commentaire pour ${curLabel}…`} className="w-full rounded-lg border border-slate-200 p-2 text-sm outline-none focus:border-[#0E9488]" />
+              placeholder={`Ajouter un commentaire pour ${curLabel}…`} className="w-full rounded-lg border border-slate-200 p-2 text-sm outline-none focus:border-[#22C55E]" />
             <div className="mt-1.5 flex justify-end">
-              <Button size="sm" onClick={add} disabled={saving || !text.trim()} data-testid="line-comment-add" className="gap-1.5 bg-[#0E9488] hover:bg-[#0E9488]/90"><Send size={14} /> {saving ? "Envoi…" : "Commenter"}</Button>
+              <Button size="sm" onClick={add} disabled={saving || !text.trim()} data-testid="line-comment-add" className="gap-1.5 bg-[#22C55E] hover:bg-[#22C55E]/90"><Send size={14} /> {saving ? "Envoi…" : "Commenter"}</Button>
             </div>
           </div>
         ) : <p className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-400">Lecture seule — seuls les éditeurs et administrateurs peuvent commenter.</p>}
@@ -1548,7 +1548,7 @@ function ViewToggle({ value, onChange, options }) {
     <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm" data-testid="acct-view-toggle">
       {options.map((o) => (
         <button key={o.value} data-testid={`acct-view-${o.value}`} onClick={() => onChange(o.value)}
-          className={`rounded-lg px-4 py-1.5 text-sm font-600 transition-colors ${value === o.value ? "bg-[#063044] text-white" : "text-slate-500 hover:text-slate-900"}`}>
+          className={`rounded-lg px-4 py-1.5 text-sm font-600 transition-colors ${value === o.value ? "bg-[#0F172A] text-white" : "text-slate-500 hover:text-slate-900"}`}>
           {o.label}
         </button>
       ))}
@@ -1620,14 +1620,14 @@ function BilanSommaireView({ millions = false }) {
 
   const Side = ({ title, rows }) => (
     <div>
-      <h4 className="mb-2 border-b-2 border-[#063044] pb-1.5 font-display text-sm font-800 uppercase tracking-wide text-[#063044]">{title}</h4>
+      <h4 className="mb-2 border-b-2 border-[#0F172A] pb-1.5 font-display text-sm font-800 uppercase tracking-wide text-[#0F172A]">{title}</h4>
       <table className="acct-hover-rows w-full text-sm">
         <tbody className="font-mono-data">
           {rows.map((l, i) => {
             const s = excelRowStyle(l);
             return (
             <tr key={i} className={`border-b border-slate-50 ${s.cls}`} style={{ background: s.bg }}>
-              <td className={`px-3 py-1.5 text-left font-sans ${l.kind === "data" ? "pl-5" : ""} ${s.headerDefault ? "text-[#063044]" : (!s.color && l.kind === "data" ? "text-slate-700" : "")}`} style={{ color: s.headerDefault ? undefined : (s.color || undefined) }}>{l.label}</td>
+              <td className={`px-3 py-1.5 text-left font-sans ${l.kind === "data" ? "pl-5" : ""} ${s.headerDefault ? "text-[#0F172A]" : (!s.color && l.kind === "data" ? "text-slate-700" : "")}`} style={{ color: s.headerDefault ? undefined : (s.color || undefined) }}>{l.label}</td>
               <td className="px-3 py-1.5 text-right" style={{ color: l.value == null ? undefined : excelCellColor(s, l.value, false) }}>{l.value == null ? "" : fmt(l.value)}</td>
             </tr>
             );
@@ -1645,7 +1645,7 @@ function BilanSommaireView({ millions = false }) {
         <PeriodSelect periods={periods} value={period} onChange={setPeriod} testId="acct-bilansom" />
         <div className="flex items-center gap-2">
           <PresentationButton />
-          <ExportMenu onPdf={exportPdf} onExcel={exportExcel} disabled={!rep} testid="acct-bilansom-export" className="bg-[#063044] hover:bg-[#063044]/90" />
+          <ExportMenu onPdf={exportPdf} onExcel={exportExcel} disabled={!rep} testid="acct-bilansom-export" className="bg-[#0F172A] hover:bg-[#0F172A]/90" />
         </div>
       </div>
       {rep && !rep.locked && (
@@ -1696,7 +1696,7 @@ export function AcctReports() {
       <div className="flex flex-wrap gap-2" data-testid="acct-reports-typebar">
         {TYPES.map((tp) => (
           <button key={tp.value} onClick={() => set(tp.value)} data-testid={`acct-reports-type-${tp.value}`}
-            className={`rounded-full border px-3.5 py-1.5 text-sm font-600 transition-colors ${type === tp.value ? "border-[#063044] bg-[#063044] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488] hover:text-[#0E9488]"}`}>
+            className={`rounded-full border px-3.5 py-1.5 text-sm font-600 transition-colors ${type === tp.value ? "border-[#0F172A] bg-[#0F172A] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#22C55E] hover:text-[#22C55E]"}`}>
             {tp.label}
           </button>
         ))}
@@ -1737,7 +1737,7 @@ function PnlMonthlyView() {
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-500">Année :</span>
             <select value={year || ""} onChange={(e) => setYear(Number(e.target.value))} data-testid="acct-monthly-year"
-              className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+              className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#22C55E] focus:outline-none">
               {years.map((y) => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
@@ -1759,7 +1759,7 @@ function PnlMonthlyView() {
                   <th className="bg-white px-3 py-2 text-left">Compte</th>
                   <th className="bg-white px-3 py-2 text-left">Description</th>
                   {months.map((m) => <th key={m.month} className={`bg-white px-3 py-2 text-right ${!m.locked && m.has_data ? "text-amber-600" : ""}`}>{m.short}{!m.locked && m.has_data ? " *" : ""}</th>)}
-                  <th className="bg-white px-3 py-2 text-right font-700 text-[#063044]">Total</th>
+                  <th className="bg-white px-3 py-2 text-right font-700 text-[#0F172A]">Total</th>
                 </tr>
               </thead>
               <tbody className="font-mono-data">
@@ -1774,7 +1774,7 @@ function PnlMonthlyView() {
                     const isPct = !!ln.is_pct;
                     const qpB = (pos) => {
                       if (!isQp) return "";
-                      let c = "border-[#0E9488] ";
+                      let c = "border-[#22C55E] ";
                       if (pos === "first") c += "border-l ";
                       if (pos === "last") c += "border-r ";
                       if (i === qpFirst) c += "border-t ";
@@ -1782,13 +1782,13 @@ function PnlMonthlyView() {
                       return c;
                     };
                     const fmt = (v) => ln.kind === "header" ? "" : (isPct ? pctFmt(v) : money(v));
-                    const cellColor = (v) => isPct ? "#0E9488" : excelCellColor(s, v || 0, false);
+                    const cellColor = (v) => isPct ? "#22C55E" : excelCellColor(s, v || 0, false);
                     const row = (
                       <tr key={ln.row ?? i} data-testid={`acct-monthly-line-${ln.row ?? i}`}
                         className={`group ${isQp ? "" : "border-b border-slate-50"} ${s.cls}`}
                         style={{ background: isQp ? "transparent" : s.bg, color: s.color, fontWeight: (isQp || isPct || s.plain) ? 400 : undefined, fontStyle: isPct ? "italic" : undefined, fontSize: isQp ? "0.72rem" : undefined }}>
                         <td className={`px-3 py-1.5 text-left ${qpB("none")}`} style={{ color: "#94A3B8" }}>{ln.account || ""}</td>
-                        <td className={`px-3 py-1.5 text-left font-sans ${qpB("first")} ${s.headerDefault ? "text-[#063044]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`} style={{ color: isPct ? "#0E9488" : (s.headerDefault ? undefined : (s.color || undefined)) }}>{ln.label}</td>
+                        <td className={`px-3 py-1.5 text-left font-sans ${qpB("first")} ${s.headerDefault ? "text-[#0F172A]" : ((!s.color && ln.kind === "data") || s.plain ? "text-slate-700" : "")}`} style={{ color: isPct ? "#22C55E" : (s.headerDefault ? undefined : (s.color || undefined)) }}>{ln.label}</td>
                         {months.map((m) => (
                           <td key={m.month} className={`px-3 py-1.5 text-right ${qpB("mid")} ${isPct ? "italic" : ""}`} style={{ color: cellColor(ln.values[String(m.month)]) }}>{fmt(ln.values[String(m.month)])}</td>
                         ))}
@@ -1824,12 +1824,12 @@ function NoteCell({ value, onSave }) {
       <textarea autoFocus value={txt} onChange={(e) => setTxt(e.target.value)} onBlur={commit}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commit(); } if (e.key === "Escape") { setTxt(value || ""); setEditing(false); } }}
         rows={2} data-testid="acct-note-input"
-        className="w-full min-w-[180px] rounded border border-[#0E9488] px-2 py-1 text-xs focus:outline-none" />
+        className="w-full min-w-[180px] rounded border border-[#22C55E] px-2 py-1 text-xs focus:outline-none" />
     );
   }
   return (
     <button type="button" onClick={() => setEditing(true)} data-testid="acct-note-cell"
-      className={`w-full min-w-[160px] rounded px-2 py-1 text-left text-xs transition-colors hover:bg-[#0E9488]/5 ${value ? "text-slate-600" : "text-slate-300 italic"}`}>
+      className={`w-full min-w-[160px] rounded px-2 py-1 text-left text-xs transition-colors hover:bg-[#22C55E]/5 ${value ? "text-slate-600" : "text-slate-300 italic"}`}>
       {value || "Ajouter une note…"}
     </button>
   );
@@ -1899,7 +1899,7 @@ function ByManagerView() {
           <div>
             <label className="mb-1 block text-[11px] font-600 uppercase tracking-wider text-slate-400">Responsable budgétaire</label>
             <select value={mid} onChange={(e) => setMid(e.target.value)} data-testid="acct-bymanager-select"
-              className="h-9 min-w-[220px] rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+              className="h-9 min-w-[220px] rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#22C55E] focus:outline-none">
               <option value="">— Choisir —</option>
               {managers.map((m) => <option key={m.id} value={m.id}>{m.name}{m.accounts?.length ? ` (${m.accounts.length} cptes)` : ""}</option>)}
             </select>
@@ -1911,17 +1911,17 @@ function ByManagerView() {
           <div>
             <label className="mb-1 block text-[11px] font-600 uppercase tracking-wider text-slate-400">Budget</label>
             <select value={rev} onChange={(e) => setRevision(e.target.value)} data-testid="acct-bymanager-rev"
-              className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+              className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#22C55E] focus:outline-none">
               {REVS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {mid && rep && <ExportMenu onPdf={() => doExport("pdf")} onExcel={() => doExport("excel")} disabled={!rep} testid="acct-bymanager-export" className="bg-[#0E9488] hover:bg-[#0E9488]/90" />}
+          {mid && rep && <ExportMenu onPdf={() => doExport("pdf")} onExcel={() => doExport("excel")} disabled={!rep} testid="acct-bymanager-export" className="bg-[#22C55E] hover:bg-[#22C55E]/90" />}
           {mid && rep && (
             <Button size="sm" onClick={sendOne} disabled={emailing || !emailCfg.configured}
               title={emailCfg.configured ? `Envoyer par courriel à ${rep.manager.email || "(aucun courriel)"}` : "Service d'email non configuré"}
-              data-testid="acct-bymanager-email" className="gap-2 bg-[#063044] hover:bg-[#063044]/90">
+              data-testid="acct-bymanager-email" className="gap-2 bg-[#0F172A] hover:bg-[#0F172A]/90">
               <Send size={15} /> {emailing ? "Envoi…" : "Envoyer"}
             </Button>
           )}
@@ -1935,10 +1935,10 @@ function ByManagerView() {
         : (
           <div className="card overflow-x-auto" data-testid="acct-bymanager-report">
             <div className="border-b border-slate-100 px-5 py-3">
-              <h3 className="font-display text-base font-700 text-[#063044]">Suivi Budget frais d'exploitation - {rep.manager.name}</h3>
+              <h3 className="font-display text-base font-700 text-[#0F172A]">Suivi Budget frais d'exploitation - {rep.manager.name}</h3>
               <p className="mt-0.5 text-xs text-slate-400">Réel {rep.month_label} {rep.year} (Cumulatif) · Budget {rep.rev_label}{!rep.locked ? " · données provisoires" : ""} · {rep.manager.email || "aucun courriel"}</p>
               {rep.last_sent
-                ? <p className="mt-1 flex items-center gap-1.5 text-xs text-[#0E9488]" data-testid="acct-bymanager-lastsent">
+                ? <p className="mt-1 flex items-center gap-1.5 text-xs text-[#22C55E]" data-testid="acct-bymanager-lastsent">
                     <Send size={12} /> Dernier envoi : {new Date(rep.last_sent.sent_at).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" })} à {rep.last_sent.email} · par {rep.last_sent.sent_by} (budget {rep.last_sent.rev_label})
                   </p>
                 : <p className="mt-1 text-xs text-slate-300" data-testid="acct-bymanager-lastsent-none">Jamais envoyé pour cette période</p>}
@@ -1968,7 +1968,7 @@ function ByManagerView() {
                         <td className="px-2 py-1 text-left"><NoteCell value={ln.note} onSave={(t) => saveNote(ln.account, t)} /></td>
                       </tr>
                     ))}
-                    <tr className="border-t-2 border-slate-300 bg-[#eef1f5] font-700 text-[#063044]" data-testid="acct-bymanager-total">
+                    <tr className="border-t-2 border-slate-300 bg-[#eef1f5] font-700 text-[#0F172A]" data-testid="acct-bymanager-total">
                       <td className="px-3 py-2 text-left" colSpan={2}>TOTAL - {rep.manager.name.toUpperCase()}</td>
                       <td className="px-3 py-2 text-right font-mono-data">{cell(rep.total.reel)}</td>
                       <td className="px-3 py-2 text-right font-mono-data">{cell(rep.total.budget)}</td>
@@ -2023,7 +2023,7 @@ function ManagersDialog({ open, onOpenChange, managers, onChanged }) {
             <div key={m.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2" data-testid={`acct-manager-row-${m.id}`}>
               <div className="min-w-0"><p className="text-sm font-600 text-slate-700">{m.name}</p><p className="truncate text-xs text-slate-400">{m.email || "—"} · {(m.accounts || []).length} compte(s)</p>
                 {lastByMgr[m.id]
-                  ? <p className="mt-0.5 truncate text-[11px] text-[#0E9488]" data-testid={`acct-manager-lastsent-${m.id}`}>Dernier envoi : {MONTHS_FR[lastByMgr[m.id].month - 1]} {lastByMgr[m.id].year} · {new Date(lastByMgr[m.id].sent_at).toLocaleDateString("fr-CA", { dateStyle: "medium" })} par {lastByMgr[m.id].sent_by}</p>
+                  ? <p className="mt-0.5 truncate text-[11px] text-[#22C55E]" data-testid={`acct-manager-lastsent-${m.id}`}>Dernier envoi : {MONTHS_FR[lastByMgr[m.id].month - 1]} {lastByMgr[m.id].year} · {new Date(lastByMgr[m.id].sent_at).toLocaleDateString("fr-CA", { dateStyle: "medium" })} par {lastByMgr[m.id].sent_by}</p>
                   : <p className="mt-0.5 text-[11px] text-slate-300">Aucun envoi enregistré</p>}
               </div>
               <div className="flex gap-1">
@@ -2035,16 +2035,16 @@ function ManagersDialog({ open, onOpenChange, managers, onChanged }) {
           {managers.length === 0 && <p className="py-3 text-center text-sm text-slate-400">Aucun responsable défini.</p>}
         </div>
         {editing ? (
-          <div className="space-y-2 rounded-lg border border-[#0E9488]/30 bg-[#0E9488]/5 p-3" data-testid="acct-manager-form">
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nom du responsable" data-testid="acct-manager-name" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0E9488] focus:outline-none" />
-            <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Courriel" data-testid="acct-manager-email" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0E9488] focus:outline-none" />
-            <textarea value={form.accounts} onChange={(e) => setForm({ ...form, accounts: e.target.value })} placeholder="Comptes (ex : 4000, 4100, 5000)" data-testid="acct-manager-accounts" rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0E9488] focus:outline-none" />
+          <div className="space-y-2 rounded-lg border border-[#22C55E]/30 bg-[#22C55E]/5 p-3" data-testid="acct-manager-form">
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nom du responsable" data-testid="acct-manager-name" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#22C55E] focus:outline-none" />
+            <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Courriel" data-testid="acct-manager-email" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#22C55E] focus:outline-none" />
+            <textarea value={form.accounts} onChange={(e) => setForm({ ...form, accounts: e.target.value })} placeholder="Comptes (ex : 4000, 4100, 5000)" data-testid="acct-manager-accounts" rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#22C55E] focus:outline-none" />
             <div className="flex justify-end gap-2">
               <Button size="sm" variant="outline" onClick={() => setEditing(null)}>Annuler</Button>
-              <Button size="sm" onClick={save} data-testid="acct-manager-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">Enregistrer</Button>
+              <Button size="sm" onClick={save} data-testid="acct-manager-save" className="bg-[#22C55E] hover:bg-[#22C55E]/90">Enregistrer</Button>
             </div>
           </div>
-        ) : <Button size="sm" onClick={startNew} data-testid="acct-manager-new" className="gap-2 bg-[#063044] hover:bg-[#063044]/90"><Plus size={15} /> Nouveau responsable</Button>}
+        ) : <Button size="sm" onClick={startNew} data-testid="acct-manager-new" className="gap-2 bg-[#0F172A] hover:bg-[#0F172A]/90"><Plus size={15} /> Nouveau responsable</Button>}
       </DialogContent>
     </Dialog>
   );
@@ -2127,7 +2127,7 @@ function ExternalSendView() {
           <div>
             <label className="mb-1 block text-[11px] font-600 uppercase tracking-wider text-slate-400">Contact Externe</label>
             <select value={cid} onChange={(e) => setCid(e.target.value)} data-testid="acct-external-select"
-              className="h-9 min-w-[220px] rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#0E9488] focus:outline-none">
+              className="h-9 min-w-[220px] rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-[#22C55E] focus:outline-none">
               <option value="">— Choisir —</option>
               {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}{c.report_types?.length ? ` (${c.report_types.length} rapport(s))` : ""}</option>)}
             </select>
@@ -2141,7 +2141,7 @@ function ExternalSendView() {
           {cid && contact && (
             <Button size="sm" onClick={sendAll} disabled={busy || !emailCfg.configured}
               title={emailCfg.configured ? `Envoyer le package à ${contact.email || "(aucun courriel)"}` : "Service d'email non configuré"}
-              data-testid="acct-external-email" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Send size={15} /> {busy ? "…" : "Envoyer le package"}</Button>
+              data-testid="acct-external-email" className="gap-2 bg-[#22C55E] hover:bg-[#22C55E]/90"><Send size={15} /> {busy ? "…" : "Envoyer le package"}</Button>
           )}
           {cid && <Button size="sm" variant="outline" onClick={() => setHistOpen(true)} data-testid="acct-external-history-btn" className="gap-2"><Clock size={15} /> Historique{history.length ? ` (${history.length})` : ""}</Button>}
           {isAdmin && <Button size="sm" variant="outline" onClick={() => setManageOpen(true)} data-testid="acct-external-manage" className="gap-2"><Settings2 size={15} /> Gérer les contacts</Button>}
@@ -2153,7 +2153,7 @@ function ExternalSendView() {
           <div className="card overflow-hidden" data-testid="acct-external-package">
             <div className="border-b border-slate-100 px-5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="font-display text-base font-700 text-[#063044]">Package — {contact.name}</h3>
+                <h3 className="font-display text-base font-700 text-[#0F172A]">Package — {contact.name}</h3>
                 {ls
                   ? <span data-testid="acct-external-last-sent" className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-600 text-emerald-700"><CheckCircle2 size={13} /> Dernier envoi : {fmtSent(ls.sent_at)} · {MONTHS[(ls.month || 1) - 1]?.slice(0, 3)} {ls.year} · {ls.doc_count || 0} doc(s)</span>
                   : <span data-testid="acct-external-last-sent" className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-600 text-slate-500"><Clock size={13} /> Aucun envoi enregistré</span>}
@@ -2170,7 +2170,7 @@ function ExternalSendView() {
                     <div className="min-w-0">
                       <p className="text-sm font-600 text-slate-700">{labelOf(key)}</p>
                       {isMarg && <p className="text-xs text-slate-400">{marg.present ? `Fichier : ${marg.filename}` : "Aucun fichier téléversé pour cette période"}</p>}
-                      {!isMarg && <p className="text-xs text-[#0E9488]">Cliquer pour aperçu</p>}
+                      {!isMarg && <p className="text-xs text-[#22C55E]">Cliquer pour aperçu</p>}
                     </div>
                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {isMarg && isAdmin && (
@@ -2196,7 +2196,7 @@ function ExternalSendView() {
       <Dialog open={histOpen} onOpenChange={setHistOpen}>
         <DialogContent data-testid="acct-external-history-dialog" className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Clock size={16} className="text-[#0E9488]" /> Historique des envois — {contact?.name || ""}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><Clock size={16} className="text-[#22C55E]" /> Historique des envois — {contact?.name || ""}</DialogTitle>
             <DialogDescription className="text-xs">Journal des packages financiers transmis à ce contact.</DialogDescription>
           </DialogHeader>
           {history.length === 0
@@ -2205,7 +2205,7 @@ function ExternalSendView() {
                 {history.map((h, i) => (
                   <div key={i} className="rounded-lg border border-slate-200 px-3 py-2.5" data-testid={`acct-external-history-row-${i}`}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-sm font-600 text-[#063044]">{MONTHS[(h.month || 1) - 1]} {h.year}</span>
+                      <span className="text-sm font-600 text-[#0F172A]">{MONTHS[(h.month || 1) - 1]} {h.year}</span>
                       <span className="text-xs text-slate-500">{fmtSent(h.sent_at)}</span>
                     </div>
                     <p className="mt-1 text-xs text-slate-500">Vers {h.email} · par {h.sent_by} · {h.doc_count || 0} document(s)</p>
@@ -2239,7 +2239,7 @@ function ExternalSendView() {
                   <div className="mb-2 flex flex-wrap gap-1.5">
                     {preview.sheets.map((s, i) => (
                       <button key={i} onClick={() => setPreview((p) => ({ ...p, active: i }))} data-testid={`acct-preview-tab-${i}`}
-                        className={`rounded-md border px-2.5 py-1 text-xs font-600 transition-colors ${preview.active === i ? "border-[#0E9488] bg-[#0E9488] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#0E9488]"} ${(margSearch[i] || "").trim() && preview.active !== i ? "ring-1 ring-[#F8A942]" : ""}`}>
+                        className={`rounded-md border px-2.5 py-1 text-xs font-600 transition-colors ${preview.active === i ? "border-[#22C55E] bg-[#22C55E] text-white" : "border-slate-300 bg-white text-slate-600 hover:border-[#22C55E]"} ${(margSearch[i] || "").trim() && preview.active !== i ? "ring-1 ring-[#FBBF24]" : ""}`}>
                         {s.name.trim()}{(margSearch[i] || "").trim() ? " ·" : ""}
                       </button>
                     ))}
@@ -2276,7 +2276,7 @@ function ExternalSendView() {
                                     const cls = [
                                       "whitespace-nowrap border border-slate-100 px-2 py-1",
                                       typeof c === "number" ? "text-right" : "text-left",
-                                      isHead ? "sticky top-0 bg-[#063044] text-white" : "",
+                                      isHead ? "sticky top-0 bg-[#0F172A] text-white" : "",
                                       isFirstCol && !isHead ? "sticky left-0 bg-white" : "",
                                       isHead && isFirstCol ? "z-30" : isHead ? "z-20" : isFirstCol ? "z-10" : "",
                                     ].join(" ");
@@ -2300,7 +2300,7 @@ function ExternalSendView() {
                 </div>}
           <DialogFooter>
             <Button variant="outline" onClick={closePreview}>Fermer</Button>
-            <Button onClick={() => download(preview.key)} className="gap-1.5 bg-[#063044] hover:bg-[#063044]/90"><Download size={14} /> Télécharger {preview.pdf ? "" : "l'Excel"}</Button>
+            <Button onClick={() => download(preview.key)} className="gap-1.5 bg-[#0F172A] hover:bg-[#0F172A]/90"><Download size={14} /> Télécharger {preview.pdf ? "" : "l'Excel"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2343,14 +2343,14 @@ function ExternalContactsDialog({ open, onOpenChange, contacts, catalog, onChang
           {contacts.length === 0 && <p className="py-3 text-center text-sm text-slate-400">Aucun contact défini.</p>}
         </div>
         {editing ? (
-          <div className="space-y-3 rounded-lg border border-[#0E9488]/30 bg-[#0E9488]/5 p-3" data-testid="acct-external-form">
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nom du contact" data-testid="acct-external-name" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0E9488] focus:outline-none" />
-            <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Courriel" data-testid="acct-external-cemail" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0E9488] focus:outline-none" />
+          <div className="space-y-3 rounded-lg border border-[#22C55E]/30 bg-[#22C55E]/5 p-3" data-testid="acct-external-form">
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nom du contact" data-testid="acct-external-name" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#22C55E] focus:outline-none" />
+            <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Courriel" data-testid="acct-external-cemail" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#22C55E] focus:outline-none" />
             <div>
               <p className="mb-1.5 text-xs font-600 uppercase tracking-wider text-slate-400">Rapports à envoyer</p>
               <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {catalog.map((c) => (
-                  <label key={c.key} className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-2 py-1.5 text-sm text-slate-700 hover:border-[#0E9488]" data-testid={`acct-external-type-${c.key}`}>
+                  <label key={c.key} className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-2 py-1.5 text-sm text-slate-700 hover:border-[#22C55E]" data-testid={`acct-external-type-${c.key}`}>
                     <input type="checkbox" checked={form.report_types.includes(c.key)} onChange={() => toggle(c.key)} className="h-4 w-4 rounded border-slate-300" />
                     {c.label}
                   </label>
@@ -2359,10 +2359,10 @@ function ExternalContactsDialog({ open, onOpenChange, contacts, catalog, onChang
             </div>
             <div className="flex justify-end gap-2">
               <Button size="sm" variant="outline" onClick={() => setEditing(null)}>Annuler</Button>
-              <Button size="sm" onClick={save} data-testid="acct-external-save" className="bg-[#0E9488] hover:bg-[#0E9488]/90">Enregistrer</Button>
+              <Button size="sm" onClick={save} data-testid="acct-external-save" className="bg-[#22C55E] hover:bg-[#22C55E]/90">Enregistrer</Button>
             </div>
           </div>
-        ) : <Button size="sm" onClick={startNew} data-testid="acct-external-new" className="gap-2 bg-[#063044] hover:bg-[#063044]/90"><Plus size={15} /> Nouveau contact</Button>}
+        ) : <Button size="sm" onClick={startNew} data-testid="acct-external-new" className="gap-2 bg-[#0F172A] hover:bg-[#0F172A]/90"><Plus size={15} /> Nouveau contact</Button>}
       </DialogContent>
     </Dialog>
   );
@@ -2418,10 +2418,10 @@ function CashflowView() {
     const steps = [{ name: "Ouverture", range: [0, run], fill: "#808080", delta: run }];
     [["Exploitation", rep.exploitation_total], ["Investissement", rep.investissement_total], ["Financement", rep.financement_total]].forEach(([name, delta]) => {
       const start = run, end = run + delta;
-      steps.push({ name, range: [Math.min(start, end), Math.max(start, end)], fill: delta >= 0 ? "#15AF97" : "#F8A942", delta });
+      steps.push({ name, range: [Math.min(start, end), Math.max(start, end)], fill: delta >= 0 ? "#22C55E" : "#FBBF24", delta });
       run = end;
     });
-    steps.push({ name: "Clôture", range: [0, run], fill: "#063044", delta: run });
+    steps.push({ name: "Clôture", range: [0, run], fill: "#0F172A", delta: run });
     return steps;
   })() : [];
 
@@ -2451,7 +2451,7 @@ function CashflowView() {
         </div>
         <div className="flex items-center gap-2">
           <PresentationButton />
-          <ExportMenu onPdf={exportPdf} onExcel={exportExcel} disabled={!rep} testid="acct-cashflow-export" className="bg-[#0E9488] hover:bg-[#0E9488]/90" />
+          <ExportMenu onPdf={exportPdf} onExcel={exportExcel} disabled={!rep} testid="acct-cashflow-export" className="bg-[#22C55E] hover:bg-[#22C55E]/90" />
         </div>
       </div>
       <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs text-sky-800" data-testid="acct-cashflow-hint">

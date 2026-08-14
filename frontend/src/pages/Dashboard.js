@@ -10,7 +10,7 @@ import {
 import { Users, DollarSign, Wallet, TrendingUp, Calendar, PieChart as PieIcon, BarChart3, Layers, Scale } from "lucide-react";
 import { PresentationButton } from "../components/PresentationButton";
 
-const NAVY = "#063044", TEAL = "#15AF97", ORANGE = "#F8A942", GREY = "#808080";
+const NAVY = "#0F172A", TEAL = "#22C55E", ORANGE = "#FBBF24", GREY = "#808080";
 const BLUE = NAVY, VIOLET = TEAL;
 const TYPE_COLORS = { "CCQ": NAVY, "Régulier temps plein": TEAL, "Stagiaire": ORANGE };
 const SEX_CATS = ["Masculin", "Féminin", "Autre", "Non spécifié"];
@@ -113,7 +113,7 @@ function Comparatif({ cmp }) {
   const dCA = cmp.actuel.masse ? ((cmp.ca.masse - cmp.actuel.masse) / cmp.actuel.masse) * 100 : 0;
   return (
     <div className="card p-6" data-testid="comparatif-card">
-      <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><Scale size={16} className="text-[#063044]" /> {t("Comparatif des masses salariales —")} {cmp.year}</h3>
+      <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><Scale size={16} className="text-[#0F172A]" /> {t("Comparatif des masses salariales —")} {cmp.year}</h3>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <div className="grid grid-cols-2 gap-3">
           {rows.map(([lbl, val, c, sub]) => (
@@ -138,7 +138,7 @@ function Comparatif({ cmp }) {
               <Bar dataKey="Revue 2" fill={ORANGE} radius={[3, 3, 0, 0]} maxBarSize={26} />
             </BarChart>
           </ResponsiveContainer>
-          <p className="mt-2 text-[11px] text-slate-500">{t("Budget CA vs Salaires actuels :")} <b className="text-[#063044]">{dCA >= 0 ? "+" : ""}{dCA.toFixed(1)}%</b></p>
+          <p className="mt-2 text-[11px] text-slate-500">{t("Budget CA vs Salaires actuels :")} <b className="text-[#0F172A]">{dCA >= 0 ? "+" : ""}{dCA.toFixed(1)}%</b></p>
         </div>
       </div>
     </div>
@@ -150,7 +150,7 @@ function Evolution({ evo }) {
   const data = evo.years.map((y) => ({ year: String(y.year), "Salaires actuels": y.actuel, "Budget CA": y.ca, "Revue 1": y.revue1, "Revue 2": y.revue2 }));
   return (
     <div className="card p-6" data-testid="evolution-card">
-      <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><TrendingUp size={16} className="text-[#F8A942]" /> {t("Évolution pluriannuelle de la masse salariale")}</h3>
+      <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><TrendingUp size={16} className="text-[#FBBF24]" /> {t("Évolution pluriannuelle de la masse salariale")}</h3>
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={data} margin={{ left: 4, right: 8 }} barGap={3}>
           <CartesianGrid stroke="#EEF2F7" vertical={false} />
@@ -170,7 +170,7 @@ function Evolution({ evo }) {
 function EmployeesKpi({ k }) {
   const { t } = useLang();
   const sx = k.sex_counts || {};
-  const typeRows = [["CCQ", k.ccq_count, "#063044"], ["Non-CCQ", k.non_ccq_count, "#808080"], ["Stagiaire", k.stagiaire_count, "#F8A942"]];
+  const typeRows = [["CCQ", k.ccq_count, "#0F172A"], ["Non-CCQ", k.non_ccq_count, "#808080"], ["Stagiaire", k.stagiaire_count, "#FBBF24"]];
   const sexRows = [["Masculin", sx.Masculin], ["Féminin", sx.Féminin], ["Autre", sx.Autre], ["Non spéc.", sx["Non spécifié"]]];
   return (
     <div className="card p-5" data-testid="kpi-employes">
@@ -209,7 +209,7 @@ function SexDistribution({ b }) {
   const topFem = depts.reduce((best, d) => (d.Féminin > (best?.Féminin ?? -1) ? d : best), null);
   return (
     <div className="card p-5" data-testid="chart-sex">
-      <h3 className="mb-4 flex items-center gap-2 text-sm font-700"><PieIcon size={16} className="text-[#F8A942]" /> {t("Répartition des effectifs par sexe à la naissance")}</h3>
+      <h3 className="mb-4 flex items-center gap-2 text-sm font-700"><PieIcon size={16} className="text-[#FBBF24]" /> {t("Répartition des effectifs par sexe à la naissance")}</h3>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-1">
           <ResponsiveContainer width="100%" height={170}>
@@ -232,12 +232,12 @@ function SexDistribution({ b }) {
         <div className="lg:col-span-2">
           <p className="mb-1.5 text-[10px] font-600 uppercase tracking-wide text-slate-400">{t("Par département")}</p>
           {topFem && topFem.Féminin > 0 && (
-            <div className="mb-2 flex items-center justify-between rounded-lg border border-[#F8A942]/30 bg-[#F8A942]/5 px-3 py-2" data-testid="sex-top-fem">
+            <div className="mb-2 flex items-center justify-between rounded-lg border border-[#FBBF24]/30 bg-[#FBBF24]/5 px-3 py-2" data-testid="sex-top-fem">
               <span className="flex items-center gap-1.5 text-[11px] text-slate-600">
-                <span className="h-2 w-2 rounded-sm" style={{ background: "#F8A942" }} />
+                <span className="h-2 w-2 rounded-sm" style={{ background: "#FBBF24" }} />
                 {t("Plus de femmes :")} <b className="text-slate-800">{topFem.department} — {topFem.label}</b>
               </span>
-              <span className="font-mono-data text-[11px] font-700 text-[#F8A942]">{topFem.Féminin} F <span className="text-slate-400">/ {topFem.total} total</span></span>
+              <span className="font-mono-data text-[11px] font-700 text-[#FBBF24]">{topFem.Féminin} F <span className="text-slate-400">/ {topFem.total} total</span></span>
             </div>
           )}
           <div className="max-h-[220px] overflow-y-auto">
@@ -281,7 +281,7 @@ function DashboardBody({ b }) {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="card p-6 lg:col-span-2" data-testid="chart-departments">
-          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><BarChart3 size={16} className="text-[#063044]" /> {t("Budget par département")}</h3>
+          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><BarChart3 size={16} className="text-[#0F172A]" /> {t("Budget par département")}</h3>
           <ResponsiveContainer width="100%" height={Math.max(240, b.by_department.length * 46)}>
             <BarChart data={b.by_department} layout="vertical" margin={{ left: 8, right: 16 }} barGap={2}>
               <CartesianGrid stroke="#EEF2F7" horizontal={false} />
@@ -299,7 +299,7 @@ function DashboardBody({ b }) {
         </div>
 
         <div className="card p-6" data-testid="chart-types">
-          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><PieIcon size={16} className="text-[#063044]" /> {t("Types d'emploi")}</h3>
+          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><PieIcon size={16} className="text-[#0F172A]" /> {t("Types d'emploi")}</h3>
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie data={b.by_type} dataKey="total" nameKey="type" cx="50%" cy="50%" innerRadius={58} outerRadius={92} paddingAngle={2} isAnimationActive={false}>
@@ -323,7 +323,7 @@ function DashboardBody({ b }) {
 
       <div className="card p-6" data-testid="chart-monthly">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-sm font-700"><Calendar size={16} className="text-[#063044]" /> {t("Ventilation mensuelle")}</h3>
+          <h3 className="flex items-center gap-2 text-sm font-700"><Calendar size={16} className="text-[#0F172A]" /> {t("Ventilation mensuelle")}</h3>
           <span className="font-mono-data text-xs text-slate-500">{t("Total avec charges :")} <b className="text-slate-800">{fmtCAD(b.totals.budget_total)}</b></span>
         </div>
         <div className="mb-4 overflow-x-auto">
@@ -349,7 +349,7 @@ function DashboardBody({ b }) {
               ))}
               <tr className="border-t border-slate-200 bg-slate-50">
                 <td className="px-2 py-1.5 font-700 text-slate-700">{t("Total + charges")}</td>
-                {b.monthly.map((m) => <td key={m.month} className="px-2 py-1.5 text-center text-[#0E9488]">{fmtCAD(m.total)}</td>)}
+                {b.monthly.map((m) => <td key={m.month} className="px-2 py-1.5 text-center text-[#22C55E]">{fmtCAD(m.total)}</td>)}
                 <td className="px-2 py-1.5 text-center font-700">{fmtCAD(b.totals.budget_total)}</td>
               </tr>
             </tbody>
@@ -369,7 +369,7 @@ function DashboardBody({ b }) {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="card p-6" data-testid="decomposition">
-          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><Layers size={16} className="text-[#063044]" /> {t("Décomposition du budget")}</h3>
+          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><Layers size={16} className="text-[#0F172A]" /> {t("Décomposition du budget")}</h3>
           <div className="space-y-3.5">
             {b.decomposition.map((d) => (
               <div key={d.label}>
@@ -386,7 +386,7 @@ function DashboardBody({ b }) {
         </div>
 
         <div className="card p-6" data-testid="top5">
-          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><TrendingUp size={16} className="text-[#063044]" /> {t("Top 5 — Budget le plus élevé")}</h3>
+          <h3 className="mb-5 flex items-center gap-2 text-sm font-700"><TrendingUp size={16} className="text-[#0F172A]" /> {t("Top 5 — Budget le plus élevé")}</h3>
           <div className="space-y-3">
             {b.top5.map((emp) => (
               <div key={emp.rank} className="flex items-center gap-3">

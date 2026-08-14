@@ -1,69 +1,72 @@
 {
-  "project_context": {
-    "app_type": "dashboard",
-    "theme": "light",
-    "intent": "Redesign layout for maximum density and minimal vertical scrolling (Cryptobase style), keeping all existing KPIs, metrics, and exact color palette."
+  "typography": {
+    "heading": "Satoshi Bold",
+    "body": "Satoshi Regular",
+    "setup": "@import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap');",
+    "instructions": "In `/app/frontend/src/index.css`, replace Montserrat and Calibri font imports and rules with Satoshi. Add to `body` and `.font-sans` the fallback `'Satoshi', sans-serif`. Update `.font-display` to use Satoshi."
   },
   "colors": {
-    "primary": "#063044",
-    "accent": "#0E9488",
-    "amber": "#F8A942",
-    "amber_dark": "#B45309",
-    "grey": "#808080",
-    "success": "#10B981",
-    "danger": "#EF4444",
-    "background": "slate-50",
-    "card_bg": "#ffffff",
-    "border": "slate-200"
-  },
-  "typography": {
-    "font_family": "Inter, system-ui, sans-serif",
-    "section_titles": "text-xs font-semibold uppercase tracking-wider text-slate-500",
-    "kpi_values": "text-base 2xl:text-lg font-bold text-[#063044] leading-none",
-    "labels": "text-[10px] md:text-xs text-[#808080]",
-    "inputs": "text-sm text-slate-800"
+    "meelora_navy": "#0F172A",
+    "meelora_green": "#22C55E",
+    "meelora_mint": "#A7F3DD",
+    "meelora_amber": "#FBBF24",
+    "meelora_gray": "#F3F4F6",
+    "mapping": {
+      "old_navy (#063044)": "meelora_navy (#0F172A)",
+      "old_teal (#15AF97)": "meelora_green (#22C55E)",
+      "old_orange (#F8A942)": "meelora_amber (#FBBF24)",
+      "light_background (#F4F6F8)": "meelora_gray (#F3F4F6)"
+    },
+    "instructions_to_main_agent": "In `/app/frontend/src/index.css`, update the `:root` CSS variables. Set `--navy: #0F172A;`, `--teal: #22C55E;`, `--coral: #FBBF24;`. Also update Tailwind config or CSS variables for Shadcn to match the new palette. Set primary to `#22C55E`."
   },
   "layouts": {
-    "dashboard_container": "h-screen w-full bg-slate-50 flex flex-col p-2 md:p-3 overflow-hidden",
-    "header": "flex-none h-12 md:h-14 bg-white border border-slate-200 rounded-md shadow-sm mb-3 px-4 flex items-center justify-between",
-    "main_grid": "flex-1 grid grid-cols-1 xl:grid-cols-12 gap-3 min-h-0 overflow-y-auto xl:overflow-hidden",
-    "left_panel": "xl:col-span-8 2xl:col-span-9 flex flex-col gap-3 min-h-0 overflow-y-auto pr-0 xl:pr-1",
-    "right_panel": "xl:col-span-4 2xl:col-span-3 flex flex-col gap-3 min-h-0 overflow-y-auto xl:border-l xl:border-slate-200 xl:pl-3",
-    "metrics_ribbon": "grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2 flex-none",
-    "projections_grid": "grid grid-cols-2 xl:grid-cols-4 gap-2 flex-none",
-    "main_charts_grid": "grid grid-cols-1 xl:grid-cols-2 gap-3 flex-1 min-h-[250px] md:min-h-[300px]",
-    "indicateurs_stack": "flex flex-col gap-2 flex-none",
-    "ai_variance_card": "flex-none",
-    "ai_chat_card": "flex-1 min-h-[300px] flex flex-col"
-  },
-  "component_instructions": {
-    "cards": {
-      "general": "Use shadcn Card. Override padding to `p-2` or `p-3` (e.g., `<CardContent className='p-3'>`). Reduce border radius to `rounded-md` and use `shadow-sm`.",
-      "status_tiles": "Extremely compact, flex-row items-center gap-2, col-span-1 in the metrics_ribbon.",
-      "kpi_cards": "Compact flex-col or flex-row. Value, sparkline, and trend badge must fit tightly. col-span-1 in the metrics_ribbon.",
-      "indicateur_cards": "Placed in the right_panel. Ensure the inline input ('montant en litige') is visible without wrapping awkwardly. Use compact form fields."
+    "sidebar": {
+      "theme": "Light/White",
+      "text": "Labels 'MASSE SALARIALE' and 'COMPTABILITÉ' in muted uppercase. Nav items have icon + title + subtitle.",
+      "active_state": "Mint background (`bg-[#A7F3DD]`/30 or similar soft mint) with Meelora Green icon (`text-[#22C55E]`) and green label.",
+      "footer": "Tagline 'Votre entreprise, clairement.' with a small plant/growth-chart SVG illustration. User profile block (avatar initial + name + ADMIN badge + email + chevron)."
     },
-    "charts": {
-      "projections": "Set parent container height to `h-32` or `h-36`. Use Recharts ResponsiveContainer. Minimal axes.",
-      "main_charts": "Set parent container to `h-full`. Recharts margin: { top: 5, right: 5, bottom: 0, left: -20 }. Tick fonts text-[10px]. Hide vertical grid lines.",
-      "general": "Do not change calculations or content. Just reduce visual whitespace."
+    "header": {
+      "elements": "Breadcrumb 'Masse salariale › Salaires & Budget', big Satoshi title, subtitle.",
+      "right_side": "Green 'Budget actif' pill (`bg-[#22C55E]/10 text-[#22C55E]`), calendar/year selector '2026', '+ Année' button, top-right circular icon buttons (help, bell, gear)."
     },
-    "ai_section": {
-      "chat": "Make the chat area scrollable (`overflow-y-auto`) and occupy remaining vertical space (`flex-1`) in the right panel."
+    "kpi_cards": {
+      "styling": "White background, soft rounded (`rounded-2xl`), subtle border/shadow.",
+      "content": "Pastel colored icon chip per card (salaire=slate, vacances=amber, primes=amber, avantages=violet/mint, budget total=green), large navy value (`text-[#0F172A]`)."
+    },
+    "footer": {
+      "content": "'© 2026 Meelora inc. Tous droits réservés.' + links (Confidentialité, Conditions d'utilisation, Aide) + small meelora logo bottom-left."
     }
   },
-  "visual_enhancers": {
-    "borders": "Use subtle 1px borders (border-slate-200) instead of heavy shadows for separation.",
-    "hover_states": "Add subtle background shifts (e.g., hover:bg-slate-50) to clickable cards like the Indicateurs."
+  "components": {
+    "tabs": "Active tab should have a green underline (`border-b-2 border-[#22C55E] text-[#22C55E]`).",
+    "buttons": {
+      "primary": "Meelora Green (`bg-[#22C55E] text-white`).",
+      "outlined_green": "`border border-[#22C55E] text-[#22C55E] bg-transparent`.",
+      "outlined_amber": "`border border-[#FBBF24] text-[#FBBF24] bg-transparent`."
+    },
+    "tables": "Green positive amounts (`text-[#22C55E]`), green pagination active page, '25 / page' selector. Amounts formatting québécois MUST remain unchanged.",
+    "charts": "Update Recharts to use the 4-color Meelora palette: `#0F172A`, `#22C55E`, `#A7F3DD`, `#FBBF24`. Update `<Bar>`, `<Line>`, and `<Pie>` colors respectively."
   },
-  "universal_guidelines_for_main_agent": [
-    "HARD CONSTRAINT: DO NOT change existing colors. Use exactly #063044, #0E9488, #F8A942, #B45309, #808080, #10B981, #EF4444.",
-    "HARD CONSTRAINT: DO NOT change KPI contents, logic, or metrics.",
-    "Maximize horizontal space. The Left Panel handles 7 small top-row metrics, 4 small projection charts, and 2 larger main charts.",
-    "The Right Panel acts as a fixed sidebar for the 3 Indicateurs, AI Variance, and AI Chat, maximizing vertical utility.",
-    "Remove large paddings (gap-6, p-6). Replace with gap-2/gap-3 and p-2/p-3 to achieve the dense 'Cryptobase' aesthetic.",
-    "All interactive elements MUST include a `data-testid` attribute (e.g., `data-testid='period-selector'`).",
-    "Ensure layout is responsive: stacks on mobile, multi-column strictly on xl/2xl viewports.",
-    "Do NOT use transparent backgrounds on containers having content underneath. All Cards must be bg-white."
+  "visual enhancers": {
+    "shadows": "Subtle, soft shadows for KPI cards (`box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05)`).",
+    "borders": "Soft gray borders (`border-[#F3F4F6]`) for card separation.",
+    "radius": "Use `rounded-xl` or `rounded-2xl` for main cards and widgets to align with the modern mockup."
+  },
+  "instructions_to_main_agent": [
+    "Replace all 'Budget Salaires Pro' / 'ACCS' text with 'meelora'.",
+    "Update `/app/frontend/src/index.css` to import Satoshi font and replace old font variables.",
+    "Map old colors to new Meelora colors in CSS variables.",
+    "Redesign the Sidebar: Remove dark navy theme, implement light theme with the Meelora logo (green M + amber dot) at top-left. Apply the Mint/Green active state styling.",
+    "Update Header: Build out the breadcrumb, title layout, and the right-side controls.",
+    "Update KPI Cards: Refine styling for pastel icon chips and typography.",
+    "DO NOT change amounts formatting (québécois).",
+    "DO NOT break existing application logic, routes, or Shadcn behavior. Restyle only."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "Prioritize using pre-existing components from src/components/ui when applicable.",
+    "Create new components that match the style and conventions of existing components when needed.",
+    "DO NOT use complete `transparent` background in header, overlays, any surface that has content under it.",
+    "All interactive and key informational elements MUST include a `data-testid` attribute to facilitate robust automated testing."
   ]
 }

@@ -2014,7 +2014,7 @@ async def acct_summary(year: int, month: int, user: dict = Depends(get_current_u
 
 @api.get("/acct/trend")
 async def acct_trend(user: dict = Depends(get_current_user)):
-    periods = await db.acct_periods.find().sort("_id", 1).to_list(500)
+    periods = await db.acct_periods.find({"company_id": await _company_id("acct")}).sort("_id", 1).to_list(500)
     out = []
     for p in periods:
         bv = await db.acct_bv.find_one({"_id": p["_id"]})
@@ -2272,7 +2272,7 @@ async def acct_upload_bv(year: int, month: int, file: UploadFile = File(...), us
 
 @api.get("/acct/periods")
 async def acct_periods(user: dict = Depends(get_current_user)):
-    docs = await db.acct_periods.find().sort("_id", -1).to_list(500)
+    docs = await db.acct_periods.find({"company_id": await _company_id("acct")}).sort("_id", -1).to_list(500)
     for d in docs:
         d["id"] = d.pop("_id")
     return docs
@@ -2714,7 +2714,7 @@ async def acct_pnl_monthly(year: int, variant: str = "detail", user: dict = Depe
     variant: 'detail' (Resultats internes) ou 'sommaire' (Resultats sommaires)."""
     kind = "pnl_sommaire" if variant == "sommaire" else "pnl"
     months = list(range(1, 13))
-    per = {p["month"]: p for p in await db.acct_periods.find({"year": int(year)}).to_list(200)}
+    per = {p["month"]: p for p in await db.acct_periods.find({"year": int(year), "company_id": await _company_id("acct")}).to_list(200)}
     reports = {}
     for m in months:
         try:
@@ -3307,7 +3307,7 @@ async def external_email_log(contact_id: Optional[str] = None, limit: int = 100,
 @api.get("/acct/dashboard")
 async def acct_dashboard(user: dict = Depends(get_current_user)):
     tmpl = await db.acct_template.find_one({"_id": "current"})
-    periods = await db.acct_periods.find().sort("_id", -1).to_list(500)
+    periods = await db.acct_periods.find({"company_id": await _company_id("acct")}).sort("_id", -1).to_list(500)
     latest = periods[0] if periods else None
     return {
         "template_imported": tmpl is not None,
@@ -3639,7 +3639,7 @@ def _add_months(y, m, k):
 
 @api.get("/acct/projections")
 async def acct_projections(user: dict = Depends(get_current_user)):
-    periods = await db.acct_periods.find({"locked": True}).sort("_id", 1).to_list(500)
+    periods = await db.acct_periods.find({"locked": True, "company_id": await _company_id("acct")}).sort("_id", 1).to_list(500)
     series = []
     for p in periods:
         y, m = p["year"], p["month"]
@@ -4519,7 +4519,7 @@ async def _qc_acc_name(gl):
 # ---- Années -------------------------------------------------------------
 @api.get("/qc9434/years")
 async def qc_years(user: dict = Depends(get_current_user)):
-    docs = await db.qc9434_years.find().sort("_id", -1).to_list(1000)
+    docs = await db.qc9434_years.find({"company_id": await _company_id("qc9434")}).sort("_id", -1).to_list(1000)
     cfg = await db.qc9434_settings.find_one({"_id": "config"}) or {}
     active = cfg.get("active_year")
     if active is None and docs:
@@ -4531,7 +4531,7 @@ async def qc_years(user: dict = Depends(get_current_user)):
 
 @api.post("/qc9434/years")
 async def qc_create_year(year: Optional[int] = None, user: dict = Depends(require_admin)):
-    docs = await db.qc9434_years.find().sort("_id", -1).to_list(1000)
+    docs = await db.qc9434_years.find({"company_id": await _company_id("qc9434")}).sort("_id", -1).to_list(1000)
     if docs:
         latest = docs[0]
         if not latest.get("locked"):
@@ -4572,9 +4572,10 @@ async def qc_lock_year(year: int, locked: bool = True, user: dict = Depends(requ
 
 async def _qc_post_closing(year, user):
     """Écriture de fermeture : solde les comptes de résultat de l'exercice vers les BNR."""
-    await db.qc9434_entries.delete_many({"year": int(year), "source": "closing"})
-    accts = {d["gl"]: d for d in await db.qc9434_accounts.find().to_list(2000)}
-    docs = await db.qc9434_entries.find({"year": int(year), "source": {"$ne": "closing"}}).to_list(50000)
+    _cid = await _company_id("qc9434")
+    await db.qc9434_entries.delete_many({"year": int(year), "source": "closing", "company_id": _cid})
+    accts = {d["gl"]: d for d in await db.qc9434_accounts.find({"company_id": _cid}).to_list(2000)}
+    docs = await db.qc9434_entries.find({"year": int(year), "source": {"$ne": "closing"}, "company_id": _cid}).to_list(50000)
     bal = {}
     for e in docs:
         for l in e.get("lines", []):
@@ -4609,7 +4610,7 @@ async def _qc_post_closing(year, user):
 # ---- Écritures (journal général) ---------------------------------------
 @api.get("/qc9434/entries")
 async def qc_entries(year: int, user: dict = Depends(get_current_user)):
-    docs = await db.qc9434_entries.find({"year": int(year)}).sort([("date", 1), ("created_at", 1)]).to_list(5000)
+    docs = await db.qc9434_entries.find({"year": int(year), "company_id": await _company_id("qc9434")}).sort([("date", 1), ("created_at", 1)]).to_list(5000)
     return [_qc_entry_out(d) for d in docs]
 
 @api.post("/qc9434/entries")
@@ -4655,7 +4656,7 @@ async def qc_delete_entry(eid: str, user: dict = Depends(get_current_user)):
 
 # ---- Balance de vérification (générée à partir des écritures) -----------
 async def _qc_trial_balance(year: int):
-    docs = await db.qc9434_entries.find({"year": int(year), "source": {"$ne": "closing"}}).to_list(20000)
+    docs = await db.qc9434_entries.find({"year": int(year), "source": {"$ne": "closing"}, "company_id": await _company_id("qc9434")}).to_list(20000)
     agg = {}
     for e in docs:
         for l in e.get("lines", []):
@@ -4900,7 +4901,7 @@ class QcAccount(BaseModel):
 @api.get("/qc9434/accounts")
 async def qc_accounts(user: dict = Depends(get_current_user)):
     await _qc_seed_accounts()
-    docs = await db.qc9434_accounts.find().to_list(2000)
+    docs = await db.qc9434_accounts.find({"company_id": await _company_id("qc9434")}).to_list(2000)
     docs.sort(key=lambda d: (str(d.get("gl"))))
     return {"sections": QC_SECTIONS,
             "accounts": [{"gl": d["gl"], "description": d.get("description", ""),
@@ -4941,8 +4942,9 @@ async def qc_delete_account(gl: str, user: dict = Depends(get_current_user)):
 async def _qc_report_balances(year):
     """Retourne {gl: {movement, opening, cumulative}} + méta comptes."""
     await _qc_seed_accounts()
-    accts = {d["gl"]: d for d in await db.qc9434_accounts.find().to_list(2000)}
-    docs = await db.qc9434_entries.find({"year": {"$lte": int(year)}, "source": {"$ne": "closing"}}).to_list(50000)
+    _cid = await _company_id("qc9434")
+    accts = {d["gl"]: d for d in await db.qc9434_accounts.find({"company_id": _cid}).to_list(2000)}
+    docs = await db.qc9434_entries.find({"year": {"$lte": int(year)}, "source": {"$ne": "closing"}, "company_id": _cid}).to_list(50000)
     bal = {}
     for e in docs:
         cur = e.get("year") == int(year)
@@ -5159,7 +5161,7 @@ async def qc_journal_pdf(year: int, user: dict = Depends(get_current_user)):
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    docs = await db.qc9434_entries.find({"year": int(year)}).sort([("date", 1), ("created_at", 1)]).to_list(50000)
+    docs = await db.qc9434_entries.find({"year": int(year), "company_id": await _company_id("qc9434")}).sort([("date", 1), ("created_at", 1)]).to_list(50000)
     styles = getSampleStyleSheet()
     small = ParagraphStyle("s", parent=styles["Normal"], fontSize=7.5, leading=9)
     NAVY = colors.HexColor("#063044"); GREY = colors.HexColor("#E9EDEF")
@@ -5377,7 +5379,7 @@ async def _qc_build_invoice_doc(payload, year, num_seq, number, entry_id, cname,
 
 @api.get("/qc9434/invoices")
 async def qc_invoices(year: int, user: dict = Depends(get_current_user)):
-    docs = await db.qc9434_invoices.find({"year": int(year)}).sort("num_seq", 1).to_list(2000)
+    docs = await db.qc9434_invoices.find({"year": int(year), "company_id": await _company_id("qc9434")}).sort("num_seq", 1).to_list(2000)
     return [_qc_invoice_out(d) for d in docs]
 
 @api.post("/qc9434/invoices")
@@ -5459,7 +5461,7 @@ def _qc_client_out(c):
 
 @api.get("/qc9434/clients")
 async def qc_clients(user: dict = Depends(get_current_user)):
-    docs = await db.qc9434_clients.find({}).sort("name", 1).to_list(1000)
+    docs = await db.qc9434_clients.find({"company_id": await _company_id("qc9434")}).sort("name", 1).to_list(1000)
     return [_qc_client_out(c) for c in docs]
 
 @api.post("/qc9434/clients")
@@ -5496,7 +5498,7 @@ async def _qc_client_statement(cid: str, year: Optional[int]):
     c = await db.qc9434_clients.find_one({"_id": _oid(cid)})
     if not c:
         raise HTTPException(status_code=404, detail="Client introuvable")
-    q = {"$or": [{"client_id": cid}, {"client_name": c.get("name", "")}]}
+    q = {"$or": [{"client_id": cid}, {"client_name": c.get("name", "")}], "company_id": await _company_id("qc9434")}
     if year:
         q = {"$and": [q, {"year": int(year)}]}
     docs = await db.qc9434_invoices.find(q).sort([("date", 1), ("num_seq", 1)]).to_list(5000)
@@ -5572,8 +5574,8 @@ async def qc_client_statement_pdf(cid: str, year: Optional[int] = None, user: di
 @api.post("/qc9434/purge-test-data")
 async def qc_purge_test_data(user: dict = Depends(require_admin)):
     rx = {"$regex": "^TEST_", "$options": "i"}
-    invs = await db.qc9434_invoices.find({"client_name": rx}).to_list(5000)
-    bills = await db.qc9434_bills.find({"supplier": rx}).to_list(5000)
+    invs = await db.qc9434_invoices.find({"client_name": rx, "company_id": await _company_id("qc9434")}).to_list(5000)
+    bills = await db.qc9434_bills.find({"supplier": rx, "company_id": await _company_id("qc9434")}).to_list(5000)
     src_ids = [str(d["_id"]) for d in invs] + [str(d["_id"]) for d in bills]
     entry_oids = [d["entry_id"] for d in (invs + bills) if d.get("entry_id")]
     ent1 = 0; ent2 = 0
@@ -5819,7 +5821,7 @@ async def qc_invoice_send_reminders(year: int, user: dict = Depends(get_current_
     if not _email_configured():
         raise HTTPException(status_code=400, detail="Service d'email non configuré. Un administrateur doit renseigner la clé Resend.")
     today = datetime.now(timezone.utc).date().isoformat()
-    docs = await db.qc9434_invoices.find({"year": int(year)}).to_list(2000)
+    docs = await db.qc9434_invoices.find({"year": int(year), "company_id": await _company_id("qc9434")}).to_list(2000)
     overdue = [d for d in docs if d.get("status") != "paid" and d.get("due_date") and d["due_date"] < today]
     import resend
     resend.api_key = os.environ["RESEND_API_KEY"]
@@ -5970,7 +5972,7 @@ async def qc_bill_extract(file: UploadFile = File(...), user: dict = Depends(get
         raise HTTPException(status_code=400, detail="Impossible de lire le document (PDF ou image).")
     if not images_b64:
         raise HTTPException(status_code=400, detail="Aucune page exploitable dans le document.")
-    charges = await db.qc9434_accounts.find({"type": "charge"}).sort("gl", 1).to_list(500)
+    charges = await db.qc9434_accounts.find({"type": "charge", "company_id": await _company_id("qc9434")}).sort("gl", 1).to_list(500)
     charge_list = "\n".join(f"{c['gl']} — {c.get('description', '')}" for c in charges) or "(aucun)"
     system = ("Tu es un comptable québécois expert. Tu analyses une facture FOURNISSEUR et tu retournes des données structurées "
               "en français. Les montants sont en dollars canadiens. TPS = 5 %, TVQ = 9,975 %.")
@@ -6145,7 +6147,7 @@ async def qc_put_opening(year: int, payload: dict, user: dict = Depends(require_
 # ---- Détail d'un compte (drill-down) -----------------------------------
 @api.get("/qc9434/account-detail")
 async def qc_account_detail(year: int, account: str, scope: str = "movement", user: dict = Depends(get_current_user)):
-    q = {"source": {"$ne": "closing"}}
+    q = {"source": {"$ne": "closing"}, "company_id": await _company_id("qc9434")}
     q["year"] = {"$lte": int(year)} if scope == "cumulative" else int(year)
     docs = await db.qc9434_entries.find(q).sort([("date", 1), ("seq", 1)]).to_list(50000)
     name = await _qc_acc_name(account)
