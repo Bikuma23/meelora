@@ -1,3 +1,5 @@
+import { UserAvatar } from "../components/UserAvatar";
+
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { useLang } from "../context/LanguageContext";
@@ -89,7 +91,10 @@ export default function Journal() {
                       ))}
                     </ul>
                   )}
-                  <p className="mt-0.5 text-[11px] text-slate-400">{e.user_name || e.user_email}</p>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <UserAvatar name={e.user_name || e.user_email} showPhoto={false} size={18} />
+                    <p className="text-[11px] text-slate-400">{e.user_name || e.user_email}</p>
+                  </div>
                 </div>
                 <span className="shrink-0 font-mono-data text-xs text-slate-400">{fmtDate(e.timestamp)}</span>
               </li>

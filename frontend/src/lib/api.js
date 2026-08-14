@@ -67,6 +67,7 @@ export const api = {
   getPreferences: () => client.get("/me/preferences").then((r) => r.data),
   updatePreferences: (body) => client.put("/me/preferences", body).then((r) => r.data),
   getCompanies: () => client.get("/companies").then((r) => r.data),
+  getNotifications: () => client.get("/notifications").then((r) => r.data),
   uploadAvatar: (file) => {
     const fd = new FormData();
     fd.append("file", file);

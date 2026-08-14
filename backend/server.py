@@ -66,6 +66,20 @@ def _pdf_logo(width_mm=38):
         from reportlab.platypus import Spacer as _Spacer
         return _Spacer(1, 0)
 
+
+def _xlsx_logo(ws):
+    """Réserve la 1re ligne et y insère le logo Meelora (en-tête Excel)."""
+    try:
+        from openpyxl.drawing.image import Image as _XLImage
+        ws.append([])  # ligne 1 réservée au logo
+        img = _XLImage(os.path.join(os.path.dirname(__file__), "assets", "meelora-logo.png"))
+        img.height = 30
+        img.width = 112
+        ws.add_image(img, "A1")
+        ws.row_dimensions[1].height = 26
+    except Exception:
+        pass
+
 app = FastAPI(title="Budget Salaires Pro")
 api = APIRouter(prefix="/api")
 
@@ -707,10 +721,42 @@ async def get_avatar(uid: str):
 
 @api.get("/companies")
 async def list_companies(user: dict = Depends(get_current_user)):
-    """Liste des sociétés (mandats) pour le sélecteur d'en-tête."""
     docs = await db.companies.find({"active": {"$ne": False}}).to_list(50)
     return [{"id": d.get("id"), "name": d.get("name"), "legacy_prefix": d.get("legacy_prefix")}
             for d in sorted(docs, key=lambda x: x.get("legacy_prefix") or "")]
+
+
+@api.get("/notifications")
+async def notifications(user: dict = Depends(get_current_user)):
+    """Alertes vivantes pour la cloche : factures échues / à échoir (entité 9434)."""
+    from datetime import date, timedelta
+    today = date.today()
+    today_s = today.isoformat()
+    soon_s = (today + timedelta(days=7)).isoformat()
+    items = []
+    try:
+        cid = await _company_id("qc9434")
+        invs = await db.qc9434_invoices.find({"type": "invoice", "status": "open", "company_id": cid}).to_list(3000)
+    except Exception:
+        invs = []
+    for d in invs:
+        bal = round((d.get("total", 0) or 0) - (d.get("paid_amount", 0) or 0) - (d.get("credited_amount", 0) or 0), 2)
+        if bal <= 0:
+            continue
+        due = d.get("due_date")
+        if not due:
+            continue
+        base = {"id": str(d["_id"]), "target": "acct_qc9434",
+                "detail": f"{d.get('client_name', '')} · {bal:,.2f} $ · éch. {due}"}
+        if due < today_s:
+            items.append({**base, "type": "overdue", "severity": "high",
+                          "title": f"Facture {d.get('number', '')} échue"})
+        elif due <= soon_s:
+            items.append({**base, "type": "soon", "severity": "medium",
+                          "title": f"Facture {d.get('number', '')} à échoir"})
+    items.sort(key=lambda x: 0 if x["type"] == "overdue" else 1)
+    overdue = sum(1 for i in items if i["type"] == "overdue")
+    return {"count": len(items), "overdue": overdue, "soon": len(items) - overdue, "items": items[:30]}
 
 
 # ---------------------------------------------------------------------------
@@ -1367,7 +1413,7 @@ async def report_scenario_compare(department: Optional[str] = None, year: Option
 def _scenario_compare_excel(cmp, year):
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Comparatif scénarios"
     bold = openpyxl.styles.Font(bold=True)
-    ws.append([f"Comparatif des scénarios — {year}"]); ws["A1"].font = openpyxl.styles.Font(bold=True, size=14)
+    _xlsx_logo(ws); ws.append([f"Comparatif des scénarios — {year}"]); ws["A2"].font = openpyxl.styles.Font(bold=True, size=14)
     ws.append([])
     ws.append(["Département", "Budget CA", "Revue 1", "Écart R1 ($)", "Écart R1 (%)", "Revue 2", "Écart R2 ($)", "Écart R2 (%)"])
     [setattr(c, "font", bold) for c in ws[ws.max_row]]
@@ -1482,7 +1528,7 @@ async def delete_report_template(tid: str, user: dict = Depends(get_current_user
 def _pnl_excel(pnl, year, scenario_label):
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "État des résultats"
     bold = openpyxl.styles.Font(bold=True)
-    ws.append([f"État des résultats (P&L) — {scenario_label} {year}"]); ws["A1"].font = openpyxl.styles.Font(bold=True, size=14)
+    _xlsx_logo(ws); ws.append([f"État des résultats (P&L) — {scenario_label} {year}"]); ws["A2"].font = openpyxl.styles.Font(bold=True, size=14)
     ws.append([])
     ws.append(["Compte GL"] + pnl["months"] + ["Total"]); [setattr(c, "font", bold) for c in ws[ws.max_row]]
     for r in pnl["rows"]:
@@ -1505,7 +1551,7 @@ def build_budget_excel(data, year, dept_label):
     bold = openpyxl.styles.Font(bold=True)
     # Résumé
     ws = wb.active; ws.title = "Résumé"
-    ws.append([f"Rapport budgétaire {year} — {dept_label}"]); ws["A1"].font = openpyxl.styles.Font(bold=True, size=14)
+    _xlsx_logo(ws); ws.append([f"Rapport budgétaire {year} — {dept_label}"]); ws["A2"].font = openpyxl.styles.Font(bold=True, size=14)
     ws.append([])
     k = data["kpis"]
     for lbl, val in [("Effectif", k["headcount"]), ("Masse salariale", data["totals"]["salaire_base"]),
@@ -1664,7 +1710,7 @@ def _fiche_row(l):
 def build_fiches_excel(data, year, scenario_label, scope):
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Fiches détaillées"
     bold = openpyxl.styles.Font(bold=True)
-    ws.append([f"Fiches détaillées {scenario_label} {year} — {scope}"]); ws["A1"].font = openpyxl.styles.Font(bold=True, size=14)
+    _xlsx_logo(ws); ws.append([f"Fiches détaillées {scenario_label} {year} — {scope}"]); ws["A2"].font = openpyxl.styles.Font(bold=True, size=14)
     ws.append([])
     num_cols = ["Sal. base", "Nouv. salaire", "Vacances", "Primes", "Sal. brut total", "Avantages", "CSST", "REER", "Assur.", "Coût total"]
     for dept, g in _group_by_dept(data["lines"]):
@@ -1812,7 +1858,7 @@ async def report_by_class_excel(department: Optional[str] = None, year: Optional
     bc = _by_class_data(data, hypo)
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Masse par classe"
     bold = openpyxl.styles.Font(bold=True)
-    ws.append([f"Masse salariale par classe de sécurité — {SCEN_LABEL.get(scenario, scenario)} {y}  (max assurable {bc['csst_max_assurable']} $)"]); ws["A1"].font = openpyxl.styles.Font(bold=True, size=13)
+    _xlsx_logo(ws); ws.append([f"Masse salariale par classe de sécurité — {SCEN_LABEL.get(scenario, scenario)} {y}  (max assurable {bc['csst_max_assurable']} $)"]); ws["A2"].font = openpyxl.styles.Font(bold=True, size=13)
     ws.append([])
     ws.append(["Classe", "Description", "Taux %", "Employés", "Salaire brut", "CSST", "Coût total"]); [setattr(c, "font", bold) for c in ws[ws.max_row]]
     for r in bc["rows"]:
@@ -1833,7 +1879,7 @@ async def report_custom_excel(columns: str = "", group_by: str = "", sort_key: s
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Rapport personnalisé"
     bold = openpyxl.styles.Font(bold=True)
     hdr = [c["label"] for c in rep["columns"]]
-    ws.append([f"Rapport personnalisé — {SCEN_LABEL.get(scenario, scenario)} {y}"]); ws["A1"].font = openpyxl.styles.Font(bold=True, size=13)
+    _xlsx_logo(ws); ws.append([f"Rapport personnalisé — {SCEN_LABEL.get(scenario, scenario)} {y}"]); ws["A2"].font = openpyxl.styles.Font(bold=True, size=13)
     ws.append([]); ws.append(hdr); [setattr(c, "font", bold) for c in ws[ws.max_row]]
     keys = [c["key"] for c in rep["columns"]]
     if rep["grouped"]:

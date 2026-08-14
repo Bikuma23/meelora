@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Plus, Pencil, Trash2, ShieldCheck, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
+import { UserAvatar } from "../components/UserAvatar";
 
 const ROLE_LABEL = { admin: "Administrateur", editor: "Éditeur", user: "Utilisateur" };
 const empty = { email: "", name: "", password: "", role: "user" };
@@ -96,7 +97,12 @@ export default function Users() {
           <tbody>
             {users.map((u) => (
               <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50" data-testid={`user-row-${u.email}`}>
-                <td className="px-4 py-2.5 font-600">{u.name}{u.id === user?.id && <span className="ml-2 text-[10px] text-slate-400">{t("(vous)")}</span>}</td>
+                <td className="px-4 py-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <UserAvatar userId={u.id} name={u.name} role={u.role} size={30} />
+                    <span className="font-600">{u.name}{u.id === user?.id && <span className="ml-2 text-[10px] text-slate-400">{t("(vous)")}</span>}</span>
+                  </div>
+                </td>
                 <td className="px-4 py-2.5 font-mono-data text-[13px] text-slate-600">{u.email}</td>
                 <td className="px-4 py-2.5">
                   <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-700 uppercase ${u.role === "admin" ? "bg-[#0F172A] text-white" : u.role === "editor" ? "bg-[#22C55E] text-white" : "bg-slate-200 text-slate-600"}`}>

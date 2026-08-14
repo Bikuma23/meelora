@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
 import { useLang } from "../context/LanguageContext";
 import {
-  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight, Minimize2, HelpCircle, Bell, Camera, Trash2,
+  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight, Minimize2, HelpCircle, Bell, Camera, Trash2, Pencil, AlertTriangle,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
@@ -92,8 +92,45 @@ function getInitials(name) {
   return "U";
 }
 
+function NotificationsBell({ go }) {
+  const [data, setData] = useState({ count: 0, items: [] });
+  useEffect(() => {
+    const load = () => api.getNotifications().then(setData).catch(() => {});
+    load();
+    const id = setInterval(load, 60000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button data-testid="header-notif-btn" title="Notifications" className="relative hidden rounded-full p-2 text-slate-500 transition-colors hover:bg-[#F3F4F6] hover:text-[#0F172A] sm:block">
+          <Bell size={18} />
+          {data.count > 0
+            ? <span data-testid="notif-badge" className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-700 text-white">{data.count > 9 ? "9+" : data.count}</span>
+            : <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#22C55E]" />}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={8} className="w-80 max-h-[70vh] overflow-auto" data-testid="notif-menu">
+        <div className="px-3 py-2 text-sm font-700 text-[#0F172A]">Notifications{data.count > 0 && <span className="font-500 text-slate-400"> · {data.count}</span>}</div>
+        <DropdownMenuSeparator />
+        {(!data.items || data.items.length === 0) && <div className="px-3 py-6 text-center text-xs text-slate-400" data-testid="notif-empty">Aucune alerte pour le moment 🎉</div>}
+        {(data.items || []).map((n) => (
+          <DropdownMenuItem key={n.id + n.type} data-testid="notif-item" onSelect={() => go(n.target)} className="flex items-start gap-2.5 py-2">
+            <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${n.severity === "high" ? "bg-red-500/12 text-red-600" : "bg-[#FBBF24]/15 text-[#B45309]"}`}><AlertTriangle size={13} /></span>
+            <span className="min-w-0">
+              <p className="truncate text-xs font-600 text-[#0F172A]">{n.title}</p>
+              <p className="truncate text-[11px] text-slate-400">{n.detail}</p>
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function UserMenu({ user, logout, go, t }) {
   const [ts, setTs] = useState(0);
+  const [hasAvatar, setHasAvatar] = useState(!!user?.has_avatar);
   const fileRef = useRef(null);
   const role = ROLE_META[user?.role] || ROLE_META.user;
   const initials = getInitials(user?.name);
@@ -103,12 +140,12 @@ function UserMenu({ user, logout, go, t }) {
     const f = e.target.files?.[0];
     if (!f) return;
     if (f.size > 5 * 1024 * 1024) { toast.error("Image trop volumineuse (max 5 Mo)"); e.target.value = ""; return; }
-    try { await api.uploadAvatar(f); setTs(Date.now()); toast.success("Photo de profil mise à jour"); }
+    try { await api.uploadAvatar(f); setHasAvatar(true); setTs(Date.now()); toast.success("Photo de profil mise à jour"); }
     catch { toast.error("Échec du téléversement"); }
     e.target.value = "";
   };
   const onRemove = async () => {
-    try { await api.deleteAvatar(); setTs(Date.now()); toast.success("Photo retirée"); }
+    try { await api.deleteAvatar(); setHasAvatar(false); setTs(Date.now()); toast.success("Photo retirée"); }
     catch { toast.error("Échec de la suppression"); }
   };
 
@@ -125,10 +162,24 @@ function UserMenu({ user, logout, go, t }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={8} className="w-64" data-testid="user-menu">
         <div className="flex items-center gap-3 px-2 py-2">
-          <Avatar className="h-11 w-11 border border-[#F3F4F6]">
-            <AvatarImage src={src} alt={user?.name} />
-            <AvatarFallback style={{ backgroundColor: role.c }} className="text-sm font-700 text-white">{initials}</AvatarFallback>
-          </Avatar>
+          <div className="group relative shrink-0">
+            <Avatar className="h-14 w-14 border border-[#F3F4F6]">
+              <AvatarImage src={src} alt={user?.name} />
+              <AvatarFallback style={{ backgroundColor: role.c }} className="text-base font-700 text-white">{initials}</AvatarFallback>
+            </Avatar>
+            <button type="button" data-testid="avatar-change" title="Changer la photo"
+              onClick={(e) => { e.preventDefault(); fileRef.current?.click(); }}
+              className="absolute inset-0 flex items-center justify-center rounded-full bg-[#0F172A]/55 opacity-0 transition-opacity group-hover:opacity-100">
+              <Pencil size={16} className="text-white" />
+            </button>
+            {hasAvatar && (
+              <button type="button" data-testid="avatar-remove" title="Retirer la photo"
+                onClick={(e) => { e.preventDefault(); onRemove(); }}
+                className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow transition-opacity group-hover:opacity-100">
+                <X size={11} />
+              </button>
+            )}
+          </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <p className="truncate text-sm font-600 text-[#0F172A]">{user?.name}</p>
@@ -137,13 +188,6 @@ function UserMenu({ user, logout, go, t }) {
             <p className="truncate text-[11px] text-slate-400">{user?.email}</p>
           </div>
         </div>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem data-testid="avatar-change" onSelect={(e) => { e.preventDefault(); fileRef.current?.click(); }}>
-          <Camera size={15} className="mr-2 text-slate-500" /> Changer la photo
-        </DropdownMenuItem>
-        <DropdownMenuItem data-testid="avatar-remove" onSelect={(e) => { e.preventDefault(); onRemove(); }}>
-          <Trash2 size={15} className="mr-2 text-slate-500" /> Retirer la photo
-        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem data-testid="menu-profile" onSelect={() => go("preferences")}>
           <UserCog size={15} className="mr-2 text-slate-500" /> {t("Mon profil")}
@@ -392,7 +436,7 @@ function LayoutInner() {
             {!active.startsWith("acct_") && <YearControls />}
             <div className="ml-1 flex items-center gap-1 border-l border-slate-200 pl-2">
               <button data-testid="header-help-btn" title={t("Aide")} className="hidden rounded-full p-2 text-slate-500 transition-colors hover:bg-[#F3F4F6] hover:text-[#0F172A] sm:block"><HelpCircle size={18} /></button>
-              <button data-testid="header-notif-btn" title="Notifications" className="relative hidden rounded-full p-2 text-slate-500 transition-colors hover:bg-[#F3F4F6] hover:text-[#0F172A] sm:block"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#22C55E]" /></button>
+              <NotificationsBell go={go} />
               <UserMenu user={user} logout={logout} go={go} t={t} />
             </div>
           </div>

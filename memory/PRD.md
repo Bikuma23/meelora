@@ -767,3 +767,12 @@ Basée sur « Facturation - Frais de gestion 2021 Commandité.xlsx » + import d
 - [x] **Sidebar** : bloc profil + tagline 'Votre entreprise, clairement.' supprimés.
 - [x] **Vérifié** : testing_agent iteration_46 = **100% frontend** (5/5 + upload photo), aucune régression.
 
+
+## Avatars Users/Journal + cloche active + logo Excel + crayon photo (2026-08-14)
+- [x] **Composant réutilisable `UserAvatar`** (`components/UserAvatar.jsx`) : photo via `${BACKEND}/api/users/{id}/avatar` sinon initiales (2 lettres) colorées par rôle + `getInitials`.
+- [x] **Avatars affichés** : page Utilisateurs (photo par `u.id`) et Journal d'audit (initiales, pas d'id dans les logs) — data-testid='user-avatar'.
+- [x] **Cloche header vivante** : `NotificationsBell` (`Layout.js`) — fetch `GET /api/notifications` (polling 60s), badge compteur (data-testid='notif-badge') + dropdown flottant (data-testid='notif-menu') listant les factures ÉCHUES/à échoir (entité 9434), items cliquables (nav vers acct_qc9434), état vide (data-testid='notif-empty'). Endpoint backend calcule overdue (due<aujourd'hui) et soon (≤7j) sur `qc9434_invoices` ouvertes avec solde>0.
+- [x] **Logo dans les exports Excel** : helper `_xlsx_logo(ws)` (réserve la 1re ligne + insère `assets/meelora-logo.png`) appliqué aux 6 exports budget/masse salariale (comparatif scénarios, P&L, rapport budgétaire, fiches détaillées, masse par classe, rapport personnalisé) ; styles de titre décalés A1→A2. Vérifié : `xl/media/image1.png` présent dans les xlsx.
+- [x] **Menu utilisateur (tâche crayon)** : item 'Retirer la photo' supprimé du menu. Au survol de la photo (en-tête du dropdown) : bouton CRAYON (data-testid='avatar-change') → ouvre l'input fichier ; bouton CROIX (data-testid='avatar-remove') visible au survol quand une photo existe → retire la photo.
+- [x] **Vérifié** : testing_agent iteration_47 = **100% frontend** (import `UserAvatar` repositionné dans Users.js par l'agent). Excel vérifié via curl.
+
