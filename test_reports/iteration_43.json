@@ -1,0 +1,23 @@
+{
+  "summary": "Iteration 43 — Frontend-only validation of the new CompanySelector in the header (Meelora vs 9434-3977 QC inc.). All 5 requested behaviors are functional. (1) On Masse salariale (nav-dashboard) the [data-testid='company-selector'] is ABSENT and [data-testid='header-year-select'] + 'Budget actif' badge are PRESENT ✔ (2) On Comptabilité (nav-acct_dashboard) the company-selector is PRESENT and header-year-select is absent ✔ (3) The Select shows two options loaded from GET /api/companies: 'Meelora' (data-testid='company-option-acct') and '9434-3977 QC inc.' (data-testid='company-option-qc9434') ✔ (4) On Meelora Comptabilité page the trigger value is 'Meelora'; selecting '9434-3977 QC inc.' navigates to the dedicated QC page (body contains '9434-3977' and 'Commandité') and the trigger value updates to '9434-3977 QC inc.' ✔ (5) Selecting 'Meelora' from the QC page navigates back to the Tableau de bord comptable, trigger value returns to 'Meelora' ✔. Also verified: selector remains visible on nav-acct_bv (Balance de vérification) and disappears again after returning to nav-dashboard.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Layout.js CompanySelector (lines 199-219): clean implementation, uses api.getCompanies once on mount, correctly derives activePrefix from `active === 'acct_qc9434' ? 'qc9434' : 'acct'`. Conditional rendering `active.startsWith('acct_')` at line 327 is correct — Masse salariale pages (nav keys without 'acct_' prefix) do not render the selector. ✔",
+    "Minor UX: the CompanySelector only renders when companies list is non-empty; if GET /api/companies fails silently (catch → setCompanies([])), the selector will simply not appear with no user feedback. Not a blocker since companies is a stable admin-seeded list, but could log a warning."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% (5/5 assertions pass on public URL)"},
+  "test_credentials": "admin@accslegro.com / admin123",
+  "seed_data_creation": "None — pure navigation/UI test, no mutations.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "CompanySelector fully working. To interact with the shadcn Select: click [data-testid='company-select'] with force=True, wait 300-500ms, then click [data-testid='company-option-acct'] or [data-testid='company-option-qc9434'] with force=True. Navigation is state-based (no URL change) — verify success via trigger text_content() and body innerText. Selector is conditional on `active.startsWith('acct_')` so it renders on acct_dashboard, acct_bv, acct_reports, acct_qc9434, acct_journal etc. — NOT on Masse salariale pages (dashboard, employees, salaries).",
+  "rca of the issue": "N/A — feature working as specified."
+}

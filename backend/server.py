@@ -634,7 +634,6 @@ async def me(user: dict = Depends(get_current_user)):
 @api.get("/me/preferences")
 async def get_preferences(user: dict = Depends(get_current_user)):
     return user.get("preferences", {}) or {}
-
 @api.put("/me/preferences")
 async def update_preferences(request: Request, user: dict = Depends(get_current_user)):
     try:
@@ -646,6 +645,14 @@ async def update_preferences(request: Request, user: dict = Depends(get_current_
     prefs = {**(user.get("preferences") or {}), **payload}
     await db.users.update_one({"_id": ObjectId(user["id"])}, {"$set": {"preferences": prefs}})
     return prefs
+
+
+@api.get("/companies")
+async def list_companies(user: dict = Depends(get_current_user)):
+    """Liste des sociétés (mandats) pour le sélecteur d'en-tête."""
+    docs = await db.companies.find({"active": {"$ne": False}}).to_list(50)
+    return [{"id": d.get("id"), "name": d.get("name"), "legacy_prefix": d.get("legacy_prefix")}
+            for d in sorted(docs, key=lambda x: x.get("legacy_prefix") or "")]
 
 
 # ---------------------------------------------------------------------------

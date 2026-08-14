@@ -196,6 +196,28 @@ export default function Layout() {
   return <YearProvider><LayoutInner /></YearProvider>;
 }
 
+function CompanySelector({ active, onNavigate }) {
+  const [companies, setCompanies] = useState([]);
+  useEffect(() => { api.getCompanies().then(setCompanies).catch(() => setCompanies([])); }, []);
+  if (!companies.length) return null;
+  // Mandat actif déduit de la page : la page dédiée 9434 → qc9434 ; toutes les autres pages Compta → acct (Meelora).
+  const activePrefix = active === "acct_qc9434" ? "qc9434" : "acct";
+  const TARGET = { acct: "acct_dashboard", qc9434: "acct_qc9434" };
+  return (
+    <div className="flex items-center gap-2" data-testid="company-selector">
+      <Building2 size={15} className="text-[#063044]" />
+      <Select value={activePrefix} onValueChange={(v) => onNavigate(TARGET[v] || "acct_dashboard")}>
+        <SelectTrigger className="h-8 w-[190px]" data-testid="company-select"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {companies.map((c) => (
+            <SelectItem key={c.legacy_prefix} value={c.legacy_prefix} data-testid={`company-option-${c.legacy_prefix}`}>{c.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 function LayoutInner() {
   const { user, logout } = useAuth();
   const { t } = useLang();
@@ -302,6 +324,7 @@ function LayoutInner() {
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
+            {active.startsWith("acct_") && <CompanySelector active={active} onNavigate={go} />}
             {!active.startsWith("acct_") && <span className="hidden rounded-full bg-[#15AF97]/10 px-3 py-1 text-xs font-600 text-[#15AF97] sm:inline-flex">{t("Budget actif")}</span>}
             {!active.startsWith("acct_") && <YearControls />}
           </div>
