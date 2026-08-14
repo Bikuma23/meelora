@@ -757,3 +757,13 @@ Basée sur « Facturation - Frais de gestion 2021 Commandité.xlsx » + import d
 - [x] **Thème sombre adapté Meelora** (`index.css`) : fond navy #0F172A, cartes #16233A / bordures #243B5A, accents Mint→vert translucide, focus-ring + `--ring` (clair & sombre) passés en vert `142 71% 45%`. Boutons/accents restent verts #22C55E. Vérifié : bascule `.dark`, aucun texte illisible.
 - [x] **Vérifié** : testing_agent iteration_45 = **100% frontend** (6/6 critères), aucune régression.
 
+
+## Menu utilisateur (header) + photo de profil + ajustements login (2026-08-14)
+- [x] **Profil déplacé en haut à droite** : nouveau composant `UserMenu` (`Layout.js`) — avatar circulaire (data-testid='user-menu-toggle') dans le header, à droite des icônes aide/notifications.
+- [x] **Photo de profil** : upload via input fichier (data-testid='avatar-file-input') → backend `POST /api/me/avatar` (stockage objet Emergent, réutilise `_qc_put_object`), `DELETE /api/me/avatar`, `GET /api/users/{uid}/avatar` (public, sert l'image). `/auth/me` renvoie `has_avatar`. `/api/me/avatar` ajouté à `WRITE_ALLOW_ALL` (tout utilisateur connecté). Frontend : `api.uploadAvatar/deleteAvatar`, avatar = `Avatar` shadcn (AvatarImage `${BACKEND}/api/users/{id}/avatar?v=ts`, fallback initiales). Validé curl : upload 200 → serve 200 → delete → 404.
+- [x] **Initiales** : `getInitials(name)` = 1ʳᵉ lettre du 1ᵉʳ mot + 1ʳᵉ lettre du dernier mot (ex. 'Bikuma B.' → 'BB'), fond coloré selon le rôle.
+- [x] **Menu flottant** : `DropdownMenu` shadcn (data-testid='user-menu') avec nom+email+badge rôle, 'Changer la photo', 'Retirer la photo', 'Mon profil', 'Utilisateurs' (admin), 'Déconnexion' — remplace l'ancienne expansion inline dans la sidebar.
+- [x] **Login** : logo blanc `meelora-logo-white.png` (wordmark recoloré en blanc, mark vert + tagline verte) directement sur le panneau navy — carte blanche supprimée.
+- [x] **Sidebar** : bloc profil + tagline 'Votre entreprise, clairement.' supprimés.
+- [x] **Vérifié** : testing_agent iteration_46 = **100% frontend** (5/5 + upload photo), aucune régression.
+

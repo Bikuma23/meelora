@@ -67,6 +67,12 @@ export const api = {
   getPreferences: () => client.get("/me/preferences").then((r) => r.data),
   updatePreferences: (body) => client.put("/me/preferences", body).then((r) => r.data),
   getCompanies: () => client.get("/companies").then((r) => r.data),
+  uploadAvatar: (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return client.post("/me/avatar", fd, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data);
+  },
+  deleteAvatar: () => client.delete("/me/avatar").then((r) => r.data),
   listReportTemplates: () => client.get("/report-templates").then((r) => r.data),
   createReportTemplate: (body) => client.post("/report-templates", body).then((r) => r.data),
   deleteReportTemplate: (id) => client.delete(`/report-templates/${id}`).then((r) => r.data),

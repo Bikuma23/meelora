@@ -42,8 +42,8 @@ export default function Login() {
           style={{ backgroundImage: "url('https://images.unsplash.com/photo-1599398766380-23b3144142c7?crop=entropy&cs=srgb&fm=jpg&q=85&w=1400')" }}
         />
         <div className="absolute inset-0 bg-[#0F172A]/85" />
-        <div className="relative z-10 inline-flex items-center rounded-2xl bg-white px-5 py-4 shadow-lg" data-testid="login-brand">
-          <img src="/meelora-logo-full.png" alt="Meelora — Votre entreprise, clairement." className="h-16 w-auto" />
+        <div className="relative z-10" data-testid="login-brand">
+          <img src="/meelora-logo-white.png" alt="Meelora — Votre entreprise, clairement." className="h-16 w-auto" />
         </div>
 
         <div className="relative z-10">

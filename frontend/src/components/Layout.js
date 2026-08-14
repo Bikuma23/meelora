@@ -1,11 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
 import { useLang } from "../context/LanguageContext";
 import {
-  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight, Minimize2, HelpCircle, Bell,
+  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight, Minimize2, HelpCircle, Bell, Camera, Trash2,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "./ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
@@ -74,6 +76,89 @@ export function MeeloraLogo({ compact = false, className = "" }) {
       draggable={false}
       className={`${compact ? "h-7" : "h-8"} w-auto select-none ${className}`}
     />
+  );
+}
+
+const ROLE_META = {
+  admin: { label: "Admin", c: "#0F172A" },
+  editor: { label: "Éditeur", c: "#22C55E" },
+  user: { label: "Utilisateur", c: "#64748B" },
+};
+
+function getInitials(name) {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return "U";
+}
+
+function UserMenu({ user, logout, go, t }) {
+  const [ts, setTs] = useState(0);
+  const fileRef = useRef(null);
+  const role = ROLE_META[user?.role] || ROLE_META.user;
+  const initials = getInitials(user?.name);
+  const src = user?.id ? `${process.env.REACT_APP_BACKEND_URL}/api/users/${user.id}/avatar?v=${ts}` : undefined;
+
+  const onFile = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { toast.error("Image trop volumineuse (max 5 Mo)"); e.target.value = ""; return; }
+    try { await api.uploadAvatar(f); setTs(Date.now()); toast.success("Photo de profil mise à jour"); }
+    catch { toast.error("Échec du téléversement"); }
+    e.target.value = "";
+  };
+  const onRemove = async () => {
+    try { await api.deleteAvatar(); setTs(Date.now()); toast.success("Photo retirée"); }
+    catch { toast.error("Échec de la suppression"); }
+  };
+
+  return (
+    <DropdownMenu>
+      <input type="file" ref={fileRef} accept="image/*" className="hidden" onChange={onFile} data-testid="avatar-file-input" />
+      <DropdownMenuTrigger asChild>
+        <button data-testid="user-menu-toggle" className="rounded-full outline-none ring-offset-2 transition hover:ring-2 hover:ring-[#22C55E]/40 focus-visible:ring-2 focus-visible:ring-[#22C55E]">
+          <Avatar className="h-9 w-9 border border-[#F3F4F6]">
+            <AvatarImage src={src} alt={user?.name} />
+            <AvatarFallback style={{ backgroundColor: role.c }} className="text-xs font-700 text-white">{initials}</AvatarFallback>
+          </Avatar>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={8} className="w-64" data-testid="user-menu">
+        <div className="flex items-center gap-3 px-2 py-2">
+          <Avatar className="h-11 w-11 border border-[#F3F4F6]">
+            <AvatarImage src={src} alt={user?.name} />
+            <AvatarFallback style={{ backgroundColor: role.c }} className="text-sm font-700 text-white">{initials}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className="truncate text-sm font-600 text-[#0F172A]">{user?.name}</p>
+              <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-700 uppercase" style={{ backgroundColor: role.c + "1A", color: role.c }}>{t(role.label)}</span>
+            </div>
+            <p className="truncate text-[11px] text-slate-400">{user?.email}</p>
+          </div>
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem data-testid="avatar-change" onSelect={(e) => { e.preventDefault(); fileRef.current?.click(); }}>
+          <Camera size={15} className="mr-2 text-slate-500" /> Changer la photo
+        </DropdownMenuItem>
+        <DropdownMenuItem data-testid="avatar-remove" onSelect={(e) => { e.preventDefault(); onRemove(); }}>
+          <Trash2 size={15} className="mr-2 text-slate-500" /> Retirer la photo
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem data-testid="menu-profile" onSelect={() => go("preferences")}>
+          <UserCog size={15} className="mr-2 text-slate-500" /> {t("Mon profil")}
+        </DropdownMenuItem>
+        {user?.role === "admin" && (
+          <DropdownMenuItem data-testid="menu-users" onSelect={() => go("utilisateurs")}>
+            <ShieldCheck size={15} className="mr-2 text-slate-500" /> {t("Utilisateurs")}
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem data-testid="logout-btn" onSelect={logout} className="text-red-600 focus:bg-red-50 focus:text-red-700">
+          <LogOut size={15} className="mr-2" /> {t("Déconnexion")}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -288,37 +373,6 @@ function LayoutInner() {
             </div>
           )}
         </nav>
-
-        <div className="mt-3 border-t border-[#F3F4F6] pt-3">
-          <div className="mb-3 flex items-center gap-2.5 rounded-xl bg-[#A7F3DD]/25 px-3 py-2.5" data-testid="sidebar-tagline">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#22C55E]/15 text-[#22C55E]"><Briefcase size={15} strokeWidth={2.2} /></span>
-            <p className="text-xs font-600 leading-tight text-[#0F172A]">Votre entreprise,<br /><span className="text-[#22C55E]">clairement.</span></p>
-          </div>
-          {userMenuOpen && (
-            <div className="mb-2 space-y-1" data-testid="user-submenu">
-              <NavItem item={{ key: "preferences", label: "Mon profil", sub: "Préférences & apparence", icon: UserCog }} active={active} onClick={(k) => { go(k); setUserMenuOpen(false); }} />
-              {user?.role === "admin" && <NavItem item={{ key: "utilisateurs", label: "Utilisateurs", sub: "Comptes & accès", icon: ShieldCheck }} active={active} onClick={(k) => { go(k); setUserMenuOpen(false); }} />}
-              <button data-testid="logout-btn" onClick={logout}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-600 text-slate-600 transition-colors hover:bg-red-500/10 hover:text-red-600">
-                <LogOut size={16} /> {t("Déconnexion")}
-              </button>
-            </div>
-          )}
-          <button data-testid="user-menu-toggle" onClick={() => setUserMenuOpen((o) => !o)}
-            className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-[#F3F4F6]">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-700 text-white" style={{ backgroundColor: avatarColor }}>
-              {(user?.name || "U").charAt(0)}
-            </span>
-            <div className="min-w-0 flex-1 text-left">
-              <div className="flex items-center gap-1.5">
-                <p className="truncate text-sm font-600 text-[#0F172A]">{user?.name}</p>
-                <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-700 uppercase" style={{ backgroundColor: roleMeta.c + "1A", color: roleMeta.c }}>{t(roleMeta.label)}</span>
-              </div>
-              <p className="truncate text-[11px] text-slate-400">{user?.email}</p>
-            </div>
-            {userMenuOpen ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronUp size={16} className="text-slate-400" />}
-          </button>
-        </div>
       </aside>
 
       <div className={`flex-1 ${presentation ? "" : "lg:ml-64"}`}>
@@ -336,10 +390,10 @@ function LayoutInner() {
             {active.startsWith("acct_") && <CompanySelector active={active} onNavigate={go} />}
             {!active.startsWith("acct_") && <span className="hidden rounded-full bg-[#22C55E]/10 px-3 py-1 text-xs font-600 text-[#22C55E] sm:inline-flex">{t("Budget actif")}</span>}
             {!active.startsWith("acct_") && <YearControls />}
-            <div className="ml-1 hidden items-center gap-1 border-l border-slate-200 pl-2 sm:flex">
-              <button data-testid="header-help-btn" title={t("Aide")} className="rounded-full p-2 text-slate-500 transition-colors hover:bg-[#F3F4F6] hover:text-[#0F172A]"><HelpCircle size={18} /></button>
-              <button data-testid="header-notif-btn" title="Notifications" className="relative rounded-full p-2 text-slate-500 transition-colors hover:bg-[#F3F4F6] hover:text-[#0F172A]"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#22C55E]" /></button>
-              <button data-testid="header-settings-btn" title={t("Mon profil")} onClick={() => go("preferences")} className="rounded-full p-2 text-slate-500 transition-colors hover:bg-[#F3F4F6] hover:text-[#0F172A]"><Settings size={18} /></button>
+            <div className="ml-1 flex items-center gap-1 border-l border-slate-200 pl-2">
+              <button data-testid="header-help-btn" title={t("Aide")} className="hidden rounded-full p-2 text-slate-500 transition-colors hover:bg-[#F3F4F6] hover:text-[#0F172A] sm:block"><HelpCircle size={18} /></button>
+              <button data-testid="header-notif-btn" title="Notifications" className="relative hidden rounded-full p-2 text-slate-500 transition-colors hover:bg-[#F3F4F6] hover:text-[#0F172A] sm:block"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#22C55E]" /></button>
+              <UserMenu user={user} logout={logout} go={go} t={t} />
             </div>
           </div>
         </header>

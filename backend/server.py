@@ -646,7 +646,9 @@ async def logout(response: Response, user: dict = Depends(get_current_user)):
 
 @api.get("/auth/me")
 async def me(user: dict = Depends(get_current_user)):
-    return {"id": user["id"], "email": user["email"], "name": user.get("name", ""), "role": user.get("role", "user")}
+    prefs = user.get("preferences") or {}
+    return {"id": user["id"], "email": user["email"], "name": user.get("name", ""), "role": user.get("role", "user"),
+            "has_avatar": bool(prefs.get("avatar_path"))}
 
 @api.get("/me/preferences")
 async def get_preferences(user: dict = Depends(get_current_user)):
@@ -662,6 +664,45 @@ async def update_preferences(request: Request, user: dict = Depends(get_current_
     prefs = {**(user.get("preferences") or {}), **payload}
     await db.users.update_one({"_id": ObjectId(user["id"])}, {"$set": {"preferences": prefs}})
     return prefs
+
+
+@api.post("/me/avatar")
+async def upload_avatar(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    data = await file.read()
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image trop volumineuse (max 5 Mo)")
+    ext = ((file.filename or "png").rsplit(".", 1)[-1] or "png").lower()
+    if ext not in ("png", "jpg", "jpeg", "webp", "gif"):
+        ext = "png"
+    ct = file.content_type or "image/png"
+    path = f"avatars/{user['id']}.{ext}"
+    _qc_put_object(path, data, ct)
+    prefs = {**(user.get("preferences") or {}), "avatar_path": path, "avatar_ct": ct}
+    await db.users.update_one({"_id": ObjectId(user["id"])}, {"$set": {"preferences": prefs}})
+    return {"ok": True, "avatar_path": path}
+
+
+@api.delete("/me/avatar")
+async def delete_avatar(user: dict = Depends(get_current_user)):
+    prefs = {**(user.get("preferences") or {})}
+    prefs.pop("avatar_path", None)
+    prefs.pop("avatar_ct", None)
+    await db.users.update_one({"_id": ObjectId(user["id"])}, {"$set": {"preferences": prefs}})
+    return {"ok": True}
+
+
+@api.get("/users/{uid}/avatar")
+async def get_avatar(uid: str):
+    from starlette.responses import Response
+    try:
+        u = await db.users.find_one({"_id": ObjectId(uid)})
+    except Exception:
+        u = None
+    path = (u or {}).get("preferences", {}).get("avatar_path") if u else None
+    if not path:
+        raise HTTPException(status_code=404, detail="Aucune photo")
+    content, ct = _qc_get_object(path)
+    return Response(content=content, media_type=ct, headers={"Cache-Control": "no-cache"})
 
 
 @api.get("/companies")
@@ -6477,7 +6518,7 @@ api.include_router(acct_ai.router)
 
 app.include_router(api)
 
-WRITE_ALLOW_ALL = {"/api/auth/login", "/api/auth/logout", "/api/me/preferences", "/api/acct/bv", "/api/acct/account-map",
+WRITE_ALLOW_ALL = {"/api/auth/login", "/api/auth/logout", "/api/me/preferences", "/api/me/avatar", "/api/acct/bv", "/api/acct/account-map",
                    "/api/acct/ai/variance", "/api/acct/ai/anomalies", "/api/acct/ai/chat", "/api/acct/ai/suggest-mapping",
                    "/api/acct/report/by-manager/note"}
 
