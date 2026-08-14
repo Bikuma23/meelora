@@ -1216,7 +1216,7 @@ function excelCellColor(s, val, ecart) {
 function ReportView({ type, title }) {
   const { periods } = usePeriods();
   const { user } = useAuth();
-  const canEdit = user && (user.role === "admin" || user.role === "editor");
+  const canEdit = user && ["admin", "user", "editor"].includes(user.role);
   const commentKey = type.includes("bilan") ? "bilan" : "pnl";
   const [period, setPeriod] = useState("");
   const [rep, setRep] = useState(null);

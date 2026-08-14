@@ -1,0 +1,206 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
+import { useLang } from "../context/LanguageContext";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Building2, BriefcaseBusiness, Plus, Pencil, Search, Users, Loader2, CircleCheck, CircleAlert, Upload, FileSpreadsheet } from "lucide-react";
+import { toast } from "sonner";
+
+const INDUSTRIES = [
+  ["services", "Services professionnels"], ["retail", "Commerce / Retail"], ["distribution", "Distribution"],
+  ["construction", "Construction"], ["hospitality", "Restauration / Hôtellerie"], ["manufacturing", "Manufacturing"],
+  ["real_estate", "Immobilier"], ["technology", "SaaS / Technologie"], ["transport", "Transport / Logistique"],
+  ["healthcare", "Santé"], ["agriculture", "Agriculture / Agroalimentaire"], ["other", "Autre"],
+];
+const COMPANY_TYPES = [
+  ["operating", "Société opérationnelle"], ["holding", "Holding"], ["real_estate", "Société immobilière"],
+  ["nonprofit", "Association / Fondation"], ["other", "Autre"],
+];
+const emptyCompany = {
+  name: "", legal_name: "", company_code: "", jurisdiction: "CH", region: "", functional_currency: "CHF",
+  industry: "services", company_type: "operating", fiscal_year_start: "01-01",
+};
+
+function CompanyForm({ open, onOpenChange, initial, onSubmit, saving }) {
+  const { t } = useLang();
+  const [f, setF] = useState(emptyCompany);
+  useEffect(() => {
+    setF(initial ? {
+      name: initial.name || "", legal_name: initial.legal_name || "", company_code: initial.company_code || "",
+      jurisdiction: initial.jurisdiction || "CH", region: initial.region || "", functional_currency: initial.functional_currency || (initial.jurisdiction === "CA" ? "CAD" : "CHF"),
+      industry: initial.industry || "services", company_type: initial.company_type || "operating", fiscal_year_start: initial.fiscal_year_start || "01-01",
+    } : emptyCompany);
+  }, [initial, open]);
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const submit = () => {
+    if (!f.name.trim()) return toast.error(t("Nom de société requis"));
+    if (!f.functional_currency || f.functional_currency.length !== 3) return toast.error(t("Devise invalide"));
+    onSubmit({ ...f, name: f.name.trim(), legal_name: f.legal_name.trim() || null, company_code: f.company_code.trim() || null, region: f.region.trim() || null });
+  };
+  return <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent className="max-w-2xl" data-testid="company-form-dialog">
+      <DialogHeader><DialogTitle>{initial ? t("Modifier la société") : t("Nouvelle société")}</DialogTitle><DialogDescription className="text-xs">{t("Les paramètres financiers détaillés seront configurés dans les phases suivantes.")}</DialogDescription></DialogHeader>
+      <div className="grid grid-cols-1 gap-3 py-1 sm:grid-cols-2">
+        <div><Label className="text-[11px] uppercase text-slate-500">{t("Nom d'affichage")}</Label><Input value={f.name} onChange={(e) => set("name", e.target.value)} data-testid="company-name" /></div>
+        <div><Label className="text-[11px] uppercase text-slate-500">{t("Nom légal")}</Label><Input value={f.legal_name} onChange={(e) => set("legal_name", e.target.value)} /></div>
+        <div><Label className="text-[11px] uppercase text-slate-500">{t("Code société")}</Label><Input value={f.company_code} onChange={(e) => set("company_code", e.target.value)} placeholder="CH-001" /></div>
+        <div><Label className="text-[11px] uppercase text-slate-500">{t("Juridiction")}</Label><Select value={f.jurisdiction} onValueChange={(v) => { set("jurisdiction", v); if (!initial) set("functional_currency", v === "CA" ? "CAD" : "CHF"); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CH">Suisse</SelectItem><SelectItem value="CA">Canada</SelectItem></SelectContent></Select></div>
+        <div><Label className="text-[11px] uppercase text-slate-500">{t("Canton / Province")}</Label><Input value={f.region} onChange={(e) => set("region", e.target.value)} /></div>
+        <div><Label className="text-[11px] uppercase text-slate-500">{t("Devise fonctionnelle")}</Label><Input maxLength={3} className="uppercase" value={f.functional_currency} onChange={(e) => set("functional_currency", e.target.value.toUpperCase())} /></div>
+        <div><Label className="text-[11px] uppercase text-slate-500">{t("Secteur")}</Label><Select value={f.industry} onValueChange={(v) => set("industry", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{INDUSTRIES.map(([v,l]) => <SelectItem key={v} value={v}>{t(l)}</SelectItem>)}</SelectContent></Select></div>
+        <div><Label className="text-[11px] uppercase text-slate-500">{t("Type de société")}</Label><Select value={f.company_type} onValueChange={(v) => set("company_type", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{COMPANY_TYPES.map(([v,l]) => <SelectItem key={v} value={v}>{t(l)}</SelectItem>)}</SelectContent></Select></div>
+        <div className="sm:col-span-2"><Label className="text-[11px] uppercase text-slate-500">{t("Début d'exercice (MM-JJ)")}</Label><Input value={f.fiscal_year_start} onChange={(e) => set("fiscal_year_start", e.target.value)} placeholder="01-01" className="max-w-[180px]" /></div>
+      </div>
+      <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>{t("Annuler")}</Button><Button disabled={saving} onClick={submit} className="bg-[#0F172A] hover:bg-[#0F172A]/90">{saving && <Loader2 size={14} className="mr-2 animate-spin" />}{t("Enregistrer")}</Button></DialogFooter>
+    </DialogContent>
+  </Dialog>;
+}
+
+function MandateForm({ open, onOpenChange, company, mandate, users, onSubmit, saving }) {
+  const { t } = useLang();
+  const activeUsers = useMemo(() => (users || []).filter((u) => u.status !== "inactive" && u.role !== "admin"), [users]);
+  const [code, setCode] = useState("");
+  const [principal, setPrincipal] = useState("");
+  const [collabs, setCollabs] = useState([]);
+  useEffect(() => {
+    setCode(mandate?.mandate_code || company?.company_code || "");
+    setPrincipal(mandate?.principal_user_id || "");
+    setCollabs(mandate?.collaborator_user_ids || []);
+  }, [open, mandate, company]);
+  const toggle = (id) => setCollabs((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
+  const submit = () => {
+    if (!code.trim()) return toast.error(t("Code mandat requis"));
+    if (!principal) return toast.error(t("Responsable principal requis"));
+    onSubmit({ mandate_code: code.trim(), principal_user_id: principal, collaborator_user_ids: collabs.filter((x) => x !== principal) });
+  };
+  return <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent className="max-w-xl" data-testid="mandate-form-dialog">
+      <DialogHeader><DialogTitle>{mandate ? t("Modifier le mandat") : t("Créer le mandat")}</DialogTitle><DialogDescription>{company?.name}</DialogDescription></DialogHeader>
+      <div className="space-y-4 py-1">
+        <div><Label className="text-[11px] uppercase text-slate-500">{t("Code mandat")}</Label><Input value={code} onChange={(e) => setCode(e.target.value)} /></div>
+        <div><Label className="text-[11px] uppercase text-slate-500">{t("Responsable principal")}</Label><Select value={principal} onValueChange={(v) => { setPrincipal(v); setCollabs((p) => p.filter((x) => x !== v)); }}><SelectTrigger><SelectValue placeholder={t("Sélectionner un utilisateur")} /></SelectTrigger><SelectContent>{activeUsers.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
+        <div><Label className="text-[11px] uppercase text-slate-500">{t("Collaborateurs autorisés")}</Label><div className="mt-1 max-h-48 space-y-1 overflow-auto rounded-xl border border-slate-200 p-2">{activeUsers.filter((u) => u.id !== principal).map((u) => <button key={u.id} type="button" onClick={() => toggle(u.id)} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${collabs.includes(u.id) ? "bg-[#A7F3DD]/25 text-[#0F172A]" : "hover:bg-slate-50"}`}><span>{u.name}</span><span className={`h-4 w-4 rounded border ${collabs.includes(u.id) ? "border-[#22C55E] bg-[#22C55E]" : "border-slate-300"}`} /></button>)}{activeUsers.length === 0 && <p className="p-3 text-center text-xs text-slate-400">{t("Créez d'abord un utilisateur standard.")}</p>}</div></div>
+      </div>
+      <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>{t("Annuler")}</Button><Button disabled={saving || !activeUsers.length} onClick={submit} className="bg-[#0F172A] hover:bg-[#0F172A]/90">{saving && <Loader2 size={14} className="mr-2 animate-spin" />}{t("Enregistrer")}</Button></DialogFooter>
+    </DialogContent>
+  </Dialog>;
+}
+
+function ImportCompaniesDialog({ open, onOpenChange, onDone }) {
+  const { t } = useLang(); const inputRef = useRef(null); const [file,setFile]=useState(null); const [preview,setPreview]=useState(null); const [busy,setBusy]=useState(false);
+  useEffect(()=>{ if(!open){setFile(null);setPreview(null);} },[open]);
+  const choose=async(f)=>{ if(!f)return; setFile(f);setBusy(true); try{setPreview(await api.previewCompaniesImport(f));}catch(e){toast.error(e.response?.data?.detail || t("Fichier invalide"));setPreview(null);}finally{setBusy(false);} };
+  const commit=async()=>{setBusy(true);try{const r=await api.commitCompaniesImport(file);toast.success(`${r.created} ${t("société(s) créée(s)")}`);onOpenChange(false);await onDone();}catch(e){const d=e.response?.data?.detail;toast.error(typeof d==="string"?d:(d?.message||t("Import impossible")));}finally{setBusy(false);} };
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-w-4xl"><DialogHeader><DialogTitle>{t("Importer des sociétés depuis Excel")}</DialogTitle><DialogDescription>{t("Le fichier est toujours validé avant toute création. Colonnes: Nom, Code société, Juridiction, Devise, Secteur, Type. Pour une fiduciaire: Code mandat, Responsable principal et Collaborateurs.")}</DialogDescription></DialogHeader>
+    <input ref={inputRef} type="file" accept=".xlsx,.xlsm" className="hidden" onChange={e=>choose(e.target.files?.[0])}/>
+    {!preview && <button type="button" onClick={()=>inputRef.current?.click()} className="flex min-h-40 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/60 text-slate-500 hover:border-slate-400"><FileSpreadsheet size={30}/><span className="mt-2 text-sm font-600">{file?.name || t("Choisir un fichier Excel")}</span><span className="mt-1 text-xs">.xlsx</span></button>}
+    {busy && <div className="flex justify-center py-5 text-sm text-slate-500"><Loader2 size={17} className="mr-2 animate-spin"/>{t("Validation...")}</div>}
+    {preview && !busy && <div className="space-y-3"><div className="grid grid-cols-4 gap-2 text-center text-xs"><div className="rounded-lg bg-slate-50 p-2"><b className="block text-lg">{preview.total}</b>{t("Lignes")}</div><div className="rounded-lg bg-emerald-50 p-2 text-emerald-700"><b className="block text-lg">{preview.valid}</b>{t("Valides")}</div><div className="rounded-lg bg-amber-50 p-2 text-amber-700"><b className="block text-lg">{preview.warnings}</b>{t("Warnings")}</div><div className="rounded-lg bg-red-50 p-2 text-red-700"><b className="block text-lg">{preview.errors}</b>{t("Erreurs")}</div></div><div className="max-h-72 overflow-auto rounded-xl border"><table className="w-full text-xs"><thead className="sticky top-0 bg-slate-50 text-left"><tr><th className="p-2">#</th><th>{t("Société")}</th><th>{t("Code")}</th><th>{t("Juridiction")}</th><th>{t("Validation")}</th></tr></thead><tbody>{preview.rows.map(r=><tr key={r.row} className="border-t"><td className="p-2 text-slate-400">{r.row}</td><td>{r.name||"—"}</td><td>{r.company_code||"—"}</td><td>{r.jurisdiction||"—"}</td><td className="py-2 pr-2">{r.errors?.length?<span className="text-red-600">{r.errors.join(" · ")}</span>:r.warnings?.length?<span className="text-amber-600">{r.warnings.join(" · ")}</span>:<span className="text-emerald-600">OK</span>}</td></tr>)}</tbody></table></div></div>}
+    <DialogFooter><Button variant="outline" onClick={()=>onOpenChange(false)}>{t("Annuler")}</Button>{preview&&<Button variant="outline" onClick={()=>inputRef.current?.click()}>{t("Changer de fichier")}</Button>}<Button disabled={!preview||preview.errors>0||busy} onClick={commit} className="bg-[#0F172A] hover:bg-[#0F172A]/90">{t("Confirmer l'import")}</Button></DialogFooter>
+  </DialogContent></Dialog>;
+}
+
+export default function Companies() {
+  const { user } = useAuth();
+  const { t } = useLang();
+  const orgType = user?.workspace?.organization_type || user?.organization_type || "company";
+  const fiduciary = orgType === "fiduciary";
+  const admin = user?.role === "admin";
+  const [companies, setCompanies] = useState([]);
+  const [mandates, setMandates] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [jurisdiction, setJurisdiction] = useState("all");
+  const [companyDialog, setCompanyDialog] = useState({ open:false, item:null });
+  const [mandateDialog, setMandateDialog] = useState({ open:false, company:null, mandate:null });
+  const [saving, setSaving] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [cs, ms, us] = await Promise.all([
+        api.getCompanies(),
+        fiduciary ? api.listMandates().catch(() => []) : Promise.resolve([]),
+        admin ? api.listUsers().catch(() => []) : Promise.resolve([]),
+      ]);
+      setCompanies(cs || []); setMandates(ms || []); setUsers(us || []);
+    } catch (e) { toast.error(e.response?.data?.detail || t("Impossible de charger les sociétés")); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, [fiduciary, admin]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const mandateByCompany = useMemo(() => Object.fromEntries(mandates.map((m) => [m.company_id, m])), [mandates]);
+  const userById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
+  const rows = useMemo(() => companies.filter((c) => {
+    const m = mandateByCompany[c.id];
+    const principal = userById[m?.principal_user_id]?.name || "";
+    const needle = `${c.name || ""} ${c.company_code || ""} ${principal}`.toLowerCase();
+    return (!query || needle.includes(query.toLowerCase())) && (jurisdiction === "all" || c.jurisdiction === jurisdiction);
+  }), [companies, mandateByCompany, userById, query, jurisdiction]);
+
+  const saveCompany = async (payload) => {
+    setSaving(true);
+    try {
+      if (companyDialog.item) { await api.updateCompany(companyDialog.item.id, payload); toast.success(t("Société mise à jour")); }
+      else { await api.createCompany(payload); toast.success(t("Société créée")); }
+      setCompanyDialog({ open:false, item:null }); await load();
+    } catch (e) { toast.error(e.response?.data?.detail || t("Erreur lors de l'enregistrement")); }
+    finally { setSaving(false); }
+  };
+  const saveMandate = async (payload) => {
+    setSaving(true);
+    try {
+      const d = mandateDialog;
+      if (d.mandate) await api.updateMandate(d.mandate.id, payload);
+      else await api.createMandate({ ...payload, company_id: d.company.id });
+      toast.success(t(d.mandate ? "Mandat mis à jour" : "Mandat créé"));
+      setMandateDialog({ open:false, company:null, mandate:null }); await load();
+    } catch (e) { toast.error(e.response?.data?.detail || t("Erreur lors de l'enregistrement du mandat")); }
+    finally { setSaving(false); }
+  };
+
+  const heading = fiduciary ? t("Mandats") : t("Sociétés");
+  return <div className="space-y-4" data-testid="companies-page">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div><p className="text-sm font-600 text-[#0F172A]">{heading}</p><p className="mt-0.5 text-xs text-slate-500">{admin ? t("Gérez les entités financières de votre organisation et leurs responsables.") : t("Vous ne voyez que les sociétés qui vous sont attribuées.")}</p></div>
+      {admin && <div className="flex gap-2"><Button variant="outline" className="gap-1.5" onClick={() => setImportOpen(true)}><Upload size={15}/>{t("Importer Excel")}</Button><Button data-testid="add-company-btn" className="gap-1.5 bg-[#0F172A] hover:bg-[#0F172A]/90" onClick={() => setCompanyDialog({ open:true, item:null })}><Plus size={16}/>{t("Nouvelle société")}</Button></div>}
+    </div>
+
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="relative max-w-md flex-1"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><Input value={query} onChange={(e) => setQuery(e.target.value)} className="pl-9" placeholder={t("Rechercher société, code ou responsable...")} /></div>
+      <Select value={jurisdiction} onValueChange={setJurisdiction}><SelectTrigger className="w-full sm:w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("Toutes juridictions")}</SelectItem><SelectItem value="CH">Suisse</SelectItem><SelectItem value="CA">Canada</SelectItem></SelectContent></Select>
+    </div>
+
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {loading && <div className="col-span-full flex items-center justify-center py-16 text-slate-400"><Loader2 className="mr-2 animate-spin" size={18}/>{t("Chargement...")}</div>}
+      {!loading && rows.map((c) => {
+        const m = mandateByCompany[c.id]; const principal = userById[m?.principal_user_id];
+        return <div key={c.id} className="card group p-4 transition hover:-translate-y-0.5 hover:shadow-md" data-testid={`company-card-${c.id}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#A7F3DD]/30 text-[#15803D]">{fiduciary ? <BriefcaseBusiness size={19}/> : <Building2 size={19}/>}</div><div className="min-w-0"><p className="truncate font-700 text-[#0F172A]">{c.name}</p><p className="mt-0.5 text-[11px] text-slate-400">{[c.company_code, c.jurisdiction, c.functional_currency].filter(Boolean).join(" · ") || c.id}</p></div></div>
+            {admin && <button title={t("Modifier la société")} onClick={() => setCompanyDialog({ open:true, item:c })} className="rounded-lg p-1.5 text-slate-400 opacity-0 transition hover:bg-slate-100 hover:text-[#0F172A] group-hover:opacity-100"><Pencil size={14}/></button>}
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-lg bg-slate-50 px-2.5 py-2"><span className="block text-[10px] uppercase text-slate-400">{t("Secteur")}</span><b className="font-600 text-slate-700">{INDUSTRIES.find(([v]) => v === c.industry)?.[1] || c.industry || "—"}</b></div>
+            <div className="rounded-lg bg-slate-50 px-2.5 py-2"><span className="block text-[10px] uppercase text-slate-400">{t("Statut")}</span><b className="inline-flex items-center gap-1 font-600 text-[#15803D]"><CircleCheck size={12}/>{t("Actif")}</b></div>
+          </div>
+          {fiduciary && <div className="mt-3 border-t border-slate-100 pt-3">
+            {m ? <div className="flex items-center justify-between gap-2"><div className="min-w-0"><p className="text-[10px] uppercase text-slate-400">{t("Responsable principal")}</p><p className="truncate text-xs font-600 text-slate-700">{principal?.name || m.principal_user_id}</p><p className="mt-0.5 text-[10px] text-slate-400">{m.mandate_code} · {(m.collaborator_user_ids || []).length} {t("collaborateur(s)")}</p></div>{admin && <Button size="sm" variant="outline" className="h-8" onClick={() => setMandateDialog({ open:true, company:c, mandate:m })}><Users size={13} className="mr-1"/>{t("Affecter")}</Button>}</div>
+            : <div className="flex items-center justify-between gap-2"><span className="inline-flex items-center gap-1 text-xs font-600 text-amber-600"><CircleAlert size={13}/>{t("Mandat à configurer")}</span>{admin && <Button size="sm" variant="outline" className="h-8" onClick={() => setMandateDialog({ open:true, company:c, mandate:null })}>{t("Configurer")}</Button>}</div>}
+          </div>}
+        </div>;
+      })}
+      {!loading && rows.length === 0 && <div className="col-span-full rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center"><Building2 className="mx-auto mb-3 text-slate-300" size={34}/><p className="text-sm font-600 text-slate-500">{t("Aucune société trouvée")}</p>{admin && <p className="mt-1 text-xs text-slate-400">{t("Créez votre première société pour commencer.")}</p>}</div>}
+    </div>
+
+    <ImportCompaniesDialog open={importOpen} onOpenChange={setImportOpen} onDone={load}/>
+    {companyDialog.open && <CompanyForm open={companyDialog.open} onOpenChange={(v) => setCompanyDialog((p) => ({...p, open:v}))} initial={companyDialog.item} onSubmit={saveCompany} saving={saving}/>} 
+    {mandateDialog.open && <MandateForm open={mandateDialog.open} onOpenChange={(v) => setMandateDialog((p) => ({...p, open:v}))} company={mandateDialog.company} mandate={mandateDialog.mandate} users={users} onSubmit={saveMandate} saving={saving}/>} 
+  </div>;
+}

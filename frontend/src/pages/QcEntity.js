@@ -109,7 +109,7 @@ function OpeningBalancesDialog({ open, onOpenChange, year, locked, canEdit }) {
 export default function QcEntity() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const canEdit = user?.role === "admin" || user?.role === "editor";
+  const canEdit = ["admin", "user", "editor"].includes(user?.role);
   const [tab, setTab] = useState("entries");
   const [years, setYears] = useState([]);
   const [activeYear, setActiveYear] = useState(null);

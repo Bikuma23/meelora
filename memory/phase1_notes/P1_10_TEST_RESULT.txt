@@ -1,0 +1,22 @@
+P1.10 LOCAL VALIDATION
+======================
+
+Command:
+  PYTHONPATH=backend python -m pytest -q -c /dev/null backend/tests/test_phase1_*.py
+Result:
+  44 passed
+
+Command:
+  python -m compileall -q backend
+Result:
+  PASS
+
+Command:
+  REACT_APP_BACKEND_URL=http://example.invalid PYTHONPATH=backend python -m pytest -q -c /dev/null --collect-only backend/tests/test_admin_write_guard.py backend/tests/test_role_matrix_editor.py
+Result:
+  27 tests collected
+
+Not executed locally:
+- deployed HTTP integration tests (no running preview backend / test DB)
+- frontend production build (node_modules absent)
+- repository pytest config with xdist (plugin unavailable in this runtime)

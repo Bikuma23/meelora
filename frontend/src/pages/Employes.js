@@ -198,7 +198,7 @@ export default function Employes() {
   const { t } = useLang();
   const { user } = useAuth();
   const { year } = useYear();
-  const canEdit = ["admin", "editor"].includes(user?.role);
+  const canEdit = ["admin", "user", "editor"].includes(user?.role);
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [query, setQuery] = useState("");

@@ -48,14 +48,18 @@ export const api = {
   listUsers: () => client.get("/users").then((r) => r.data),
   createUser: (d) => client.post("/users", d).then((r) => r.data),
   updateUser: (id, d) => client.put(`/users/${id}`, d).then((r) => r.data),
-  deleteUser: (id) => client.delete(`/users/${id}`).then((r) => r.data),
+  deactivateUser: (id) => client.delete(`/users/${id}`).then((r) => r.data),
+  deleteUser: (id) => client.delete(`/users/${id}`).then((r) => r.data), // P1.7 alias
+  getUserCompanyAccess: (id) => client.get(`/users/${id}/company-access`).then((r) => r.data),
+  replaceUserCompanyAccess: (id, assignments) => client.put(`/users/${id}/company-access`, { assignments }).then((r) => r.data),
 
   listDepartments: () => client.get("/departments").then((r) => r.data),
   createDepartment: (d) => client.post("/departments", d).then((r) => r.data),
   updateDepartment: (id, d) => client.put(`/departments/${id}`, d).then((r) => r.data),
   deleteDepartment: (id) => client.delete(`/departments/${id}`).then((r) => r.data),
 
-  getJournal: () => client.get("/journal").then((r) => r.data),
+  getLogs: (params) => client.get("/logs", { params: params || {} }).then((r) => r.data),
+  getJournal: () => client.get("/journal").then((r) => r.data), // deprecated P1.6 compatibility
   downloadReport: (kind, department, year, scenario) => client.get(`/reports/${kind}`, {
     params: { ...(department && department !== "all" ? { department } : {}), ...(year ? { year } : {}), ...(scenario ? { scenario } : {}) }, responseType: "blob",
   }).then((r) => r.data),
@@ -67,6 +71,15 @@ export const api = {
   getPreferences: () => client.get("/me/preferences").then((r) => r.data),
   updatePreferences: (body) => client.put("/me/preferences", body).then((r) => r.data),
   getCompanies: () => client.get("/companies").then((r) => r.data),
+  previewCompaniesImport: (file) => { const fd = new FormData(); fd.append("file", file); return client.post("/companies/import/preview", fd).then((r) => r.data); },
+  commitCompaniesImport: (file) => { const fd = new FormData(); fd.append("file", file); return client.post("/companies/import/commit", fd).then((r) => r.data); },
+  getCompany: (id) => client.get(`/companies/${id}`).then((r) => r.data),
+  createCompany: (body) => client.post("/companies", body).then((r) => r.data),
+  updateCompany: (id, body) => client.patch(`/companies/${id}`, body).then((r) => r.data),
+  listMandates: () => client.get("/mandates").then((r) => r.data),
+  getMandate: (id) => client.get(`/mandates/${id}`).then((r) => r.data),
+  createMandate: (body) => client.post("/mandates", body).then((r) => r.data),
+  updateMandate: (id, body) => client.patch(`/mandates/${id}`, body).then((r) => r.data),
   getNotifications: () => client.get("/notifications").then((r) => r.data),
   uploadAvatar: (file) => {
     const fd = new FormData();

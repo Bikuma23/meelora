@@ -24,7 +24,7 @@ export default function Rapports() {
   const { year, years, selectYear } = useYear();
   const { user } = useAuth();
   const { t } = useLang();
-  const isAdmin = ["admin", "editor"].includes(user?.role);
+  const isAdmin = ["admin", "user", "editor"].includes(user?.role);
   const [departments, setDepartments] = useState([]);
   const [dept, setDept] = useState("all");
   const [scenario, setScenario] = useState("ca");

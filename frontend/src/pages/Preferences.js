@@ -55,7 +55,7 @@ export default function Preferences() {
         <div>
           <div className="flex items-center gap-2">
             <p className="font-700">{user?.name}</p>
-            <span className="rounded-full px-2 py-0.5 text-[10px] font-700 uppercase" style={{ backgroundColor: (user?.role === "admin" ? "#0F172A" : user?.role === "editor" ? "#22C55E" : "#64748B") + "22", color: user?.role === "admin" ? "#0F172A" : user?.role === "editor" ? "#22C55E" : "#64748B" }} data-testid="profile-role-badge">{user?.role === "admin" ? t("Administrateur") : user?.role === "editor" ? t("Éditeur") : t("Utilisateur")}</span>
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-700 uppercase" style={{ backgroundColor: (user?.role === "admin" ? "#0F172A" : "#64748B") + "22", color: user?.role === "admin" ? "#0F172A" : "#64748B" }} data-testid="profile-role-badge">{user?.role === "admin" ? t("Administrateur") : t("Utilisateur")}</span>
           </div>
           <p className="text-xs text-slate-500">{user?.email}</p>
         </div>

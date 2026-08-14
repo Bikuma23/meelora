@@ -80,7 +80,7 @@ function DeptForm({ open, onOpenChange, initial, onSubmit }) {
 export default function Departements() {
   const { user } = useAuth();
   const { t } = useLang();
-  const canEdit = ["admin", "editor"].includes(user?.role);
+  const canEdit = ["admin", "user", "editor"].includes(user?.role);
   const [depts, setDepts] = useState([]);
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState({ open: false, item: null });

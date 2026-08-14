@@ -19,8 +19,9 @@ import SalairesBudget from "../pages/SalairesBudget";
 import Hypotheses from "../pages/Hypotheses";
 import Departements from "../pages/Departements";
 import Rapports from "../pages/Rapports";
-import Journal from "../pages/Journal";
+import Logs from "../pages/Logs";
 import UsersPage from "../pages/Users";
+import CompaniesPage from "../pages/Companies";
 import Preferences from "../pages/Preferences";
 import { applyTheme } from "../lib/theme";
 import { AcctDashboard, AcctBV, AcctBilan, AcctPnl, AcctCashflow, AcctReports } from "../pages/Comptabilite";
@@ -34,8 +35,9 @@ const PAGES = {
   hypotheses: { title: "Hypothèses", sub: "Taux & paramètres", comp: Hypotheses },
   departements: { title: "Départements", sub: "Codes & superviseurs", comp: Departements },
   rapports: { title: "Rapports", sub: "Prédéfinis & custom", comp: Rapports },
+  companies: { title: "Sociétés / Mandats", sub: "Portefeuille & affectations", comp: CompaniesPage },
   utilisateurs: { title: "Utilisateurs", sub: "Comptes & accès", comp: UsersPage },
-  journal: { title: "Journal", sub: "Historique des modifications", comp: Journal },
+  logs: { title: "Logs", sub: "Historique des activités", comp: Logs },
   preferences: { title: "Mon profil", sub: "Préférences & apparence", comp: Preferences },
   acct_dashboard: { title: "Tableau de bord", sub: "Vue d'ensemble du mois", comp: AcctDashboard },
   acct_bv: { title: "Balance de vérification", sub: "Upload & gestion mensuelle", comp: AcctBV },
@@ -56,6 +58,9 @@ const NAV_ACCT = [
 const NAV_GROUP = [
   { key: "dashboard", label: "Tableau de bord", sub: "Vue globale", icon: LayoutDashboard },
 ];
+const NAV_FOUNDATION = [
+  { key: "companies", label: "Sociétés / Mandats", sub: "Portefeuille & affectations", icon: Building2 },
+];
 const BUDGET_PARENT = { key: "budget", label: "Salaires & Budget", sub: "Saisie & calculs", icon: DollarSign };
 const BUDGET_CHILDREN = [
   { key: "employes", label: "Employés", icon: Users },
@@ -64,7 +69,7 @@ const BUDGET_CHILDREN = [
   { key: "rapports", label: "Rapports", icon: FileText },
 ];
 const NAV_BOTTOM = [
-  { key: "journal", label: "Journal", sub: "Historique des modifications", icon: ScrollText },
+  { key: "logs", label: "Logs", sub: "Historique des activités", icon: ScrollText },
 ];
 
 export function MeeloraLogo({ compact = false, className = "" }) {
@@ -81,7 +86,7 @@ export function MeeloraLogo({ compact = false, className = "" }) {
 
 const ROLE_META = {
   admin: { label: "Admin", c: "#0F172A" },
-  editor: { label: "Éditeur", c: "#22C55E" },
+  editor: { label: "Utilisateur", c: "#64748B" },
   user: { label: "Utilisateur", c: "#64748B" },
 };
 
@@ -387,7 +392,7 @@ function LayoutInner() {
     return () => { window.removeEventListener("acct-presentation", ph); document.removeEventListener("fullscreenchange", fh); };
   }, []);
   const exitPresentation = () => { try { document.exitFullscreen?.(); } catch (e) { /* ignore */ } setPresentation(false); };
-  const roleMeta = { admin: { label: "Admin", c: "#0F172A", t: "#93B4FF" }, editor: { label: "Éditeur", c: "#22C55E", t: "#5EEAD4" }, user: { label: "Utilisateur", c: "#64748B", t: "#94A3B8" } }[user?.role] || { label: "Utilisateur", c: "#64748B", t: "#94A3B8" };
+  const roleMeta = { admin: { label: "Admin", c: "#0F172A", t: "#93B4FF" }, editor: { label: "Utilisateur", c: "#64748B", t: "#94A3B8" }, user: { label: "Utilisateur", c: "#64748B", t: "#94A3B8" } }[user?.role] || { label: "Utilisateur", c: "#64748B", t: "#94A3B8" };
   useEffect(() => { api.getPreferences().then((p) => { applyTheme(p?.theme); if (p?.avatar_color) setAvatarColor(p.avatar_color); }).catch(() => {}); }, []);
 
   return (
@@ -401,10 +406,19 @@ function LayoutInner() {
 
         <nav className="flex-1 space-y-1 overflow-y-auto">
           <div className="flex items-center gap-2 px-3 pb-1 pt-1">
+            <LayoutDashboard size={13} className="text-[#22C55E]" />
+            <span className="overline" style={{ color: "#94A3B8" }}>{t("Vue globale")}</span>
+          </div>
+          {NAV_GROUP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
+          <div className="flex items-center gap-2 px-3 pb-1 pt-4">
+            <Building2 size={13} className="text-[#22C55E]" />
+            <span className="overline" style={{ color: "#94A3B8" }}>{t(user?.workspace?.organization_type === "fiduciary" ? "Mandats" : "Sociétés")}</span>
+          </div>
+          {NAV_FOUNDATION.map((i) => <NavItem key={i.key} item={{ ...i, label: user?.workspace?.organization_type === "fiduciary" ? "Tous les mandats" : "Sociétés" }} active={active} onClick={go} />)}
+          <div className="flex items-center gap-2 px-3 pb-1 pt-4">
             <Briefcase size={13} className="text-[#22C55E]" />
             <span className="overline" style={{ color: "#94A3B8" }}>{t("Masse Salariale")}</span>
           </div>
-          {NAV_GROUP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
           <NavParent item={BUDGET_PARENT} children={BUDGET_CHILDREN} active={active} onClick={go} />
           <div className="flex items-center gap-2 px-3 pb-1 pt-4">
             <Calculator size={13} className="text-[#22C55E]" />
@@ -425,7 +439,7 @@ function LayoutInner() {
           <div className="flex min-w-0 items-center gap-2.5">
             <button className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden" onClick={() => setMobileOpen(true)} data-testid="sidebar-open-btn"><Menu size={22} /></button>
             <div className="min-w-0">
-              <p className="overline mb-0.5" data-testid="breadcrumb">{active.startsWith("acct_") ? t("Comptabilité") : t("Masse salariale")} <span className="mx-1 text-slate-300">›</span> {t(page.title)}</p>
+              <p className="overline mb-0.5" data-testid="breadcrumb">{active === "companies" ? t(user?.workspace?.organization_type === "fiduciary" ? "Mandats" : "Sociétés") : active.startsWith("acct_") ? t("Comptabilité") : t("Masse salariale")} <span className="mx-1 text-slate-300">›</span> {t(page.title)}</p>
               <h2 className="font-display truncate text-lg font-800 tracking-tight text-[#0F172A] dark:text-white sm:text-2xl">{t(page.title)}</h2>
               <p className="truncate text-xs text-slate-500">{t(page.sub)}</p>
             </div>

@@ -75,7 +75,7 @@ export default function SalairesBudget() {
   const lockKey = `${year}:${scenario}`;
   const lockInfo = locks[lockKey];
   const locked = !!lockInfo?.locked;
-  const canEdit = isAdmin || (user?.role === "editor" && !locked);
+  const canEdit = isAdmin || (["user", "editor"].includes(user?.role) && !locked);
 
   const load = () => api.getBudget({ year, scenario }).then(setB);
   const loadLocks = () => api.getLocks({ year }).then(setLocks);

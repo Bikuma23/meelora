@@ -18,6 +18,7 @@ export const EN = {
   "Flux de trésorerie": "Cash Flow",
   "Rapports d'audit": "Audit Reports",
   "Journal": "Journal",
+  "Logs": "Logs",
   "Utilisateurs": "Users",
   "Mon profil": "My Profile",
   // subs

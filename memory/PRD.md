@@ -776,3 +776,66 @@ Basée sur « Facturation - Frais de gestion 2021 Commandité.xlsx » + import d
 - [x] **Menu utilisateur (tâche crayon)** : item 'Retirer la photo' supprimé du menu. Au survol de la photo (en-tête du dropdown) : bouton CRAYON (data-testid='avatar-change') → ouvre l'input fichier ; bouton CROIX (data-testid='avatar-remove') visible au survol quand une photo existe → retire la photo.
 - [x] **Vérifié** : testing_agent iteration_47 = **100% frontend** (import `UserAvatar` repositionné dans Users.js par l'agent). Excel vérifié via curl.
 
+
+# ============================================================
+# MEELORA V2 — MIGRATION STRANGLER (7 phases)
+# ============================================================
+## PHASE 1 — FONDATION (2026-08-14) ✅ TERMINÉE
+Modèle de tenancy : WORKSPACE > COMPANY > données financières. Non destructif, backend-first.
+- **Collections nouvelles** : `workspaces` {id,name,organization_type(company|group|fiduciary),primary_jurisdiction(CH|CA),jurisdictions[],onboarding_complete,created_at} · `company_access` {id,workspace_id,company_id,user_id,role(principal|collaborator)} (= AUTORITÉ de sécurité) · `mandates` {id,workspace_id,company_id,code,principal_user,collaborators[],status}.
+- **Champs ajoutés** : companies(workspace_id,company_type,industry ; jurisdiction préexistait 'CA-QC') · users(workspace_id) · journal(workspace_id).
+- **Backend** (`server.py`) : helpers `_ws_id`, `_accessible_company_ids` (admin=toutes sociétés du workspace ; user=sociétés assignées), `require_company_access` (404 si hors périmètre). Endpoints : `/auth/me` (workspace+org type), `/workspace`, `/onboarding` (POST, verrouillé si onboarding_complete), `/logs` (admin-only, scopé workspace), `/company-access` (GET/POST/DELETE), `/mandates` (GET/POST). `/companies` scopé workspace+accès. `log_action` stampe workspace_id.
+- **Frontend** : 'Journal d'audit' → **'Logs'** (admin-only, nav-journal). Écran `Onboarding.jsx` (affiché si admin && onboarding_complete===false). `api.completeOnboarding/getWorkspace`.
+- **Migration** : `scripts/phase1_foundation.py` (DRY-RUN → COMMIT, idempotente) — workspace 'Meelora' (company, CA, CH+CA) créé ; 2 sociétés + admin rattachés ; company_access admin=principal ×2 ; 1026 logs stampés. Re-run = 0 changement.
+- **Tests** : testing_agent iteration_48 — backend 9/9 critiques, frontend 100%, aucune régression du core existant.
+- **⚠️ Warnings / dépendances legacy restantes** :
+  1. `require_company_access` câblé sur `/companies` + endpoints V2 UNIQUEMENT ; les routes legacy `acct_*`/`qc9434_*` filtrent par company_id mais NE vérifient PAS encore l'assignation user (à durcir).
+  2. Rôle legacy `editor` conservé (non normalisé vers `user`) — rapporté seulement.
+  3. Un seul utilisateur admin existe → scoping `user` non testé end-to-end (pas de compte user de test).
+  4. Collections legacy `acct_*`/`qc9434_*` intactes (nettoyage = Phase 7).
+- **Prochaine étape recommandée** : soit (A) durcir l'enforcement `company_access` sur les routes legacy + gestion des utilisateurs/assignations (UI admin) ; soit (B) démarrer PHASE 2 — Financial Core (financial_years/periods, accounts, imports, trial balance & journal normalisés). **EN ATTENTE D'APPROBATION.**
+
+
+## PHASE 1 — RÉIMPLÉMENTATION MODULAIRE P1.10 (2026-08-14) ✅ INTÉGRÉE & VALIDÉE — SUPERSEDES la section ci-dessus
+Le client a fourni `meelora_phase1_p1_10.zip` : réimplémentation modulaire, propre et testée de la Phase 1 (P1.1→P1.10), construite AU-DESSUS du travail de session (avatars/notifications/logo intacts). Elle REMPLACE l'approche ad-hoc `phase1_foundation.py` + `Onboarding.jsx`.
+
+### Architecture intégrée
+- **`backend/core/`** (nouveau, modulaire) : `workspaces.py`, `auth_context.py`, `permissions.py`, `company_access.py`, `companies.py`, `mandates.py`, `logs.py`, `access_management.py`, `company_imports.py`.
+- **`server.py`** : importe `core/*`; `get_current_user` charge le workspace (fail-closed 403 si workspace manquant/inactif) ; routes fondation déléguées aux services core.
+- **Scripts migration séparés (dry-run→commit)** : `migrate_phase1_workspace.py`, `migrate_phase1_company_access.py`, `migrate_phase1_logs.py`, `migrate_phase1_mandates.py`.
+- **Frontend** : nouvelles pages `Companies.js` (label Sociétés/Mandats selon org_type) + `Logs.js` ; `Layout.js` NAV_FOUNDATION ; suppression de `Onboarding.jsx`/`Journal.js`. Pages financières + P1.10 role-compat (Employes/Departements/SalairesBudget/Comptabilite/Rapports/Preferences/Users) mises à jour.
+
+### Modèle de données (schéma P1.10 — DIFFÉRENT de l'ancien)
+- `workspaces` : `_id="ws_<hex>"` (STRING, = identifiant tenant), `name`, `organization_type`(company|group|fiduciary), `jurisdiction`, `primary_admin_user_id`, `status`, `onboarding_completed`.
+- `companies` : `id`(uuid/`cmp_`), `workspace_id`(→ws _id), `name`, `company_code`, `jurisdiction`, `status`, `active`, `legacy_prefix`(pont acct/qc9434).
+- `company_access` (AUTORITÉ sécurité) : `_id="cacc_"`, `workspace_id`, `company_id`, `user_id`, `access_role`(principal|collaborator), `active`. Index unique partiel : 1 principal actif/société.
+- `mandates` (fiduciaire only) : `_id="mnd_"`, `workspace_id`, `company_id`, `mandate_code`, `principal_user_id`, `collaborator_user_ids[]`, `status`. Index uniques partiels (1 mandat actif/société, code unique).
+- `users` : `workspace_id`, `status`. `logs` : collection immuable admin-only scopée workspace (dual-write journal conservé).
+
+### Réconciliation DB (approuvée par le client)
+L'ancienne migration avait laissé un schéma incompatible (workspace `_id`=ObjectId+`id`uuid, `role` au lieu de `access_role`, `primary_jurisdiction`). Reset des 3 collections fondation (workspaces/company_access/mandates) + retrait workspace_id/status sur users/companies → état legacy. **Données financières `acct_*`/`qc9434_*` + `journal` JAMAIS touchées** (comptes vérifiés identiques avant/après).
+
+### Migrations exécutées (dry-run → commit)
+- Workspace : **Meelora / fiduciary / CA** (`ws_56c492936ea64c4db53a2f14a0825ef5`), admin@accslegro.com rattaché + 2 sociétés (Meelora/acct, 9434/qc9434).
+- company_access : indexes créés (0 accès inféré du legacy — pas d'invention de principal).
+- logs : 1027 lignes journal → logs (idempotent, journal conservé). Remap workspace_id périmé→nouveau ws (les lignes journal legacy portaient l'ancien uuid).
+- mandates : indexes. **BUG CORRIGÉ** : `partialFilterExpression {status:{$ne:"inactive"}}` invalide sous MongoDB → remplacé par `{status:"active"}` (égalité supportée).
+- **Fix core** : `_load_workspace_user`/`_workspace_user` rendus robustes (ObjectId `_id` en prod + fallback `id` string) — corrige 5 tests unitaires bson-env.
+
+### Validation (2026-08-14)
+- **Tests unitaires Phase 1** : 44/44 PASS (`tests/test_phase1_*.py`, pytest-asyncio installé). Ancien `test_phase1_foundation.py` supprimé (endpoints disparus).
+- **Matrice sécurité (curl)** : admin→2 sociétés ; Julie→[Meelora] ; Marc→[Meelora,9434] ; Julie GET company B=403, company A=200, inconnu=404 (pas d'énumération) ; Julie /logs=403 (admin-only).
+- **Mandats** : création→sync company_access ; doublon actif/société=409 ; PATCH inactive→révocation accès. Import Excel PREVIEW : lignes valides/erreurs bloquantes (juridiction, doublon code)/warnings détectés, 0 société créée (non destructif).
+- **P1.10 régression** : Julie (role user) PEUT écrire (POST/DELETE départements=200) mais bloquée sur routes admin (users, hypotheses=403). NON read-only.
+- **Régression financière** : tous endpoints acct_*/qc9434_* (dashboard, kpis, cashflow, trial-balance, bilan, pnl, entries, invoices, bills) = 200 avec params ; export Excel = fichier xlsx valide. Aucune régression.
+- **STEP 14** : 0 user/company sans workspace_id ; 0 accès cross-workspace ; 0 doublon principal/mandat actif ; collections financières + journal intacts. **PASS**.
+
+### Comptes de test (voir /app/memory/test_credentials.md)
+admin@accslegro.com/admin123 · julie@accslegro.com/julie123 (Meelora only) · marc@accslegro.com/marc123 (Meelora+9434).
+
+### ⚠️ Dépendances legacy restantes (à traiter en Phase 2+)
+1. Routes legacy `acct_*`/`qc9434_*` filtrent par company_id mais N'appliquent PAS encore `require_company_access` (durcissement Financial Core).
+2. Rôle legacy `editor` exposé comme `user` (normalisation DB à finaliser).
+3. `legacy_prefix` maintenu comme pont (retiré à la migration Financial Core).
+
+### STATUT : Phase 1 production-ready. **STOP — EN ATTENTE D'APPROBATION EXPLICITE AVANT PHASE 2 (Financial Core).**

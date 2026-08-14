@@ -1,6 +1,6 @@
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
 
-const ROLE_COLORS = { admin: "#0F172A", editor: "#22C55E", user: "#64748B" };
+const ROLE_COLORS = { admin: "#0F172A", editor: "#64748B", user: "#64748B" };
 
 export function getInitials(name) {
   const p = (name || "").trim().split(/\s+/).filter(Boolean);

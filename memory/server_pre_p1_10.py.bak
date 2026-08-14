@@ -27,13 +27,6 @@ import requests
 import presentation_reports
 import openpyxl
 from accounting import ReportEngine
-from core.auth_context import load_workspace_for_user, build_auth_user, auth_me_payload
-from core.companies import CompanyCreate, CompanyUpdate, list_companies_for_user, get_company_for_user, create_company_for_admin, update_company_for_admin
-from core.mandates import MandateCreate, MandateUpdate, list_mandates_for_user, get_mandate_for_user, create_mandate_for_admin, update_mandate_for_admin
-from core.logs import write_log, list_logs_for_admin
-from core.access_management import UserCompanyAccessUpdate, list_user_company_access, replace_user_company_access
-from core.permissions import require_tenant_context
-from core.company_imports import preview_company_import, commit_company_import
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -120,19 +113,12 @@ async def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Non authentifié")
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
-        user_doc = await db.users.find_one({"_id": ObjectId(payload["sub"])})
-        if not user_doc:
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        if not user:
             raise HTTPException(status_code=401, detail="Utilisateur introuvable")
-        if user_doc.get("status", "active") != "active":
-            raise HTTPException(status_code=403, detail="Compte utilisateur inactif")
-
-        workspace_doc = await load_workspace_for_user(db, user_doc)
-        if user_doc.get("workspace_id") and not workspace_doc:
-            # A migrated user pointing to a missing workspace is an integrity
-            # error. Fail closed rather than silently losing tenant isolation.
-            raise HTTPException(status_code=403, detail="Workspace utilisateur introuvable")
-
-        return build_auth_user(user_doc, workspace_doc)
+        user["id"] = str(user.pop("_id"))
+        user.pop("password_hash", None)
+        return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Session expirée")
     except jwt.InvalidTokenError:
@@ -149,39 +135,15 @@ async def require_admin(user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
     return user
 
-async def log_action(
-    user, action, entity, label, details="", changes=None, *,
-    company_id=None, mandate_id=None, entity_id=None, event_type=None,
-    severity="info", metadata=None,
-):
-    """Compatibility wrapper during P1.6.
-
-    New immutable events are written to ``logs``. We temporarily dual-write to
-    the legacy ``journal`` collection so old deployments/UI remain compatible
-    until the migration is committed and the legacy endpoint is retired.
-    """
-    event = await write_log(
-        db, user, action=action, entity=entity, label=label, details=details,
-        changes=changes, company_id=company_id, mandate_id=mandate_id,
-        entity_id=entity_id, event_type=event_type, severity=severity,
-        metadata=metadata,
-    )
+async def log_action(user, action, entity, label, details="", changes=None):
     await db.journal.insert_one({
-        "timestamp": event["timestamp"],
-        "workspace_id": event.get("workspace_id"),
-        "user_id": event.get("user_id"),
-        "user_email": event.get("user_email", "système"),
-        "user_name": event.get("user_name", ""),
-        "company_id": company_id,
-        "mandate_id": mandate_id,
-        "entity_id": entity_id,
-        "event_type": event.get("event_type"),
-        "severity": severity,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "user_email": user.get("email", "système"),
+        "user_name": user.get("name", ""),
+        "workspace_id": user.get("workspace_id"),
         "action": action, "entity": entity, "label": label, "details": details,
         "changes": changes or [],
-        "metadata": {**(metadata or {}), "p1_6_log_id": event["_id"]},
     })
-    return event
 
 def _fmt_pct(v):
     try:
@@ -690,7 +652,7 @@ async def login(payload: LoginPayload, response: Response):
     uid = str(user["_id"])
     token = create_token(uid, email)
     response.set_cookie("access_token", token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
-    return {"token": token, "user": {"id": uid, "email": email, "name": user.get("name", ""), "role": _normalized_role(user.get("role", "user"))}}
+    return {"token": token, "user": {"id": uid, "email": email, "name": user.get("name", ""), "role": user.get("role", "user")}}
 
 @api.post("/auth/logout")
 async def logout(response: Response, user: dict = Depends(get_current_user)):
@@ -699,7 +661,19 @@ async def logout(response: Response, user: dict = Depends(get_current_user)):
 
 @api.get("/auth/me")
 async def me(user: dict = Depends(get_current_user)):
-    return auth_me_payload(user)
+    prefs = user.get("preferences") or {}
+    ws = None
+    if user.get("workspace_id"):
+        ws = await db.workspaces.find_one({"id": user["workspace_id"]})
+    if not ws:
+        ws = await db.workspaces.find_one({})
+    return {"id": user["id"], "email": user["email"], "name": user.get("name", ""), "role": user.get("role", "user"),
+            "has_avatar": bool(prefs.get("avatar_path")),
+            "workspace_id": (ws or {}).get("id"),
+            "workspace_name": (ws or {}).get("name"),
+            "organization_type": (ws or {}).get("organization_type"),
+            "primary_jurisdiction": (ws or {}).get("primary_jurisdiction"),
+            "onboarding_complete": bool((ws or {}).get("onboarding_complete", False))}
 
 @api.get("/me/preferences")
 async def get_preferences(user: dict = Depends(get_current_user)):
@@ -758,80 +732,20 @@ async def get_avatar(uid: str):
 
 @api.get("/companies")
 async def list_companies(user: dict = Depends(get_current_user)):
-    """List only companies visible to the authenticated user (P1.4)."""
-    return await list_companies_for_user(db, user)
-
-
-@api.post("/companies/import/preview")
-async def preview_companies_import(file: UploadFile = File(...), user: dict = Depends(require_admin)):
-    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm")): raise HTTPException(status_code=422, detail="Format attendu: .xlsx")
-    return await preview_company_import(db, user, await file.read())
-
-@api.post("/companies/import/commit")
-async def commit_companies_import(file: UploadFile = File(...), user: dict = Depends(require_admin)):
-    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm")): raise HTTPException(status_code=422, detail="Format attendu: .xlsx")
-    result = await commit_company_import(db, user, await file.read())
-    await log_action(user, "import", "company", file.filename, details=f"Import sociétés: {result['created']} créée(s)", event_type="company.bulk_imported")
-    return result
-
-@api.post("/companies", status_code=201)
-async def create_company(payload: CompanyCreate, user: dict = Depends(require_admin)):
-    company = await create_company_for_admin(db, user, payload)
-    await log_action(user, "create", "company", company.get("name") or company.get("legal_name", ""),
-                     details=f"Société créée: {company.get('id')}",
-                     company_id=company.get("id"), entity_id=company.get("id"),
-                     event_type="company.created")
-    return company
-
-
-@api.get("/companies/{company_id}")
-async def get_company(company_id: str, user: dict = Depends(get_current_user)):
-    return await get_company_for_user(db, company_id, user)
-
-
-@api.patch("/companies/{company_id}")
-async def update_company(company_id: str, payload: CompanyUpdate, user: dict = Depends(require_admin)):
-    before = await get_company_for_user(db, company_id, user, admin_required=True)
-    company = await update_company_for_admin(db, company_id, user, payload)
-    await log_action(user, "update", "company", company.get("name") or company.get("legal_name", ""),
-                     details=f"Société modifiée: {company_id}",
-                     changes=[{"field": k, "before": before.get(k), "after": company.get(k)}
-                              for k in payload.model_dump(exclude_unset=True).keys()],
-                     company_id=company_id, entity_id=company_id, event_type="company.updated")
-    return company
-
-
-@api.get("/mandates")
-async def list_mandates(user: dict = Depends(get_current_user)):
-    return await list_mandates_for_user(db, user)
-
-
-@api.post("/mandates", status_code=201)
-async def create_mandate(payload: MandateCreate, user: dict = Depends(require_admin)):
-    mandate = await create_mandate_for_admin(db, user, payload)
-    await log_action(user, "create", "mandate", mandate.get("mandate_code", ""),
-                     details=f"Mandat créé: {mandate.get('id')} · société {mandate.get('company_id')}",
-                     company_id=mandate.get("company_id"), mandate_id=mandate.get("id"),
-                     entity_id=mandate.get("id"), event_type="mandate.created")
-    return mandate
-
-
-@api.get("/mandates/{mandate_id}")
-async def get_mandate(mandate_id: str, user: dict = Depends(get_current_user)):
-    return await get_mandate_for_user(db, mandate_id, user)
-
-
-@api.patch("/mandates/{mandate_id}")
-async def update_mandate(mandate_id: str, payload: MandateUpdate, user: dict = Depends(require_admin)):
-    before = await get_mandate_for_user(db, mandate_id, user)
-    mandate = await update_mandate_for_admin(db, mandate_id, user, payload)
-    await log_action(user, "update", "mandate", mandate.get("mandate_code", ""),
-                     details=f"Mandat modifié: {mandate_id}",
-                     changes=[{"field": k, "before": before.get(k), "after": mandate.get(k)}
-                              for k in payload.model_dump(exclude_unset=True).keys()],
-                     company_id=mandate.get("company_id"), mandate_id=mandate_id,
-                     entity_id=mandate_id, event_type="mandate.updated")
-    return mandate
+    wid = await _ws_id(user)
+    q = {"active": {"$ne": False}}
+    docs = await db.companies.find(q).to_list(200)
+    allowed = await _accessible_company_ids(user)
+    out = []
+    for d in docs:
+        # scope workspace (tolérance strangler : société sans workspace_id visible)
+        if d.get("workspace_id") and wid and d["workspace_id"] != wid:
+            continue
+        if d.get("id") not in allowed:
+            continue
+        out.append({"id": d.get("id"), "name": d.get("name"), "legacy_prefix": d.get("legacy_prefix"),
+                    "company_type": d.get("company_type"), "jurisdiction": d.get("jurisdiction")})
+    return sorted(out, key=lambda x: x.get("legacy_prefix") or "")
 
 
 @api.get("/notifications")
@@ -867,92 +781,203 @@ async def notifications(user: dict = Depends(get_current_user)):
     return {"count": len(items), "overdue": overdue, "soon": len(items) - overdue, "items": items[:30]}
 
 
+# ============================================================
+# V2 — PHASE 1 : FONDATION (workspace / accès / mandats / logs)
+# ============================================================
+async def _ws_id(user: dict) -> str:
+    wid = user.get("workspace_id")
+    if wid:
+        return wid
+    ws = await db.workspaces.find_one({})
+    return ws["id"] if ws else None
+
+
+async def _accessible_company_ids(user: dict):
+    """admin -> toutes les sociétés du workspace ; user -> uniquement les sociétés assignées."""
+    wid = await _ws_id(user)
+    if user.get("role") == "admin":
+        docs = await db.companies.find({"workspace_id": wid}).to_list(500)
+        # tolérance strangler : inclure les sociétés sans workspace_id (pré-migration)
+        if not docs:
+            docs = await db.companies.find({}).to_list(500)
+        return {d.get("id") for d in docs}
+    rows = await db.company_access.find({"workspace_id": wid, "user_id": user["id"]}).to_list(500)
+    return {r["company_id"] for r in rows}
+
+
+async def require_company_access(company_id: str, user: dict):
+    """Vérifie l'accès société (backend-first). 404 si hors périmètre (pas de fuite d'existence)."""
+    allowed = await _accessible_company_ids(user)
+    if company_id not in allowed:
+        raise HTTPException(status_code=404, detail="Société introuvable")
+    return True
+
+
+@api.get("/workspace")
+async def get_workspace(user: dict = Depends(get_current_user)):
+    wid = await _ws_id(user)
+    ws = await db.workspaces.find_one({"id": wid}) if wid else None
+    if not ws:
+        return {"configured": False}
+    ws.pop("_id", None)
+    return {"configured": True, **ws}
+
+
+@api.post("/onboarding")
+async def onboarding(payload: dict, user: dict = Depends(require_admin)):
+    """Configure/complète le workspace (organization_type + juridiction) et crée éventuellement une 1re société.
+    Réglages structurels : non modifiables une fois onboarding_complete=True."""
+    wid = await _ws_id(user)
+    ws = await db.workspaces.find_one({"id": wid}) if wid else None
+    if ws and ws.get("onboarding_complete"):
+        raise HTTPException(status_code=400, detail="Onboarding déjà complété (réglages structurels verrouillés)")
+    org = payload.get("organization_type")
+    if org not in ("company", "group", "fiduciary"):
+        raise HTTPException(status_code=400, detail="organization_type invalide")
+    juris = payload.get("primary_jurisdiction")
+    if juris not in ("CH", "CA"):
+        raise HTTPException(status_code=400, detail="primary_jurisdiction invalide")
+    import uuid as _uuid
+    if not ws:
+        wid = str(_uuid.uuid4())
+        ws = {"id": wid, "created_at": datetime.now(timezone.utc).isoformat()}
+        await db.workspaces.insert_one(ws)
+        await db.users.update_one({"_id": ObjectId(user["id"])}, {"$set": {"workspace_id": wid}})
+    await db.workspaces.update_one({"id": wid}, {"$set": {
+        "name": (payload.get("name") or ws.get("name") or "Meelora").strip(),
+        "organization_type": org, "primary_jurisdiction": juris,
+        "jurisdictions": payload.get("jurisdictions") or ["CH", "CA"],
+        "onboarding_complete": True}})
+    created = None
+    fc = payload.get("first_company")
+    if fc and fc.get("name"):
+        cid = str(_uuid.uuid4())
+        await db.companies.insert_one({"id": cid, "workspace_id": wid, "name": fc["name"].strip(),
+            "company_type": fc.get("company_type", "operating"), "industry": fc.get("industry", ""),
+            "jurisdiction": fc.get("jurisdiction", juris), "active": True,
+            "created_at": datetime.now(timezone.utc).isoformat()})
+        await db.company_access.insert_one({"id": str(_uuid.uuid4()), "workspace_id": wid, "company_id": cid,
+            "user_id": user["id"], "role": "principal", "created_at": datetime.now(timezone.utc).isoformat()})
+        created = cid
+    await log_action({**user, "workspace_id": wid}, "Configurer", "Workspace", org)
+    return {"ok": True, "workspace_id": wid, "company_id": created}
+
+
+@api.get("/logs")
+async def get_logs(user: dict = Depends(require_admin)):
+    """Logs (admin-only, scopés workspace). Lecture seule."""
+    wid = await _ws_id(user)
+    docs = await db.journal.find({"$or": [{"workspace_id": wid}, {"workspace_id": {"$exists": False}}]}).sort("timestamp", -1).limit(300).to_list(300)
+    for d in docs:
+        d["id"] = str(d.pop("_id"))
+    return docs
+
+
+@api.get("/company-access")
+async def list_company_access(user: dict = Depends(require_admin)):
+    wid = await _ws_id(user)
+    rows = await db.company_access.find({"workspace_id": wid}).to_list(2000)
+    for r in rows:
+        r.pop("_id", None)
+    return rows
+
+
+@api.post("/company-access")
+async def set_company_access(payload: dict, user: dict = Depends(require_admin)):
+    import uuid as _uuid
+    wid = await _ws_id(user)
+    cid = payload.get("company_id"); uid = payload.get("user_id"); role = payload.get("role", "collaborator")
+    if role not in ("principal", "collaborator"):
+        raise HTTPException(status_code=400, detail="role invalide")
+    if not cid or not uid:
+        raise HTTPException(status_code=400, detail="company_id et user_id requis")
+    if role == "principal":
+        await db.company_access.update_many({"workspace_id": wid, "company_id": cid, "role": "principal"}, {"$set": {"role": "collaborator"}})
+    existing = await db.company_access.find_one({"workspace_id": wid, "company_id": cid, "user_id": uid})
+    if existing:
+        await db.company_access.update_one({"_id": existing["_id"]}, {"$set": {"role": role}})
+    else:
+        await db.company_access.insert_one({"id": str(_uuid.uuid4()), "workspace_id": wid, "company_id": cid,
+            "user_id": uid, "role": role, "created_at": datetime.now(timezone.utc).isoformat()})
+    return {"ok": True}
+
+
+@api.delete("/company-access")
+async def del_company_access(company_id: str, user_id: str, user: dict = Depends(require_admin)):
+    wid = await _ws_id(user)
+    await db.company_access.delete_one({"workspace_id": wid, "company_id": company_id, "user_id": user_id})
+    return {"ok": True}
+
+
+@api.get("/mandates")
+async def list_mandates(user: dict = Depends(require_admin)):
+    wid = await _ws_id(user)
+    rows = await db.mandates.find({"workspace_id": wid}).to_list(2000)
+    for r in rows:
+        r.pop("_id", None)
+    return rows
+
+
+@api.post("/mandates")
+async def upsert_mandate(payload: dict, user: dict = Depends(require_admin)):
+    import uuid as _uuid
+    wid = await _ws_id(user)
+    cid = payload.get("company_id")
+    if not cid:
+        raise HTTPException(status_code=400, detail="company_id requis")
+    doc = {"code": (payload.get("code") or "").strip(), "principal_user": payload.get("principal_user"),
+           "collaborators": payload.get("collaborators") or [], "status": payload.get("status", "active")}
+    existing = await db.mandates.find_one({"workspace_id": wid, "company_id": cid})
+    if existing:
+        await db.mandates.update_one({"_id": existing["_id"]}, {"$set": doc})
+        mid = existing["id"]
+    else:
+        mid = str(_uuid.uuid4())
+        await db.mandates.insert_one({"id": mid, "workspace_id": wid, "company_id": cid,
+            "created_at": datetime.now(timezone.utc).isoformat(), **doc})
+    return {"ok": True, "id": mid}
+
+
 # ---------------------------------------------------------------------------
 # Gestion des utilisateurs (admin uniquement)
 # ---------------------------------------------------------------------------
 class UserCreate(BaseModel):
-    email: str
+    email: EmailStr
     name: str
     password: str
-    role: Literal["admin", "user"] = "user"
+    role: Literal["admin", "editor", "user"] = "user"
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
-    role: Optional[Literal["admin", "user"]] = None
+    role: Optional[Literal["admin", "editor", "user"]] = None
     password: Optional[str] = None
-    status: Optional[Literal["active", "inactive"]] = None
 
-
-def _normalized_role(role: str) -> str:
-    # P1.7 removes the legacy editor role from the product surface while
-    # remaining compatible with rows not yet migrated in Mongo.
-    return "user" if role == "editor" else (role or "user")
-
-
-def _user_public(u, access_count=None):
-    payload = {
-        "id": str(u["_id"]),
-        "email": u["email"],
-        "name": u.get("name", ""),
-        "role": _normalized_role(u.get("role", "user")),
-        "status": u.get("status", "active"),
-        "workspace_id": u.get("workspace_id"),
-        "created_at": u.get("created_at", ""),
-    }
-    if access_count is not None:
-        payload["access_count"] = access_count
-    return payload
-
+def _user_public(u):
+    return {"id": str(u["_id"]), "email": u["email"], "name": u.get("name", ""), "role": u.get("role", "user"),
+            "created_at": u.get("created_at", "")}
 
 @api.get("/users")
 async def list_users(user: dict = Depends(require_admin)):
-    workspace_id = require_tenant_context(user)
-    docs = await db.users.find({"workspace_id": workspace_id}).sort("email", 1).to_list(1000)
-    counts = {}
-    async for row in db.company_access.aggregate([
-        {"$match": {"workspace_id": workspace_id, "active": True}},
-        {"$group": {"_id": "$user_id", "count": {"$sum": 1}}},
-    ]):
-        counts[str(row.get("_id"))] = row.get("count", 0)
-    return [
-        _user_public(u, access_count=(None if _normalized_role(u.get("role")) == "admin" else counts.get(str(u["_id"]), 0)))
-        for u in docs
-    ]
-
+    docs = await db.users.find().sort("email", 1).to_list(1000)
+    return [_user_public(u) for u in docs]
 
 @api.post("/users")
 async def create_user(payload: UserCreate, user: dict = Depends(require_admin)):
-    workspace_id = require_tenant_context(user)
-    email = payload.email.strip().lower()
-    # Login is still email-only in the legacy auth route, so email remains
-    # globally unique until a future identity-provider migration changes that.
+    email = payload.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Ce courriel existe déjà")
     if len(payload.password) < 6:
         raise HTTPException(status_code=400, detail="Le mot de passe doit contenir au moins 6 caractères")
-    now = datetime.now(timezone.utc).isoformat()
-    doc = {
-        "email": email,
-        "name": payload.name.strip(),
-        "password_hash": hash_password(payload.password),
-        "role": payload.role,
-        "status": "active",
-        "workspace_id": workspace_id,
-        "created_at": now,
-        "created_by": user.get("id"),
-    }
+    doc = {"email": email, "name": payload.name.strip(), "password_hash": hash_password(payload.password),
+           "role": payload.role, "created_at": datetime.now(timezone.utc).isoformat()}
     res = await db.users.insert_one(doc)
-    await log_action(user, "create", "user", f"{payload.name} ({email})",
-                     details=f"Utilisateur créé — rôle {payload.role}",
-                     entity_id=str(res.inserted_id), event_type="user.created")
+    await log_action(user, "Créer", "Utilisateur", f"{payload.name} ({email}) — {payload.role}")
     u = await db.users.find_one({"_id": res.inserted_id})
-    return _user_public(u, access_count=0 if payload.role != "admin" else None)
-
+    return _user_public(u)
 
 @api.put("/users/{uid}")
 async def update_user(uid: str, payload: UserUpdate, user: dict = Depends(require_admin)):
-    workspace_id = require_tenant_context(user)
-    target = await db.users.find_one({"_id": _oid(uid), "workspace_id": workspace_id})
+    target = await db.users.find_one({"_id": _oid(uid)})
     if not target:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
     upd = {}
@@ -962,65 +987,30 @@ async def update_user(uid: str, payload: UserUpdate, user: dict = Depends(requir
         if len(payload.password) < 6:
             raise HTTPException(status_code=400, detail="Le mot de passe doit contenir au moins 6 caractères")
         upd["password_hash"] = hash_password(payload.password)
-    if payload.role is not None and payload.role != _normalized_role(target.get("role")):
-        if _normalized_role(target.get("role")) == "admin" and payload.role != "admin":
-            admins = await db.users.count_documents({"workspace_id": workspace_id, "role": "admin", "status": {"$ne": "inactive"}})
+    if payload.role is not None and payload.role != target.get("role"):
+        if target.get("role") == "admin" and payload.role != "admin":
+            admins = await db.users.count_documents({"role": "admin"})
             if admins <= 1:
                 raise HTTPException(status_code=400, detail="Impossible de rétrograder le dernier administrateur")
         upd["role"] = payload.role
-    if payload.status is not None and payload.status != target.get("status", "active"):
-        if str(target["_id"]) == user["id"] and payload.status == "inactive":
-            raise HTTPException(status_code=400, detail="Vous ne pouvez pas désactiver votre propre compte")
-        if _normalized_role(target.get("role")) == "admin" and payload.status == "inactive":
-            admins = await db.users.count_documents({"workspace_id": workspace_id, "role": "admin", "status": {"$ne": "inactive"}})
-            if admins <= 1:
-                raise HTTPException(status_code=400, detail="Impossible de désactiver le dernier administrateur")
-        upd["status"] = payload.status
     if upd:
-        upd["updated_at"] = datetime.now(timezone.utc).isoformat()
-        upd["updated_by"] = user.get("id")
-        await db.users.update_one({"_id": _oid(uid), "workspace_id": workspace_id}, {"$set": upd})
-    await log_action(user, "update", "user", f"{target.get('name')} ({target['email']})",
-                     details="Utilisateur modifié", entity_id=uid, event_type="user.updated")
-    u = await db.users.find_one({"_id": _oid(uid), "workspace_id": workspace_id})
-    count = None if _normalized_role(u.get("role")) == "admin" else await db.company_access.count_documents({"workspace_id": workspace_id, "user_id": uid, "active": True})
-    return _user_public(u, access_count=count)
-
+        await db.users.update_one({"_id": _oid(uid)}, {"$set": upd})
+    await log_action(user, "Modifier", "Utilisateur", f"{target.get('name')} ({target['email']})")
+    u = await db.users.find_one({"_id": _oid(uid)})
+    return _user_public(u)
 
 @api.delete("/users/{uid}")
 async def delete_user(uid: str, user: dict = Depends(require_admin)):
-    """P1.7 compatibility route: DELETE now soft-deactivates instead of erasing."""
-    workspace_id = require_tenant_context(user)
-    target = await db.users.find_one({"_id": _oid(uid), "workspace_id": workspace_id})
+    target = await db.users.find_one({"_id": _oid(uid)})
     if not target:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
     if str(target["_id"]) == user["id"]:
-        raise HTTPException(status_code=400, detail="Vous ne pouvez pas désactiver votre propre compte")
-    if _normalized_role(target.get("role")) == "admin":
-        admins = await db.users.count_documents({"workspace_id": workspace_id, "role": "admin", "status": {"$ne": "inactive"}})
-        if admins <= 1:
-            raise HTTPException(status_code=400, detail="Impossible de désactiver le dernier administrateur")
-    now = datetime.now(timezone.utc).isoformat()
-    await db.users.update_one({"_id": _oid(uid), "workspace_id": workspace_id}, {"$set": {"status": "inactive", "updated_at": now, "updated_by": user.get("id")}})
-    await db.company_access.update_many({"workspace_id": workspace_id, "user_id": uid, "active": True, "access_role": "collaborator"}, {"$set": {"active": False, "updated_at": now, "updated_by": user.get("id")}})
-    await log_action(user, "deactivate", "user", f"{target.get('name')} ({target['email']})",
-                     details="Utilisateur désactivé", entity_id=uid, event_type="user.deactivated")
-    return {"success": True, "status": "inactive"}
-
-
-@api.get("/users/{uid}/company-access")
-async def get_user_company_access(uid: str, user: dict = Depends(require_admin)):
-    return await list_user_company_access(db, user, uid)
-
-
-@api.put("/users/{uid}/company-access")
-async def put_user_company_access(uid: str, payload: UserCompanyAccessUpdate, user: dict = Depends(require_admin)):
-    result = await replace_user_company_access(db, user, uid, payload)
-    await log_action(user, "update", "company_access", uid,
-                     details=f"Affectations sociétés mises à jour ({len(payload.assignments)})",
-                     entity_id=uid, event_type="company_access.user_replaced",
-                     metadata={"assignments": [a.model_dump() for a in payload.assignments]})
-    return result
+        raise HTTPException(status_code=400, detail="Vous ne pouvez pas supprimer votre propre compte")
+    if target.get("role") == "admin" and await db.users.count_documents({"role": "admin"}) <= 1:
+        raise HTTPException(status_code=400, detail="Impossible de supprimer le dernier administrateur")
+    await db.users.delete_one({"_id": _oid(uid)})
+    await log_action(user, "Supprimer", "Utilisateur", f"{target.get('name')} ({target['email']})")
+    return {"success": True}
 
 # ---------------------------------------------------------------------------
 # Departments
@@ -2271,32 +2261,9 @@ async def import_departments(file: UploadFile = File(...), user: dict = Depends(
     await log_action(user, "Créer", "Département", f"Import Excel — {inserted} département(s)")
     return {"inserted": inserted, "errors": [], "aborted": False}
 
-@api.get("/logs")
-async def get_logs(
-    limit: int = Query(300, ge=1, le=1000),
-    company_id: Optional[str] = None,
-    event_type: Optional[str] = None,
-    severity: Optional[str] = None,
-    user: dict = Depends(require_admin),
-):
-    """Read-only, workspace-scoped logs. Admin only."""
-    return await list_logs_for_admin(
-        db, user, limit=limit, company_id=company_id,
-        event_type=event_type, severity=severity,
-    )
-
-
-@api.get("/journal", deprecated=True)
+@api.get("/journal")
 async def get_journal(user: dict = Depends(require_admin)):
-    """P1.6 compatibility alias. Remove after frontend migration is complete."""
-    logs = await list_logs_for_admin(db, user, limit=300)
-    if logs:
-        return logs
-    # Transitional fallback before migrate_phase1_logs.py --commit. Scope even
-    # legacy reads so one admin can never inspect another workspace's journal.
-    workspace_id = user.get("workspace_id")
-    query = {"workspace_id": workspace_id} if workspace_id else {}
-    docs = await db.journal.find(query).sort("timestamp", -1).limit(300).to_list(300)
+    docs = await db.journal.find().sort("timestamp", -1).limit(300).to_list(300)
     for d in docs:
         d["id"] = str(d.pop("_id"))
     return docs
@@ -6804,8 +6771,8 @@ async def write_guard(request: Request, call_next):
                     if _is_admin_only_path(path):
                         if role != "admin":
                             return JSONResponse(status_code=403, content={"detail": "Action réservée aux administrateurs"})
-                    elif _normalized_role(role) not in ("admin", "user"):
-                        return JSONResponse(status_code=403, content={"detail": "Modification non autorisée"})
+                    elif role not in ("admin", "editor"):
+                        return JSONResponse(status_code=403, content={"detail": "Modification réservée aux administrateurs et éditeurs"})
             except Exception:
                 pass
     return await call_next(request)
