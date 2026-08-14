@@ -895,3 +895,19 @@ Périodes normalisées rattachées aux exercices (financial_years), en parallèl
 - **Reco P2.3** : Unified Accounts (plan de comptes normalisé) réutilisant `core/financial/`.
 
 ### 🛑 P2.2 TERMINÉ. STOP — NE PAS DÉMARRER P2.3 avant approbation explicite du client.
+
+## PHASE 2 — P2.3 UNIFIED ACCOUNTS (2026-08-14) ✅ IMPLÉMENTÉ & VALIDÉ (testing_agent iteration_53) — P2.4 NON DÉMARRÉ
+Plan de comptes normalisé canonique par société, en parallèle du legacy (aucun compte legacy migré).
+- **Module** : `backend/core/financial/accounts.py` (services purs, réutilise l'autorisation Phase 1). Routes fines dans server.py.
+- **Collection** `accounts` : `{_id:"acc_<uuid>", workspace_id, company_id, account_code, account_name, account_type, normal_balance, currency, active, source_system, external_id, created_at/by, updated_at}`.
+- **Endpoints** : GET (filtres active/account_type/search)/POST `/api/companies/{cid}/accounts` ; GET/PATCH `/api/companies/{cid}/accounts/{aid}`. Pas de DELETE physique (405).
+- **Règles** : account_code = STRING opaque (zéros de tête et ponctuation préservés, jamais casté en int) ; unique/société (409) ; même code OK sur sociétés différentes ; account_name requis ; account_type ∈ {asset,liability,equity,revenue,expense,other} ; normal_balance ∈ {debit,credit} (stocké explicitement, non déduit) ; currency par défaut = company.functional_currency (validée 3 lettres ISO, uppercased, ne modifie JAMAIS la devise société) ; active défaut true ; pas de suppression physique (deactivate/reactivate via PATCH) ; source_system métadonnée ; external_id optionnel (prep connecteur).
+- **Index** : unique `(ws,company,account_code)` ; lookups `(ws,company,active)`, `(ws,company,account_type)` ; unique PARTIEL `(ws,company,source_system,external_id)` seulement si external_id présent (`$type:string`, pas de collision sur null).
+- **Sécurité** : admin same-workspace read+admin ; user affecté=lecture ; non affecté=403 ; cross-workspace/inexistant=404 (no-leak) ; compte d'une autre société=404.
+- **Logs** : account.created/updated/deactivated/reactivated (workspace/company/entity/account_code/acteur ; log 'updated' non émis sur PATCH vide).
+- **Tests permanents** : `tests/test_p2_accounts.py` (23 in-memory). Test API live dans `/app/test_reports/scratch/`.
+- **Validation testing_agent iteration_53** : 27/27 API + 23/23 unit + régression P2.2/P2.1/Phase 1 ; smoke financier legacy 200 ; P1.11 intact ; baseline restaurée (accounts=0).
+- **Sécurité legacy** : acct_account_map/qc9434_accounts, formules, P1.11 → inchangés. Aucun compte legacy migré.
+- **Reco P2.4** : Data Imports (ingestion normalisée alimentant accounts + trial balance), utilisant source_system/external_id pour l'idempotence connecteur.
+
+### 🛑 P2.3 TERMINÉ. STOP — NE PAS DÉMARRER P2.4 avant approbation explicite du client.

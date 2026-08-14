@@ -1,0 +1,26 @@
+{
+  "summary": "P2.3 Unified Accounts — 27/27 live-API tests PASSED. All acceptance criteria met: create with default currency inheritance from company.functional_currency (CHF for A, CAD for B), explicit currency uppercased, account_code preserved EXACTLY as string (leading zeros, dots, punctuation, alphanumerics), duplicate code within same company -> 409, same code cross-company allowed, invalid account_type/normal_balance -> 422, account_name required -> 422, PATCH name + deactivate/reactivate 200, DELETE -> 405 (no physical delete), list filters (active/account_type/search on code+name case-insensitive, deterministic ordering), external_id uniqueness per (company, source_system) with cross-company + cross-source allowed and null external_id unrestricted, security matrix (Julie A read=200 / B read=403 / admin=403; Marc both=200), isolation 404 for nonexistent/cross-workspace/wrong-company paths, log events account.created/updated/deactivated/reactivated present with entity_id, and regression smoke (P2.1 years GET, P2.2 periods route reachable, /api/qc9434/bilan|pnl|trial-balance?year=2026, /api/acct/dashboard, /api/acct/kpis?year=2026&month=7, P1.11 matrix admin/Julie/Marc) all 200. 23 in-memory unit tests in /app/backend/tests/test_p2_accounts.py also green. Baseline restored EXACTLY: users=3, companies=2 (Meelora name preserved, CHF), mandates=0, active company_access=3, financial_years=0, financial_periods=0, accounts=0.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/test_reports/scratch/test_p2_3_accounts_live.py",
+    "/app/test_reports/pytest/p2_3_accounts.xml",
+    "/app/backend/tests/test_p2_accounts.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AccountUpdate.external_id: Pydantic Optional[str] cannot distinguish 'field omitted' from 'explicit null to clear it' unless model_dump(exclude_unset=True) is used (which it is). Good.",
+    "PATCH accepts account_code changes — spec did not explicitly forbid it; make sure downstream ledger references (future phases) will handle historical code renames.",
+    "log_action on account.updated may fire even when payload is empty (no-op update). Minor: consider skipping the log when changes dict is empty; current code emits an 'updated' entry with no changes list which could clutter logs.",
+    "server.py is very large (~7100 lines). Continue modular extraction pattern used for accounts.py — good direction.",
+    "No physical DELETE endpoint exists (correct per spec) — FastAPI returns 405 Method Not Allowed (not 404) which is fine and matches test expectation."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "n/a (skipped per request)"},
+  "test_credentials": "admin@accslegro.com/admin123, julie@accslegro.com/julie123, marc@accslegro.com/marc123 (from /app/memory/test_credentials.md, all valid).",
+  "seed_data_creation": "None. 20 TST_* accounts were created during testing then fully deleted from db.accounts. Baseline verified restored to users=3, companies=2, mandates=0, active company_access=3, financial_years=0, financial_periods=0, accounts=0.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Live-API tests live in /app/test_reports/scratch/test_p2_3_accounts_live.py (do not move to /app/backend/tests/ since they mutate live DB). They create TST_-prefixed accounts and rely on manual DB cleanup (done via motor script). If re-running, clear accounts collection first or expect 409 on TST_DUP/TST_CROSS/TST_UPD/TST_DEL/TST_LOG/TST_EXT_*. Existing in-memory unit tests /app/backend/tests/test_p2_accounts.py must be run from /app/backend dir (imports 'core.financial.accounts' relative to /app/backend).",
+  "rca of the issue": "N/A — no issues found."
+}

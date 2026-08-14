@@ -45,6 +45,11 @@ from core.financial.periods import (
     update_financial_period, generate_monthly_periods,
     ensure_indexes as _ensure_financial_period_indexes,
 )
+from core.financial.accounts import (
+    AccountCreate, AccountUpdate,
+    list_accounts, get_account, create_account, update_account,
+    ensure_indexes as _ensure_account_indexes,
+)
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -958,6 +963,53 @@ async def update_company_financial_period(company_id: str, period_id: str, paylo
                              details=f"{prev_status} → {new_status} (période {period_id}, exercice {fy_id})",
                              company_id=company_id, entity_id=period_id, event_type=evt)
     return p
+
+
+# ---------------------------------------------------------------------------
+# P2.3 — Financial Core : comptes unifiés (accounts)
+# Routes fines déléguant au module core.financial.accounts (autorisation Phase 1).
+# ---------------------------------------------------------------------------
+@api.get("/companies/{company_id}/accounts")
+async def list_company_accounts(company_id: str, active: Optional[bool] = None,
+                                account_type: Optional[str] = None, search: Optional[str] = None,
+                                user: dict = Depends(get_current_user)):
+    return await list_accounts(db, company_id, user, active=active, account_type=account_type, search=search)
+
+
+@api.post("/companies/{company_id}/accounts", status_code=201)
+async def create_company_account(company_id: str, payload: AccountCreate, user: dict = Depends(require_admin)):
+    acc = await create_account(db, company_id, user, payload)
+    await log_action(user, "create", "account", acc.get("account_code", ""),
+                     details=f"Compte créé: {acc.get('id')} ({acc.get('account_type')}/{acc.get('normal_balance')})",
+                     company_id=company_id, entity_id=acc.get("id"),
+                     event_type="account.created")
+    return acc
+
+
+@api.get("/companies/{company_id}/accounts/{account_id}")
+async def get_company_account(company_id: str, account_id: str, user: dict = Depends(get_current_user)):
+    return await get_account(db, company_id, account_id, user)
+
+
+@api.patch("/companies/{company_id}/accounts/{account_id}")
+async def update_company_account(company_id: str, account_id: str, payload: AccountUpdate, user: dict = Depends(require_admin)):
+    acc, active_changed_to = await update_account(db, company_id, account_id, user, payload)
+    _acc_changes = payload.model_dump(exclude_unset=True)
+    if _acc_changes:
+        await log_action(user, "update", "account", acc.get("account_code", ""),
+                         details=f"Compte modifié: {account_id}",
+                         changes=[{"field": k, "after": acc.get(k)} for k in _acc_changes.keys()],
+                         company_id=company_id, entity_id=account_id,
+                         event_type="account.updated")
+    if active_changed_to is True:
+        await log_action(user, "reactivate", "account", acc.get("account_code", ""),
+                         details=f"Compte réactivé: {account_id}", company_id=company_id,
+                         entity_id=account_id, event_type="account.reactivated")
+    elif active_changed_to is False:
+        await log_action(user, "deactivate", "account", acc.get("account_code", ""),
+                         details=f"Compte désactivé: {account_id}", company_id=company_id,
+                         entity_id=account_id, event_type="account.deactivated")
+    return acc
 
 
 
@@ -6993,6 +7045,7 @@ async def startup():
     try:
         await _ensure_financial_year_indexes(db)
         await _ensure_financial_period_indexes(db)
+        await _ensure_account_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     try:
