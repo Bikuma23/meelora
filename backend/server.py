@@ -77,6 +77,10 @@ from core.financial.compatibility import (
     compat_accounts, compat_trial_balance, compat_journal,
     ensure_indexes as _ensure_financial_config_indexes,
 )
+from core.financial.reconciliation import (
+    reconcile_accounts, reconcile_trial_balance, reconcile_journal_vs_tb, reconciliation_status,
+    _LEGACY_COL_KEYS,
+)
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -1265,6 +1269,59 @@ async def compat_company_trial_balance(company_id: str, financial_period_id: Opt
 async def compat_company_journal(company_id: str, financial_period_id: Optional[str] = None,
                                  user: dict = Depends(get_current_user)):
     return await compat_journal(db, company_id, user, financial_period_id)
+
+
+# ---------------------------------------------------------------------------
+# P2.9 — Read-only reconciliation (diagnostic). Zero writes. Legacy BV read only
+# when an explicit legacy_period_key + column mapping are supplied (no guessing).
+# ---------------------------------------------------------------------------
+def _legacy_cols(period_debit_col, period_credit_col, ytd_debit_col, ytd_credit_col):
+    vals = {"period_debit": period_debit_col, "period_credit": period_credit_col,
+            "ytd_debit": ytd_debit_col, "ytd_credit": ytd_credit_col}
+    return vals if all(vals.get(k) for k in _LEGACY_COL_KEYS) else None
+
+
+@api.get("/companies/{company_id}/reconciliation/accounts")
+async def reconciliation_accounts(company_id: str, legacy_period_key: Optional[str] = None,
+                                  user: dict = Depends(get_current_user)):
+    return await reconcile_accounts(db, company_id, user, legacy_period_key=legacy_period_key)
+
+
+@api.get("/companies/{company_id}/reconciliation/trial-balance")
+async def reconciliation_trial_balance(company_id: str, financial_period_id: Optional[str] = None,
+                                       normalized_import_id: Optional[str] = None,
+                                       tolerance: float = 0.01, legacy_period_key: Optional[str] = None,
+                                       period_debit_col: Optional[str] = None, period_credit_col: Optional[str] = None,
+                                       ytd_debit_col: Optional[str] = None, ytd_credit_col: Optional[str] = None,
+                                       user: dict = Depends(get_current_user)):
+    return await reconcile_trial_balance(db, company_id, user, financial_period_id,
+                                         normalized_import_id=normalized_import_id, tolerance=tolerance,
+                                         legacy_period_key=legacy_period_key,
+                                         legacy_cols=_legacy_cols(period_debit_col, period_credit_col,
+                                                                  ytd_debit_col, ytd_credit_col))
+
+
+@api.get("/companies/{company_id}/reconciliation/journal-vs-trial-balance")
+async def reconciliation_journal_vs_tb(company_id: str, financial_period_id: Optional[str] = None,
+                                       normalized_import_id: Optional[str] = None,
+                                       tolerance: float = 0.01, ytd: bool = False,
+                                       user: dict = Depends(get_current_user)):
+    return await reconcile_journal_vs_tb(db, company_id, user, financial_period_id,
+                                         normalized_import_id=normalized_import_id, tolerance=tolerance, ytd=ytd)
+
+
+@api.get("/companies/{company_id}/reconciliation/status")
+async def reconciliation_overall_status(company_id: str, financial_period_id: Optional[str] = None,
+                                        normalized_import_id: Optional[str] = None, tolerance: float = 0.01,
+                                        legacy_period_key: Optional[str] = None,
+                                        period_debit_col: Optional[str] = None, period_credit_col: Optional[str] = None,
+                                        ytd_debit_col: Optional[str] = None, ytd_credit_col: Optional[str] = None,
+                                        user: dict = Depends(get_current_user)):
+    return await reconciliation_status(db, company_id, user, financial_period_id,
+                                       normalized_import_id=normalized_import_id, tolerance=tolerance,
+                                       legacy_period_key=legacy_period_key,
+                                       legacy_cols=_legacy_cols(period_debit_col, period_credit_col,
+                                                                ytd_debit_col, ytd_credit_col))
 
 
 # ---------------------------------------------------------------------------

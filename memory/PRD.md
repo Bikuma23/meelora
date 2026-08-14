@@ -1018,3 +1018,19 @@ Sépare l'identité globale (users) de l'appartenance workspace et société.
 - [x] **Smoke live (switch)** : défaut legacy → set normalized (accounts `0091/0092` + TB via normalisé, contrôles équilibrés) → 2e société reste legacy → status expose import_id/compteurs → retour legacy → legacy `acct` HTTP 200 ; données de test supprimées (baseline propre, financial_config vidé).
 
 ### 🛑 P2.8 IMPLÉMENTÉ. STOP — NE PAS DÉMARRER P2.9 (Réconciliation des données) avant approbation explicite du client.
+
+## P2.9 — Réconciliation des données (LECTURE SEULE, diagnostic) — 2026-08-14
+- [x] **Module** `core/financial/reconciliation.py` : moteur de réconciliation en lecture seule. Ne mute JAMAIS les données financières (aucun write-back legacy/normalisé, aucune écriture d'équilibrage, aucune auto-correction). Données manquantes = `not_available`/`incomplete`, jamais traitées comme zéro (pas de faux positif).
+- [x] **3 niveaux** : (1) plan comptable legacy vs normalisé (matched/missing_in_normalized[critical]/missing_in_legacy/name_difference + sévérité), (2) BV legacy vs BV normalisée (par compte + totaux de contrôle sur les 6 mesures, tolérance 0,01, convention net non inversée), (3) journal normalisé (agrégat P2.6) vs BV normalisée période (matched/journal_only/tb_only/difference).
+- [x] **Interprétation legacy EXPLICITE** : la BV legacy (`acct_bv`, clé "YYYY-MM", colonnes opaques) n'est lue que si l'appelant fournit `legacy_period_key` + mapping de colonnes (period_debit/credit, ytd_debit/credit) → **jamais de supposition** ; sinon `not_available`.
+- [x] **Sélection de version normalisée** : règle déterministe P2.8 (dernier import complété société+période) + override explicite `normalized_import_id` ; imports échoués exclus ; `normalized_import_id` toujours rapporté.
+- [x] **Couverture journal / YTD** : basée sur `financial_period.sequence` (jamais le calendrier). Mensuel = 1 période ; YTD = séquences 1..sélectionnée ; couverture insuffisante → `incomplete` (aucune valeur cumulée inventée).
+- [x] **Verdict global + cutover_ready** : `cutover_ready` exige BV normalisée + BV legacy disponibles, réconciliation BV = reconciled, et 0 écart critique de mapping de comptes. Le journal est rapporté séparément. **Aucun switch automatique** de `financial_data_source` (flag P2.8 inchangé).
+- [x] **APIs (GET, lecture seule)** : `/reconciliation/{status,accounts,trial-balance,journal-vs-trial-balance}` (params financial_period_id, normalized_import_id, tolerance, legacy_period_key + colonnes, ytd).
+- [x] **Sécurité P1.12** : lecture = membre société autorisé (principal/collaborator/company_user admin+user + admin) ; non autorisé 403 ; platform_role sans membership 403 ; cross-workspace 404. Aucun nouveau modèle de permission.
+- [x] **Preuve zéro écriture** : test espion → 0 écriture sur acct_*/qc9434_* ET sur les collections normalisées pendant toutes les réconciliations.
+- [x] **P&L / Bilan / Flux de trésorerie** : INCHANGÉS, restent legacy (migration = phase moteur de reporting, après validation du Financial Core).
+- [x] **Tests** : `test_p2_9_reconciliation.py` **31/31**. Suite in-memory permanente **303/303 verte** (Phase 1 + P1.11 + P1.12 + P2.1..P2.9).
+- [x] **Smoke live** : match parfait → `reconciled` + `cutover_ready=true` ; différence injectée (compte 10 : legacy 120 vs normalisé 100) → `difference` écart −20 détecté ; journal absent → `incomplete` (pas de faux zéro) ; legacy `acct` HTTP 200 ; données de test (dont 2 BV legacy) supprimées (baseline restaurée).
+
+### 🛑 P2.9 IMPLÉMENTÉ. STOP — NE PAS DÉMARRER P2.10 (Validation/Sign-off Phase 2) avant approbation explicite du client.
