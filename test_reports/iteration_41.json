@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 41 — 9434-3977 QC inc. — Validation of 3 new AR features: (1) RELEVÉ DE COMPTE CLIENT (statement + PDF), (2) ENCAISSEMENT MODERNISÉ (shadcn dialog, replaces window.prompt), (3) PURGE DES DONNÉES TEST_. Both BACKEND and FRONTEND fully validated end-to-end on the public URL. Backend: pytest test_qc9434_phase7.py = 9/9 PASSED (statement rows+totals+balance, statement PDF binary content-type application/pdf and %PDF magic bytes, receive partial updates paid_amount+status=partial, receive > balance rejected 400, receive on credit_note rejected 400, purge deletes case-insensitive TEST_ clients+invoices+entries, non-regression on /qc9434/entries|trial-balance|bilan|pnl). Frontend (admin@accslegro.com @1920x1080): pre-purged residual TEST_ data cleanly (dialog qc-purge-dialog → qc-purge-confirm), created TEST_ReleveUI client (AR 100105 native <select> qc-client-ar), created 2 invoices ($1000 + $500) via native qc-invoice-client-select bound to carnet client. RECEIVE FLOW: clicked qc-invoice-receive-<id> → qc-receive-dialog opens (a real Radix dialog, NOT window.prompt), unchecked qc-receive-full, typed 999999 → qc-receive-confirm disabled + red error 'Le montant doit être supérieur à 0 et ne pas dépasser le solde' shown; typed 0 → disabled; typed -5 → disabled; typed 300 → enabled, qc-receive-preview shows 'À encaisser 300,00 $ · Solde après encaissement 849,75 $', confirmed → row moved to Partielle status. CREDIT NOTE: created a linked $50 credit note on the second invoice via qc-invoice-credit-<id> + qc-cn-save. STATEMENT: navigated back to qc-tab-clients, clicked qc-client-statement-<id> on TEST_ReleveUI row → qc-statement-dialog opened, qc-statement-table lists 3 rows (2 factures + 1 note de crédit), qc-statement-totals = 'TOTAUX 1 724,63 · 300,00 · 57,49 · 1 367,14' (billed=1500*1.14975 ✔, paid=300 ✔, credited=50*1.14975=57,49 ✔, balance=1367,14 ✔), qc-statement-balance shows 'Solde dû : 1 367,14 $'. Clicked qc-statement-pdf → download triggered with filename 'releve_TEST_ReleveUI.pdf'. PURGE: qc-purge-test-btn → qc-purge-dialog → qc-purge-confirm; after purge, TEST_ReleveUI absent from both Clients carnet AND Factures clients table (0 occurrences). NON-REGRESSION: qc-tab-entries still renders the 12 real entries (2026-0001 to 2026-0012) untouched. All feature testids present and functioning: qc-receive-dialog, qc-receive-full, qc-receive-amount, qc-receive-preview, qc-receive-confirm, qc-statement-dialog, qc-statement-table, qc-statement-totals, qc-statement-balance, qc-statement-pdf, qc-purge-test-btn, qc-purge-dialog, qc-purge-confirm, qc-client-statement-<id>.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/qc9434/invoices/{iid}/receive", "issue": "Backend logic `amt = amount if amount and >0 else balance` silently treats amount<=0 (0 or negative) as 'encaisser le solde complet' instead of returning HTTP 400. Frontend blocks via qc-receive-confirm disable so end-user cannot trigger it, but the API is directly callable (e.g. via curl or admin token) and will pay the full balance. Recommended: reject amount<0 explicitly (0 could remain as 'full' shortcut if documented, but negative should always 400)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "qc-statement-dialog", "issues": ["Totals row cells are concatenated without separators when read as text ('TOTAUX1 724,63300,0057,491 367,14'). Purely a data-testid text-content artifact — visually the columns are aligned in the table, but consider inserting a <span> per cell or aria-label per <td> for screen readers."]},
+      {"screen": "qc-client-ar / qc-invoice-client-select", "issues": ["Still using native HTML <select> instead of shadcn Select — inconsistent with the rest of the app (Radix selects). Not blocking. Also carries over the <span> in <option> hydration warning already reported in iteration 40."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_qc9434_phase7.py", "/app/test_reports/pytest/phase7.xml"],
+  "action_items": [
+    "Optional: backend receive endpoint should reject amount<0 with HTTP 400 instead of silently treating it as full balance (defense in depth — UI already blocks it).",
+    "Optional: replace native <select> for qc-client-ar and qc-invoice-client-select with shadcn Select to be consistent and remove the <span> in <option> hydration warning."
+  ],
+  "critical_code_review_comments": [
+    "QcEntity.js is now ~1840 lines — even more overdue for a split into /app/frontend/src/pages/qc9434/ subfolder.",
+    "ReceivePaymentDialog validation is client-side only; backend should mirror the same rule (see minor issue above).",
+    "_qc_client_statement matches invoices by client_id OR by identical client_name — correct behaviour per spec (data migration safety). Balance excludes 'reversed' rows which is correct.",
+    "purge_test_data is admin-only (require_admin), case-insensitive on TEST_ prefix, cleans clients + invoices + credit notes + bills + all linked entries. Message payload includes counts — verified in the toast."
+  ],
+  "updated_files": ["/app/backend/tests/test_qc9434_phase7.py (new)"],
+  "success_rate": {"backend": "100% (9/9 phase7 tests)", "frontend": "100% (all 3 new features flows PASS end-to-end)"},
+  "test_credentials": "admin@accslegro.com / admin123",
+  "seed_data_creation": "Created via UI then purged: client TEST_ReleveUI (AR 100105), 2 factures 1000$/500$, 1 note de crédit liée 50$, 1 encaissement partiel 300$. Backend tests create/cleanup TEST_Phase7_Client via same purge endpoint (autouse teardown in module fixture).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 3 iteration-41 features (statement, receive dialog, purge) work end-to-end. Only observation: backend receive endpoint should also reject negative amounts (currently treats as 'full balance'). Non-regression: reference to legacy top-level tabs qc-tab-tb / qc-tab-bilan / qc-tab-pnl was removed from the QC entity toolbar — they are now grouped under a 'Rapports' dropdown. Update any old scripts that click these testids to open the Rapports menu first.",
+  "rca of the issue": "Minor backend permissiveness on receive amount<=0: root cause is the short-circuit expression `amt = round(float(amount), 2) if amount and float(amount) > 0 else balance` in server.py:5402 — when amount is a falsy 0 OR a truthy negative, it falls back to `balance` (full payment) instead of raising. Mitigation: change to `if amount is not None and float(amount) <= 0: raise HTTPException(400, ...)` before the fallback branch."
+}

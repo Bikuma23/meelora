@@ -230,7 +230,7 @@ export default function QcEntity() {
         : tab === "entries" ? <EntriesView year={activeYear} locked={locked} canEdit={canEdit} />
         : tab === "ar" ? <InvoicesView year={activeYear} locked={locked} canEdit={canEdit} accounts={[]} />
         : tab === "ap" ? <BillsView year={activeYear} locked={locked} canEdit={canEdit} />
-        : tab === "clients" ? <ClientsView isAdmin={isAdmin} />
+        : tab === "clients" ? <ClientsView isAdmin={isAdmin} year={activeYear} />
         : tab === "tb" ? <TrialBalanceView year={activeYear} />
         : tab === "bilan" ? <StatementView year={activeYear} kind="bilan" />
         : tab === "pnl" ? <StatementView year={activeYear} kind="pnl" />
@@ -682,6 +682,7 @@ function InvoicesView({ year, locked, canEdit }) {
   const [reminding, setReminding] = useState(false);
   const [creditTarget, setCreditTarget] = useState(undefined); // undefined = closed, null = standalone, obj = linked
   const [reverseTarget, setReverseTarget] = useState(null);
+  const [receiveTarget, setReceiveTarget] = useState(null);
   const load = useCallback(() => { if (year) api.qcInvoices({ year }).then(setRows).catch(() => setRows([])); }, [year]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { api.qcAccounts().then((r) => setAccounts((r.accounts || []).filter((a) => a.type === "produit"))).catch(() => {}); api.qcClients().then(setClients).catch(() => {}); }, []);
@@ -713,11 +714,10 @@ function InvoicesView({ year, locked, canEdit }) {
       setDlg(false); setEditing(null); setForm(emptyForm); load();
     } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setSaving(false); }
   };
-  const receive = async (inv) => {
-    const input = window.prompt(`Montant à encaisser (solde ${money(inv.balance)} $) — laisser vide pour le solde complet :`, "");
-    if (input === null) return;
-    const a = input.trim() === "" ? 0 : Number(input);
-    try { await api.qcReceiveInvoice(inv.id, { date: TODAY, amount: a }); toast.success("Encaissement comptabilisé"); load(); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); }
+  const receive = (inv) => setReceiveTarget(inv);
+  const doReceive = async (inv, amount) => {
+    try { await api.qcReceiveInvoice(inv.id, { date: TODAY, amount }); toast.success("Encaissement comptabilisé"); setReceiveTarget(null); load(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Impossible"); }
   };
   const reverse = async () => {
     if (!reverseTarget) return;
@@ -782,6 +782,8 @@ function InvoicesView({ year, locked, canEdit }) {
       <CreditNoteDialog open={creditTarget !== undefined} invoice={creditTarget} year={year} accounts={accounts} clients={clients}
         onClose={() => setCreditTarget(undefined)} onDone={() => { setCreditTarget(undefined); load(); }} />
 
+      <ReceivePaymentDialog invoice={receiveTarget} onClose={() => setReceiveTarget(null)} onConfirm={doReceive} />
+
       <AlertDialog open={!!reverseTarget} onOpenChange={(v) => !v && setReverseTarget(null)}>
         <AlertDialogContent data-testid="qc-reverse-dialog">
           <AlertDialogHeader>
@@ -830,6 +832,44 @@ function InvoicesView({ year, locked, canEdit }) {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// ===================== Encaissement d'une facture =====================
+function ReceivePaymentDialog({ invoice, onClose, onConfirm }) {
+  const [amount, setAmount] = useState("");
+  const [full, setFull] = useState(true);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (invoice) { setFull(true); setAmount(String(invoice.balance ?? "")); } }, [invoice]);
+  const bal = invoice ? Number(invoice.balance || 0) : 0;
+  const amt = full ? bal : Number(amount || 0);
+  const invalid = !full && (amt <= 0 || amt > bal + 0.005);
+  const submit = async () => { if (invalid || !invoice) return; setSaving(true); try { await onConfirm(invoice, full ? 0 : amt); } finally { setSaving(false); } };
+  return (
+    <Dialog open={!!invoice} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent data-testid="qc-receive-dialog" className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Wallet size={16} className="text-emerald-600" /> Encaisser la facture {invoice?.number}</DialogTitle>
+          <DialogDescription className="text-xs">Solde restant : <strong>{money(bal)} $</strong>. L'écriture (Dr Encaisse / Cr Comptes clients) est comptabilisée automatiquement.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={full} onChange={(e) => setFull(e.target.checked)} data-testid="qc-receive-full" /> Encaisser le solde complet</label>
+          {!full && <div>
+            <label className="mb-1 block text-xs font-600 text-slate-500">Montant à encaisser ($)</label>
+            <Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} data-testid="qc-receive-amount" className="h-9 text-right font-mono-data" autoFocus />
+            {invalid && <p className="mt-1 text-xs font-600 text-red-600">Le montant doit être supérieur à 0 et ne pas dépasser le solde ({money(bal)} $).</p>}
+          </div>}
+          <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm" data-testid="qc-receive-preview">
+            <div className="flex justify-between font-700 text-emerald-700"><span>À encaisser</span><span className="font-mono-data">{money(amt)} $</span></div>
+            <div className="flex justify-between text-slate-500"><span>Solde après encaissement</span><span className="font-mono-data">{money(Math.max(0, bal - amt))} $</span></div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Annuler</Button>
+          <Button onClick={submit} disabled={saving || invalid} data-testid="qc-receive-confirm" className="bg-emerald-600 hover:bg-emerald-700">{saving ? "…" : "Comptabiliser l'encaissement"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -899,13 +939,16 @@ function CreditNoteDialog({ open, invoice, year, accounts, clients, onClose, onD
 }
 
 // ===================== Carnet de clients =====================
-function ClientsView({ isAdmin }) {
+function ClientsView({ isAdmin, year }) {
   const [rows, setRows] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [dlg, setDlg] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [delTarget, setDelTarget] = useState(null);
+  const [stmtClient, setStmtClient] = useState(null);
+  const [purgeOpen, setPurgeOpen] = useState(false);
+  const [purging, setPurging] = useState(false);
   const empty = { name: "", att: "", address: "", email: "", ar_account: "", active: true };
   const [form, setForm] = useState(empty);
   const load = useCallback(() => api.qcClients().then(setRows).catch(() => setRows([])), []);
@@ -922,12 +965,20 @@ function ClientsView({ isAdmin }) {
     } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setSaving(false); }
   };
   const del = async () => { if (!delTarget) return; try { await api.qcDeleteClient(delTarget.id); toast.success("Client supprimé"); load(); } catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setDelTarget(null); } };
+  const purge = async () => {
+    setPurging(true);
+    try { const r = await api.qcPurgeTestData(); toast.success(r.message || "Données de test purgées"); load(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Impossible"); } finally { setPurging(false); setPurgeOpen(false); }
+  };
   const accName = (gl) => { const a = accounts.find((x) => x.gl === gl); return a ? `${a.gl} · ${a.description}` : gl; };
   return (
     <div className="space-y-3" data-testid="qc-clients-view">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-500">{rows.length} client(s) au carnet.</p>
-        {isAdmin && <Button size="sm" onClick={openNew} data-testid="qc-add-client" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouveau client</Button>}
+        {isAdmin && <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => setPurgeOpen(true)} data-testid="qc-purge-test-btn" className="gap-2 text-red-600 hover:bg-red-50"><Trash2 size={14} /> Purger données test</Button>
+          <Button size="sm" onClick={openNew} data-testid="qc-add-client" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><Plus size={14} /> Nouveau client</Button>
+        </div>}
       </div>
       {rows.length === 0
         ? <div className="card p-10 text-center text-sm text-slate-400" data-testid="qc-clients-empty">Aucun client. {isAdmin ? "Ajoutez-en un pour attribuer un compte de comptes-clients dédié." : ""}</div>
@@ -944,6 +995,7 @@ function ClientsView({ isAdmin }) {
                   <td className="px-3 py-2 font-mono-data text-xs">{accName(c.ar_account)}</td>
                   <td className="px-3 py-2">{c.active !== false ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-600 text-emerald-700">Actif</span> : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-600 text-slate-500">Inactif</span>}</td>
                   <td className="px-3 py-2"><div className="flex justify-end gap-1">
+                    <button onClick={() => setStmtClient(c)} data-testid={`qc-client-statement-${c.id}`} className="rounded p-1.5 text-[#0E9488] hover:bg-[#0E9488]/10" title="Relevé de compte"><FileText size={14} /></button>
                     {isAdmin && <button onClick={() => openEdit(c)} data-testid={`qc-client-edit-${c.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Modifier"><Pencil size={14} /></button>}
                     {isAdmin && <button onClick={() => setDelTarget(c)} data-testid={`qc-client-delete-${c.id}`} className="rounded p-1.5 text-red-500 hover:bg-red-50" title="Supprimer"><Trash2 size={14} /></button>}
                   </div></td>
@@ -987,11 +1039,81 @@ function ClientsView({ isAdmin }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ClientStatementDialog client={stmtClient} year={year} onClose={() => setStmtClient(null)} />
+
+      <AlertDialog open={purgeOpen} onOpenChange={(v) => !v && setPurgeOpen(false)}>
+        <AlertDialogContent data-testid="qc-purge-dialog">
+          <AlertDialogHeader><AlertDialogTitle>Purger les données de démonstration ?</AlertDialogTitle>
+            <AlertDialogDescription>Tous les clients, factures clients et factures fournisseurs dont le nom commence par « TEST_ » seront supprimés définitivement, ainsi que leurs écritures comptables. Les vraies données ne sont pas touchées.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={purge} disabled={purging} data-testid="qc-purge-confirm" className="bg-red-600 hover:bg-red-700">{purging ? "…" : "Purger"}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-// ===================== Factures fournisseurs (auxiliaire payable) =====================
+// ===================== Relevé de compte client =====================
+function ClientStatementDialog({ client, year, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (!client) { setData(null); return; }
+    setLoading(true);
+    api.qcClientStatement(client.id, year ? { year } : {}).then(setData).catch(() => setData(null)).finally(() => setLoading(false));
+  }, [client, year]);
+  const pdf = async () => {
+    try { const b = await api.qcClientStatementPdf(client.id, year ? { year } : {}); const url = URL.createObjectURL(b); const a = document.createElement("a"); a.href = url; a.download = `releve_${client.name}.pdf`; a.click(); URL.revokeObjectURL(url); }
+    catch { toast.error("PDF indisponible"); }
+  };
+  const t = data?.totals;
+  return (
+    <Dialog open={!!client} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent data-testid="qc-statement-dialog" className="max-h-[88vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#0E9488]" /> Relevé de compte — {client?.name}</DialogTitle>
+          <DialogDescription className="text-xs">{year ? `Exercice ${year}` : "Tous les exercices"} · Compte clients {client?.ar_account}</DialogDescription>
+        </DialogHeader>
+        {loading ? <p className="py-6 text-center text-sm text-slate-400">Chargement…</p>
+          : !data || data.rows.length === 0 ? <p className="py-6 text-center text-sm text-slate-400" data-testid="qc-statement-empty">Aucune facture ni note de crédit pour ce client.</p>
+          : <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-statement-table">
+              <thead><tr className="bg-[#063044] text-left text-xs uppercase text-white">
+                <th className="px-3 py-2">N°</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Type</th><th className="px-3 py-2 text-right">Total</th><th className="px-3 py-2 text-right">Réglé</th><th className="px-3 py-2 text-right">Crédité</th><th className="px-3 py-2 text-right">Solde</th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.rows.map((r, i) => (
+                  <tr key={i} className={`hover:bg-slate-50 ${r.status === "reversed" ? "text-slate-400 line-through" : ""}`} data-testid={`qc-statement-row-${i}`}>
+                    <td className="px-3 py-1.5 font-mono-data text-xs">{r.number}{r.linked_number ? <span className="ml-1 text-[10px] text-violet-600">↩ {r.linked_number}</span> : null}</td>
+                    <td className="px-3 py-1.5 text-xs">{r.date}</td>
+                    <td className={`px-3 py-1.5 text-xs ${r.is_credit_note ? "text-violet-700" : ""}`}>{r.type}{r.status === "reversed" ? " (Extournée)" : ""}</td>
+                    <td className="px-3 py-1.5 text-right font-mono-data">{money(r.total)}</td>
+                    <td className="px-3 py-1.5 text-right font-mono-data">{money(r.paid_amount)}</td>
+                    <td className="px-3 py-1.5 text-right font-mono-data">{money(r.credited_amount)}</td>
+                    <td className="px-3 py-1.5 text-right font-mono-data">{money(r.balance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr className="border-t-2 border-[#063044] bg-slate-50 font-700 text-[#063044]" data-testid="qc-statement-totals">
+                <td className="px-3 py-2" colSpan={3}>TOTAUX</td>
+                <td className="px-3 py-2 text-right font-mono-data">{money(t?.billed)}</td>
+                <td className="px-3 py-2 text-right font-mono-data">{money(t?.paid)}</td>
+                <td className="px-3 py-2 text-right font-mono-data">{money(t?.credited)}</td>
+                <td className="px-3 py-2 text-right font-mono-data">{money(t?.balance)}</td>
+              </tr></tfoot>
+            </table>
+            <p className="mt-3 rounded-lg bg-[#0E9488]/10 px-3 py-2 text-right text-sm font-700 text-[#063044]" data-testid="qc-statement-balance">Solde dû : {money(t?.balance)} $</p>
+          </div>}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Fermer</Button>
+          {data && data.rows.length > 0 && <Button onClick={pdf} data-testid="qc-statement-pdf" className="gap-2 bg-[#0E9488] hover:bg-[#0E9488]/90"><FileDown size={14} /> Télécharger le relevé (PDF)</Button>}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 function BillsView({ year, locked, canEdit }) {
   const [rows, setRows] = useState([]);
   const [accounts, setAccounts] = useState([]);

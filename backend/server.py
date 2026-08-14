@@ -5453,6 +5453,106 @@ async def qc_delete_client(cid: str, user: dict = Depends(require_admin)):
     await db.qc9434_clients.delete_one({"_id": _oid(cid)})
     return {"success": True}
 
+# ---- Relevé de compte client ------------------------------------------
+async def _qc_client_statement(cid: str, year: Optional[int]):
+    c = await db.qc9434_clients.find_one({"_id": _oid(cid)})
+    if not c:
+        raise HTTPException(status_code=404, detail="Client introuvable")
+    q = {"$or": [{"client_id": cid}, {"client_name": c.get("name", "")}]}
+    if year:
+        q = {"$and": [q, {"year": int(year)}]}
+    docs = await db.qc9434_invoices.find(q).sort([("date", 1), ("num_seq", 1)]).to_list(5000)
+    rows, total_billed, total_paid, total_credited, total_balance = [], 0.0, 0.0, 0.0, 0.0
+    for d in docs:
+        o = _qc_invoice_out(d)
+        is_cn = o["type"] == "credit_note"
+        rows.append({"number": o["number"], "date": o["date"], "due_date": o.get("due_date", ""),
+                     "type": "Note de crédit" if is_cn else "Facture", "is_credit_note": is_cn,
+                     "status": o["status"], "total": o["total"], "paid_amount": o["paid_amount"],
+                     "credited_amount": o["credited_amount"], "balance": o["balance"],
+                     "linked_number": o.get("linked_number")})
+        if is_cn:
+            total_credited += o["total"]
+        else:
+            total_billed += o["total"]; total_paid += o["paid_amount"]
+        if o["status"] != "reversed":
+            total_balance += o["balance"]
+    return {"client": _qc_client_out(c), "year": int(year) if year else None, "rows": rows,
+            "totals": {"billed": round(total_billed, 2), "paid": round(total_paid, 2),
+                       "credited": round(total_credited, 2), "balance": round(total_balance, 2)}}
+
+@api.get("/qc9434/clients/{cid}/statement")
+async def qc_client_statement(cid: str, year: Optional[int] = None, user: dict = Depends(get_current_user)):
+    return await _qc_client_statement(cid, year)
+
+@api.get("/qc9434/clients/{cid}/statement/pdf")
+async def qc_client_statement_pdf(cid: str, year: Optional[int] = None, user: dict = Depends(get_current_user)):
+    data = await _qc_client_statement(cid, year)
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    NAVY = colors.HexColor("#063044"); VIOLET = colors.HexColor("#7C3AED"); styles = getSampleStyleSheet()
+    H = ParagraphStyle("h", parent=styles["Normal"], fontSize=15, fontName="Helvetica-Bold", textColor=NAVY)
+    N = ParagraphStyle("n", parent=styles["Normal"], fontSize=9, leading=12)
+    B = ParagraphStyle("b", parent=styles["Normal"], fontSize=9, leading=12, fontName="Helvetica-Bold")
+    cl = data["client"]
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=16 * mm, bottomMargin=16 * mm)
+    el = [Paragraph("9434-3977 QUÉBEC INC.", H), Spacer(1, 1 * mm),
+          Paragraph("RELEVÉ DE COMPTE" + (f" — Exercice {data['year']}" if data["year"] else ""), B), Spacer(1, 4 * mm)]
+    who = cl["name"]
+    if cl.get("att"): who += f"<br/>Att : {cl['att']}"
+    if cl.get("address"): who += "<br/>" + cl["address"].replace("\n", "<br/>")
+    if cl.get("email"): who += f"<br/>{cl['email']}"
+    el += [Paragraph("Client", B), Paragraph(who, N),
+           Paragraph(f"Compte de comptes-clients : {cl.get('ar_account','')}", N), Spacer(1, 5 * mm)]
+    header = ["N°", "Date", "Type", "Total", "Réglé", "Crédité", "Solde"]
+    body = [header]
+    for r in data["rows"]:
+        num = r["number"] + (f" ↩ {r['linked_number']}" if r.get("linked_number") else "")
+        stat = " (Extournée)" if r["status"] == "reversed" else ""
+        body.append([num, r["date"], r["type"] + stat, f"{r['total']:,.2f} $",
+                     f"{r['paid_amount']:,.2f} $", f"{r['credited_amount']:,.2f} $", f"{r['balance']:,.2f} $"])
+    t = data["totals"]
+    body.append(["", "", "TOTAUX", f"{t['billed']:,.2f} $", f"{t['paid']:,.2f} $", f"{t['credited']:,.2f} $", f"{t['balance']:,.2f} $"])
+    tbl = Table(body, colWidths=[26 * mm, 20 * mm, 34 * mm, 24 * mm, 22 * mm, 22 * mm, 24 * mm])
+    tbl.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("ALIGN", (3, 0), (-1, -1), "RIGHT"), ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("LINEABOVE", (0, -1), (-1, -1), 1, NAVY), ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#E9EDEF")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#F6F8F9")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    el += [tbl, Spacer(1, 6 * mm)]
+    el += [Paragraph(f"<b>Solde dû : {t['balance']:,.2f} $</b>", ParagraphStyle("bal", parent=B, fontSize=11, textColor=NAVY))]
+    doc.build(el); buf.seek(0)
+    fname = f"releve_{cl['name'].replace(' ', '_')}{('_' + str(data['year'])) if data['year'] else ''}.pdf"
+    return StreamingResponse(buf, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={fname}"})
+
+# ---- Purge des données de démonstration (TEST_) -----------------------
+@api.post("/qc9434/purge-test-data")
+async def qc_purge_test_data(user: dict = Depends(require_admin)):
+    rx = {"$regex": "^TEST_", "$options": "i"}
+    invs = await db.qc9434_invoices.find({"client_name": rx}).to_list(5000)
+    bills = await db.qc9434_bills.find({"supplier": rx}).to_list(5000)
+    src_ids = [str(d["_id"]) for d in invs] + [str(d["_id"]) for d in bills]
+    entry_oids = [d["entry_id"] for d in (invs + bills) if d.get("entry_id")]
+    ent1 = 0; ent2 = 0
+    if src_ids:
+        r = await db.qc9434_entries.delete_many({"source_id": {"$in": src_ids}}); ent1 = r.deleted_count
+    if entry_oids:
+        r = await db.qc9434_entries.delete_many({"_id": {"$in": entry_oids}}); ent2 = r.deleted_count
+    ri = await db.qc9434_invoices.delete_many({"client_name": rx})
+    rb = await db.qc9434_bills.delete_many({"supplier": rx})
+    rc = await db.qc9434_clients.delete_many({"name": rx})
+    counts = {"clients": rc.deleted_count, "invoices": ri.deleted_count, "bills": rb.deleted_count, "entries": ent1 + ent2}
+    await log_action(user, "Purger", "9434 — Données de test",
+                     f"{counts['clients']} client(s), {counts['invoices']} facture(s), {counts['bills']} fournisseur(s), {counts['entries']} écriture(s)")
+    return {"success": True, "deleted": counts,
+            "message": f"Purgé : {counts['clients']} client(s), {counts['invoices']} facture(s) client, {counts['bills']} facture(s) fournisseur, {counts['entries']} écriture(s)."}
+
+
 # ---- Notes de crédit --------------------------------------------------
 class QcCreditNoteIn(QcInvoiceIn):
     invoice_id: Optional[str] = None
