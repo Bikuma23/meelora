@@ -66,6 +66,11 @@ from core.financial.trial_balance import (
     preview_trial_balance_import, commit_trial_balance_import, list_trial_balance,
     ensure_indexes as _ensure_trial_balance_indexes,
 )
+from core.financial.journal import (
+    JournalCommitRequest,
+    preview_journal_import, commit_journal_import, list_journal_entries, get_journal_entry,
+    aggregate_journal, ensure_indexes as _ensure_journal_indexes,
+)
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -1142,6 +1147,79 @@ async def get_company_trial_balance(company_id: str, financial_period_id: Option
 @api.get("/companies/{company_id}/imports/{import_id}/trial-balance")
 async def get_import_trial_balance(company_id: str, import_id: str, user: dict = Depends(get_current_user)):
     return await list_trial_balance(db, company_id, user, import_id=import_id)
+
+
+# ---------------------------------------------------------------------------
+# P2.6 — Normalized journal (journal_entries + journal_entry_lines) via data_imports.
+# Structural journal import (preview/commit) = workspace admin only ; open period only.
+# ---------------------------------------------------------------------------
+@api.post("/companies/{company_id}/imports/journal/preview")
+async def preview_company_journal_import(company_id: str, financial_year_id: str = Form(...),
+                                         financial_period_id: str = Form(...),
+                                         source_type: str = Form("import"),
+                                         file: UploadFile = File(...),
+                                         user: dict = Depends(require_admin)):
+    content = await file.read()
+    result = await preview_journal_import(
+        db, company_id, user, content, file.filename or "journal",
+        financial_year_id, financial_period_id, source_type)
+    ev = "journal.validated" if result.get("status") == "valid" else "journal.previewed"
+    await log_action(user, "preview", "journal", result.get("id", ""),
+                     details=f"Aperçu journal: {result.get('counts')} · contrôles {result.get('controls')}",
+                     company_id=company_id, entity_id=result.get("id"), event_type=ev,
+                     metadata={"data_type": "journal", "source_type": source_type,
+                               "financial_year_id": financial_year_id,
+                               "financial_period_id": financial_period_id,
+                               "controls": result.get("controls")})
+    if result.get("status") == "failed":
+        await log_action(user, "preview", "journal", result.get("id", ""),
+                         details=f"Aperçu journal en échec: {result.get('error_summary')}",
+                         company_id=company_id, entity_id=result.get("id"),
+                         event_type="journal.failed",
+                         metadata={"data_type": "journal", "financial_period_id": financial_period_id})
+    return result
+
+
+@api.post("/companies/{company_id}/imports/journal/commit")
+async def commit_company_journal_import(company_id: str, payload: JournalCommitRequest,
+                                        user: dict = Depends(require_admin)):
+    result = await commit_journal_import(db, company_id, user, payload.import_id)
+    ev = {"completed": "journal.completed", "completed_with_warnings": "journal.completed",
+          "failed": "journal.failed"}.get(result.get("status"), "journal.completed")
+    await log_action(user, "commit", "journal", result.get("id", ""),
+                     details=(f"Journal finalisé: {result.get('entry_count')} écriture(s) / "
+                              f"{result.get('line_count')} ligne(s)"),
+                     company_id=company_id, entity_id=result.get("id"), event_type=ev,
+                     metadata={"data_type": "journal",
+                               "financial_year_id": result.get("financial_year_id"),
+                               "financial_period_id": result.get("financial_period_id"),
+                               "entry_count": result.get("entry_count"),
+                               "line_count": result.get("line_count"),
+                               "controls": result.get("controls")})
+    return result
+
+
+@api.get("/companies/{company_id}/journal-entries")
+async def list_company_journal_entries(company_id: str, financial_period_id: Optional[str] = None,
+                                        import_id: Optional[str] = None, account_id: Optional[str] = None,
+                                        date_from: Optional[str] = None, date_to: Optional[str] = None,
+                                        reference: Optional[str] = None,
+                                        user: dict = Depends(get_current_user)):
+    return await list_journal_entries(db, company_id, user, financial_period_id=financial_period_id,
+                                      import_id=import_id, account_id=account_id,
+                                      date_from=date_from, date_to=date_to, reference=reference)
+
+
+@api.get("/companies/{company_id}/journal-entries/aggregate")
+async def aggregate_company_journal(company_id: str, financial_period_id: Optional[str] = None,
+                                    import_id: Optional[str] = None,
+                                    user: dict = Depends(get_current_user)):
+    return await aggregate_journal(db, company_id, user, financial_period_id=financial_period_id, import_id=import_id)
+
+
+@api.get("/companies/{company_id}/journal-entries/{entry_id}")
+async def get_company_journal_entry(company_id: str, entry_id: str, user: dict = Depends(get_current_user)):
+    return await get_journal_entry(db, company_id, entry_id, user)
 
 
 # ---------------------------------------------------------------------------
@@ -7269,6 +7347,7 @@ async def startup():
         await _ensure_membership_indexes(db)
         await _ensure_data_import_indexes(db)
         await _ensure_trial_balance_indexes(db)
+        await _ensure_journal_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     try:

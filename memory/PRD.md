@@ -973,3 +973,20 @@ Sépare l'identité globale (users) de l'appartenance workspace et société.
 - [x] **Smoke live** : FY→périodes→comptes→preview (équilibré, contrôles OK)→commit (2 lignes)→re-commit idempotent→lecture avec totaux ; toutes les données de test supprimées (baseline propre). Legacy `acct` summary HTTP 200 ; aucune collection `acct_*`/`qc9434_*` touchée.
 
 ### 🛑 P2.5 IMPLÉMENTÉ. STOP — NE PAS DÉMARRER P2.6 (Journal / Transactions normalisés) avant approbation explicite du client.
+
+## P2.6 — Journal comptable normalisé (journal_entries + journal_entry_lines) — 2026-08-14
+- [x] **Module** `core/financial/journal.py` : couche journal normalisée sur le cycle de vie P2.4 (`data_imports`, data_type=`journal`). Regroupe les lignes source par `entry_id` (jamais par ordre de ligne), résout chaque `account_code` contre le plan comptable P2.3, valide l'équilibre par écriture (Σdébit=Σcrédit, tolérance 0,01), la date dans la période, et les règles de montant.
+- [x] **Convention nette** : `net = debit − credit` (jamais inversée par type de compte).
+- [x] **Règles de ligne** : debit≥0, credit≥0, pas les deux positifs, au moins un montant non nul ; négatif → bloquant ; `line_number` unique et contigu par écriture.
+- [x] **Statut de période (P2.2)** : écritures normalisées autorisées uniquement si la période est `open` ; `locked`/`closed` → import refusé (409) au preview ET au commit ; réouverture admin rétablit l'import. **N'affecte pas** le comportement legacy acct/qc9434.
+- [x] **APIs** : `POST .../imports/journal/preview` (multipart file + fy + fp ; n'écrit rien), `POST .../imports/journal/commit`, `GET .../journal-entries` (filtres period/import/account/date_from/date_to/reference, lignes aplaties + totaux), `GET .../journal-entries/{entry_id}`, `GET .../journal-entries/aggregate` (réconciliation lecture seule).
+- [x] **Doublons** : dans une écriture, ligne dupliquée en conflit (même identifiant, données ≠) → bloquant ; doublon exact → dédupliqué (warning) déterministe (jamais de double comptabilisation).
+- [x] **Idempotence / versioning** : commit lié à `import_id`, retry = no-op (`already_committed`) ; plusieurs versions par période autorisées ; lignée jamais écrasée ; pas de suppression physique. `external_entry_id`/`external_line_id` préservés pour l'idempotence connecteur future.
+- [x] **Réconciliation (préparation P2.9)** : `aggregate_journal` renvoie total_debit/credit + net par compte pour une période/import — **lecture seule**, n'écrit PAS `trial_balance_lines`, n'exige PAS l'égalité avec la BV pour le commit.
+- [x] **Index** — journal_entries : (ws+company+period), (ws+company+import), (ws+company+entry_date), UNIQUE partiel (ws+company+source_system+external_id) si présent. journal_entry_lines : UNIQUE (ws+company+entry+line_number), (ws+company+account), (ws+company+entry).
+- [x] **Sécurité P1.12** : import structurel = workspace admin uniquement ; lecture = membre société autorisé (principal/collaborator/company_user admin+user) ; company-local admin ≠ import ; platform_role sans membership → aucun accès ; cross-workspace 404.
+- [x] **Logs** : `journal.previewed/validated/completed/failed` (+ totaux, entry/line count, fy/fp, import_id, acteur).
+- [x] **Tests** : `test_p2_6_journal.py` **37/37**. Suite in-memory permanente **231/231 verte** (Phase 1 + P1.11 + P1.12 + P2.1..P2.6).
+- [x] **Smoke live** : FY→périodes→comptes→preview (écriture équilibrée)→commit (1 écriture / 2 lignes)→re-commit idempotent→liste (lignes+totaux)→aggregate (net 9001=+100 / 9002=−100) ; données de test supprimées (baseline propre). Legacy `acct` HTTP 200, aucune collection legacy touchée.
+
+### 🛑 P2.6 IMPLÉMENTÉ. STOP — NE PAS DÉMARRER P2.7 (Abstraction d'ingestion) avant approbation explicite du client.
