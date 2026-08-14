@@ -22,6 +22,7 @@ from ..permissions import require_company_access, require_company_admin, require
 from .accounts import (
     _CURRENCY_RE, _validate_currency, public_account,
 )
+from .ingestion.readers import read_tabular, _cell_str  # noqa: F401 (re-exported for TB/journal)
 
 SourceType = Literal["excel", "csv", "api", "manual"]
 DataType = Literal["accounts", "trial_balance", "transactions", "journal"]
@@ -96,68 +97,13 @@ def _norm_header(h) -> Optional[str]:
     return None
 
 
-def _cell_str(v) -> str:
-    """Stringify a cell WITHOUT losing leading zeros / punctuation for text values.
-    Numeric cells are rendered without a trailing .0 for whole numbers."""
-    if v is None:
-        return ""
-    if isinstance(v, float) and v.is_integer():
-        return str(int(v))
-    return str(v).strip()
-
-
 def parse_accounts_file(content: bytes, file_name: str) -> list[dict]:
-    """Parse an Excel/CSV chart-of-accounts into raw string rows.
+    """Parse an Excel/CSV chart-of-accounts into raw string rows (P2.7 shared reader).
 
     Returns a list of {"_row": <1-based data row>, <field>: str}. Raises 400 on
     an unreadable file or a missing account_code/account_name header.
     """
-    name = (file_name or "").lower()
-    is_csv = name.endswith(".csv") or (not name.endswith((".xlsx", ".xls")) and b"," in content[:200] and b"PK" not in content[:4])
-
-    rows: list[dict] = []
-    if is_csv:
-        try:
-            text = content.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            text = content.decode("latin-1")
-        reader = list(_csv.reader(io.StringIO(text)))
-        if not reader:
-            raise HTTPException(status_code=400, detail="Fichier vide")
-        header_map = {i: _norm_header(h) for i, h in enumerate(reader[0])}
-        data_rows = reader[1:]
-        for idx, raw in enumerate(data_rows, start=2):
-            if not any((c or "").strip() for c in raw):
-                continue
-            row = {"_row": idx}
-            for i, field in header_map.items():
-                if field and i < len(raw):
-                    row[field] = (raw[i] or "").strip()
-            rows.append(row)
-    else:
-        import openpyxl
-        try:
-            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True, read_only=True)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Fichier Excel illisible")
-        ws = wb.active
-        it = ws.iter_rows(values_only=True)
-        try:
-            header = next(it)
-        except StopIteration:
-            raise HTTPException(status_code=400, detail="Fichier vide")
-        header_map = {i: _norm_header(h) for i, h in enumerate(header)}
-        for idx, raw in enumerate(it, start=2):
-            if raw is None or not any(c is not None and str(c).strip() for c in raw):
-                continue
-            row = {"_row": idx}
-            for i, field in header_map.items():
-                if field and i < len(raw):
-                    row[field] = _cell_str(raw[i])
-            rows.append(row)
-
-    fields_present = set().union(*(set(r.keys()) for r in rows)) if rows else set()
-    header_fields = set(v for v in header_map.values() if v)
+    rows, header_fields = read_tabular(content, file_name, _norm_header)
     if "account_code" not in header_fields or "account_name" not in header_fields:
         raise HTTPException(status_code=400, detail="Colonnes requises manquantes : account_code et account_name")
     return rows
@@ -263,64 +209,9 @@ async def _existing_indexes(db, workspace_id, company_id, source_system):
 
 async def preview_accounts_import(db, company_id: str, user: dict, content: bytes,
                                   file_name: str, source_type: str = "excel") -> dict:
-    company = await require_company_admin(db, company_id, user)
-    workspace_id = require_tenant_context(user)
-    if source_type not in _VALID_SOURCE_TYPES:
-        raise HTTPException(status_code=422, detail=f"source_type invalide: {source_type}")
-
-    checksum = _checksum(content)
-    idempotency_key = f"{workspace_id}:{company_id}:accounts:{checksum}"
-    now = datetime.now(timezone.utc).isoformat()
-    source_system = source_type
-
-    rows = parse_accounts_file(content, file_name)
-    by_code, by_ext = await _existing_indexes(db, workspace_id, company_id, source_system)
-    preview_rows, warnings_flat = validate_accounts_rows(rows, company, by_code, by_ext)
-
-    rejected = sum(1 for p in preview_rows if p["action"] == "reject")
-    to_apply = [p for p in preview_rows if p["action"] in ("create", "update")]
-    status = "failed" if rejected else "valid"
-
-    doc = {
-        "_id": f"imp_{uuid.uuid4().hex}",
-        "workspace_id": workspace_id,
-        "company_id": company_id,
-        "source_type": source_type,
-        "data_type": "accounts",
-        "source_system": source_system,
-        "file_name": file_name,
-        "file_reference": None,
-        "financial_year_id": None,
-        "financial_period_id": None,
-        "status": status,
-        "version": 1,
-        "records_received": len(rows),
-        "records_created": 0,
-        "records_updated": 0,
-        "records_rejected": rejected,
-        "checksum": checksum,
-        "idempotency_key": idempotency_key,
-        "started_at": now,
-        "completed_at": None,
-        "created_by": user.get("id"),
-        "created_at": now,
-        "updated_at": now,
-        "error_summary": (f"{rejected} ligne(s) en erreur" if rejected else None),
-        "warnings": warnings_flat,
-        "metadata": {"apply_rows": [p["normalized"] for p in to_apply]},
-    }
-    await db.data_imports.insert_one(doc)
-
-    result = public_import(doc)
-    result["preview_rows"] = preview_rows
-    result["counts"] = {
-        "received": len(rows),
-        "to_create": sum(1 for p in to_apply if p["action"] == "create"),
-        "to_update": sum(1 for p in to_apply if p["action"] == "update"),
-        "rejected": rejected,
-        "warnings": len(warnings_flat),
-    }
-    return result
+    from .ingestion.orchestrator import run_preview
+    from .ingestion.registry import get_adapter
+    return await run_preview(db, get_adapter("accounts"), company_id, user, content, file_name, source_type)
 
 
 # ---- Lifecycle: commit ----------------------------------------------------
@@ -361,58 +252,9 @@ async def _upsert_account(db, workspace_id, company_id, source_system, row, acto
 
 
 async def commit_accounts_import(db, company_id: str, user: dict, import_id: str) -> dict:
-    await require_company_admin(db, company_id, user)
-    workspace_id = require_tenant_context(user)
-    doc = await db.data_imports.find_one({"_id": import_id, "workspace_id": workspace_id, "company_id": company_id})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Import introuvable")
-
-    # Already committed → idempotent no-op.
-    if doc.get("status") in ("completed", "completed_with_warnings"):
-        return {"already_committed": True, **public_import(doc)}
-    if doc.get("status") == "failed":
-        raise HTTPException(status_code=409, detail="Import en échec — corriger les erreurs bloquantes avant validation")
-    if doc.get("status") != "valid":
-        raise HTTPException(status_code=409, detail=f"Statut d'import non validable: {doc.get('status')}")
-
-    now = datetime.now(timezone.utc).isoformat()
-    warnings = list(doc.get("warnings", []))
-
-    # Same-source idempotency: an identical source already fully imported → safe no-op.
-    dup = await db.data_imports.find_one({
-        "workspace_id": workspace_id, "company_id": company_id,
-        "idempotency_key": doc.get("idempotency_key"),
-        "status": {"$in": ["completed", "completed_with_warnings"]},
-        "_id": {"$ne": import_id},
-    })
-    if dup:
-        warnings.append({"warning": f"Source identique déjà importée ({dup['_id']}) — aucune modification"})
-        await db.data_imports.update_one({"_id": import_id}, {"$set": {
-            "status": "completed_with_warnings", "records_created": 0, "records_updated": 0,
-            "completed_at": now, "updated_at": now, "warnings": warnings,
-        }})
-        doc = await db.data_imports.find_one({"_id": import_id})
-        return public_import(doc)
-
-    await db.data_imports.update_one({"_id": import_id}, {"$set": {"status": "importing", "updated_at": now}})
-
-    source_system = doc.get("source_system")
-    created = updated = 0
-    apply_rows = (doc.get("metadata") or {}).get("apply_rows", [])
-    for row in apply_rows:
-        outcome = await _upsert_account(db, workspace_id, company_id, source_system, row, user.get("id"))
-        if outcome == "created":
-            created += 1
-        else:
-            updated += 1
-
-    final_status = "completed_with_warnings" if warnings else "completed"
-    await db.data_imports.update_one({"_id": import_id}, {"$set": {
-        "status": final_status, "records_created": created, "records_updated": updated,
-        "completed_at": now, "updated_at": now, "warnings": warnings,
-    }})
-    doc = await db.data_imports.find_one({"_id": import_id})
-    return public_import(doc)
+    from .ingestion.orchestrator import run_commit
+    from .ingestion.registry import get_adapter
+    return await run_commit(db, get_adapter("accounts"), company_id, user, import_id)
 
 
 # ---- History --------------------------------------------------------------

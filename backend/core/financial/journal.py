@@ -20,8 +20,9 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from ..permissions import require_company_access, require_company_admin, require_tenant_context
-from .data_imports import _checksum, _cell_str, public_import
+from .data_imports import _checksum, _cell_str, public_import  # noqa: F401 (_checksum/_cell_str reused)
 from .trial_balance import _parse_number, _resolve_financial_context
+from .ingestion.readers import read_tabular
 
 _TOLERANCE = 0.01
 _DATE_FMT = "%Y-%m-%d"
@@ -113,54 +114,7 @@ def _norm_j_header(h) -> Optional[str]:
 
 
 def parse_journal_file(content: bytes, file_name: str) -> list[dict]:
-    name = (file_name or "").lower()
-    is_csv = name.endswith(".csv") or (not name.endswith((".xlsx", ".xls")) and b"PK" not in content[:4])
-    rows: list[dict] = []
-    header_fields: set = set()
-    if is_csv:
-        import csv as _csv
-        import io
-        try:
-            text = content.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            text = content.decode("latin-1")
-        reader = list(_csv.reader(io.StringIO(text)))
-        if not reader:
-            raise HTTPException(status_code=400, detail="Fichier vide")
-        header_map = {i: _norm_j_header(h) for i, h in enumerate(reader[0])}
-        header_fields = {v for v in header_map.values() if v}
-        for idx, raw in enumerate(reader[1:], start=2):
-            if not any((c or "").strip() for c in raw):
-                continue
-            row = {"_row": idx}
-            for i, field in header_map.items():
-                if field and i < len(raw):
-                    row[field] = (raw[i] or "").strip()
-            rows.append(row)
-    else:
-        import openpyxl
-        import io
-        try:
-            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True, read_only=True)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Fichier Excel illisible")
-        ws = wb.active
-        it = ws.iter_rows(values_only=True)
-        try:
-            header = next(it)
-        except StopIteration:
-            raise HTTPException(status_code=400, detail="Fichier vide")
-        header_map = {i: _norm_j_header(h) for i, h in enumerate(header)}
-        header_fields = {v for v in header_map.values() if v}
-        for idx, raw in enumerate(it, start=2):
-            if raw is None or not any(c is not None and str(c).strip() for c in raw):
-                continue
-            row = {"_row": idx}
-            for i, field in header_map.items():
-                if field and i < len(raw):
-                    row[field] = _cell_str(raw[i])
-            rows.append(row)
-
+    rows, header_fields = read_tabular(content, file_name, _norm_j_header)
     for req in ("entry_id", "account_code"):
         if req not in header_fields:
             raise HTTPException(status_code=400, detail=f"Colonne requise manquante : {req}")
@@ -314,131 +268,20 @@ def validate_journal_rows(rows, company, accounts_by_code, period):
     return entries_preview, warnings_flat, controls
 
 
-# ---- Lifecycle: preview ---------------------------------------------------
+# ---- Lifecycle (delegated to the P2.7 ingestion orchestrator) -------------
 async def preview_journal_import(db, company_id, user, content, file_name,
                                  financial_year_id, financial_period_id, source_type="import"):
-    company = await require_company_admin(db, company_id, user)
-    workspace_id = require_tenant_context(user)
-    if not financial_year_id or not financial_period_id:
-        raise HTTPException(status_code=422, detail="financial_year_id et financial_period_id requis")
-    _fy, fp = await _resolve_financial_context(db, company_id, workspace_id, financial_year_id, financial_period_id)
-    _check_period_open(fp)  # open only for NEW normalized journal writes
-
-    checksum = _checksum(content)
-    idempotency_key = f"{workspace_id}:{company_id}:journal:{financial_period_id}:{checksum}"
-    now = datetime.now(timezone.utc).isoformat()
-
-    rows = parse_journal_file(content, file_name)
-    accounts = await db.accounts.find({"workspace_id": workspace_id, "company_id": company_id}).to_list(None)
-    accounts_by_code = {a.get("account_code"): a for a in accounts}
-    entries_preview, warnings_flat, controls = validate_journal_rows(rows, company, accounts_by_code, fp)
-
-    rejected = sum(1 for e in entries_preview if e["action"] == "reject")
-    to_apply = [e for e in entries_preview if e["action"] == "import"]
-    status = "failed" if rejected else "valid"
-    error_summary = f"{rejected} écriture(s) en erreur" if rejected else None
-
-    doc = {
-        "_id": f"imp_{uuid.uuid4().hex}",
-        "workspace_id": workspace_id, "company_id": company_id,
-        "source_type": source_type, "data_type": "journal", "source_system": source_type,
-        "file_name": file_name, "file_reference": None,
-        "financial_year_id": financial_year_id, "financial_period_id": financial_period_id,
-        "status": status, "version": 1,
-        "records_received": len(rows), "records_created": 0, "records_updated": 0,
-        "records_rejected": rejected,
-        "checksum": checksum, "idempotency_key": idempotency_key,
-        "started_at": now, "completed_at": None,
-        "created_by": user.get("id"), "created_at": now, "updated_at": now,
-        "error_summary": error_summary, "warnings": warnings_flat,
-        "metadata": {"apply_entries": [
-            {"entry_id": e["entry_id"], "entry_date": e["entry_date"], "reference": e["reference"],
-             "description": e["description"], "external_entry_id": e["external_entry_id"],
-             "lines": e["lines"]} for e in to_apply],
-            "controls": controls},
-    }
-    await db.data_imports.insert_one(doc)
-
-    result = public_import(doc)
-    result["entries_preview"] = entries_preview
-    result["controls"] = controls
-    result["counts"] = {"received": len(rows), "entries_to_import": len(to_apply),
-                        "rejected": rejected, "warnings": len(warnings_flat)}
-    return result
+    from .ingestion.orchestrator import run_preview
+    from .ingestion.registry import get_adapter
+    return await run_preview(db, get_adapter("journal"), company_id, user, content, file_name,
+                             source_type, ctx={"financial_year_id": financial_year_id,
+                                               "financial_period_id": financial_period_id})
 
 
-# ---- Lifecycle: commit ----------------------------------------------------
 async def commit_journal_import(db, company_id, user, import_id):
-    await require_company_admin(db, company_id, user)
-    workspace_id = require_tenant_context(user)
-    doc = await db.data_imports.find_one({
-        "_id": import_id, "workspace_id": workspace_id, "company_id": company_id, "data_type": "journal"})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Import introuvable")
-    if doc.get("status") in ("completed", "completed_with_warnings"):
-        return {"already_committed": True, **public_import(doc)}
-    if doc.get("status") == "failed":
-        raise HTTPException(status_code=409, detail="Import en échec — corriger les erreurs bloquantes avant validation")
-    if doc.get("status") != "valid":
-        raise HTTPException(status_code=409, detail=f"Statut d'import non validable: {doc.get('status')}")
-
-    # Re-check period status at commit time (open only).
-    fp = await db.financial_periods.find_one({
-        "_id": doc.get("financial_period_id"), "workspace_id": workspace_id, "company_id": company_id})
-    if not fp:
-        raise HTTPException(status_code=404, detail="Période introuvable")
-    _check_period_open(fp)
-
-    # Retry safety.
-    existing = await db.journal_entries.find_one({
-        "workspace_id": workspace_id, "company_id": company_id, "import_id": import_id})
-    if existing:
-        return {"already_committed": True, **public_import(doc)}
-
-    now = datetime.now(timezone.utc).isoformat()
-    await db.data_imports.update_one({"_id": import_id}, {"$set": {"status": "importing", "updated_at": now}})
-
-    apply_entries = (doc.get("metadata") or {}).get("apply_entries", [])
-    entry_count = line_count = 0
-    for e in apply_entries:
-        je_id = f"je_{uuid.uuid4().hex}"
-        entry_doc = {
-            "_id": je_id, "workspace_id": workspace_id, "company_id": company_id,
-            "financial_year_id": doc.get("financial_year_id"),
-            "financial_period_id": doc.get("financial_period_id"),
-            "import_id": import_id,
-            "entry_date": e["entry_date"], "reference": e.get("reference"),
-            "description": e.get("description"),
-            "source_type": doc.get("source_type"), "source_system": doc.get("source_system"),
-            "external_id": e.get("external_entry_id"), "status": "posted",
-            "created_at": now, "created_by": user.get("id"), "updated_at": now,
-        }
-        await db.journal_entries.insert_one(entry_doc)
-        entry_count += 1
-        for ln in e["lines"]:
-            line_doc = {
-                "_id": f"jel_{uuid.uuid4().hex}", "workspace_id": workspace_id, "company_id": company_id,
-                "journal_entry_id": je_id, "account_id": ln["account_id"], "account_code": ln["account_code"],
-                "line_number": ln["line_number"], "description": ln.get("description"),
-                "debit": ln["debit"], "credit": ln["credit"], "net": ln["net"],
-                "currency": ln["currency"], "external_line_id": ln.get("external_line_id"),
-                "source_row": ln.get("source_row"), "created_at": now, "updated_at": now,
-            }
-            await db.journal_entry_lines.insert_one(line_doc)
-            line_count += 1
-
-    warnings = list(doc.get("warnings", []))
-    final_status = "completed_with_warnings" if warnings else "completed"
-    await db.data_imports.update_one({"_id": import_id}, {"$set": {
-        "status": final_status, "records_created": entry_count, "completed_at": now, "updated_at": now,
-        "metadata": {**(doc.get("metadata") or {}), "committed_line_count": line_count},
-    }})
-    doc = await db.data_imports.find_one({"_id": import_id})
-    result = public_import(doc)
-    result["entry_count"] = entry_count
-    result["line_count"] = line_count
-    result["controls"] = (doc.get("metadata") or {}).get("controls", {})
-    return result
+    from .ingestion.orchestrator import run_commit
+    from .ingestion.registry import get_adapter
+    return await run_commit(db, get_adapter("journal"), company_id, user, import_id)
 
 
 # ---- Read -----------------------------------------------------------------

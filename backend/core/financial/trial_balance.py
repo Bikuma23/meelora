@@ -20,7 +20,8 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from ..permissions import require_company_access, require_company_admin, require_tenant_context
-from .data_imports import _checksum, _cell_str, public_import, parse_accounts_file as _p  # noqa: F401 (parse reused via own parser)
+from .data_imports import _checksum, _cell_str, public_import  # noqa: F401 (_checksum/_cell_str reused)
+from .ingestion.readers import read_tabular
 
 _TOLERANCE = 0.01  # currency 2-decimal tolerance
 
@@ -97,57 +98,9 @@ def _parse_number(raw):
 
 
 def parse_trial_balance_file(content: bytes, file_name: str) -> list[dict]:
-    """Parse an Excel/CSV Trial Balance into raw rows keyed by TB field.
+    """Parse an Excel/CSV Trial Balance into raw rows keyed by TB field (P2.7 shared reader).
     account_code preserved as string. Raises 400 on unreadable file / missing headers."""
-    name = (file_name or "").lower()
-    is_csv = name.endswith(".csv") or (not name.endswith((".xlsx", ".xls")) and b"PK" not in content[:4])
-
-    rows: list[dict] = []
-    header_fields: set = set()
-    if is_csv:
-        import csv as _csv
-        import io
-        try:
-            text = content.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            text = content.decode("latin-1")
-        reader = list(_csv.reader(io.StringIO(text)))
-        if not reader:
-            raise HTTPException(status_code=400, detail="Fichier vide")
-        header_map = {i: _norm_tb_header(h) for i, h in enumerate(reader[0])}
-        header_fields = {v for v in header_map.values() if v}
-        for idx, raw in enumerate(reader[1:], start=2):
-            if not any((c or "").strip() for c in raw):
-                continue
-            row = {"_row": idx}
-            for i, field in header_map.items():
-                if field and i < len(raw):
-                    row[field] = (raw[i] or "").strip()
-            rows.append(row)
-    else:
-        import openpyxl
-        import io
-        try:
-            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True, read_only=True)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Fichier Excel illisible")
-        ws = wb.active
-        it = ws.iter_rows(values_only=True)
-        try:
-            header = next(it)
-        except StopIteration:
-            raise HTTPException(status_code=400, detail="Fichier vide")
-        header_map = {i: _norm_tb_header(h) for i, h in enumerate(header)}
-        header_fields = {v for v in header_map.values() if v}
-        for idx, raw in enumerate(it, start=2):
-            if raw is None or not any(c is not None and str(c).strip() for c in raw):
-                continue
-            row = {"_row": idx}
-            for i, field in header_map.items():
-                if field and i < len(raw):
-                    row[field] = _cell_str(raw[i])
-            rows.append(row)
-
+    rows, header_fields = read_tabular(content, file_name, _norm_tb_header)
     if "account_code" not in header_fields:
         raise HTTPException(status_code=400, detail="Colonne requise manquante : account_code")
     if not ({"period_debit", "period_credit"} & header_fields) and "period_net" not in header_fields:
@@ -273,122 +226,20 @@ def validate_tb_rows(rows, company, accounts_by_code):
     return preview, warnings_flat, controls
 
 
-# ---- Lifecycle: preview ---------------------------------------------------
+# ---- Lifecycle (delegated to the P2.7 ingestion orchestrator) -------------
 async def preview_trial_balance_import(db, company_id, user, content, file_name,
                                        financial_year_id, financial_period_id, source_type="excel"):
-    company = await require_company_admin(db, company_id, user)
-    workspace_id = require_tenant_context(user)
-    if not financial_year_id or not financial_period_id:
-        raise HTTPException(status_code=422, detail="financial_year_id et financial_period_id requis")
-    await _resolve_financial_context(db, company_id, workspace_id, financial_year_id, financial_period_id)
-
-    checksum = _checksum(content)
-    idempotency_key = f"{workspace_id}:{company_id}:trial_balance:{financial_period_id}:{checksum}"
-    now = datetime.now(timezone.utc).isoformat()
-
-    rows = parse_trial_balance_file(content, file_name)
-    accounts = await db.accounts.find({"workspace_id": workspace_id, "company_id": company_id}).to_list(None)
-    accounts_by_code = {a.get("account_code"): a for a in accounts}
-    preview_rows, warnings_flat, controls = validate_tb_rows(rows, company, accounts_by_code)
-
-    rejected = sum(1 for p in preview_rows if p["action"] == "reject")
-    to_apply = [p for p in preview_rows if p["action"] == "import"]
-
-    # Balance controls are blocking by default (never silently import an unbalanced TB).
-    balance_errors = []
-    if not controls["period_balanced"]:
-        balance_errors.append(f"Balance déséquilibrée (période): écart {controls['period_difference']}")
-    if not controls["ytd_balanced"]:
-        balance_errors.append(f"Balance déséquilibrée (cumul): écart {controls['ytd_difference']}")
-
-    status = "failed" if (rejected or balance_errors) else "valid"
-    error_summary = None
-    if rejected or balance_errors:
-        parts = []
-        if rejected:
-            parts.append(f"{rejected} ligne(s) en erreur")
-        parts += balance_errors
-        error_summary = " ; ".join(parts)
-
-    doc = {
-        "_id": f"imp_{uuid.uuid4().hex}",
-        "workspace_id": workspace_id, "company_id": company_id,
-        "source_type": source_type, "data_type": "trial_balance", "source_system": source_type,
-        "file_name": file_name, "file_reference": None,
-        "financial_year_id": financial_year_id, "financial_period_id": financial_period_id,
-        "status": status, "version": 1,
-        "records_received": len(rows), "records_created": 0, "records_updated": 0,
-        "records_rejected": rejected,
-        "checksum": checksum, "idempotency_key": idempotency_key,
-        "started_at": now, "completed_at": None,
-        "created_by": user.get("id"), "created_at": now, "updated_at": now,
-        "error_summary": error_summary, "warnings": warnings_flat,
-        "metadata": {"apply_rows": [p["normalized"] for p in to_apply], "controls": controls},
-    }
-    await db.data_imports.insert_one(doc)
-
-    result = public_import(doc)
-    result["preview_rows"] = preview_rows
-    result["controls"] = controls
-    result["balance_errors"] = balance_errors
-    result["counts"] = {"received": len(rows), "to_import": len(to_apply),
-                        "rejected": rejected, "warnings": len(warnings_flat)}
-    return result
+    from .ingestion.orchestrator import run_preview
+    from .ingestion.registry import get_adapter
+    return await run_preview(db, get_adapter("trial_balance"), company_id, user, content, file_name,
+                             source_type, ctx={"financial_year_id": financial_year_id,
+                                               "financial_period_id": financial_period_id})
 
 
-# ---- Lifecycle: commit ----------------------------------------------------
 async def commit_trial_balance_import(db, company_id, user, import_id):
-    await require_company_admin(db, company_id, user)
-    workspace_id = require_tenant_context(user)
-    doc = await db.data_imports.find_one({
-        "_id": import_id, "workspace_id": workspace_id, "company_id": company_id,
-        "data_type": "trial_balance"})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Import introuvable")
-
-    if doc.get("status") in ("completed", "completed_with_warnings"):
-        return {"already_committed": True, **public_import(doc)}
-    if doc.get("status") == "failed":
-        raise HTTPException(status_code=409, detail="Import en échec — corriger les erreurs bloquantes avant validation")
-    if doc.get("status") != "valid":
-        raise HTTPException(status_code=409, detail=f"Statut d'import non validable: {doc.get('status')}")
-
-    # Retry safety: if lines already exist for this import_id, do not duplicate.
-    existing = await db.trial_balance_lines.find_one({
-        "workspace_id": workspace_id, "company_id": company_id, "import_id": import_id})
-    if existing:
-        return {"already_committed": True, **public_import(doc)}
-
-    now = datetime.now(timezone.utc).isoformat()
-    await db.data_imports.update_one({"_id": import_id}, {"$set": {"status": "importing", "updated_at": now}})
-
-    apply_rows = (doc.get("metadata") or {}).get("apply_rows", [])
-    created = 0
-    for row in apply_rows:
-        line = {
-            "_id": f"tbl_{uuid.uuid4().hex}",
-            "workspace_id": workspace_id, "company_id": company_id,
-            "financial_year_id": doc.get("financial_year_id"),
-            "financial_period_id": doc.get("financial_period_id"),
-            "import_id": import_id,
-            "account_id": row["account_id"], "account_code": row["account_code"],
-            "period_debit": row["period_debit"], "period_credit": row["period_credit"], "period_net": row["period_net"],
-            "ytd_debit": row["ytd_debit"], "ytd_credit": row["ytd_credit"], "ytd_net": row["ytd_net"],
-            "currency": row["currency"], "source_row": row["source_row"],
-            "created_at": now, "updated_at": now,
-        }
-        await db.trial_balance_lines.insert_one(line)
-        created += 1
-
-    warnings = list(doc.get("warnings", []))
-    final_status = "completed_with_warnings" if warnings else "completed"
-    await db.data_imports.update_one({"_id": import_id}, {"$set": {
-        "status": final_status, "records_created": created, "completed_at": now, "updated_at": now,
-    }})
-    doc = await db.data_imports.find_one({"_id": import_id})
-    result = public_import(doc)
-    result["controls"] = (doc.get("metadata") or {}).get("controls", {})
-    return result
+    from .ingestion.orchestrator import run_commit
+    from .ingestion.registry import get_adapter
+    return await run_commit(db, get_adapter("trial_balance"), company_id, user, import_id)
 
 
 # ---- Read -----------------------------------------------------------------
