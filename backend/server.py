@@ -81,6 +81,10 @@ from core.financial.reconciliation import (
     reconcile_accounts, reconcile_trial_balance, reconcile_journal_vs_tb, reconciliation_status,
     _LEGACY_COL_KEYS,
 )
+from core.financial.phase2_signoff import (
+    create_signoff, list_signoffs, get_signoff, signoff_status,
+    ensure_indexes as _ensure_phase2_signoff_indexes,
+)
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -1322,6 +1326,65 @@ async def reconciliation_overall_status(company_id: str, financial_period_id: Op
                                        legacy_period_key=legacy_period_key,
                                        legacy_cols=_legacy_cols(period_debit_col, period_credit_col,
                                                                 ytd_debit_col, ytd_credit_col))
+
+
+# ---------------------------------------------------------------------------
+# P2.10 — Phase 2 sign-off (validation evidence). Consumes REAL P2.9 output.
+# Create/finalize = workspace admin only; reads = authorized company members.
+# NO cutover here (readiness only); never mutates financial_data_source or
+# legacy financial collections. Finalized sign-offs are audit evidence.
+# ---------------------------------------------------------------------------
+class Phase2SignoffCreate(BaseModel):
+    financial_period_id: str
+    decision: str
+    conditions: Optional[List[str]] = None
+    notes: Optional[str] = None
+    normalized_import_id: Optional[str] = None
+    tolerance: float = 0.01
+    legacy_period_key: Optional[str] = None
+    period_debit_col: Optional[str] = None
+    period_credit_col: Optional[str] = None
+    ytd_debit_col: Optional[str] = None
+    ytd_credit_col: Optional[str] = None
+
+
+@api.post("/companies/{company_id}/phase2-signoffs")
+async def create_company_phase2_signoff(company_id: str, payload: Phase2SignoffCreate,
+                                        user: dict = Depends(get_current_user)):
+    record = await create_signoff(
+        db, company_id, user, financial_period_id=payload.financial_period_id,
+        decision=payload.decision, conditions=payload.conditions, notes=payload.notes,
+        normalized_import_id=payload.normalized_import_id, tolerance=payload.tolerance,
+        legacy_period_key=payload.legacy_period_key,
+        legacy_cols=_legacy_cols(payload.period_debit_col, payload.period_credit_col,
+                                 payload.ytd_debit_col, payload.ytd_credit_col))
+    await log_action(user, "create", "phase2_signoff", record.get("id", ""),
+                     details=f"Sign-off Phase 2 — décision {record.get('decision')}",
+                     company_id=company_id, entity_id=record.get("id"),
+                     event_type=f"phase2_signoff.{record.get('decision')}",
+                     metadata={"financial_period_id": payload.financial_period_id,
+                               "normalized_import_id": record.get("normalized_import_id"),
+                               "decision": record.get("decision"),
+                               "cutover_ready": record.get("cutover_ready")})
+    return record
+
+
+@api.get("/companies/{company_id}/phase2-signoffs")
+async def list_company_phase2_signoffs(company_id: str, financial_period_id: Optional[str] = None,
+                                       user: dict = Depends(get_current_user)):
+    return await list_signoffs(db, company_id, user, financial_period_id=financial_period_id)
+
+
+@api.get("/companies/{company_id}/phase2-signoff-status")
+async def company_phase2_signoff_status(company_id: str, financial_period_id: Optional[str] = None,
+                                        user: dict = Depends(get_current_user)):
+    return await signoff_status(db, company_id, user, financial_period_id)
+
+
+@api.get("/companies/{company_id}/phase2-signoffs/{signoff_id}")
+async def get_company_phase2_signoff(company_id: str, signoff_id: str,
+                                     user: dict = Depends(get_current_user)):
+    return await get_signoff(db, company_id, user, signoff_id)
 
 
 # ---------------------------------------------------------------------------
@@ -7451,6 +7514,7 @@ async def startup():
         await _ensure_trial_balance_indexes(db)
         await _ensure_journal_indexes(db)
         await _ensure_financial_config_indexes(db)
+        await _ensure_phase2_signoff_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     try:

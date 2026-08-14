@@ -1034,3 +1034,38 @@ Sépare l'identité globale (users) de l'appartenance workspace et société.
 - [x] **Smoke live** : match parfait → `reconciled` + `cutover_ready=true` ; différence injectée (compte 10 : legacy 120 vs normalisé 100) → `difference` écart −20 détecté ; journal absent → `incomplete` (pas de faux zéro) ; legacy `acct` HTTP 200 ; données de test (dont 2 BV legacy) supprimées (baseline restaurée).
 
 ### 🛑 P2.9 IMPLÉMENTÉ. STOP — NE PAS DÉMARRER P2.10 (Validation/Sign-off Phase 2) avant approbation explicite du client.
+
+## P2.10 — Sign-off / Validation Phase 2 (couche d'évidence, gel d'audit) — 2026-06 (APPROUVÉ par le client)
+- [x] **Module** `core/financial/phase2_signoff.py` + collection `phase2_signoffs` (`_id=p2so_<uuid>`). AUCUN calcul financier nouveau : la préparation est dérivée EXCLUSIVEMENT de la sortie réelle de `reconciliation_status` (P2.9) + `reconcile_journal_vs_tb`. Ne mute JAMAIS `financial_data_source` (pas de cutover — préparation seulement) ni les collections legacy (acct_*/qc9434_*). Seule `phase2_signoffs` est écrite.
+- [x] **Décisions** : `approved` | `approved_with_conditions` | `blocked`. Règles : `approved` REFUSÉ (422) si TB ≠ reconciled OU cutover_ready=false OU écarts critiques de comptes > 0 ; `approved` simple aussi refusé si journal ≠ reconciled (→ utiliser approved_with_conditions). `approved_with_conditions` exige conditions non vides ET les portes dures TB/cutover (le journal seul ne bloque pas si documenté). `blocked` toujours permis, conserve `reconciliation_reasons`.
+- [x] **validation_snapshot** (évidence immuable, PAS de duplication des datasets) : reconciliation generated_at, normalized_import_id, legacy_period_key, tolérance, résumé comptes, totaux de contrôle TB, compteurs de différences, nb d'écarts critiques, statut+couverture journal, overall_status, cutover_ready.
+- [x] **Supersession** (jamais d'écrasement/suppression) : un nouveau sign-off société/période marque le précédent `superseded=true` (+ superseded_at/superseded_by) et pointe via `supersedes_signoff_id`. Le dernier finalisé (non superseded) est identifiable de façon déterministe.
+- [x] **APIs** : `POST /api/companies/{id}/phase2-signoffs` (workspace admin), `GET /api/companies/{id}/phase2-signoffs` (liste, filtre période), `GET /api/companies/{id}/phase2-signoffs/{signoff_id}`, `GET /api/companies/{id}/phase2-signoff-status?financial_period_id=...`. **Cutover NON implémenté** (choix client — sécurité > convenance ; le flag P2.8 reste inchangé).
+- [x] **Sécurité P1.12** : création/finalisation = workspace admin uniquement (`require_company_admin`) ; lecture = membre société autorisé ; admin company-local = lecture seule ; platform_role sans membership refusé ; cross-workspace 404.
+- [x] **Logs** : `phase2_signoff.{approved|approved_with_conditions|blocked}` (workspace_id, company_id, financial_period_id, signoff_id, normalized_import_id, decision, acteur). Aucun log sur les lectures.
+- [x] **Tests** : `test_p2_10_signoff.py` **19/19** ; suite in-memory permanente **322/322 verte** (Phase 1 + P1.11 + P1.12 + P2.1..P2.10).
+- [x] **Smoke live (pilote Meelora, période fictive 2099)** : status → `reconciled` + `cutover_ready=true` ; POST approved → OK (snapshot 15 clés) ; scénario en échec (sans mapping legacy) → 422 ; blocked supersède l'approved ; status latest=blocked count=2 ; Julie (principal) lit (200) mais ne peut créer (403) ; société sans accès 403 ; sign-off inexistant 404 ; logs `phase2_signoff.approved/.blocked` présents ; legacy `acct`/`companies` HTTP 200 ; **baseline restaurée** (acct_bv 2099-01 supprimé, 0 phase2_signoffs résiduels).
+
+## 🏁 RAPPORT DE COMPLÉTION PHASE 2 — FINANCIAL CORE (2026-06)
+1. **Composants livrés** : P2.1 Exercices, P2.2 Périodes, P2.3 Comptes unifiés, P2.4 Cycle de vie des imports, P2.5 Balance normalisée, P2.6 Journal normalisé, P2.7 Abstraction d'ingestion, P2.8 Pont de compatibilité legacy, P2.9 Réconciliation, P2.10 Sign-off.
+2. **Collections introduites** : `financial_years`, `financial_periods`, `accounts`, `data_imports`, `trial_balance_lines`, `journal_entries`, `journal_entry_lines`, `financial_config`, `phase2_signoffs`.
+3. **APIs introduites** : imports (accounts/TB/journal preview+commit), lectures TB/journal, financial-source (status/set), compat (accounts/TB/journal), reconciliation (accounts/TB/journal-vs-TB/status), phase2-signoffs (create/list/get/status).
+4. **Modèle de sécurité** : P1.12 partout — import/structurel/sign-off = workspace admin ; lecture = membre autorisé ; company-local admin borné ; platform_role sans accès client automatique ; cross-workspace 404.
+5. **Ingestion** : abstraction unifiée (readers/adapters/orchestrator/registry) ; connecteurs (BaseConnector + MockConnector, **aucun fournisseur réel — MOCKÉ**).
+6. **Comptes normalisés** : opaques (code string préservé), devise, normal_balance ; réconciliés vs legacy.
+7. **Balance de vérification** : normalisée, contrôles d'équilibre, convention net=debit−credit ; réconciliée vs BV legacy (tolérance 0,01).
+8. **Journal** : normalisé, équilibre par écriture, agrégat de réconciliation vs TB (couverture par sequence, mensuel/YTD).
+9. **Pont de compatibilité** : lecture normalisée en formes legacy, flag société réversible, défaut legacy, aucune écriture legacy.
+10. **Réconciliation** : diagnostic lecture seule 3 niveaux + `cutover_ready`.
+11. **Résultat sign-off pilote** : APPROVED prouvé sur données réconciliées + cutover_ready ; approbation refusée (422) sur scénario en échec ; supersession prouvée.
+12. **Tests permanents** : **322/322 verts** (< 2 s, in-memory). (Les tests d'intégration HTTP legacy `test_admin_write_guard`/`test_preferences`/`test_fiche_overrides` échouent en pré-existant : identifiants legacy non semés dans cet environnement — hors périmètre Phase 2.)
+13. **Smoke legacy** : endpoints `acct`/`companies`/`employees` HTTP 200 après P2.10 ; aucune collection legacy modifiée destructivement.
+14. **Limitations connues** : connecteurs API réels non implémentés (mockés) ; cutover non implémenté (préparation seulement, par choix de sécurité).
+15. **Dépendances legacy restantes** : P&L / Bilan / Flux de trésorerie / KPI / Dashboards restent sur legacy (`acct_bv` clé "YYYY-MM", colonnes opaques).
+16. **Dépendances pont d'identité** : P1.12 (workspace_memberships / company_memberships + pont company_access) — stable.
+17. **Société réellement basculée en normalisé ?** : **NON** — aucune (défaut legacy conservé partout ; aucun cutover exécuté).
+18. **Phase 2 prête à la clôture ?** : **OUI** — Financial Core complet, testé, réversible, non destructif.
+19. **Préconditions Phase 3 (Reporting Engine)** : (a) sign-off approuvé par société/période cible ; (b) interprétation legacy explicite (clé + mapping colonnes) validée ; (c) couverture journal si le reporting le requiert ; (d) décision de bascule `financial_data_source` par société (action séparée, à concevoir).
+20. **Prochaine étape recommandée** : **ATTENDRE l'approbation explicite du client** avant de démarrer la Phase 3 (moteur de reporting P&L/Bilan/Flux sur données normalisées). NE PAS démarrer Concepts financiers / Templates de reporting.
+
+### 🛑 P2.10 IMPLÉMENTÉ — PHASE 2 PRÊTE À LA CLÔTURE. STOP — NE PAS DÉMARRER LA PHASE 3 (Reporting Engine) avant approbation explicite du client.
