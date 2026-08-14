@@ -877,3 +877,21 @@ Première brique du Financial Core normalisé, en parallèle du legacy (aucune d
 - **Reco P2.2** : `financial_periods` (rattachés à un financial_year, avec verrouillage introduit à ce moment-là).
 
 ### 🛑 P2.1 TERMINÉ. STOP — NE PAS DÉMARRER P2.2 avant approbation explicite du client.
+
+## PHASE 2 — P2.2 FINANCIAL PERIODS (2026-08-14) ✅ IMPLÉMENTÉ & VALIDÉ (testing_agent iteration_52) — P2.3 NON DÉMARRÉ
+Périodes normalisées rattachées aux exercices (financial_years), en parallèle du legacy.
+- **Module** : `backend/core/financial/periods.py` (services purs, réutilise l'autorisation Phase 1/P2.1). Routes fines dans server.py.
+- **Collection** `financial_periods` : `{_id:"fp_<uuid>", workspace_id, company_id, financial_year_id, period_code, label, start_date, end_date, period_type(month|quarter|adjustment), sequence, status(open|locked|closed), created_at/by, updated_at}`.
+- **Endpoints** : GET/POST `/api/companies/{cid}/financial-years/{fyid}/periods` ; POST `.../periods/generate-monthly` ; GET/PATCH `/api/companies/{cid}/financial-periods/{pid}`. Pas de DELETE physique (405).
+- **Règles** : 1 période=1 exercice ; workspace/company doivent matcher l'exercice parent (404 sinon) ; période entièrement dans l'exercice (422) ; pas de chevauchement/exercice (409) ; period_code unique/société (409) ; sequence unique/exercice (409) ; sequence NON basée sur janvier (position fiscale) ; exercices non calendaires first-class ; pas de suppression physique.
+- **Génération mensuelle** : admin, mois calendaires contigus couvrant l'exercice, sequence dès 1 (= 1er mois fiscal), idempotente (skip period_codes existants), rejette exercice non aligné mois entiers (422, message clair — pas de règle inventée). Pas de 4-4-5.
+- **Machine à états (verrou/clôture)** explicite : open↔locked, open↔closed, locked→closed, closed→open ; transition invalide (ex. closed→locked)=409. **Non propagé** aux écritures acct_*/qc9434_* (phase compat ultérieure).
+- **Index** : unique `(ws,company,fy,sequence)`, unique `(ws,company,period_code)`, `(ws,company,fy,start,end)`.
+- **Sécurité** : admin same-workspace read+admin ; user affecté=lecture ; non affecté=403 ; cross-workspace/inexistant=404 (no-leak) ; parent FY d'une autre société=404.
+- **Logs** : financial_periods.generated, financial_period.created/updated/locked/unlocked/closed/reopened (workspace/company/entity/acteur).
+- **Tests permanents** : `tests/test_p2_financial_periods.py` (22 in-memory, sans effet de bord). Test API live rangé dans `/app/test_reports/scratch/` (non collecté).
+- **Validation testing_agent iteration_52** : 31/31 API + 22/22 unit P2.2 + 16/16 P2.1 + régression Phase 1 ; smoke financier legacy 200 (formules inchangées) ; P1.11 intact ; baseline restaurée (financial_years=0, financial_periods=0).
+- **Sécurité legacy** : acct_periods/qc9434_years, formules BV/P&L/Bilan/Cashflow, P1.11 → inchangés. Aucune donnée legacy migrée.
+- **Reco P2.3** : Unified Accounts (plan de comptes normalisé) réutilisant `core/financial/`.
+
+### 🛑 P2.2 TERMINÉ. STOP — NE PAS DÉMARRER P2.3 avant approbation explicite du client.

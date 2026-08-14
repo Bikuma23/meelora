@@ -1,0 +1,29 @@
+{
+  "summary": "P2.2 Financial Periods — full backend API test suite on live preview backend. 31/31 API tests PASS: setup (calendar + non-calendar FYs), monthly generation for calendar (2026-01..2026-12 seq 1..12) and non-calendar (seq 1='2026-07', seq 12='2027-06'), idempotency (created=0/skipped=12), non-whole-month FY rejection 422 (start day!=1 AND end day!=last), manual create (inside 201 / outside 422 / overlap 409 / dup code 409 / dup sequence 409 / adjacent 201 / start>end 422), lifecycle open<->locked/closed with reopen, INVALID closed->locked 409, no physical DELETE (405), list sorted by sequence, GET single, security matrix (admin OK, Julie read A=200 read B=403 administer=403, Marc read both), no-leak isolation (unknown company 404, cross-company fy_id 404, wrong-company period_id 404), unauth 401/403. Logs assertions confirm all 7 event_types emitted (financial_periods.generated, financial_period.created/updated/locked/unlocked/closed/reopened). Regression: P2.1 years still work (list/get/overlap 409); legacy financial smoke green (/api/qc9434/bilan|pnl|trial-balance?year=2026, /api/acct/dashboard, /api/acct/kpis?year=2026&month=7 = 200); 46/46 pre-existing in-memory unit tests green (22 P2.2 periods + 16 P2.1 years + 8 P1 regression). Strict cleanup honored via pymongo teardown; baseline restored (users=3, companies=2, mandates=0, company_access=3 active, financial_years=0, financial_periods=0).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/test_reports/scratch/test_p22_financial_periods_api.py",
+    "/app/test_reports/pytest/iteration_52.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "core/financial/periods.py is well-scoped (~330 lines), reuses require_company_access/require_company_admin and require_tenant_context — no second permission system. No-leak 404 semantics preserved via _load_year_scoped enforcing workspace_id+company_id match.",
+    "_ALLOWED_TRANSITIONS state machine is explicit and closed->locked is rejected 409 as required. Self-transitions (open->open etc.) are allowed which is harmless.",
+    "generate_monthly_periods correctly rejects non-whole-month FY on BOTH ends (start day!=1 → 422; end day != last day of month → 422); french messages are clear ('L'exercice ne commence pas au 1er...' / '...ne se termine pas le dernier jour...'). No silent rule invention.",
+    "Idempotency implemented by pre-loading existing period_codes into a set and skipping — verified created=0/skipped=12 on second call. Sequence is recomputed on each call from fiscal start, correctly yielding 1..12 with sequence=1 tied to fiscal-start month (2026-07 for the 2026-07-01→2027-06-30 FY).",
+    "Overlap detection uses inclusive [s1<=e2 AND s2<=e1] — matches P2.1 semantics. Unique indexes (period_code per company, sequence per FY) are declared and backed by conflict checks at the service layer for friendly 409s.",
+    "Logs are emitted with company_id + entity_id (period_id) + event_type. financial_year_id is included in the status-transition log's `details` string ('...période <pid>, exercice <fy_id>') but is NOT a first-class field on the log document. Not a blocker (request said 'in details/entity') — acceptable.",
+    "server.py routes (~L906-960) are thin (5 handlers, ~55 lines) — good separation. server.py remains very large overall (>7000 lines) — long-standing tech debt, not P2.2-specific.",
+    "Cross-company period_id path -> get_financial_period returns 404 (verified). Cross-company fy_id in path -> _load_year_scoped returns 404 (verified). Good.",
+    "Manual create validates start<=end AND period-within-FY range in _validate_within_year — both 422 paths verified."
+  ],
+  "updated_files": ["/app/test_reports/scratch/test_p22_financial_periods_api.py (new)"],
+  "success_rate": {"backend": "100% (31/31 API + 22/22 P2.2 unit + 16/16 P2.1 unit + 8/8 P1 regression)", "frontend": "not tested (backend-only per request)"},
+  "test_credentials": "admin@accslegro.com/admin123, julie@accslegro.com/julie123, marc@accslegro.com/marc123 — all working.",
+  "seed_data_creation": "None persisted. All financial_years and financial_periods created during the run are deleted via module-scope pymongo teardown; baseline verified after run: financial_years=0, financial_periods=0, users=3, companies=2, mandates=0, company_access=3 (active).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reusable API regression file at /app/test_reports/scratch/test_p22_financial_periods_api.py (placed OUTSIDE /app/backend/tests/ per agent-to-agent instruction because it mutates the live DB). Run with: MONGO_URL=mongodb://localhost:27017 DB_NAME=test_database REACT_APP_BACKEND_URL=<preview url> python -m pytest /app/test_reports/scratch/test_p22_financial_periods_api.py -v -p no:cacheprovider. Self-cleans on teardown. Note: baseline company_access field is 'active' (not 'is_active') — 3 active docs. If P2.3 arrives, extend this file rather than pollute /app/backend/tests/.",
+  "rca of the issue": "N/A — no failures."
+}

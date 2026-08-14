@@ -39,6 +39,12 @@ from core.financial.years import (
     list_financial_years, get_financial_year, create_financial_year, update_financial_year,
     ensure_indexes as _ensure_financial_year_indexes,
 )
+from core.financial.periods import (
+    FinancialPeriodCreate, FinancialPeriodUpdate,
+    list_financial_periods, get_financial_period, create_financial_period,
+    update_financial_period, generate_monthly_periods,
+    ensure_indexes as _ensure_financial_period_indexes,
+)
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -891,6 +897,67 @@ async def update_company_financial_year(company_id: str, financial_year_id: str,
                              company_id=company_id, entity_id=financial_year_id,
                              event_type="financial_year.reopened")
     return fy
+
+
+# ---------------------------------------------------------------------------
+# P2.2 — Financial Core : périodes financières (financial_periods)
+# Routes fines déléguant au module core.financial.periods (autorisation Phase 1).
+# ---------------------------------------------------------------------------
+@api.get("/companies/{company_id}/financial-years/{financial_year_id}/periods")
+async def list_year_periods(company_id: str, financial_year_id: str, user: dict = Depends(get_current_user)):
+    return await list_financial_periods(db, company_id, financial_year_id, user)
+
+
+@api.post("/companies/{company_id}/financial-years/{financial_year_id}/periods", status_code=201)
+async def create_year_period(company_id: str, financial_year_id: str, payload: FinancialPeriodCreate, user: dict = Depends(require_admin)):
+    p = await create_financial_period(db, company_id, financial_year_id, user, payload)
+    await log_action(user, "create", "financial_period", p.get("period_code", ""),
+                     details=f"Période créée: {p.get('id')} ({p.get('start_date')} → {p.get('end_date')})",
+                     company_id=company_id, entity_id=p.get("id"),
+                     event_type="financial_period.created")
+    return p
+
+
+@api.post("/companies/{company_id}/financial-years/{financial_year_id}/periods/generate-monthly")
+async def generate_year_monthly_periods(company_id: str, financial_year_id: str, user: dict = Depends(require_admin)):
+    result = await generate_monthly_periods(db, company_id, financial_year_id, user)
+    await log_action(user, "generate", "financial_period", financial_year_id,
+                     details=f"Génération mensuelle: {result['created']} créée(s), {result['skipped']} ignorée(s)",
+                     company_id=company_id, entity_id=financial_year_id,
+                     event_type="financial_periods.generated")
+    return result
+
+
+@api.get("/companies/{company_id}/financial-periods/{period_id}")
+async def get_company_financial_period(company_id: str, period_id: str, user: dict = Depends(get_current_user)):
+    return await get_financial_period(db, company_id, period_id, user)
+
+
+@api.patch("/companies/{company_id}/financial-periods/{period_id}")
+async def update_company_financial_period(company_id: str, period_id: str, payload: FinancialPeriodUpdate, user: dict = Depends(require_admin)):
+    p, prev_status = await update_financial_period(db, company_id, period_id, user, payload)
+    fy_id = p.get("financial_year_id")
+    await log_action(user, "update", "financial_period", p.get("period_code", ""),
+                     details=f"Période modifiée: {period_id}",
+                     changes=[{"field": k, "after": p.get(k)} for k in payload.model_dump(exclude_unset=True).keys()],
+                     company_id=company_id, entity_id=period_id,
+                     event_type="financial_period.updated")
+    if prev_status is not None:
+        new_status = p.get("status")
+        evt = None
+        if new_status == "locked":
+            evt = "financial_period.locked"
+        elif new_status == "closed":
+            evt = "financial_period.closed"
+        elif new_status == "open" and prev_status == "locked":
+            evt = "financial_period.unlocked"
+        elif new_status == "open" and prev_status == "closed":
+            evt = "financial_period.reopened"
+        if evt:
+            await log_action(user, "status", "financial_period", p.get("period_code", ""),
+                             details=f"{prev_status} → {new_status} (période {period_id}, exercice {fy_id})",
+                             company_id=company_id, entity_id=period_id, event_type=evt)
+    return p
 
 
 
@@ -6925,6 +6992,7 @@ async def startup():
     await db.users.create_index("email", unique=True)
     try:
         await _ensure_financial_year_indexes(db)
+        await _ensure_financial_period_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     try:
