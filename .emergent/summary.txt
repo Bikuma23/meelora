@@ -1,0 +1,149 @@
+<analysis>**original_problem_statement**: Build a highly fluid, simple-to-use workforce budgeting application (masse salariale) tailored for a technical company. It calculates complex payroll projections, separates standard employees from construction union employees (CCQ), and features a Comptabilité module generating financial reports from Excel exports. **PRODUCT REQUIREMENTS**: Real-time recalculation, automated financial reporting matching specific templates, deep AI variance analysis, and interactive UI. **LATEST EPICS**: Create a completely standalone accounting entity inside the app (originally 9434-3977 QC inc., now accompanied by Meelora). Features require manual double-entry bookkeeping (Journal Général), custom Chart of Accounts, Year locking, AR/AP ledgers with file uploads, partial payments, automated AI data extraction for bills, opening balances adjustment, client management, complex financial statements matching an Excel model, and multi-company architecture support.
+
+**User's preferred language**: French
+INSTRUCT NEXT AGENT: You MUST automatically detect the user's primary language from their messages inside the <trajectory> tag and INSTRUCT the next agent to respond in the user's preferred language only. In this case, strictly **French**.
+
+**what currently exists?** 
+A mature full-stack application (React + FastAPI + MongoDB). The application features two main accounting modules. Recent updates added a robust frontend for AR/AP (Client Registry, Credit Notes, Invoice editing/reversals, Receive Payment dialogs, Client PDF Statements, and Demo Data Purging). Most recently, a database migration was successfully executed to support a Multi-Company architecture.  was created (with entities Meelora and 9434-3977 QC inc.), and a  field was backfilled to 130 existing documents across the  and  collections.
+
+**Last working item**:
+    - Last item agent was working: The agent successfully ran the multi-company database migration scripts ( and ). Prior to this interruption, the agent had just implemented the UI logic for AccountDetailModal (adding search functionality and Year/Cumulative toggles) and confirmed the logic for Extourne (which preserves the original entry while creating an inverse entry), but had not yet run the UI testing for these features.
+    - Status: IN PROGRESS
+    - Agent Testing Done: Y (Backend Bash tests for DB migration were successful. UI testing for AccountDetailModal is pending).
+    - Which testing method agent to use?: testing agent (Frontend testing for the new AccountDetailModal search/toggle and Extourne validation).
+    - User Testing Done: N
+
+**All Pending/In progress Issue list**:
+  - Issue 1: Validate Account Detail Modal & Extourne Logic (P0)
+     - Attempted fixes: The agent used  to add search and scope toggles to . The agent also read the backend code to confirm that invoice reversals (Extourne) already preserve the original entry and post the inverse, but empirical testing is needed.
+     - Next debug checklist: Run the testing agent to verify the Search and Scope toggle in  (accessed by clicking a row in the Bilan/Résultats statements). Manually or via testing agent, create an invoice, reverse it (extourne), and verify in the UI that the original entry exists and an inverse entry was posted.
+     - Why fix this issue and what will be achieved with the fix?: Fulfills user's explicit UX request for drilling down into accounts and ensures accounting compliance for reversals.
+     - Status: TESTING PENDING
+     - Is recurring issue?: N
+     - Should Test frontend/backend/both after fix?: Both (UI validation)
+     - Blocked on other issue: None
+
+**In progress Task List**:
+  - Task 1: Multi-Company Architecture - Step 4 (Route Filtering & UI Selector) (P1)
+     - Where to resume: Ask the user if they want to proceed with Step 4 of the multi-company migration. This involves updating backend routes to filter by  and adding a company selector in the frontend UI.
+     - What will be achieved with this?: True multi-tenant/multi-company isolation at the API and UI level.
+     - Status: NOT STARTED
+     - Should Test frontend/backend/both after fix?: Both
+     - Blocked on something: Pending user approval to proceed.
+
+**Upcoming and Future Tasks**:
+  - Task 1: Integrate ACCS Logo into all report headers (P2) - *Waiting for user to provide logo file.*
+  - Task 2: OneDrive/SharePoint Sync via Microsoft Graph API (P3) - *Deferred.*
+
+**Completed work in this session**:
+- Built Frontend UI for Phase 6 AR actions (Client Registry, Credit Notes, Invoice editing, Reversals) in  (DONE)
+- Implemented Client Statement Generation (Relevé de compte client) with PDF export (DONE)
+- Modernized Encaisser (Receive Payment) logic into a dedicated shadcn dialog with balance validation (DONE)
+- Added Purge Test Data button for stakeholders (DONE)
+- Ran multi-company DB migration: created  (Meelora & 9434-3977 QC inc.) and backfilled  to 130 documents across all collections (DONE)
+
+**Earlier issues found/mentioned but not fixed**:
+None
+
+**Known issue recurrence from previous fork**:
+  - Issue recurrence in previous fork: None
+  - Recurrence count: 0
+  - Status: RESOLVED
+
+**Code Architecture**:
+/api/qc9434
+
+**Key Technical Concepts**:
+React, FastAPI, MongoDB. 
+Report Generation:  for PDFs,  for Excel.
+File Uploads: Emergent Object Storage.
+AI Integration:  with /usage: pymupdf [-h]
+               {show,clean,join,extract,embed-info,embed-add,embed-del,embed-upd,embed-extract,embed-copy,gettext,internal}
+               ...
+
+------------------------- Basic PyMuPDF Functions -------------------------
+
+options:
+  -h, --help            show this help message and exit
+
+Subcommands:
+  {show,clean,join,extract,embed-info,embed-add,embed-del,embed-upd,embed-extract,embed-copy,gettext,internal}
+                        Enter 'command -h' for subcommand specific help using GPT-5.4 Vision for parsing invoices.
+DB Scripts: Idempotent python scripts for MongoDB migrations.
+
+**key DB schema**:
+  -  (NEW): {legacy_prefix, name, id, active}
+  - : {name, email, phone, default_ar, company_id}
+  -  / : {type, num_seq, items [{gl, amount}], client_id, total, paid, balance, status, linked_to, company_id}
+  - : {id, description, line_dicts, company_id}
+  - : Legacy main app collections (now with )
+
+**changes in tech stack**:
+  - No new stack changes this session, but architectural shift towards multi-tenancy ().
+
+**All files of reference**:
+  -  (Created this session)
+  -  (Created this session)
+  -  (Updated with client PDF statements and delete purge logic)
+  -  (Extensively modified for Phase 6 UI, ReceivePaymentDialog, AccountDetailModal search)
+  -  (Updated with Phase 6 endpoints)
+
+**Areas that need refactoring**:
+  -  (>6500 lines) and  (>1800 lines). Both are extremely large. Use  precisely. Avoid replacing large chunks.
+
+**key api endpoints**:
+  -  (GET - Generates JSON and PDF statement)
+  -  (DELETE - Purges demo data)
+  -  (GET - Drill down for Bilan/Résultats)
+  -  (POST - Reverse invoice)
+
+**Critical Info for New Agent**:
+- **Language**: User writes in French. YOU MUST RESPOND IN FRENCH.
+- **Data Architecture**: The database has just undergone a migration.  exists. All  and  docs now have a . Be prepared to implement route filtering if the user requests Step 4.
+- **Account Detail Modal**: The code for the search bar and the Exercice/Cumulatif toggle in the Bilan/Résultats drill-down has been written but NOT visually verified by the testing agent.
+- **Extourne (Reversal)**: The user requested that reversing an invoice keeps the original entry and posts an inverse. The backend logic ( handling inverses) already does this, but you should confirm it operationally if asked.
+
+**documents and test reports created in this job**:
+  -  (Phase 6 UI testing - 100% Pass)
+  -  (Client Statements & Payments testing - 100% Pass)
+
+**Last 10 User Messages and any pending HUMAN messages**:
+ 1. (User): Approved the plan to build frontend UI for Client Registry & Invoice Actions.
+ 2. (User): Requested Relevé de compte client, modernized Receive Payment dialog, and Purge demo data function.
+ 3. (User): Requested that Extourne keeps original entries/adds inverted ones, and requested Search + Exercice/Cumulatif toggle in the Account detail drill-down modal.
+ 4. (User): Sent artifacts containing  and  and requested to run them in dry-run.
+ 5. (User): Requested changing the legacy entity name to Meelora.
+ 6. (User): Requested to run  on the DB migration scripts. (Agent successfully completed this, waiting for user's next directive).
+
+**Project Health Check:**
+- Broken: None known.
+- Mocked: Logo integration (pending user file).
+
+**3rd Party Integrations**:
+- Emergent Auth (JWT)
+- Emergent LLM Key (GPT-5.4 Vision for AI Invoice Extraction)
+- Resend (Emails) - requires User API Key
+- Emergent Object Storage - uses Emergent LLM Key applicability
+
+**Testing status**:
+  - Testing agent used after significant changes: YES (Iterations 40 & 41 passed).
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: None.
+  - Known regressions: None.
+
+**Credentials to test flow:**
+Located in 
+- Admin: admin@accslegro.com / admin123
+
+**What agent forgot to execute**:
+The agent implemented the UI code for the search feature and Exercice/Cumulatif toggle inside  but was interrupted by the database migration request. The testing agent was not run to verify this specific feature, nor was empirical validation of the Extourne (Reversal) accounting logic performed yet.
+
+**Debugging checklist for current issue**:
+    Issue: Validate Account Detail Modal search & toggle + Extourne logic
+    Frontend files to check: 
+    -  (Review  for the  input state and the UI toggle for ).
+    Backend files to check:
+    -  (Review  and verify how it interacts with  to ensure the original ledger entry is untouched and a new opposite entry is added).
+    Testing Method: 
+    - Call the testing agent to verify the Search and Scope Toggle in the UI. 
+    - Optionally, use bash/curl to trigger an Extourne and read the resulting entries from .</analysis>

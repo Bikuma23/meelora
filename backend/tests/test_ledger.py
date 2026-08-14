@@ -5,7 +5,7 @@ import pytest
 import requests
 import openpyxl
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://ccq-workforce-calc.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://budgetapp-qc.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
 YEAR, MONTH = 2026, 6

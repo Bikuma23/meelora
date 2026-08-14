@@ -32,6 +32,23 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
+# --- company_id resolution (pont avant refonte multi-mandat complète) ---
+_company_id_cache: dict = {}
+
+async def _company_id(legacy_prefix: str) -> str:
+    """Résout legacy_prefix ('acct' ou 'qc9434') -> company_id réel.
+    Mis en cache après le premier appel. Si la compagnie n'existe pas
+    encore (ex: seed_companies.py pas encore lancé), lève une erreur
+    explicite plutôt que d'écrire un document orphelin."""
+    if legacy_prefix not in _company_id_cache:
+        doc = await db.companies.find_one({"legacy_prefix": legacy_prefix})
+        if not doc:
+            raise RuntimeError(
+                f"Aucune compagnie avec legacy_prefix='{legacy_prefix}' — "
+                f"lancer scripts/seed_companies.py --commit d'abord.")
+        _company_id_cache[legacy_prefix] = doc["id"]
+    return _company_id_cache[legacy_prefix]
+
 app = FastAPI(title="Budget Salaires Pro")
 api = APIRouter(prefix="/api")
 
@@ -2505,7 +2522,8 @@ async def acct_add_line_comment(body: LineCommentBody, user: dict = Depends(get_
     now = datetime.now(timezone.utc).isoformat()
     doc = {"_id": ObjectId(), "report": body.report, "account": body.account, "text": text[:2000],
            "author": user["email"], "author_name": user.get("name") or user["email"],
-           "year": body.year, "month": body.month, "created_at": now}
+           "year": body.year, "month": body.month, "created_at": now,
+           "company_id": await _company_id("acct")}
     await db.acct_line_comments.insert_one(doc)
     await log_action(user, "Ajouter", "Commentaire", f"{body.report} · compte {body.account}")
     return _comment_out(doc)
@@ -2747,6 +2765,7 @@ async def create_budget_manager(payload: BudgetManager, user: dict = Depends(get
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
     doc = payload.model_dump()
+    doc["company_id"] = await _company_id("acct")
     res = await db.acct_budget_managers.insert_one(dict(doc))
     await log_action(user, "Créer", "Responsable budgétaire", payload.name)
     return {"id": str(res.inserted_id), **payload.model_dump()}
@@ -3003,7 +3022,8 @@ async def _send_manager_report_email(mgr_doc, year, month, rev="rev1", actor=Non
         rec = {"manager_id": str(mgr_doc["_id"]), "manager_name": name, "email": email,
                "year": int(year), "month": int(month), "rev": rev, "rev_label": data["rev_label"],
                "sent_at": datetime.now(timezone.utc).isoformat(), "sent_by": sent_by,
-               "email_id": (res or {}).get("id") if isinstance(res, dict) else None}
+               "email_id": (res or {}).get("id") if isinstance(res, dict) else None,
+               "company_id": await _company_id("acct")}
         await db.acct_email_log.insert_one(dict(rec))
         # Dernier envoi mémorisé par (responsable, période).
         await db.acct_email_last.update_one(
@@ -3130,7 +3150,9 @@ async def list_external_contacts(user: dict = Depends(get_current_user)):
 async def create_external_contact(payload: ExternalContact, user: dict = Depends(get_current_user)):
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
-    res = await db.acct_external_contacts.insert_one(payload.model_dump())
+    ec_doc = payload.model_dump()
+    ec_doc["company_id"] = await _company_id("acct")
+    res = await db.acct_external_contacts.insert_one(ec_doc)
     await log_action(user, "Créer", "Contact externe", payload.name)
     return {"id": str(res.inserted_id), **payload.model_dump()}
 
@@ -4416,7 +4438,8 @@ async def _qc_post_entry(year, date, description, line_dicts, reference="", sour
            "description": (description or "").strip(), "reference": (reference or "").strip(),
            "lines": line_dicts, "total": total, "source": source, "source_id": source_id,
            "created_at": datetime.now(timezone.utc).isoformat(),
-           "created_by": (actor or {}).get("email") if actor else "système"}
+           "created_by": (actor or {}).get("email") if actor else "système",
+           "company_id": await _company_id("qc9434")}
     res = await db.qc9434_entries.insert_one(doc)
     await db.qc9434_years.update_one({"_id": int(year)}, {"$inc": {"entry_count": 1}})
     doc["_id"] = res.inserted_id
@@ -4512,7 +4535,8 @@ async def qc_create_year(year: Optional[int] = None, user: dict = Depends(requir
     if await _qc_year_doc(new_year):
         raise HTTPException(status_code=400, detail=f"L'année {new_year} existe déjà.")
     await db.qc9434_years.insert_one({"_id": new_year, "locked": False,
-        "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email")})
+        "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email"),
+        "company_id": await _company_id("qc9434")})
     await db.qc9434_settings.update_one({"_id": "config"}, {"$set": {"active_year": new_year}}, upsert=True)
     await log_action(user, "Créer", "9434 — Année", str(new_year))
     return {"success": True, "year": new_year}
@@ -4725,7 +4749,9 @@ async def qc_list_external(user: dict = Depends(get_current_user)):
 
 @api.post("/qc9434/external-contacts")
 async def qc_create_external(payload: QcExternalContact, user: dict = Depends(require_admin)):
-    res = await db.qc9434_external_contacts.insert_one(payload.model_dump())
+    qc_ec_doc = payload.model_dump()
+    qc_ec_doc["company_id"] = await _company_id("qc9434")
+    res = await db.qc9434_external_contacts.insert_one(qc_ec_doc)
     await log_action(user, "Créer", "9434 — Contact externe", payload.name)
     return {"success": True, "id": str(res.inserted_id)}
 
@@ -4797,7 +4823,8 @@ async def qc_external_email(contact_id: str, year: int, user: dict = Depends(get
         rec = {"contact_id": contact_id, "contact_name": c.get("name", ""), "email": email,
                "year": int(year), "documents": doc_labels, "doc_count": len(attachments), "missing": missing,
                "sent_at": datetime.now(timezone.utc).isoformat(), "sent_by": (user or {}).get("email") or "système",
-               "email_id": (res or {}).get("id") if isinstance(res, dict) else None}
+               "email_id": (res or {}).get("id") if isinstance(res, dict) else None,
+               "company_id": await _company_id("qc9434")}
         await db.qc9434_external_email_log.insert_one(dict(rec))
         await db.qc9434_external_contacts.update_one({"_id": _oid(contact_id)}, {"$set": {"last_sent": {k: rec[k] for k in
             ("email", "year", "documents", "doc_count", "sent_at", "sent_by")}}})
@@ -4852,7 +4879,8 @@ QC_ACCOUNTS_SEED = [
 
 async def _qc_seed_accounts():
     if await db.qc9434_accounts.count_documents({}) == 0:
-        docs = [{"gl": gl, "description": desc, "type": typ, "section": sec, "sort": i}
+        _cid = await _company_id("qc9434")
+        docs = [{"gl": gl, "description": desc, "type": typ, "section": sec, "sort": i, "company_id": _cid}
                 for i, (gl, desc, typ, sec) in enumerate(QC_ACCOUNTS_SEED)]
         await db.qc9434_accounts.insert_many(docs)
 
@@ -4879,7 +4907,7 @@ async def qc_create_account(payload: QcAccount, user: dict = Depends(get_current
     if await db.qc9434_accounts.find_one({"gl": gl}):
         raise HTTPException(status_code=400, detail=f"Le compte {gl} existe déjà.")
     await db.qc9434_accounts.insert_one({"gl": gl, "description": payload.description.strip(),
-        "type": payload.type, "section": payload.section})
+        "type": payload.type, "section": payload.section, "company_id": await _company_id("qc9434")})
     await log_action(user, "Créer", "9434 — Compte", f"{gl} · {payload.description}")
     return {"success": True}
 
@@ -4948,7 +4976,8 @@ async def _qc_post_opening(year, targets, actor=None):
            "description": f"Solde d'ouverture au 1er janvier {y} (report de la clôture {y - 1})",
            "source": "opening", "lines": lines,
            "created_at": datetime.now(timezone.utc).isoformat(),
-           "created_by": (actor or {}).get("email", "système")}
+           "created_by": (actor or {}).get("email", "système"),
+           "company_id": await _company_id("qc9434")}
     await db.qc9434_entries.insert_one(doc)
     return doc
 
@@ -5178,7 +5207,7 @@ async def qc_create_template(payload: QcTemplate, user: dict = Depends(get_curre
     if not payload.name.strip():
         raise HTTPException(status_code=400, detail="Nom du modèle requis.")
     res = await db.qc9434_templates.insert_one({"name": payload.name.strip(), "description": payload.description.strip(),
-        "lines": [l.model_dump() for l in payload.lines]})
+        "lines": [l.model_dump() for l in payload.lines], "company_id": await _company_id("qc9434")})
     await log_action(user, "Créer", "9434 — Modèle d'écriture", payload.name)
     return {"success": True, "id": str(res.inserted_id)}
 
@@ -5378,7 +5407,8 @@ async def qc_create_invoice(payload: QcInvoiceIn, year: int, user: dict = Depend
            "client_name": cname, "client_att": catt, "client_address": caddr, "client_email": cemail, "client_id": cid, "ar_account": ar,
            "description": payload.description, "amount": amount, "tps": tps, "tvq": tvq, "total": total,
            "sales_account": items[0]["account"], "items": items, "status": "open", "paid_amount": 0.0, "credited_amount": 0.0, "entry_id": entry["_id"],
-           "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email")}
+           "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email"),
+           "company_id": await _company_id("qc9434")}
     res = await db.qc9434_invoices.insert_one(doc)
     await db.qc9434_entries.update_one({"_id": entry["_id"]}, {"$set": {"source_id": str(res.inserted_id)}})
     await log_action(user, "Créer", "9434 — Facture client", f"{number} · {cname} ({total:,.2f} $)")
@@ -5432,7 +5462,8 @@ async def qc_create_client(payload: dict, user: dict = Depends(require_admin)):
         raise HTTPException(status_code=400, detail="Le nom du client est requis.")
     doc = {"name": name, "att": (payload.get("att") or "").strip(), "address": (payload.get("address") or "").strip(),
            "email": (payload.get("email") or "").strip(), "ar_account": payload.get("ar_account") or QC_DEF["ar"],
-           "active": True, "created_at": datetime.now(timezone.utc).isoformat()}
+           "active": True, "created_at": datetime.now(timezone.utc).isoformat(),
+           "company_id": await _company_id("qc9434")}
     res = await db.qc9434_clients.insert_one(doc); doc["_id"] = res.inserted_id
     await log_action(user, "Créer", "9434 — Client", f"{name} → compte {doc['ar_account']}")
     return _qc_client_out(doc)
@@ -5602,7 +5633,8 @@ async def qc_create_credit_note(payload: QcCreditNoteIn, year: int, user: dict =
            "sales_account": items[0]["account"], "items": items, "status": "applied" if linked else "credit",
            "applied_amount": total if linked else 0.0, "linked_invoice": str(linked["_id"]) if linked else None,
            "linked_number": linked.get("number") if linked else None, "entry_id": entry["_id"],
-           "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email")}
+           "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email"),
+           "company_id": await _company_id("qc9434")}
     res = await db.qc9434_invoices.insert_one(doc)
     await db.qc9434_entries.update_one({"_id": entry["_id"]}, {"$set": {"source_id": str(res.inserted_id)}})
     if linked:
@@ -5883,7 +5915,8 @@ async def qc_create_bill(year: int = Form(...), supplier: str = Form(...), date:
     doc = {"year": int(year), "number": reference or entry["num"], "supplier": supplier, "date": date, "due_date": due_date,
            "description": description, "amount": amt, "tps": tps, "tvq": tvq, "total": total, "expense_account": items[0]["account"],
            "items": items, "status": "open", "file_id": file_id, "file_name": file_name, "entry_id": entry["_id"],
-           "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email")}
+           "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email"),
+           "company_id": await _company_id("qc9434")}
     res = await db.qc9434_bills.insert_one(doc)
     await db.qc9434_entries.update_one({"_id": entry["_id"]}, {"$set": {"source_id": str(res.inserted_id)}})
     await log_action(user, "Créer", "9434 — Facture fournisseur", f"{supplier} ({total:,.2f} $)")
@@ -6030,14 +6063,14 @@ async def qc_import_model(user: dict = Depends(require_admin)):
     if await db.qc9434_entries.count_documents({}) > 0 or await db.qc9434_years.count_documents({}) > 0:
         raise HTTPException(status_code=400, detail="Des données existent déjà. Videz d'abord les exercices pour réimporter le modèle.")
     await _qc_seed_accounts()
-    await db.qc9434_years.insert_one({"_id": 2025, "locked": False, "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email")})
+    await db.qc9434_years.insert_one({"_id": 2025, "locked": False, "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email"), "company_id": await _company_id("qc9434")})
     await db.qc9434_settings.update_one({"_id": "config"}, {"$set": {"active_year": 2025}}, upsert=True)
     inv = await qc_create_invoice(QcInvoiceIn(date="2025-10-31", due_date="2025-11-30", client_name="Société en commandite ACCS",
         client_att="Simon Fournier", client_address="3152 Boulevard des Entreprises\nTerrebonne, Québec J6X 4J8",
         description="Frais de gestion annuel pour 2025", amount=10000.0), 2025, user)
     await _qc_post_closing(2025, user)
     await db.qc9434_years.update_one({"_id": 2025}, {"$set": {"locked": True, "locked_by": user.get("email"), "locked_at": datetime.now(timezone.utc).isoformat()}})
-    await db.qc9434_years.insert_one({"_id": 2026, "locked": False, "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email")})
+    await db.qc9434_years.insert_one({"_id": 2026, "locked": False, "created_at": datetime.now(timezone.utc).isoformat(), "created_by": user.get("email"), "company_id": await _company_id("qc9434")})
     await db.qc9434_settings.update_one({"_id": "config"}, {"$set": {"active_year": 2026}})
     def L(gl, name, dr, cr, tiers=""):
         return {"account": gl, "account_name": name, "tiers": tiers, "debit": float(dr), "credit": float(cr)}
@@ -6512,12 +6545,14 @@ async def startup():
     # Seed des responsables budgétaires (RH, TI, MARKETING, FGF) — une seule fois.
     if not (app_settings and app_settings.get("budget_managers_seeded")):
         if await db.acct_budget_managers.count_documents({}) == 0:
-            await db.acct_budget_managers.insert_many([dict(m) for m in BUDGET_MANAGERS_SEED])
+            _cid = await _company_id("acct")
+            await db.acct_budget_managers.insert_many([{**dict(m), "company_id": _cid} for m in BUDGET_MANAGERS_SEED])
         await db.settings.update_one({"key": "app"}, {"$set": {"budget_managers_seeded": True}}, upsert=True)
     # Seed des contacts externes (Banque Desjardins) — une seule fois.
     if not (app_settings and app_settings.get("external_contacts_seeded")):
         if await db.acct_external_contacts.count_documents({}) == 0:
-            await db.acct_external_contacts.insert_many([dict(c) for c in EXTERNAL_CONTACTS_SEED])
+            _cid = await _company_id("acct")
+            await db.acct_external_contacts.insert_many([{**dict(c), "company_id": _cid} for c in EXTERNAL_CONTACTS_SEED])
         await db.settings.update_one({"key": "app"}, {"$set": {"external_contacts_seeded": True}}, upsert=True)
 
 @app.on_event("shutdown")
