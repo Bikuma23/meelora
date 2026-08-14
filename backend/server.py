@@ -56,6 +56,11 @@ from core.financial.accounts import (
     list_accounts, get_account, create_account, update_account,
     ensure_indexes as _ensure_account_indexes,
 )
+from core.financial.data_imports import (
+    CommitRequest,
+    preview_accounts_import, commit_accounts_import, list_imports, get_import,
+    ensure_indexes as _ensure_data_import_indexes,
+)
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -1016,6 +1021,61 @@ async def update_company_account(company_id: str, account_id: str, payload: Acco
                          details=f"Compte désactivé: {account_id}", company_id=company_id,
                          entity_id=account_id, event_type="account.deactivated")
     return acc
+
+
+# ---------------------------------------------------------------------------
+# P2.4 — Data Imports registry & lifecycle (accounts fully connected).
+# Structural imports (preview/commit) = workspace admin only (aligné P2.3).
+# History reads = tout membre société autorisé (require_company_access).
+# ---------------------------------------------------------------------------
+@api.post("/companies/{company_id}/imports/accounts/preview")
+async def preview_company_accounts_import(company_id: str, file: UploadFile = File(...),
+                                          source_type: str = "excel",
+                                          user: dict = Depends(require_admin)):
+    content = await file.read()
+    result = await preview_accounts_import(db, company_id, user, content, file.filename or "import", source_type)
+    ev = "data_import.validated" if result.get("status") == "valid" else "data_import.previewed"
+    await log_action(user, "preview", "data_import", result.get("id", ""),
+                     details=f"Aperçu import comptes: {result.get('counts')}",
+                     company_id=company_id, entity_id=result.get("id"),
+                     event_type=ev,
+                     metadata={"data_type": "accounts", "source_type": source_type})
+    if result.get("status") == "failed":
+        await log_action(user, "preview", "data_import", result.get("id", ""),
+                         details="Aperçu import comptes: erreurs bloquantes",
+                         company_id=company_id, entity_id=result.get("id"),
+                         event_type="data_import.failed",
+                         metadata={"data_type": "accounts", "source_type": source_type})
+    return result
+
+
+@api.post("/companies/{company_id}/imports/accounts/commit")
+async def commit_company_accounts_import(company_id: str, payload: CommitRequest,
+                                         user: dict = Depends(require_admin)):
+    result = await commit_accounts_import(db, company_id, user, payload.import_id)
+    ev = {"completed": "data_import.completed",
+          "completed_with_warnings": "data_import.completed_with_warnings",
+          "failed": "data_import.failed"}.get(result.get("status"), "data_import.completed")
+    await log_action(user, "commit", "data_import", result.get("id", ""),
+                     details=(f"Import comptes finalisé: +{result.get('records_created')} / "
+                              f"~{result.get('records_updated')} / rejetés {result.get('records_rejected')}"),
+                     company_id=company_id, entity_id=result.get("id"),
+                     event_type=ev,
+                     metadata={"data_type": "accounts", "source_type": result.get("source_type")})
+    return result
+
+
+@api.get("/companies/{company_id}/imports")
+async def list_company_imports(company_id: str, data_type: Optional[str] = None,
+                               source_type: Optional[str] = None, status: Optional[str] = None,
+                               user: dict = Depends(get_current_user)):
+    return await list_imports(db, company_id, user, data_type=data_type, source_type=source_type, status=status)
+
+
+@api.get("/companies/{company_id}/imports/{import_id}")
+async def get_company_import(company_id: str, import_id: str, user: dict = Depends(get_current_user)):
+    return await get_import(db, company_id, import_id, user)
+
 
 
 # ---------------------------------------------------------------------------
@@ -7141,6 +7201,7 @@ async def startup():
         await _ensure_financial_period_indexes(db)
         await _ensure_account_indexes(db)
         await _ensure_membership_indexes(db)
+        await _ensure_data_import_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     try:

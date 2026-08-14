@@ -941,3 +941,18 @@ Sépare l'identité globale (users) de l'appartenance workspace et société.
 - [x] **Dépendances legacy P2.3** : `users.workspace_id` utilisé uniquement via helper centralisé `require_tenant_context` (contexte de session, pas comme vérité d'appartenance) ; `company_access` utilisé uniquement comme pont dual-read en lecture. Aucune nouvelle dépendance introduite. Aucune collection `acct_*`/`qc9434_*` touchée.
 
 ### 🛑 P2.3 FINALISÉ. STOP — NE PAS DÉMARRER P2.4 (Imports de données) avant approbation explicite du client.
+
+## P2.4 — Registre des imports de données & cycle de vie (Financial Core) — 2026-08-14
+- [x] **Module** `core/financial/data_imports.py` : registre canonique d'ingestion (`data_imports`) conçu pour accounts / trial_balance / transactions / journal / api. Seul **accounts** est pleinement connecté en P2.4 (preview + commit → `accounts` P2.3). Statuts : pending/validating/valid/importing/completed/completed_with_warnings/failed.
+- [x] **APIs** : `POST /api/companies/{id}/imports/accounts/preview` (upload Excel/CSV, crée le record, parse, valide, **n'écrit jamais** dans accounts), `POST .../imports/accounts/commit` (applique l'import validé, upserts idempotents, compteurs, statut), `GET .../imports` (filtres data_type/source_type/status), `GET .../imports/{import_id}`.
+- [x] **Cycle de vie** : preview → valid|failed ; commit refuse failed (409), no-op si déjà committé (`already_committed`), no-op sûr si même source (checksum) déjà importée. Compteurs `records_received/created/updated/rejected`.
+- [x] **Validation** : erreurs bloquantes (code/nom manquant, type/solde invalide, doublon de code en conflit dans le fichier) vs warnings (compte existant → mise à jour, devise omise → héritée, external_id absent, doublon identique ignoré). `account_code` préservé en STRING (zéros de tête / ponctuation).
+- [x] **Idempotence** : checksum SHA-256 + `idempotency_key = ws:company:accounts:checksum` ; index NON unique (ré-imports de données modifiées autorisés) ; commit protégé contre double soumission.
+- [x] **Upsert comptes** : priorité (source_system+external_id) puis (company+account_code) → aucun doublon normalisé. Devise héritée de `company.functional_currency` si omise. Aucune collection legacy touchée.
+- [x] **Autorisation P1.12** : preview/commit = workspace admin uniquement (aligné P2.3 structural admin) ; historique = tout membre société autorisé (`require_company_access`, dual-read). `platform_role` sans membership → aucun accès. Cross-workspace 404.
+- [x] **Index** `data_imports` : (ws+company+created_at desc), (ws+company+status), (ws+company+data_type), (idempotency_key).
+- [x] **Logs** : `data_import.previewed/validated/completed/completed_with_warnings/failed` (workspace_id, company_id, import_id, data_type, source_type, acteur).
+- [x] **Tests** : `test_p2_4_data_imports.py` **32/32** (parsing, preview sans écriture, validation, idempotence, upsert, historique + filtres, matrice de sécurité P1.12). Suite in-memory permanente **160/160 verte** (Phase 1 + P1.11 + P1.12 + P2.1 + P2.2 + P2.3 + P2.4).
+- [x] **Smoke live** : preview (codes `0090`/`7777` préservés, devise héritée CAD) → commit (2 créés, completed_with_warnings) → re-commit idempotent (`already_committed`) → historique 1 → accounts vérifiés ; imports/accounts de test supprimés (baseline propre : 0 account, 0 data_import).
+
+### 🛑 P2.4 IMPLÉMENTÉ. STOP — NE PAS DÉMARRER P2.5 (Balance de vérification normalisée) avant approbation explicite du client.
