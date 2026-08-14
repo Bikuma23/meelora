@@ -1,0 +1,33 @@
+{
+  "summary": "P1.12 Multi-level Identity & Membership backend fully validated via 15 live pytest cases against REACT_APP_BACKEND_URL. Migration state (3 workspace members + 3 mirrored company memberships) verified, dual-read for Julie/Marc intact, workspace-admin CRUD works with role/status PATCH, company-local admin scoping enforced (only company_user of own company; blocked from workspace_staff assignment, cross-company, workspace members, and logs), company-local user gets read-only financial access and 403 on user admin + on other company, platform_admin with no workspace membership is fail-closed 403 on customer endpoints and /auth/me exposes platform_role, invalid role/type combos return 422, cross-workspace/nonexistent company returns 404, logs remain admin-only and emit the P1.12 event_types, and financial smoke (bilan/pnl/trial-balance/dashboard/kpis) is unchanged. Baseline restored exactly: users=3, companies=2, mandates=0, company_access active=3, workspace_memberships=3, company_memberships=3, financial_years/periods/accounts=0.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/scratch/test_p1_12_identity_live.py",
+    "/app/test_reports/pytest/p1_12_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py L1024 _resolve_or_create_user assigns the actor's workspace_id to the newly created global user doc. That is fine for the current single-workspace tenant model but effectively couples a 'global identity' to one workspace at creation; for true multi-tenant it should not stamp workspace_id on the users doc (memberships already carry it). Low risk today, worth noting for P2.x.",
+    "permissions.require_workspace_admin/require_workspace_membership still trust legacy user.get('role') == 'admin' as a shortcut. Once workspace_memberships is the source of truth, consider removing the legacy bridge to keep a single authorization path.",
+    "memberships.upsert_workspace_membership silently re-activates a previously deactivated membership on POST /workspace/members with the same email (status flips back to active). Documented behaviour but worth confirming this is intentional so a deactivated user cannot be silently reactivated without an explicit PATCH."
+  ],
+  "updated_files": [
+    "/app/test_reports/scratch/test_p1_12_identity_live.py",
+    "/app/test_reports/pytest/p1_12_results.xml"
+  ],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "N/A (skipped per request)"},
+  "test_credentials": "Used /app/memory/test_credentials.md (admin/julie/marc). Additional test users created with prefix 'test_' + run tag, all deleted at teardown.",
+  "seed_data_creation": "None persistent. Ephemeral test users/memberships (test_<prefix>_<run_tag>_*@test.com) plus one direct-insert platform_admin doc, all deleted in the module-scoped mongo fixture teardown. Post-run counts match required baseline exactly.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Live pytest lives under /app/test_reports/scratch/test_p1_12_identity_live.py (not /app/backend/tests). It self-cleans via a pymongo teardown keyed on run tag and lowercased emails (server lowercases on login/create — do NOT use uppercase in test emails or lookups will miss). RUN_TAG-scoped cleanup regex is case-sensitive. Requires REACT_APP_BACKEND_URL exported at pytest invocation time.",
+  "rca of the issue": "During initial run two tests failed. RCA: server /auth/login and _resolve_or_create_user normalize email to lowercase before Mongo lookup/insert (server.py L708, L1026), while the test built emails with 'TEST_' prefix (uppercase). MongoDB find is case-sensitive, so (a) list_workspace_members returned members joined by ObjectId user_id (email stored lowercase) and my assertion compared to raw uppercase input — never matched, (b) directly inserting a platform_admin user doc with uppercase email caused /auth/login (which lowercases input) to miss the record. Fix: lowered all generated test emails to 'test_<prefix>_<run_tag>_*' and updated the cleanup regex to match. All 15 tests then passed and baseline is intact. No product code needed to change."
+}

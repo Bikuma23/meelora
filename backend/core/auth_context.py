@@ -38,6 +38,9 @@ def build_auth_user(user_doc: dict, workspace_doc: Optional[dict] = None) -> dic
     user["workspace_id"] = user_doc.get("workspace_id")
     user["workspace"] = public_workspace(workspace_doc)
     user["tenant_migrated"] = bool(user_doc.get("workspace_id") and workspace_doc)
+    # P1.12: platform_role is a Meelora-internal privilege and is intentionally
+    # separate from customer membership — it never grants customer data access.
+    user["platform_role"] = user_doc.get("platform_role")
     return user
 
 
@@ -53,5 +56,6 @@ def auth_me_payload(user: dict) -> dict:
         "workspace_id": user.get("workspace_id"),
         "workspace": user.get("workspace"),
         "tenant_migrated": bool(user.get("tenant_migrated")),
+        "platform_role": user.get("platform_role"),
         "has_avatar": bool(prefs.get("avatar_path")),
     }

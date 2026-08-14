@@ -32,7 +32,13 @@ from core.companies import CompanyCreate, CompanyUpdate, list_companies_for_user
 from core.mandates import MandateCreate, MandateUpdate, list_mandates_for_user, get_mandate_for_user, create_mandate_for_admin, update_mandate_for_admin
 from core.logs import write_log, list_logs_for_admin
 from core.access_management import UserCompanyAccessUpdate, list_user_company_access, replace_user_company_access
-from core.permissions import require_tenant_context, require_company_access
+from core.permissions import require_tenant_context, require_company_access, require_workspace_admin, require_company_local_admin
+from core.memberships import (
+    WorkspaceMemberCreate, WorkspaceMemberUpdate, CompanyMemberCreate, CompanyMemberUpdate,
+    list_workspace_members, upsert_workspace_membership, update_workspace_membership,
+    list_company_members, create_company_membership, update_company_membership,
+    validate_combo, ensure_indexes as _ensure_membership_indexes,
+)
 from core.company_imports import preview_company_import, commit_company_import
 from core.financial.years import (
     FinancialYearCreate, FinancialYearUpdate,
@@ -1010,6 +1016,94 @@ async def update_company_account(company_id: str, account_id: str, payload: Acco
                          details=f"Compte désactivé: {account_id}", company_id=company_id,
                          entity_id=account_id, event_type="account.deactivated")
     return acc
+
+
+# ---------------------------------------------------------------------------
+# P1.12 — Multi-level identity: workspace members & company members
+# ---------------------------------------------------------------------------
+async def _resolve_or_create_user(email: str, name: Optional[str], password: Optional[str], actor: dict) -> str:
+    """Return a global user_id, reusing the identity for a normalized email."""
+    norm = (email or "").strip().lower()
+    if not norm:
+        raise HTTPException(status_code=422, detail="Email requis")
+    existing = await db.users.find_one({"email": norm})
+    if existing:
+        return str(existing["_id"])
+    if not password:
+        raise HTTPException(status_code=422, detail="Mot de passe requis pour un nouvel utilisateur")
+    doc = {"email": norm, "name": name or norm, "password_hash": hash_password(password),
+           "role": "user", "status": "active", "platform_role": None,
+           "workspace_id": actor.get("workspace_id"),
+           "created_at": datetime.now(timezone.utc).isoformat()}
+    res = await db.users.insert_one(doc)
+    return str(res.inserted_id)
+
+
+@api.get("/workspace/members")
+async def list_ws_members(user: dict = Depends(get_current_user)):
+    ws = await require_workspace_admin(db, user)
+    return await list_workspace_members(db, ws)
+
+
+@api.post("/workspace/members", status_code=201)
+async def create_ws_member(payload: WorkspaceMemberCreate, user: dict = Depends(get_current_user)):
+    ws = await require_workspace_admin(db, user)
+    uid = await _resolve_or_create_user(payload.email, payload.name, payload.password, user)
+    m = await upsert_workspace_membership(db, ws, uid, payload.role, user.get("id"))
+    await log_action(user, "create", "workspace_member", payload.email, details=f"Membre workspace {payload.role}",
+                     entity_id=m.get("id"), event_type="workspace_member.created")
+    return m
+
+
+@api.patch("/workspace/members/{membership_id}")
+async def patch_ws_member(membership_id: str, payload: WorkspaceMemberUpdate, user: dict = Depends(get_current_user)):
+    ws = await require_workspace_admin(db, user)
+    m = await update_workspace_membership(db, ws, membership_id, payload, user.get("id"))
+    evt = "workspace_member.deactivated" if payload.status == "inactive" else "workspace_member.updated"
+    await log_action(user, "update", "workspace_member", m.get("email", ""), details=f"Membre workspace {membership_id}",
+                     entity_id=membership_id, event_type=evt)
+    return m
+
+
+@api.get("/companies/{company_id}/members")
+async def list_cmp_members(company_id: str, user: dict = Depends(get_current_user)):
+    company = await require_company_local_admin(db, company_id, user)
+    only_local = user.get("role") != "admin"  # company-local admin sees only company_user
+    return await list_company_members(db, company.get("workspace_id"), company_id, only_company_user=only_local)
+
+
+@api.post("/companies/{company_id}/members", status_code=201)
+async def create_cmp_member(company_id: str, payload: CompanyMemberCreate, user: dict = Depends(get_current_user)):
+    company = await require_company_local_admin(db, company_id, user)
+    validate_combo(payload.membership_type, payload.role)
+    # Only workspace admins may assign fiduciary staff; company-local admins are
+    # restricted to company_user memberships of their own company.
+    if payload.membership_type == "workspace_staff" and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Seul un admin workspace peut affecter le personnel fiduciaire")
+    uid = await _resolve_or_create_user(payload.email, payload.name, payload.password, user)
+    m = await create_company_membership(db, company.get("workspace_id"), company_id, uid,
+                                        payload.membership_type, payload.role, user.get("id"))
+    evt = "company_admin.user_created" if user.get("role") != "admin" else "company_member.created"
+    await log_action(user, "create", "company_member", payload.email,
+                     details=f"Membre société {payload.membership_type}/{payload.role}",
+                     company_id=company_id, entity_id=m.get("id"), event_type=evt)
+    return m
+
+
+@api.patch("/companies/{company_id}/members/{membership_id}")
+async def patch_cmp_member(company_id: str, membership_id: str, payload: CompanyMemberUpdate, user: dict = Depends(get_current_user)):
+    company = await require_company_local_admin(db, company_id, user)
+    restrict = user.get("role") != "admin"
+    m = await update_company_membership(db, company.get("workspace_id"), company_id, membership_id, payload, user.get("id"), restrict_to_company_user=restrict)
+    if payload.status == "inactive":
+        evt = "company_member.deactivated"
+    elif restrict:
+        evt = "company_admin.user_updated"
+    else:
+        evt = "company_member.updated"
+    await log_action(user, "update", "company_member", m.get("email", ""), details=f"Membre société {membership_id}",
+                     company_id=company_id, entity_id=membership_id, event_type=evt)
+    return m
 
 
 
@@ -7046,6 +7140,7 @@ async def startup():
         await _ensure_financial_year_indexes(db)
         await _ensure_financial_period_indexes(db)
         await _ensure_account_indexes(db)
+        await _ensure_membership_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     try:

@@ -66,6 +66,7 @@ class _DB:
         self.company_access = _Collection([
             {"workspace_id": WS, "company_id": CA, "user_id": "u_read", "access_role": "collaborator", "active": True},
         ])
+        self.company_memberships = _Collection([])
         self.financial_years = _Collection([
             {"_id": FY_CAL, "workspace_id": WS, "company_id": CA, "label": "2026", "start_date": "2026-01-01", "end_date": "2026-12-31", "status": "open"},
             {"_id": FY_NC, "workspace_id": WS, "company_id": CA, "label": "FY2026/27", "start_date": "2026-07-01", "end_date": "2027-06-30", "status": "open"},

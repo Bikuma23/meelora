@@ -74,6 +74,7 @@ class _DB:
             {"id":U3,"workspace_id":"ws_x","status":"active","name":"Other"},
         ])
         self.company_access = _Collection([])
+        self.company_memberships = _Collection([])
         self.mandates = _Collection([])
 
 

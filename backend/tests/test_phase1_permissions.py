@@ -58,6 +58,7 @@ class _DB:
             {"workspace_id": "ws_a", "company_id": "cmp_a", "user_id": "usr_1", "access_role": "principal", "active": True},
             {"workspace_id": "ws_a", "company_id": "cmp_b", "user_id": "usr_2", "access_role": "collaborator", "active": True},
         ])
+        self.company_memberships = _Collection([])
 
 
 def _user(uid="usr_1", role="user", ws="ws_a"):

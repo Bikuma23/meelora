@@ -53,6 +53,7 @@ class _DB:
         self.company_access = _Collection([
             {"workspace_id":"ws_a","company_id":"cmp_b","user_id":"usr_1","access_role":"principal","active":True},
         ])
+        self.company_memberships = _Collection([])
 
 
 def user(role="user", uid="usr_1", ws="ws_a"):

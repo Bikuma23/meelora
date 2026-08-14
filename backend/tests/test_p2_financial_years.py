@@ -61,6 +61,7 @@ class _DB:
         self.company_access = _Collection([
             {"workspace_id": WS, "company_id": CA, "user_id": "u_read", "access_role": "collaborator", "active": True},
         ])
+        self.company_memberships = _Collection([])
         self.financial_years = _Collection([])
 
 

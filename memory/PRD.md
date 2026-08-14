@@ -911,3 +911,22 @@ Plan de comptes normalisé canonique par société, en parallèle du legacy (auc
 - **Reco P2.4** : Data Imports (ingestion normalisée alimentant accounts + trial balance), utilisant source_system/external_id pour l'idempotence connecteur.
 
 ### 🛑 P2.3 TERMINÉ. STOP — NE PAS DÉMARRER P2.4 avant approbation explicite du client.
+
+## PHASE 1 — P1.12 MULTI-LEVEL IDENTITY & MEMBERSHIP (2026-08-14) ✅ IMPLÉMENTÉ & VALIDÉ (testing_agent iteration_54) — P2.3 EN PAUSE
+Sépare l'identité globale (users) de l'appartenance workspace et société.
+- **Modules** : `backend/core/memberships.py` (services + validate_combo + index) ; `core/permissions.py` refactoré ; `core/auth_context.py` (+platform_role). Routes fines dans server.py. Migration `scripts/migrate_p1_12_identity.py`.
+- **Collections ajoutées** : `workspace_memberships` {_id:wsm_, workspace_id, user_id, role(admin|user), status} ; `company_memberships` {_id:cpm_, workspace_id, company_id, user_id, membership_type(workspace_staff|company_user), role, status}. `users` +`platform_role`(null|support|platform_admin).
+- **Index** : unique partiel actif `(ws,user)` [wsm] ; unique partiel actif `(ws,company,user,membership_type)` [cpm] ; lookups user/company.
+- **Combinaisons rôle** : workspace_staff∈{principal,collaborator} ; company_user∈{admin,user} (validées, 422 sinon).
+- **Auth** : platform_role séparé, N'accorde AUCUN accès client auto (platform_admin sans workspace → 403 fail-closed). users.workspace_id conservé comme contexte workspace actif transitionnel.
+- **Helpers** : require_workspace_admin, require_workspace_membership, require_company_local_admin (workspace admin OU company_user+admin de CETTE société), require_company_access **dual-read** (company_memberships + company_access legacy), require_company_admin reste workspace-admin-only (financier), list_accessible_company_ids union.
+- **APIs** : GET/POST/PATCH `/api/workspace/members` (workspace-admin) ; GET/POST/PATCH `/api/companies/{cid}/members` (workspace-admin ou admin local ; admin local limité aux company_user de sa société, ne peut affecter le personnel fiduciaire ni voir autres sociétés/Logs).
+- **Logs** : workspace_member.created/updated/deactivated, company_member.created/updated/deactivated, company_admin.user_created/user_updated. Logs restent workspace-admin only.
+- **Migration (dry-run→commit)** : users.workspace_id→workspace_memberships (admin/user) ; company_access→company_memberships (workspace_staff principal/collaborator). company_access **préservé** (pont). platform_role=null posé. Aucun user local inventé, aucun platform_role inféré. Résultat : 3 wsm + 3 cpm.
+- **Tests permanents** : `tests/test_p1_12_memberships.py` (14 in-memory). Suite globale 119/119.
+- **Validation testing_agent iteration_54** : 15/15 live (dual-read, workspace-admin CRUD, admin local scoping, company_user lecture seule, platform_admin fail-closed, combos 422, cross-workspace 404, logs admin-only, smoke financier inchangé). Baseline restaurée.
+- **Frontend** : inchangé en P1.12 (pas de redesign ; l'UI Membres par contexte est un enhancement recommandé, non implémenté).
+- **users.workspace_id encore utilisé ?** OUI (contexte workspace actif transitionnel + auth_context + pont helpers). **company_access encore utilisé ?** OUI (pont legacy dual-read, non supprimé).
+- **Reco avant reprise P2.3** : marquer company_access legacy une fois l'UI Membres migrée ; ajouter le sélecteur de workspace uniquement pour utilisateurs multi-organisations.
+
+### 🛑 P1.12 TERMINÉ. STOP — NE PAS REPRENDRE P2.3 avant approbation explicite du client.
