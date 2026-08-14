@@ -1,0 +1,25 @@
+{
+  "summary": "P2.1 Financial Years — full backend API test suite on live preview backend. 23/23 API tests PASS (create + all business rules, GET list/one, PATCH lifecycle & overlap-on-update, security matrix admin/Julie/Marc, no-leak 404, cross-company 404, DELETE returns 405, logs event_types present) + 16/16 pre-existing P2.1 unit tests + 23/23 Phase 1 regression unit tests. Legacy financial smoke (/api/qc9434/bilan|pnl|trial-balance?year=2026, /api/acct/dashboard, /api/acct/kpis?year=2026&month=7) all 200. Strict cleanup honored: all created financial_years deleted; DB baseline restored to users=3, companies=2, mandates=0, company_access active=3, financial_years=0.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_p2_financial_years_api.py",
+    "/app/test_reports/pytest/iteration_51.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "core/financial/years.py is clean, small, well-scoped: dates parsed to real date objects, overlap check uses [s1<=e2 AND s2<=e1] correctly (inclusive), label uniqueness enforced via query + backed by unique index, no physical delete endpoint as designed.",
+    "Reuse of require_company_access / require_company_admin is correct and preserves no-leak 404 semantics (verified: Julie on B -> 403, unknown company -> 404, cross-company fy_id -> 404).",
+    "Log events (financial_year.created/updated/closed/reopened) are emitted with company_id + entity_id; close/reopen distinguished via previous_status returned by update_financial_year — nice design.",
+    "server.py has grown very large (>6900 lines) — long-standing issue, not P2.1-specific; new P2.1 routes remain thin (4 handlers, ~40 lines) which is good.",
+    "Minor: FinancialYearCreate accepts status but there is no explicit test that creating with status='closed' is allowed by policy — currently the API allows it. If closed-on-create is unintended, add validator; otherwise fine."
+  ],
+  "updated_files": ["/app/backend/tests/test_p2_financial_years_api.py (new)"],
+  "success_rate": {"backend": "100% (23/23 API + 16/16 P2.1 unit + 23/23 P1 regression)", "frontend": "not tested (backend-only per request)"},
+  "test_credentials": "admin@accslegro.com/admin123, julie@accslegro.com/julie123, marc@accslegro.com/marc123 (all working).",
+  "seed_data_creation": "None persisted. All financial_years created during the test run are cleaned up via a module-scope pymongo teardown fixture. Baseline verified after run: financial_years=0, users=3, companies=2, mandates=0, company_access active=3.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reusable API regression file at /app/backend/tests/test_p2_financial_years_api.py. Run with: cd /app/backend && source .env && export REACT_APP_BACKEND_URL=<preview url> && python -m pytest tests/test_p2_financial_years_api.py -n 0 -v. It self-cleans on teardown. Baseline collections state above.",
+  "rca of the issue": "N/A — no failures encountered."
+}

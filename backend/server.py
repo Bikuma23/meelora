@@ -34,6 +34,11 @@ from core.logs import write_log, list_logs_for_admin
 from core.access_management import UserCompanyAccessUpdate, list_user_company_access, replace_user_company_access
 from core.permissions import require_tenant_context, require_company_access
 from core.company_imports import preview_company_import, commit_company_import
+from core.financial.years import (
+    FinancialYearCreate, FinancialYearUpdate,
+    list_financial_years, get_financial_year, create_financial_year, update_financial_year,
+    ensure_indexes as _ensure_financial_year_indexes,
+)
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -839,6 +844,54 @@ async def update_mandate(mandate_id: str, payload: MandateUpdate, user: dict = D
                      company_id=mandate.get("company_id"), mandate_id=mandate_id,
                      entity_id=mandate_id, event_type="mandate.updated")
     return mandate
+
+
+# ---------------------------------------------------------------------------
+# P2.1 — Financial Core : exercices financiers (financial_years)
+# Routes fines déléguant au module core.financial.years (autorisation Phase 1).
+# ---------------------------------------------------------------------------
+@api.get("/companies/{company_id}/financial-years")
+async def list_company_financial_years(company_id: str, user: dict = Depends(get_current_user)):
+    return await list_financial_years(db, company_id, user)
+
+
+@api.post("/companies/{company_id}/financial-years", status_code=201)
+async def create_company_financial_year(company_id: str, payload: FinancialYearCreate, user: dict = Depends(require_admin)):
+    fy = await create_financial_year(db, company_id, user, payload)
+    await log_action(user, "create", "financial_year", fy.get("label", ""),
+                     details=f"Exercice créé: {fy.get('id')} ({fy.get('start_date')} → {fy.get('end_date')})",
+                     company_id=company_id, entity_id=fy.get("id"),
+                     event_type="financial_year.created")
+    return fy
+
+
+@api.get("/companies/{company_id}/financial-years/{financial_year_id}")
+async def get_company_financial_year(company_id: str, financial_year_id: str, user: dict = Depends(get_current_user)):
+    return await get_financial_year(db, company_id, financial_year_id, user)
+
+
+@api.patch("/companies/{company_id}/financial-years/{financial_year_id}")
+async def update_company_financial_year(company_id: str, financial_year_id: str, payload: FinancialYearUpdate, user: dict = Depends(require_admin)):
+    fy, prev_status = await update_financial_year(db, company_id, financial_year_id, user, payload)
+    await log_action(user, "update", "financial_year", fy.get("label", ""),
+                     details=f"Exercice modifié: {financial_year_id}",
+                     changes=[{"field": k, "after": fy.get(k)} for k in payload.model_dump(exclude_unset=True).keys()],
+                     company_id=company_id, entity_id=financial_year_id,
+                     event_type="financial_year.updated")
+    if prev_status is not None:
+        new_status = fy.get("status")
+        if new_status == "closed":
+            await log_action(user, "close", "financial_year", fy.get("label", ""),
+                             details=f"Exercice clôturé: {financial_year_id}",
+                             company_id=company_id, entity_id=financial_year_id,
+                             event_type="financial_year.closed")
+        elif new_status == "open":
+            await log_action(user, "reopen", "financial_year", fy.get("label", ""),
+                             details=f"Exercice réouvert: {financial_year_id}",
+                             company_id=company_id, entity_id=financial_year_id,
+                             event_type="financial_year.reopened")
+    return fy
+
 
 
 @api.get("/notifications")
@@ -6870,6 +6923,10 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("email", unique=True)
+    try:
+        await _ensure_financial_year_indexes(db)
+    except Exception as e:
+        logger.error(f"Index financial_years échec : {e}")
     try:
         _qc_init_storage()
     except Exception as e:

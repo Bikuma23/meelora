@@ -860,3 +860,20 @@ Durcissement finalisé via le **helper centralisé** `require_company_access` (e
 - **Nettoyage post-tests** : dérive de données restaurée (société acct→"Meelora"/CA, users julie→"Julie Test", marc→"Marc Test") ; script one-off dans `/app/test_reports/scratch/` (PAS dans tests/, non collecté par pytest). Baseline finale : users=3, companies=2, mandates=0, active company_access=3, 44/44 tests unitaires.
 
 ### ✅ PHASE 1 — FINAL SECURITY SIGN-OFF : APPROUVÉ. **STOP — Phase 2 en attente d'approbation explicite du client.**
+
+## PHASE 2 — P2.1 FINANCIAL YEARS (2026-08-14) ✅ IMPLÉMENTÉ & VALIDÉ (testing_agent iteration_51) — P2.2 NON DÉMARRÉ
+Première brique du Financial Core normalisé, en parallèle du legacy (aucune donnée legacy migrée).
+- **Module dédié** : `backend/core/financial/` (package extensible : years → plus tard periods/accounts/data_imports/trial_balance/journal/ingestion). `years.py` = modèles + services purs (list/get/create/update) réutilisant l'autorisation Phase 1 (`require_company_access`/`require_company_admin`).
+- **Collection** `financial_years` : `{_id:"fy_<uuid>", workspace_id, company_id, label, start_date, end_date, status(open|closed), created_at/by, updated_at}`.
+- **Routes fines (server.py)** : GET/POST `/api/companies/{company_id}/financial-years`, GET/PATCH `/api/companies/{company_id}/financial-years/{id}`. Pas de DELETE physique (405). Création admin-only (`require_admin`), lecture pour user affecté.
+- **Règles métier** : 1 exercice = 1 workspace + 1 société ; NON calendaire (jamais dérivé de date.year) ; start<=end (422) ; pas de chevauchement par société (409, `[s1<=e2 AND s2<=e1]`) ; label unique par société (409) ; même label OK sur sociétés différentes ; pas de suppression physique.
+- **Index** : unique `(workspace_id, company_id, label)` + `(workspace_id, company_id, start_date, end_date)` (créés au startup).
+- **Sécurité** (réutilise Phase 1, PAS de 2e système) : admin same-workspace=OK ; user affecté=lecture ; user non affecté=403 ; cross-workspace/inexistant=404 (no-leak).
+- **Logs** : `financial_year.created/updated/closed/reopened` (close/reopen distingués via previous_status) avec workspace_id/company_id/entity_id/acteur.
+- **Tests permanents** : `tests/test_p2_financial_years.py` (16, in-memory, SANS effet de bord). Le test API live du testing_agent est rangé dans `/app/test_reports/scratch/` (non collecté par pytest par défaut, anti-pollution).
+- **Validation testing_agent iteration_51** : 23/23 API + 16/16 unit P2.1 + 44/44 régression Phase 1 ; smoke financier legacy 200 (formules inchangées) ; P1.11 intact ; baseline restaurée (users=3, companies=2, mandates=0, active_access=3, financial_years=0).
+- **Sécurité legacy** : acct_*/qc9434_*, formules BV/P&L/Bilan/Cashflow, acct_periods/qc9434_years, legacy_prefix, comportement P1.11 → **inchangés**.
+- **Dépendances legacy restantes** : `acct_periods`/`qc9434_years` non migrés (P2.x ultérieur) ; financial_years non peuplé depuis le legacy (attendra instruction explicite).
+- **Reco P2.2** : `financial_periods` (rattachés à un financial_year, avec verrouillage introduit à ce moment-là).
+
+### 🛑 P2.1 TERMINÉ. STOP — NE PAS DÉMARRER P2.2 avant approbation explicite du client.
