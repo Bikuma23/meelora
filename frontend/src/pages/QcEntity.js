@@ -262,22 +262,43 @@ export default function QcEntity() {
 
 function AccountDetailModal({ year, account, scope, onClose }) {
   const [d, setD] = useState(null);
-  useEffect(() => { if (account) api.qcAccountDetail({ year, account, scope }).then(setD).catch(() => setD(null)); }, [year, account, scope]);
+  const [curScope, setCurScope] = useState(scope || "movement");
+  const [query, setQuery] = useState("");
+  useEffect(() => { setCurScope(scope || "movement"); setQuery(""); }, [account, scope]);
+  useEffect(() => { if (account) { setD(null); api.qcAccountDetail({ year, account, scope: curScope }).then(setD).catch(() => setD(null)); } }, [year, account, curScope]);
+  const q = query.trim().toLowerCase();
+  const rows = (d?.rows || []).filter((r) => {
+    if (!q) return true;
+    const hay = [r.num, r.date, r.description, r.tiers, money(r.debit), money(r.credit), money(r.balance)].join(" ").toLowerCase();
+    return hay.includes(q);
+  });
+  const fDebit = rows.reduce((s, r) => s + (r.debit || 0), 0);
+  const fCredit = rows.reduce((s, r) => s + (r.credit || 0), 0);
   return (
     <Dialog open={!!account} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent data-testid="qc-account-detail-modal" className="max-h-[85vh] max-w-3xl overflow-y-auto">
+      <DialogContent data-testid="qc-account-detail-modal" className="max-h-[88vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><FileText size={16} className="text-[#0E9488]" /> Détail du compte {account} {d?.name ? `— ${d.name}` : ""}</DialogTitle>
-          <DialogDescription className="text-xs">{scope === "cumulative" ? "Écritures cumulatives jusqu'à la fin de l'exercice" : `Écritures de l'exercice ${year}`} · Solde : {d ? money(d.balance) : "…"} $</DialogDescription>
+          <DialogDescription className="text-xs">{curScope === "cumulative" ? "Écritures cumulatives jusqu'à la fin de l'exercice" : `Écritures de l'exercice ${year}`} · Solde : {d ? money(d.balance) : "…"} $</DialogDescription>
         </DialogHeader>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex overflow-hidden rounded-lg border border-slate-200" data-testid="qc-detail-scope-toggle">
+            <button onClick={() => setCurScope("movement")} data-testid="qc-detail-scope-movement" className={`px-3 py-1.5 text-xs font-600 ${curScope === "movement" ? "bg-[#0E9488] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>Exercice {year}</button>
+            <button onClick={() => setCurScope("cumulative")} data-testid="qc-detail-scope-cumulative" className={`px-3 py-1.5 text-xs font-600 ${curScope === "cumulative" ? "bg-[#0E9488] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>Cumulatif</button>
+          </div>
+          <div className="relative flex-1 min-w-[180px]">
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher (n°, date, description, tiers, montant)…" data-testid="qc-detail-search" className="h-8 pl-3 text-sm" />
+          </div>
+        </div>
         {!d ? <p className="py-6 text-center text-sm text-slate-400">Chargement…</p>
-          : d.rows.length === 0 ? <p className="py-6 text-center text-sm text-slate-400" data-testid="qc-detail-empty">Aucune écriture pour ce compte.</p>
+          : (d.rows || []).length === 0 ? <p className="py-6 text-center text-sm text-slate-400" data-testid="qc-detail-empty">Aucune écriture pour ce compte.</p>
           : <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="qc-detail-table">
               <thead><tr className="bg-[#063044] text-left text-xs uppercase text-white">
                 <th className="px-3 py-2">N°</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Description</th><th className="px-3 py-2">Tiers</th><th className="px-3 py-2 text-right">Débit</th><th className="px-3 py-2 text-right">Crédit</th><th className="px-3 py-2 text-right">Solde</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-100">
-                {d.rows.map((r, i) => (
+                {rows.length === 0 ? <tr data-testid="qc-detail-no-match"><td colSpan={7} className="py-6 text-center text-sm text-slate-400">Aucun résultat pour « {query} ».</td></tr>
+                  : rows.map((r, i) => (
                   <tr key={i} className="hover:bg-slate-50" data-testid={`qc-detail-row-${i}`}>
                     <td className="px-3 py-1.5 font-mono-data text-xs text-[#0E9488]">{r.num}</td>
                     <td className="px-3 py-1.5 text-xs">{r.date}</td>
@@ -290,9 +311,9 @@ function AccountDetailModal({ year, account, scope, onClose }) {
                 ))}
               </tbody>
               <tfoot><tr className="border-t-2 border-[#063044] bg-slate-50 font-700">
-                <td className="px-3 py-2" colSpan={4}>TOTAL</td>
-                <td className="px-3 py-2 text-right font-mono-data">{money(d.total_debit)}</td>
-                <td className="px-3 py-2 text-right font-mono-data">{money(d.total_credit)}</td>
+                <td className="px-3 py-2" colSpan={4}>{q ? `TOTAL FILTRÉ (${rows.length})` : "TOTAL"}</td>
+                <td className="px-3 py-2 text-right font-mono-data">{money(q ? fDebit : d.total_debit)}</td>
+                <td className="px-3 py-2 text-right font-mono-data">{money(q ? fCredit : d.total_credit)}</td>
                 <td className="px-3 py-2 text-right font-mono-data">{money(d.balance)}</td>
               </tr></tfoot>
             </table></div>}
