@@ -76,6 +76,23 @@ def reader(ws=WS): return {"id": "u_read", "role": "user", "workspace_id": ws, "
 def _run(c): return asyncio.run(c)
 
 
+def principal(uid="u_principal", ws=WS):
+    """Global user (non-admin); authorization comes from company_memberships, not role."""
+    return {"id": uid, "role": "user", "workspace_id": ws, "tenant_migrated": True}
+
+
+def platform_admin(uid="u_platform", ws=WS):
+    """platform_role must NOT grant any customer/financial access on its own."""
+    return {"id": uid, "role": "user", "platform_role": "platform_admin", "workspace_id": ws, "tenant_migrated": True}
+
+
+def _grant_company_membership(db, user_id, membership_type, role, company_id=CA, ws=WS):
+    db.company_memberships.docs.append({
+        "_id": f"cpm_{user_id}", "workspace_id": ws, "company_id": company_id,
+        "user_id": user_id, "membership_type": membership_type, "role": role, "status": "active",
+    })
+
+
 def _mk(code="3200", name="Sales", atype="revenue", nb="credit", **kw):
     return AccountCreate(account_code=code, account_name=name, account_type=atype, normal_balance=nb, **kw)
 
@@ -242,3 +259,88 @@ def test_same_external_id_different_source_allowed():
     _run(create_account(db, CA, admin(), _mk(code="1", source_system="excel", external_id="X1")))
     a = _run(create_account(db, CA, admin(), _mk(code="2", source_system="api", external_id="X1")))
     assert a["source_system"] == "api"
+
+
+# --- P1.12 security matrix (company_memberships read path, not just legacy bridge) ---
+def test_workspace_staff_principal_can_read_via_membership():
+    db = _DB()
+    _run(create_account(db, CA, admin(), _mk()))
+    _grant_company_membership(db, "u_principal", "workspace_staff", "principal")
+    assert len(_run(list_accounts(db, CA, principal("u_principal")))) == 1
+
+
+def test_workspace_staff_collaborator_can_read_via_membership():
+    db = _DB()
+    _run(create_account(db, CA, admin(), _mk()))
+    _grant_company_membership(db, "u_collab", "workspace_staff", "collaborator")
+    assert len(_run(list_accounts(db, CA, principal("u_collab")))) == 1
+
+
+def test_company_user_admin_can_read_but_not_administer():
+    db = _DB()
+    _run(create_account(db, CA, admin(), _mk()))
+    _grant_company_membership(db, "u_local_admin", "company_user", "admin")
+    # Reads allowed via active company membership...
+    assert len(_run(list_accounts(db, CA, principal("u_local_admin")))) == 1
+    # ...but company-local admin cannot administer the chart of accounts (P1.12 policy:
+    # structural financial admin = workspace admin only).
+    with pytest.raises(HTTPException) as e:
+        _run(create_account(db, CA, principal("u_local_admin"), _mk(code="9")))
+    assert e.value.status_code == 403
+
+
+def test_company_user_user_can_read_but_not_administer():
+    db = _DB()
+    _run(create_account(db, CA, admin(), _mk()))
+    _grant_company_membership(db, "u_local_user", "company_user", "user")
+    assert len(_run(list_accounts(db, CA, principal("u_local_user")))) == 1
+    with pytest.raises(HTTPException) as e:
+        _run(create_account(db, CA, principal("u_local_user"), _mk(code="9")))
+    assert e.value.status_code == 403
+
+
+def test_platform_admin_without_membership_has_no_read_access():
+    db = _DB()
+    _run(create_account(db, CA, admin(), _mk()))
+    # platform_role alone grants NO customer/financial access.
+    with pytest.raises(HTTPException) as e:
+        _run(list_accounts(db, CA, platform_admin()))
+    assert e.value.status_code == 403
+
+
+def test_platform_admin_without_membership_cannot_administer():
+    db = _DB()
+    with pytest.raises(HTTPException) as e:
+        _run(create_account(db, CA, platform_admin(), _mk()))
+    assert e.value.status_code == 403
+
+
+def test_platform_admin_with_membership_can_read_only():
+    db = _DB()
+    _run(create_account(db, CA, admin(), _mk()))
+    _grant_company_membership(db, "u_platform", "company_user", "user")
+    # Explicit customer membership grants read; platform_role never upgrades to structural admin.
+    assert len(_run(list_accounts(db, CA, platform_admin()))) == 1
+    with pytest.raises(HTTPException) as e:
+        _run(create_account(db, CA, platform_admin(), _mk(code="9")))
+    assert e.value.status_code == 403
+
+
+def test_membership_in_other_company_does_not_grant_access():
+    db = _DB()
+    _run(create_account(db, CB, admin(), _mk()))
+    _grant_company_membership(db, "u_scoped", "workspace_staff", "principal", company_id=CA)
+    # Active membership on CA must not leak read access to CB.
+    with pytest.raises(HTTPException) as e:
+        _run(list_accounts(db, CB, principal("u_scoped")))
+    assert e.value.status_code == 403
+
+
+def test_read_via_company_membership_matches_legacy_bridge():
+    """The new company_memberships read path is equivalent to the legacy company_access bridge."""
+    db = _DB()
+    _run(create_account(db, CA, admin(), _mk()))
+    # legacy bridge reader (u_read via company_access) already works; membership path parity:
+    _grant_company_membership(db, "u_new", "workspace_staff", "collaborator")
+    assert len(_run(list_accounts(db, CA, reader()))) == 1
+    assert len(_run(list_accounts(db, CA, principal("u_new")))) == 1

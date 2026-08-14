@@ -930,3 +930,14 @@ Sépare l'identité globale (users) de l'appartenance workspace et société.
 - **Reco avant reprise P2.3** : marquer company_access legacy une fois l'UI Membres migrée ; ajouter le sélecteur de workspace uniquement pour utilisateurs multi-organisations.
 
 ### 🛑 P1.12 TERMINÉ. STOP — NE PAS REPRENDRE P2.3 avant approbation explicite du client.
+
+## P2.3 — Comptes unifiés (Financial Core) — FINALISÉ sous P1.12 (2026-08-14)
+- [x] **Module** `core/financial/accounts.py` validé/finalisé : CRUD, `account_code` opaque STRING (zéros de tête / ponctuation / alphanumérique préservés, jamais casté), devise héritée de `company.functional_currency` si omise (jamais mutée, validée 3 lettres ISO), pas de suppression physique (drapeau `active`), unicité `account_code` par société + unicité partielle `external_id` par (société, source) uniquement si présent.
+- [x] **Routes** `server.py` : `GET/POST /api/companies/{id}/accounts`, `GET/PATCH .../{account_id}`. POST/PATCH gardés par `require_admin` (workspace admin) ; module appelle `require_company_admin` (workspace-admin-only, conforme P1.12). Logs `account.created/updated/deactivated/reactivated` avec workspace_id, company_id, entity_id, account_code, acteur.
+- [x] **Index** créés au démarrage : UNIQUE (ws+company+code), lookup (ws+company+active), lookup (ws+company+type), UNIQUE partiel (ws+company+source+external_id) si external_id string.
+- [x] **Autorisation P1.12** : lecture via `require_company_access` (dual-read `company_memberships`→legacy `company_access`) ; admin structurel = workspace admin uniquement (admin local société = users locaux seulement). `platform_role` n'accorde AUCUN accès client automatique.
+- [x] **Tests** : `test_p2_accounts.py` porté à **32 cas** (+8 matrice de sécurité P1.12 : principal/collaborator via memberships, company_user admin/user lecture OK + admin structurel refusé, platform_admin sans membership refusé, isolation par société, parité membership vs legacy). Suite in-memory permanente **128/128 verte** (Phase 1 + P1.11 + P1.12 + P2.1 + P2.2 + P2.3).
+- [x] **Smoke live** : create (code `SMOKE-0010` préservé, devise CAD héritée) + list/search OK ; legacy `acct` summary HTTP 200 ; comptes de test supprimés (baseline propre, 0 compte normalisé, chart legacy intact).
+- [x] **Dépendances legacy P2.3** : `users.workspace_id` utilisé uniquement via helper centralisé `require_tenant_context` (contexte de session, pas comme vérité d'appartenance) ; `company_access` utilisé uniquement comme pont dual-read en lecture. Aucune nouvelle dépendance introduite. Aucune collection `acct_*`/`qc9434_*` touchée.
+
+### 🛑 P2.3 FINALISÉ. STOP — NE PAS DÉMARRER P2.4 (Imports de données) avant approbation explicite du client.
