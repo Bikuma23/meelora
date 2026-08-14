@@ -71,6 +71,12 @@ from core.financial.journal import (
     preview_journal_import, commit_journal_import, list_journal_entries, get_journal_entry,
     aggregate_journal, ensure_indexes as _ensure_journal_indexes,
 )
+from core.financial.compatibility import (
+    FinancialSourceUpdate,
+    get_financial_source, set_financial_source, financial_source_status,
+    compat_accounts, compat_trial_balance, compat_journal,
+    ensure_indexes as _ensure_financial_config_indexes,
+)
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -1220,6 +1226,45 @@ async def aggregate_company_journal(company_id: str, financial_period_id: Option
 @api.get("/companies/{company_id}/journal-entries/{entry_id}")
 async def get_company_journal_entry(company_id: str, entry_id: str, user: dict = Depends(get_current_user)):
     return await get_journal_entry(db, company_id, entry_id, user)
+
+
+# ---------------------------------------------------------------------------
+# P2.8 — Legacy compatibility bridge (READ-ONLY). Company-scoped source flag,
+# default legacy, reversible, admin-only change. No writes to legacy collections.
+# ---------------------------------------------------------------------------
+@api.get("/companies/{company_id}/financial-source/status")
+async def get_company_financial_source_status(company_id: str, financial_period_id: Optional[str] = None,
+                                               user: dict = Depends(get_current_user)):
+    return await financial_source_status(db, company_id, user, financial_period_id=financial_period_id)
+
+
+@api.put("/companies/{company_id}/financial-source")
+async def set_company_financial_source(company_id: str, payload: FinancialSourceUpdate,
+                                       user: dict = Depends(require_admin)):
+    result = await set_financial_source(db, company_id, user, payload.source)
+    await log_action(user, "update", "financial_source", company_id,
+                     details=f"Source financière: {result['old_source']} → {result['new_source']}",
+                     company_id=company_id, entity_id=company_id, event_type="financial_source.changed",
+                     metadata={"old_source": result["old_source"], "new_source": result["new_source"]})
+    return result
+
+
+@api.get("/companies/{company_id}/compat/accounts")
+async def compat_company_accounts(company_id: str, active_only: bool = False,
+                                  user: dict = Depends(get_current_user)):
+    return await compat_accounts(db, company_id, user, active_only=active_only)
+
+
+@api.get("/companies/{company_id}/compat/trial-balance")
+async def compat_company_trial_balance(company_id: str, financial_period_id: Optional[str] = None,
+                                       user: dict = Depends(get_current_user)):
+    return await compat_trial_balance(db, company_id, user, financial_period_id)
+
+
+@api.get("/companies/{company_id}/compat/journal")
+async def compat_company_journal(company_id: str, financial_period_id: Optional[str] = None,
+                                 user: dict = Depends(get_current_user)):
+    return await compat_journal(db, company_id, user, financial_period_id)
 
 
 # ---------------------------------------------------------------------------
@@ -7348,6 +7393,7 @@ async def startup():
         await _ensure_data_import_indexes(db)
         await _ensure_trial_balance_indexes(db)
         await _ensure_journal_indexes(db)
+        await _ensure_financial_config_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     try:

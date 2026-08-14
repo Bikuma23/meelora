@@ -1002,3 +1002,19 @@ Sépare l'identité globale (users) de l'appartenance workspace et société.
 - [x] **Smoke live parité** : accounts (preview valid → commit completed_with_warnings, 2 créés), trial_balance (valid → completed, 2 lignes), journal (valid → completed, 1 écriture / 2 lignes) via les mêmes routes publiques ; legacy `acct` HTTP 200 ; données de test supprimées (baseline propre).
 
 ### 🛑 P2.7 IMPLÉMENTÉ. STOP — NE PAS DÉMARRER P2.8 (Pont de compatibilité legacy) avant approbation explicite du client.
+
+## P2.8 — Pont de compatibilité legacy (LECTURE SEULE) — 2026-08-14
+- [x] **Module** `core/financial/compatibility.py` : couche d'adaptation en lecture exposant les données normalisées V2 (accounts / trial_balance / journal) dans des formes compatibles legacy, SANS écrire dans acct_*/qc9434_* et SANS changer les formules. La seule collection écrite est `financial_config` (drapeau de source, scoped société).
+- [x] **Sélection de source** : drapeau `financial_data_source: legacy|normalized` **scoped société**, appliqué au backend, **défaut legacy**, réversible, changement **admin uniquement**, journalisé. Aucun switch global, aucune contamination inter-sociétés.
+- [x] **Adaptateurs** : `NormalizedAccountsCompatibilityAdapter` (code opaque préservé, name, active, type), `NormalizedTrialBalanceCompatibilityAdapter` (débit/crédit/net période + cumul, convention P2.5 non inversée, totaux de contrôle), `NormalizedJournalCompatibilityAdapter` (date/référence/description, lignes ordonnées par line_number, totaux).
+- [x] **Règle de version (déterministe)** : dernier import **complété** (completed/completed_with_warnings) pour société+période, trié par (completed_at, _id) ; les imports échoués/incomplets ne sont jamais sélectionnés ; `import_id` exposé dans la réponse/status.
+- [x] **Normalisé indisponible** : en mode normalized sans données requises → **erreur contrôlée 409** (aucun repli silencieux vers legacy). En mode legacy → marqueur explicite `use_legacy_endpoint` (les endpoints legacy restent la source, inchangés).
+- [x] **APIs** : `GET /api/companies/{id}/financial-source/status` (métadonnées P2.9), `PUT /api/companies/{id}/financial-source` (admin), `GET /api/companies/{id}/compat/{accounts,trial-balance,journal}`. Routes publiques existantes inchangées.
+- [x] **Sécurité P1.12** : lecture via `require_company_access` ; changement de source via workspace admin ; platform_role sans membership refusé ; cross-workspace 404 ; P1.11 legacy intacte.
+- [x] **Logs** : `financial_source.changed` (workspace_id, company_id, old_source, new_source, acteur). Pas d'inondation de logs sur les lectures normales.
+- [x] **Preuve zéro écriture legacy** : test dédié espionnant acct_bv/acct_ledger/acct_account_map/qc9434_accounts/qc9434_entries → 0 écriture pendant les lectures compat.
+- [x] **P&L / Bilan / Flux de trésorerie** : INCHANGÉS, restent sur legacy (migration = phases ultérieures ; réconciliation = P2.9).
+- [x] **Tests** : `test_p2_8_compatibility.py` **23/23**. Suite in-memory permanente **272/272 verte** (Phase 1 + P1.11 + P1.12 + P2.1..P2.8).
+- [x] **Smoke live (switch)** : défaut legacy → set normalized (accounts `0091/0092` + TB via normalisé, contrôles équilibrés) → 2e société reste legacy → status expose import_id/compteurs → retour legacy → legacy `acct` HTTP 200 ; données de test supprimées (baseline propre, financial_config vidé).
+
+### 🛑 P2.8 IMPLÉMENTÉ. STOP — NE PAS DÉMARRER P2.9 (Réconciliation des données) avant approbation explicite du client.
