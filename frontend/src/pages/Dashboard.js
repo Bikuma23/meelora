@@ -7,8 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
-import { Users, DollarSign, Wallet, TrendingUp, Calendar, PieChart as PieIcon, BarChart3, Layers, Scale } from "lucide-react";
+import { Users, DollarSign, Wallet, TrendingUp, Calendar, PieChart as PieIcon, BarChart3, Layers, Scale, ArrowRight } from "lucide-react";
 import { PresentationButton } from "../components/PresentationButton";
+import { useNav } from "../context/NavContext";
 
 const NAVY = "#0F172A", TEAL = "#22C55E", ORANGE = "#FBBF24", GREY = "#808080";
 const BLUE = NAVY, VIOLET = TEAL;
@@ -45,6 +46,7 @@ function Kpi({ label, value, sub, icon: Icon, tint, testId }) {
 export default function Dashboard() {
   const { year, years, selectYear } = useYear();
   const { t } = useLang();
+  const { go } = useNav();
   const [b, setB] = useState(null);
   const [cmp, setCmp] = useState(null);
   const [evo, setEvo] = useState(null);
@@ -63,6 +65,16 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6" data-testid="dashboard-page">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#063044]/10 bg-gradient-to-br from-[#063044] to-[#0a4a68] p-5 text-white" data-testid="client-home-banner">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#7fe3cf]">Espace client</p>
+          <h3 className="mt-1 text-lg font-light">Accédez à vos mandats et à leurs modules</h3>
+        </div>
+        <button onClick={() => go("mandats_list")} data-testid="client-home-access"
+          className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-600 text-[#063044] transition-colors hover:bg-white/90">
+          Accéder <ArrowRight size={16} />
+        </button>
+      </div>
       <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
         <div className="flex flex-wrap items-center gap-3">
           <div>

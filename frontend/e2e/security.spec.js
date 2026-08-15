@@ -59,4 +59,15 @@ test.describe("Platform/company separation & security (P1.13D.2)", () => {
     await repCtx.dispose();
     await budCtx.dispose();
   });
+
+  test("navigation endpoint is fail-closed (404 unknown company, 403 no access)", async ({ page }) => {
+    const CB = "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9"; // 9434 — reporting has no access
+    const ctx = await request.newContext({ baseURL: API, ignoreHTTPSErrors: true });
+    await ctx.post("/api/auth/login", { data: { email: "persona_reporting@accslegro.com", password: "persona123" } });
+    // Unknown / cross-workspace company => 404 (no enumeration).
+    expect((await ctx.get("/api/companies/00000000-0000-0000-0000-000000000000/navigation")).status()).toBe(404);
+    // Same workspace but no access => 403 (never 200 with empty modules).
+    expect((await ctx.get(`/api/companies/${CB}/navigation`)).status()).toBe(403);
+    await ctx.dispose();
+  });
 });

@@ -37,17 +37,21 @@ test.describe("Persona sidebar = effective access (P1.13E)", () => {
     await expect(page.getByTestId("nav-admin-section")).toBeVisible();
   });
 
-  test("multi-société persona recomputes the sidebar on company switch", async ({ page }) => {
+  test("multi-société persona recomputes the sidebar on mandate switch", async ({ page }) => {
     await login(page, { email: "persona_multi@accslegro.com", password: "persona123" });
-    await expect(page.getByTestId("company-context-switcher")).toBeVisible();
+    // Enter the first mandate from "Tous les mandats".
+    await page.getByTestId("nav-mandats_list").click();
+    await expect(page.getByTestId("mandats-list")).toBeVisible();
+    const cards = page.locator('[data-testid^="mandat-access-"]');
+    await expect(cards).toHaveCount(2);
+    await cards.nth(0).click();
+    await page.waitForTimeout(1200);
     const first = await visibleModules(page);
-    await page.getByTestId("company-context-select").click();
-    const opts = page.locator('[data-testid^="company-ctx-option-"]');
-    await expect(opts).toHaveCount(2);
-    await opts.nth(1).click();
+    // Back to the list and enter the second mandate.
+    await page.getByTestId("nav-mandats_list").click();
+    await page.locator('[data-testid^="mandat-access-"]').nth(1).click();
     await page.waitForTimeout(1200);
     const second = await visibleModules(page);
-    // The module set changes with the active company (no rights carried over).
     expect(second).not.toEqual(first);
     for (const m of [...first, ...second]) expect(["REPORTING", "BUDGETS", "ACCOUNTING", "CONSOLIDATION"]).toContain(m);
   });

@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
+import { useNav } from "../context/NavContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { toast } from "sonner";
 import {
   Building2, Users, ShieldCheck, Boxes, ScrollText, LifeBuoy, ChevronLeft, ChevronRight,
-  Loader2, Server, Search, CheckCircle2, AlertTriangle, Layers,
+  Loader2, Server, Search, CheckCircle2, AlertTriangle, Layers, ArrowRight,
 } from "lucide-react";
 
 const MODULE_LABEL = { REPORTING: "Reporting", ACCOUNTING: "Comptabilité", FIXED_ASSETS: "Immobilisations", CONSOLIDATION: "Consolidation" };
@@ -66,6 +68,9 @@ export function PlatformHome() {
 // Mandats / Clients (liste -> fiche client)
 // ---------------------------------------------------------------------------
 export function PlatformClients() {
+  const { user } = useAuth();
+  const { enterCompanyContext } = useNav();
+  const internalWsId = user?.workspace?.id;
   const [clients, setClients] = useState(null);
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState(null);
@@ -73,29 +78,51 @@ export function PlatformClients() {
   if (selected) return <ClientCard client={selected} onBack={() => setSelected(null)} />;
   if (!clients) return <div className="flex items-center gap-2 text-slate-500"><Loader2 className="animate-spin" size={16} /> Chargement…</div>;
   const filtered = clients.filter((c) => !q || (c.name || "").toLowerCase().includes(q.toLowerCase()));
+  // Internal Meelora card always first; external clients after.
+  const internal = filtered.filter((c) => c.id === internalWsId);
+  const externals = filtered.filter((c) => c.id !== internalWsId);
   return (
     <div className="space-y-4" data-testid="platform-clients">
+      <p className="text-sm text-slate-500">Portefeuille commercial de Meelora. La société interne apparaît en premier.</p>
       <div className="relative max-w-sm">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un client…" className="h-11 pl-9" data-testid="platform-clients-search" />
       </div>
-      {filtered.length === 0 ? <p className="text-sm text-slate-500" data-testid="platform-clients-empty">Aucun client.</p> :
-        filtered.map((c) => (
-          <button key={c.id} onClick={() => setSelected(c)} data-testid={`platform-client-row-${c.id}`}
-            className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-[#15AF97] hover:bg-[#15AF97]/5">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#063044]/8 text-[#063044]"><Building2 size={18} /></span>
-              <div>
-                <div className="font-medium text-[#0F172A]">{c.name}</div>
-                <div className="text-xs text-slate-400">{c.jurisdiction} · {c.organization_type} · {c.companies_count} société(s)</div>
+      {internal.map((c) => (
+        <div key={c.id} data-testid="platform-internal-card"
+          className="flex flex-col gap-3 rounded-xl border border-[#15AF97]/40 bg-[#15AF97]/8 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#15AF97]/20 text-[#0f8f7c]"><Building2 size={18} /></span>
+            <div>
+              <div className="flex items-center gap-2 font-medium text-[#063044]">{c.name}
+                <span className="rounded-full bg-[#15AF97] px-2 py-0.5 text-[10px] font-semibold uppercase text-white">Société interne</span>
               </div>
+              <div className="text-xs text-slate-500">{c.jurisdiction} · {c.companies_count} société(s) · {c.active_users_count} utilisateur(s)</div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right text-xs text-slate-500"><b className="text-[#063044]">{c.active_users_count}</b> utilisateur(s)<br /><b className="text-[#063044]">{c.client_admins_count}</b> admin(s)</div>
-              <ChevronRight size={18} className="text-slate-300" />
+          </div>
+          <Button className="gap-1.5 bg-[#063044] text-white hover:bg-[#0a4a68]" data-testid="platform-internal-access" onClick={enterCompanyContext}>
+            Accéder <ArrowRight size={14} />
+          </Button>
+        </div>
+      ))}
+      {externals.length === 0 && internal.length > 0 && (
+        <p className="pt-2 text-xs text-slate-400" data-testid="platform-no-clients">Aucun client externe pour le moment.</p>
+      )}
+      {externals.map((c) => (
+        <div key={c.id} data-testid={`platform-client-row-${c.id}`}
+          className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-[#15AF97]">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#063044]/8 text-[#063044]"><Building2 size={18} /></span>
+            <div>
+              <div className="font-medium text-[#0F172A]">{c.name}</div>
+              <div className="text-xs text-slate-400">{c.jurisdiction} · {c.organization_type} · {c.companies_count} société(s)</div>
             </div>
-          </button>
-        ))}
+          </div>
+          <Button variant="outline" size="sm" data-testid={`platform-client-access-${c.id}`} onClick={() => setSelected(c)}>
+            Accéder <ArrowRight size={14} className="ml-1" />
+          </Button>
+        </div>
+      ))}
     </div>
   );
 }

@@ -1,0 +1,20 @@
+{
+  "summary": "Retest ciblé P1.13E (iteration_63 HIGH fixes) sur GET /api/companies/{cid}/navigation. 8/8 tests pytest PASSED. Les 2 HIGH sont corrigés: (1) société inexistante/cross-workspace => 404 sans énumération (persona_reporting et admin), (2) même workspace sans accès => 403 sans fuite de modules/capabilities (persona_reporting sur CB). Non-régression validée: persona_reporting sur CA => 200 avec module REPORTING; admin sur CA => 200 management view; legacy gating intact (reporting-only /api/budget=403; budgets persona /api/budget=200 & /api/acct/periods=403).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_navigation_retest.py",
+    "/app/test_reports/pytest/nav_retest.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Correctifs conformes à la spec: 404 pour ressource non résolvable dans le workspace du caller (aucune énumération), 403 pour société connue mais non accessible, avec réponse d'erreur sans modules/capabilities. Bon découplage sémantique 403 vs 404."
+  ],
+  "updated_files": ["/app/backend/tests/test_navigation_retest.py"],
+  "success_rate": {"backend": "100%", "frontend": "N/A (skipped per request)"},
+  "test_credentials": "persona_reporting@accslegro.com/persona123, persona_budgets@accslegro.com/persona123, admin@accslegro.com/admin123",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Le test file /app/backend/tests/test_navigation_retest.py couvre en régression: navigation gating (404 vs 403 vs 200 no-leak) + legacy budget/acct gating. Lancer avec REACT_APP_BACKEND_URL exporté. Aucune donnée mutée."
+}

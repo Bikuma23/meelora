@@ -1369,3 +1369,16 @@ Refonte navigation/gating/sécurité, AUCUNE fonctionnalité métier, AUCUN calc
 - **GATE** : **P1.13 ACCESS FOUNDATION: READY** — **P1.13A MIGRATION: SAFE TO COMMIT** (attendre autorisation ; `--commit` NON exécuté).
 - **Pré-existant (LOW, hors périmètre)** : 5 tests financiers périmés dans `test_backend.py` (échouent aussi sur le code d'origine, vérifié par git stash) — code financier NON modifié.
 
+
+## P1.13E (nav V2) — Distinction Meelora/Client/Mandat (2026-06 — LIVRÉ & VALIDÉ)
+Modèle : **Client → Tous les mandats → Mandat → Modules**. Vocabulaire distinct par contexte. Aucune fonctionnalité métier / calcul financier modifié.
+- [x] **Sidebar plateforme** = Tableau de bord + **Sociétés / Clients** uniquement (Logs plateforme retiré du menu ; renommage local au contexte plateforme).
+- [x] **Page Sociétés / Clients** : carte **Meelora interne** en 1er (fond vert, badge « Société interne », bouton « Accéder » → bascule contexte Société Meelora) ; clients externes → fiche admin/support (ClientCard).
+- [x] **Contexte client** : vocabulaire « Tous les mandats ». Accueil (Dashboard) conservé + bannière « Espace client » avec bouton principal **Accéder** (`client-home-access`) → `mandats_list`. Entrée sidebar « Tous les mandats » → même écran (2 chemins).
+- [x] **Page `MandatsList`** (`mandats_list`) : cartes des sociétés accessibles (`mandat-card-<id>`) + bouton **Accéder** (`mandat-access-<id>`). « Accéder » = définit le mandat actif, recalcule la sidebar métier via accès effectif, ouvre le tableau de bord du mandat. Indicateur « Mandat actif » dans la sidebar.
+- [x] **Mono-mandat** conserve l'architecture (mandat auto-sélectionné mais « Tous les mandats » toujours accessible pour le retour).
+- [x] **NavContext** (`context/NavContext.js`) : `go`, `enterMandat`, `enterCompanyContext`, `activeCompanyId`, `companies`.
+- [x] **Durcissement `GET /api/companies/{cid}/navigation`** : 404 si société inexistante/cross-workspace ; 403 si le caller (non-admin) n'a ni membership ni company_access ; aucune fuite de modules sur refus. `GET /api/me/company-context` trie par pertinence (has_modules).
+- [x] **Validation** : Playwright **25/25** ; `testing_agent` iteration_63 (frontend 100 %, 2 HIGH backend nav guard) → corrigés → iteration_64 **backend 100 %, retest_needed False**. 0 BLOCKER/HIGH ouvert.
+- **Rappels** : migration P1.13A reste `--dry-run` (NON committée) ; ClientCard (fiche client externe) non E2E-testée ici faute de client externe dans l'environnement (attendu).
+

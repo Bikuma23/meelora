@@ -12,28 +12,27 @@ test.describe("Platform context (P1.13D.2)", () => {
     await expect(page.getByTestId("platform-stat-clients")).toBeVisible();
   });
 
-  test("platform navigation: Accueil, Mandats/Clients, Logs plateforme", async ({ page }) => {
+  test("platform navigation: Tableau de bord + Sociétés / Clients (no other menus)", async ({ page }) => {
     await login(page, "platformAdmin");
     await page.getByTestId("nav-platform_clients").click();
     await expect(page.getByTestId("platform-clients")).toBeVisible();
-    await page.getByTestId("nav-platform_logs").click();
-    await expect(page.getByTestId("platform-logs")).toBeVisible();
+    // Internal Meelora card is present and first.
+    await expect(page.getByTestId("platform-internal-card")).toBeVisible();
     await page.getByTestId("nav-platform_home").click();
     await expect(page.getByTestId("platform-home")).toBeVisible();
+    // "Logs plateforme" no longer a top-level platform menu.
+    await expect(page.getByTestId("nav-platform_logs")).toHaveCount(0);
   });
 
-  test("client card exposes all 6 tabs (Aperçu, Administrateurs, Utilisateurs, Modules, Logs, Support)", async ({ page }) => {
+  test("internal Meelora card 'Accéder' enters the Société Meelora (company) context", async ({ page }) => {
     await login(page, "platformAdmin");
     await page.getByTestId("nav-platform_clients").click();
-    await page.locator('[data-testid^="platform-client-row-"]').first().click();
-    await expect(page.getByTestId("client-card")).toBeVisible();
-    for (const tab of ["overview", "admins", "users", "modules", "logs", "support"]) {
-      await page.getByTestId(`client-tab-${tab}`).click();
-      await expect(page.getByTestId(`client-panel-${tab}`)).toBeVisible();
-    }
-    // Administrators tab shows a replace-admin action (governed emergency authority).
-    await page.getByTestId("client-tab-admins").click();
-    await expect(page.locator('[data-testid^="replace-admin-"]').first()).toBeVisible();
+    await expect(page.getByTestId("platform-internal-card")).toBeVisible();
+    await page.getByTestId("platform-internal-access").click();
+    await page.waitForTimeout(1000);
+    // Now in the company context: company sidebar, no platform nav.
+    await expect(page.getByTestId("company-nav")).toBeVisible();
+    await expect(page.getByTestId("nav-platform_home")).toHaveCount(0);
   });
 
   test("context switch to Société Meelora reveals the company sidebar, then back to platform", async ({ page }) => {
@@ -48,19 +47,13 @@ test.describe("Platform context (P1.13D.2)", () => {
     await expect(page.getByTestId("platform-home")).toBeVisible();
   });
 
-  test("log separation: platform logs are not the tenant operational stream", async ({ page }) => {
+  test("no aggregated cross-client stream: platform logs is not a top-level menu", async ({ page }) => {
     await login(page, "platformAdmin");
-    // Platform logs page (platform-scoped only).
-    await page.getByTestId("nav-platform_logs").click();
-    await expect(page.getByTestId("platform-logs")).toBeVisible();
-    // Client card > Logs tab = tenant operational logs (separate collection/scope).
+    // Log separation is enforced by scoped endpoints (see security.spec.js). The
+    // platform sidebar exposes no global operational log stream.
+    await expect(page.getByTestId("nav-platform_logs")).toHaveCount(0);
     await page.getByTestId("nav-platform_clients").click();
-    await page.locator('[data-testid^="platform-client-row-"]').first().click();
-    await page.getByTestId("client-tab-logs").click();
-    await expect(page.getByTestId("logs-tab")).toBeVisible();
-    // The tenant stream renders operational entries (or an empty state), never the
-    // platform stream — both panels exist independently.
-    await expect(page.getByTestId("client-panel-logs")).toBeVisible();
+    await expect(page.getByTestId("platform-clients")).toBeVisible();
   });
 
   test("support platform_role can enter the platform context (read-only oversight)", async ({ page }) => {

@@ -67,11 +67,10 @@ test.describe("Access administration & lifecycle (P1.13D)", () => {
     await expect(page.getByTestId("activate-invalid")).toBeVisible();
   });
 
-  test("multi-company user sees more than one company in the accounting selector", async ({ page }) => {
+  test("multi-company user reaches all accessible mandates via Tous les mandats", async ({ page }) => {
     await login(page, { email: "persona_multi@accslegro.com", password: "persona123" });
-    // persona_multi has ACCOUNTING on both companies -> accounting nav available.
-    await expect(page.getByTestId("company-context-switcher")).toBeVisible();
-    await page.getByTestId("company-context-select").click();
-    await expect(page.locator('[data-testid^="company-ctx-option-"]')).toHaveCount(2);
+    await page.getByTestId("nav-mandats_list").click();
+    await expect(page.getByTestId("mandats-list")).toBeVisible();
+    await expect(page.locator('[data-testid^="mandat-access-"]')).toHaveCount(2);
   });
 });

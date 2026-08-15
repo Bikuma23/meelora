@@ -2459,6 +2459,19 @@ async def get_company_navigation(company_id: str, user: dict = Depends(get_curre
     ws = user.get("workspace_id")
     if not ws:
         raise HTTPException(status_code=403, detail="Aucun contexte workspace")
+    # Fail-closed: unknown / cross-workspace company must not be enumerable.
+    company = await db.companies.find_one({"id": company_id})
+    if not company or company.get("workspace_id") != ws:
+        raise HTTPException(status_code=404, detail="Société introuvable")
+    # The caller must actually have access to this company (admin or membership).
+    if user.get("role") != "admin":
+        has_access = await db.company_memberships.find_one(
+            {"workspace_id": ws, "company_id": company_id, "user_id": user.get("id"), "status": "active"})
+        if not has_access:
+            has_access = await db.company_access.find_one(
+                {"workspace_id": ws, "company_id": company_id, "user_id": user.get("id"), "active": True})
+        if not has_access:
+            raise HTTPException(status_code=403, detail="Accès à cette société non autorisé")
     return await access_nav.build_company_navigation(db, user, ws, company_id)
 
 
