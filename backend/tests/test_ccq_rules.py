@@ -38,7 +38,7 @@ def test_hypotheses_no_compagnon(client):
               "alloc_securite_montant", "prime_garde_cout_unitaire", "prime_garde_nb_annuel"]:
         assert k in data, f"Paramètre manquant: {k}"
     assert data["prime_garde_cout_unitaire"] == 250
-    assert data["prime_garde_nb_annuel"] == 52
+    assert data["prime_garde_nb_annuel"] == 2.08
 
 
 def test_budget_no_compagnon_key(client):
@@ -53,15 +53,15 @@ def test_budget_no_compagnon_key(client):
 
 
 def test_prime_garde_dynamique(client):
-    """garde_moyenne = 250*52/nb_eligible. Avec 2 CCQ eligibles: 6500."""
+    """garde = cout_unitaire * nb_annuel = 250 * 2.08 = 520 par employé CCQ admissible (montant fixe, sans division par l'effectif — PRD 2026-07-10)."""
     r = client.get(f"{API}/budget")
     data = r.json()
     kpis = data["kpis"]
     # trouver les lignes CCQ avec prime_garde
     ccq_garde_lines = [ln for ln in data["lines"] if ln["is_ccq"] and ln["garde"] > 0]
     assert len(ccq_garde_lines) >= 1
-    # chaque ligne garde doit être ~ 6500 si 2 admissibles
-    expected = 250 * 52 / len(ccq_garde_lines)
+    # chaque ligne garde = 520 (250 * 2.08), montant fixe par employé admissible
+    expected = 250 * 2.08
     for ln in ccq_garde_lines:
         assert abs(ln["garde"] - expected) < 1.0, f"garde inattendue {ln['garde']} vs {expected}"
     assert abs(kpis["garde_moyenne"] - expected) < 1.0

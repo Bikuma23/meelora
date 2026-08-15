@@ -1,0 +1,37 @@
+{
+  "summary": "P1.13E Persona & UX Security Sign-off — independent confirmation across the FULL persona matrix A–H over the public REACT_APP_BACKEND_URL. Backend: (1) pytest /app/backend/tests/test_p1_13e_persona_matrix.py = 12/12 PASSED (deterministic FakeDB matrix — A no-finance despite platform_admin, B viewer, C admin!=finance, D contribute cannot post/close, E manage + granular sensitive perms but NOT period_reopen, F reporting-only, G per-company isolation with revocation independence, H CONSOLIDATION group_alpha allowed / group_beta -> group_not_in_scope, suspended identity, cross-workspace no-leak, module_not_entitled). (2) scripts/p1_13e_signoff.py against live DB + live HTTP over REACT_APP_BACKEND_URL = ALL persona resolver rows PASSED and all live HTTP fail-closed negatives PASSED: B->/api/platform/summary=403, B->GET /api/companies/{CB}=403, B->GET /api/companies/{BOGUS}=404 (no enumeration), C->GET /api/companies/{CA}/members=200 & /{CB}/members=403, platform_admin->/api/logs=403 (workspace-admin only — platform_role grants no financial/log authority), platform_admin->/api/platform/summary=200. Log separation confirmed: /api/platform/logs and /api/platform/clients/{ws}/logs are distinct; no aggregated cross-client stream endpoint exists. Frontend UX matrix (Playwright over public URL): each persona B–H lands DIRECTLY in the company app — context-switcher=0, nav-platform_home=0, nav-budget=1, breadcrumb present. Platform_admin (A) sees context-switcher=1, platform-home + nav-platform_home=1, nav-budget=0; clicking context-company reveals nav-budget=1 and hides nav-platform_home (=0); clicking context-platform restores nav-platform_home=1. Known LEGACY-module gap (main agent flagged as MEDIUM / expected FUTURE work) reproduced: persona_reporting (F) and persona_junior (D) both receive HTTP 200 on GET /api/budget?company_id=CA and GET /api/employees?company_id=CA — these legacy P1.10 routes are not yet wired to resolve_effective_access. This is by-design pending explicit follow-up work and does NOT affect the NEW access-model correctness nor P1.13A migration.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/budget, GET /api/employees, GET /api/acct/* (legacy P1.10 routes)", "issue": "Not yet wired to resolve_effective_access. persona_reporting (REPORTING-only) and persona_junior (ACCOUNTING contribute) both receive 200 on /api/budget and /api/employees for company CA even though the NEW module_access matrix denies ACCOUNTING/BUDGET beyond their granted scope. Classified MEDIUM by main agent (expected FUTURE work, documented in resolver docstring). No fix requested; do NOT modify financial code."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_p1_13e_persona_matrix.py",
+    "/app/backend/scripts/p1_13e_signoff.py",
+    "/app/backend/scripts/seed_p1_13e_personas.py",
+    "/app/test_reports/pytest/p1_13e_persona.xml"
+  ],
+  "action_items": [
+    "(Deferred / not-blocking, tracked): Wire legacy P1.10 financial routes (/api/budget*, /api/acct*, /api/employees*) through resolve_effective_access so module-level API gating matches the NEW access model. Do NOT run the migration with --commit as part of this task."
+  ],
+  "critical_code_review_comments": [
+    "Excellent: resolve_effective_access is the single authorization decision point; platform_role is never consulted for financial authority (verified live — platform@meelora.com gets 403 on /api/logs).",
+    "Excellent: admin != financial authority is enforced end-to-end (persona C client-admin has NO auto-ACCOUNTING read; module_access_insufficient).",
+    "Excellent: manage does NOT imply sensitive permissions — persona E with ACCOUNTING manage still gets permission_not_granted on accounting.period_reopen.",
+    "Excellent: per-company isolation is real — persona G's entry_post authority on CB does NOT leak to CA (permission_not_granted).",
+    "Excellent: group scope isolation for CONSOLIDATION (H allowed on group_alpha, group_not_in_scope on group_beta).",
+    "Excellent: cross-workspace no-leak returns 404 (no enumeration) and cross-tenant company IDs return cross_workspace at the resolver.",
+    "Excellent: log separation is architectural — /api/platform/logs (platform./client./client_admin./support. prefixes) is a strictly different endpoint from tenant /api/platform/clients/{ws}/logs; no aggregated stream exists.",
+    "Documented gap (already noted in resolver docstring): legacy financial routes still use P1.10 role model — clear technical-debt item, not a security defect in the NEW model."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (12/12 pytest + 100% live HTTP negatives + all resolver rows for A–H)", "frontend": "100% UX matrix (A + B–H all as expected; A context-switch round-trip verified)"},
+  "test_credentials": "All P1.13E persona credentials valid (A platform123, B–H persona123). admin@accslegro.com/admin123 also valid.",
+  "seed_data_creation": "Ran scripts/seed_p1_13e_personas.py (idempotent) — no throwaway users added.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "P1.13E sign-off is fully green. Permanent regression: pytest /app/backend/tests/test_p1_13e_persona_matrix.py (12 tests, ~0.5s). Full live matrix + HTTP negatives: E2E_BASE_URL=<public url> python /app/backend/scripts/p1_13e_signoff.py. Idempotent persona seed: python /app/backend/scripts/seed_p1_13e_personas.py. Known MEDIUM tech-debt to track (not for this iteration): legacy /api/budget, /api/acct/*, /api/employees* still gate via P1.10 role model — confirmed persona F and D both get 200 on /api/budget & /api/employees despite the NEW model denying them.",
+  "rca of the issue": "No defects. Legacy-module gating gap is a known & documented MEDIUM per resolver docstring and main-agent brief; not in scope for this sign-off."
+}

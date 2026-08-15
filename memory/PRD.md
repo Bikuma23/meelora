@@ -1341,3 +1341,16 @@ Contexte plateforme STRICTEMENT séparé du contexte société/financier. `platf
 - [x] **Validation** : `testing_agent` iteration_60 → 100 % (backend 18/18, frontend 8/8), aucun défaut. `platform_role` refusé sur `/api/logs` (workspace-admin only) = confirmation qu'il n'ouvre aucune autorité financière.
 - **Règle inchangée** : migration P1.13A reste en `--dry-run` (NE PAS committer sans autorisation) ; aucun calcul financier modifié.
 
+
+## P1.13E — Persona & UX Security Sign-off (2026-06 — TERMINÉ, aucune fonctionnalité métier)
+Audit de bout en bout de l'identité/accès/UX avec 8 personas + tests négatifs + revue du dry-run P1.13A. Aucun code financier modifié.
+- [x] **Personas A–H** seedés (idempotent, `scripts/seed_p1_13e_personas.py`) et validés via 3 canaux : matrice résolveur sur DB réelle (`scripts/p1_13e_signoff.py`), pytest permanent `tests/test_p1_13e_persona_matrix.py` (12/12), Playwright `e2e/persona-ux.spec.js`.
+- [x] **Invariants prouvés** : platform_role ≠ autorité financière (A) ; admin ≠ autorité financière (C) ; `manage` n'implique jamais une permission sensible (E period_reopen refusé) ; permissions granulaires (D ne peut ni poster ni clôturer) ; isolation par société (G posting seulement sur 9434) ; scope groupe consolidation (H group_beta refusé) ; suspension révoque tout ; cross-workspace = no-leak (404, aucune énumération).
+- [x] **Tests négatifs HTTP fail-closed** : `/api/platform/*` = 403 pour non-plateforme ; `/api/logs` = 403 pour platform_admin (aucune autorité financière/log) ; société sans accès = 403 ; société inexistante = 404 ; Client Admin limité aux membres de SA société.
+- [x] **Séparation Meelora** : Administration plateforme ≠ Société Meelora — bascule claire, aucune fuite de navigation/données/logs. **Logs** : `/api/platform/logs` (scope plateforme) et `/api/platform/clients/{ws}/logs` (tenant) distincts ; aucun flux agrégé cross-client.
+- [x] **Dry-run P1.13A** (NON committé) : 0 entitlement à activer (déjà seedés) ; 6 accès `read` conservateurs dérivés d'adhésions actives sur une société en usage (julie, marc + 4 personas) ; **0 manage**, **0 permission sensible**, **0 accès dérivé de platform_role**, **0 cross-workspace**, **0 entitlement implicite** ; legacy company_access/users.workspace_id préservés.
+- [x] **testing_agent iteration_61 : 100 %** (backend 12/12 + négatifs HTTP + matrice A–H ; frontend UX A–H). 0 BLOCKER, 0 HIGH.
+- [x] **Correctif mineur** : réalignement des tests legacy périmés `test_ccq_rules.py` (garde 2,08×250=520 $, valeur PRD 2026-07-10) — aucun code/formule financière modifié.
+- **Anomalie MEDIUM (différée, non bloquante)** : routes financières legacy (/api/budget*, /api/acct*, /api/employees*) pas encore câblées à `resolve_effective_access` (modèle de rôle P1.10 conservé) → gating par module non appliqué côté legacy. Travail futur explicite ; sans impact sur le nouveau modèle ni la migration.
+- **GATE** : **P1.13 ACCESS FOUNDATION: READY** — **P1.13A MIGRATION RECOMMENDATION: SAFE TO COMMIT** (attendre l'autorisation explicite ; NE PAS exécuter `--commit`).
+
