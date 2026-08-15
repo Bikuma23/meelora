@@ -140,6 +140,9 @@ from core.access import modules as access_modules
 from core.access import permissions_catalog as access_perms
 from core.access import entitlements as access_entitlements
 from core.access import module_access as access_module_access
+from core.access import activation as access_activation
+from core.access import lifecycle as access_lifecycle
+from core.access import log_scope as access_log_scope
 from core.access.effective_access import resolve_effective_access
 from core.access.indexes import ensure_indexes as _ensure_access_indexes
 
@@ -249,8 +252,9 @@ def verify_password(p: str, h: str) -> bool:
         return False
 
 def create_token(user_id: str, email: str) -> str:
+    now = datetime.now(timezone.utc)
     payload = {"sub": user_id, "email": email, "type": "access",
-               "exp": datetime.now(timezone.utc) + timedelta(days=7)}
+               "iat": now, "exp": now + timedelta(days=7)}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
 
 async def get_current_user(request: Request) -> dict:
@@ -268,6 +272,19 @@ async def get_current_user(request: Request) -> dict:
             raise HTTPException(status_code=401, detail="Utilisateur introuvable")
         if user_doc.get("status", "active") != "active":
             raise HTTPException(status_code=403, detail="Compte utilisateur inactif")
+
+        # P1.13B — effective session revocation. A token issued before the user's
+        # session_revoked_at (e.g. a replaced admin) is rejected immediately.
+        revoked_at = user_doc.get("session_revoked_at")
+        if revoked_at:
+            iat = payload.get("iat")
+            iat_dt = datetime.fromtimestamp(iat, tz=timezone.utc) if isinstance(iat, (int, float)) else None
+            try:
+                revoked_dt = datetime.fromisoformat(revoked_at)
+            except Exception:
+                revoked_dt = None
+            if revoked_dt is not None and (iat_dt is None or iat_dt < revoked_dt):
+                raise HTTPException(status_code=401, detail="Session révoquée")
 
         workspace_doc = await load_workspace_for_user(db, user_doc)
         if user_doc.get("workspace_id") and not workspace_doc:
@@ -987,6 +1004,92 @@ async def reset_password(payload: ResetPasswordPayload):
                               {"$set": {"password_hash": hash_password(payload.password)},
                                "$unset": {"reset_token_jti": ""}})
     return {"success": True, "message": "Mot de passe réinitialisé. Vous pouvez vous connecter."}
+
+
+# ---------------------------------------------------------------------------
+# P1.13B — User lifecycle: invitation, one-time activation, admin replacement.
+# No permanent password is ever set/visible by an admin; the user chooses their
+# own password when consuming a single-use, expiring token.
+# ---------------------------------------------------------------------------
+def _activation_link(token: str) -> str:
+    base = os.environ.get("FRONTEND_URL", "").rstrip("/")
+    return f"{base}/activate?token={token}"
+
+
+async def _send_invitation_email(email: str, link: str, context: str) -> bool:
+    if not os.environ.get("RESEND_API_KEY"):
+        return False
+    import resend
+    resend.api_key = os.environ["RESEND_API_KEY"]
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#0F172A">
+      <h2 style="color:#0F172A">Activation de votre accès Meelora</h2>
+      <p>Vous avez été invité(e) à rejoindre Meelora ({context}). Ce lien est à usage unique et valable 48 heures.</p>
+      <p style="margin:28px 0">
+        <a href="{link}" style="background:#22C55E;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600">Activer mon compte</a>
+      </p>
+      <p style="color:#64748B;font-size:13px">Vous choisirez votre propre mot de passe. Meelora ne connaît jamais votre mot de passe.</p>
+      <p style="color:#94A3B8;font-size:12px;margin-top:24px">Meelora — Votre entreprise, clairement.</p>
+    </div>"""
+    try:
+        await asyncio.to_thread(resend.Emails.send, {
+            "from": os.environ.get("SENDER_EMAIL", "onboarding@resend.dev"),
+            "to": [email], "subject": "Activez votre accès Meelora", "html": html})
+        return True
+    except Exception as e:
+        logger.error(f"Resend invitation email échec: {e}")
+        return False
+
+
+async def _send_admin_notice_email(recipients: list, subject: str, body_html: str) -> bool:
+    recipients = [r for r in recipients if r]
+    if not recipients or not os.environ.get("RESEND_API_KEY"):
+        return False
+    import resend
+    resend.api_key = os.environ["RESEND_API_KEY"]
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#0F172A">
+      {body_html}
+      <p style="color:#94A3B8;font-size:12px;margin-top:24px">Meelora — Notification d'administration.</p>
+    </div>"""
+    try:
+        await asyncio.to_thread(resend.Emails.send, {
+            "from": os.environ.get("SENDER_EMAIL", "onboarding@resend.dev"),
+            "to": recipients, "subject": subject, "html": html})
+        return True
+    except Exception as e:
+        logger.error(f"Resend admin notice échec: {e}")
+        return False
+
+
+class ActivatePayload(BaseModel):
+    token: str
+    password: str
+    name: Optional[str] = None
+
+
+@api.get("/auth/activation/{token}")
+async def get_activation_preview(token: str):
+    """Non-consuming activation preview (email + purpose + workspace context)."""
+    doc = await access_lifecycle.preview_activation(db, token)
+    ws = await db.workspaces.find_one({"_id": doc.get("workspace_id")}) if doc.get("workspace_id") else None
+    return {"email": doc.get("email"), "purpose": doc.get("purpose"),
+            "workspace_name": (ws or {}).get("name"), "expires_at": doc.get("expires_at")}
+
+
+@api.post("/auth/activate")
+async def activate_account_route(payload: ActivatePayload, response: Response):
+    if len(payload.password or "") < 6:
+        raise HTTPException(status_code=422, detail="Le mot de passe doit contenir au moins 6 caractères")
+    out = await access_lifecycle.activate_account(
+        db, payload.token, password_hash=hash_password(payload.password), name=payload.name)
+    uid, email = out["user_id"], out["email"]
+    token = create_token(uid, email)
+    response.set_cookie("access_token", token, httponly=True, secure=False, samesite="lax",
+                        max_age=604800, path="/")
+    return {"token": token, "user": {"id": uid, "email": email},
+            "membership": out.get("membership")}
+
 
 @api.get("/me/preferences")
 async def get_preferences(user: dict = Depends(get_current_user)):
@@ -2402,6 +2505,112 @@ async def get_effective_access_route(company_id: str, uid: str,
     return await resolve_effective_access(
         db, target_ctx, workspace_id=ws, company_id=company_id,
         module=module, permission=permission, required_level=required_level, group_id=group_id)
+
+
+# ---------------------------------------------------------------------------
+# P1.13B — Invitation & Client Admin replacement (admin-facing).
+# ---------------------------------------------------------------------------
+class InvitePayload(BaseModel):
+    email: str
+    name: Optional[str] = None
+    kind: str  # 'workspace' | 'company'
+    role: Optional[str] = None            # workspace role: admin | user
+    company_id: Optional[str] = None
+    membership_type: Optional[str] = None  # company: workspace_staff | company_user
+    company_role: Optional[str] = None     # company role
+
+
+class ReplaceAdminPayload(BaseModel):
+    old_membership_id: str
+    new_email: str
+    name: Optional[str] = None
+
+
+async def _workspace_admin_emails(workspace_id: str) -> list:
+    emails = set()
+    async for u in db.users.find({"workspace_id": workspace_id, "role": "admin", "status": {"$ne": "inactive"}}):
+        if u.get("email"):
+            emails.add(u["email"])
+    async for m in db.workspace_memberships.find({"workspace_id": workspace_id, "role": "admin", "status": "active"}):
+        u = await db.users.find_one({"_id": ObjectId(m["user_id"])}) if m.get("user_id") else None
+        if u and u.get("email"):
+            emails.add(u["email"])
+    return sorted(emails)
+
+
+@api.post("/workspace/invitations", status_code=201)
+async def create_invitation(payload: InvitePayload, user: dict = Depends(get_current_user)):
+    ws = await require_workspace_admin(db, user)
+    if payload.kind == "workspace":
+        purpose = "workspace_invitation"
+        intent = {"type": "workspace_member", "role": payload.role or "user"}
+        context = "Espace de travail"
+    elif payload.kind == "company":
+        if not payload.company_id:
+            raise HTTPException(status_code=422, detail="company_id requis")
+        company = await require_same_workspace(db, payload.company_id, user)
+        purpose = "company_invitation"
+        intent = {"type": "company_member", "company_id": payload.company_id,
+                  "membership_type": payload.membership_type, "role": payload.company_role}
+        context = f"Société {company.get('name', '')}"
+    else:
+        raise HTTPException(status_code=422, detail="kind invalide")
+    out = await access_lifecycle.invite_user(
+        db, actor_id=user.get("id"), workspace_id=ws, email=payload.email,
+        purpose=purpose, intent=intent)
+    link = _activation_link(out["activation_token"])
+    await _send_invitation_email(payload.email, link, context)
+    await log_action(user, "create", "invitation", payload.email,
+                     details=f"Invitation {purpose}", company_id=payload.company_id,
+                     entity_id=out["activation"]["id"], event_type="invitation.created")
+    return {"invitation": out["activation"], "reused_identity": out["reused_identity"],
+            "activation_link": link}
+
+
+@api.get("/workspace/invitations")
+async def list_invitations(user: dict = Depends(get_current_user)):
+    ws = await require_workspace_admin(db, user)
+    rows = await db.client_admin_activations.find({"workspace_id": ws}).to_list(None)
+    rows.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+    return {"invitations": [access_activation.public_activation(r) for r in rows]}
+
+
+@api.post("/companies/{company_id}/client-admin/replace")
+async def replace_company_admin(company_id: str, payload: ReplaceAdminPayload,
+                                user: dict = Depends(get_current_user)):
+    # Emergency authority: workspace admin OR platform admin.
+    if user.get("role") == "admin":
+        company = await require_same_workspace(db, company_id, user)
+    elif user.get("platform_role") == "platform_admin":
+        company = await db.companies.find_one({"id": company_id})
+        if not company:
+            raise HTTPException(status_code=404, detail="Société introuvable")
+    else:
+        raise HTTPException(status_code=403, detail="Réservé à l'autorité plateforme/workspace")
+    ws = company.get("workspace_id")
+    out = await access_activation.replace_client_admin(
+        db, ws, company_id, payload.old_membership_id, payload.new_email, actor_id=user.get("id"))
+    link = _activation_link(out["activation_token"])
+    # Notifications: new admin (activation link) + concerned workspace admins.
+    await _send_invitation_email(payload.new_email, link, f"Société {company.get('name', '')} (administrateur)")
+    await _send_admin_notice_email(
+        await _workspace_admin_emails(ws),
+        subject="Remplacement d'administrateur — Meelora",
+        body_html=f"<p>L'administrateur de la société <b>{company.get('name','')}</b> a été remplacé. "
+                  f"Le nouvel administrateur <b>{payload.new_email}</b> a reçu un lien d'activation à usage unique.</p>")
+    # Separated logs: platform-scoped event + client-context event.
+    await access_log_scope.write_platform_log(
+        db, user, event_type="client_admin.replaced",
+        label=f"Remplacement admin société {company.get('name','')}",
+        target_workspace_id=ws,
+        metadata={"company_id": company_id, "new_email": payload.new_email,
+                  "old_user_id": out.get("old_user_id"), "reused_identity": out.get("reused_identity")})
+    await log_action(user, "replace", "company_admin", payload.new_email,
+                     details="Remplacement de l'administrateur de la société",
+                     company_id=company_id, entity_id=payload.old_membership_id,
+                     event_type="company_admin.replaced")
+    return {"reused_identity": out["reused_identity"], "old_user_id": out["old_user_id"],
+            "invitation": out["activation"], "activation_link": link}
 
 
 

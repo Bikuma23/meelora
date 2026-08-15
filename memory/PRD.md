@@ -1238,3 +1238,26 @@ Infrastructure d'accès backend uniquement. AUCUNE modification financière, AUC
 **Dépendances legacy identité restantes** : `company_access` (pont lecture), `users.workspace_id` (contexte tenant), `require_company_access` admin-bypass legacy (pour routes financières existantes uniquement — le nouveau résolveur ne fait PAS de bypass admin). À retirer en phase ultérieure.
 
 ### 🛑 P1.13A IMPLÉMENTÉ & TESTÉ. STOP — NE PAS DÉMARRER P1.13B (User Lifecycle & Admin Replacement) ni refonte UI avant approbation explicite.
+
+## P1.13B — USER LIFECYCLE & ADMIN REPLACEMENT (2026-06)
+Cycle de vie utilisateur backend uniquement (aucune refonte UI, P1.13C/D NON démarrés). Aucune donnée/formule financière touchée. Aucun accès financier automatique (l'activation ne crée qu'une relation organisationnelle).
+
+**Fichiers ajoutés** : `core/access/lifecycle.py` (invitation → activation → provisioning de membership) ; `tests/test_p1_13b_lifecycle.py`.
+**Fichiers modifiés** :
+- `core/access/activation.py` : `intent` sur les jetons, `peek_activation_token` (validation sans consommation), `revoke_user_sessions`, purposes `workspace_invitation`/`company_invitation`, `replace_client_admin` (désactive l'ancien membership, révoque ses sessions, réutilise/prépare l'identité, intent = admin société).
+- `core/access/log_scope.py` : écriture de log plateforme = action serveur interne (gate `platform_role` seulement en lecture).
+- `server.py` : `create_token` ajoute `iat` ; `get_current_user` **révoque effectivement** tout JWT émis avant `session_revoked_at` ; helpers email (`_send_invitation_email`, `_send_admin_notice_email`, `_activation_link`) ; routes.
+
+**Nouvelles routes** :
+- `GET /api/auth/activation/{token}` (public, aperçu sans consommation)
+- `POST /api/auth/activate` (public — l'utilisateur choisit son propre mot de passe, auto-login)
+- `POST /api/workspace/invitations` + `GET /api/workspace/invitations` (admin workspace)
+- `POST /api/companies/{cid}/client-admin/replace` (admin workspace OU platform_admin)
+
+**Sécurité** : jeton à usage unique + expiration (48 h) ; aucun mot de passe permanent défini/visible par un admin ; réutilisation d'identité existante par email (clé d'identité) ; révocation JWT effective de l'ancien admin (401 immédiat) ; notifications email au nouvel admin + aux admins workspace ; logs plateforme (`client_admin.replaced`) et client (`company_admin.replaced`) séparés par contexte.
+
+**Tests** : 9 tests P1.13B in-memory (100%) ; régression in-memory (phase1 + P1.12 + P3.5→P3.7 + P1.13A/B) = 150/150. Validation live e2e via curl : invitation société → aperçu → activation (mot de passe choisi) → login OK → remplacement admin → **ancien token révoqué (401)** → logs plateforme + client enregistrés. Tous les artefacts de test nettoyés (5 users, 0 `session_revoked_at` résiduel).
+
+**Reporté (hors périmètre P1.13B, ne pas démarrer sans approbation)** : page frontend `/activate` (appartient au travail UI) ; P1.13C/D ; refonte UI.
+
+### 🛑 P1.13B IMPLÉMENTÉ & TESTÉ. STOP — page UI d'activation et P1.13C/D en attente d'approbation explicite.

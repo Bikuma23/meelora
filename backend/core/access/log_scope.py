@@ -61,7 +61,9 @@ def _require_platform(user: dict) -> None:
 async def write_platform_log(db, user: dict, *, event_type: str, label: str,
                              target_workspace_id: Optional[str] = None, details: str = "",
                              metadata: Optional[dict[str, Any]] = None) -> dict:
-    """Append one platform-scoped event. Kept physically separate from tenant logs."""
+    """Append one platform-scoped event. Kept physically separate from tenant
+    logs. Writing is a server-internal action; READING is gated by platform role
+    (see list_platform_logs)."""
     if classify_scope(event_type) != "platform":
         raise HTTPException(status_code=422, detail=f"Type d'évènement non plateforme: {event_type}")
     doc = {
