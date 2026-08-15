@@ -71,8 +71,15 @@ PERSONAS = {
     "persona_multi@accslegro.com": {     # G — Multi-société (different rights A vs B)
         "name": "Persona G — Utilisateur multi-société",
         "companies": [(CA, "company_user", "user"), (CB, "company_user", "user")],
-        "modules": [(CA, "ACCOUNTING", "read"), (CB, "ACCOUNTING", "manage")],
+        "modules": [(CA, "ACCOUNTING", "read"), (CA, "BUDGETS", "read"),
+                    (CB, "ACCOUNTING", "manage"), (CB, "CONSOLIDATION", "read")],
         "perms": [(CB, "accounting.entry_post")],   # posting only on company B
+    },
+    "persona_budgets@accslegro.com": {   # Budgets-only (legacy-route gating test)
+        "name": "Persona — Budgets uniquement",
+        "companies": [(CA, "company_user", "user")],
+        "modules": [(CA, "BUDGETS", "manage")],
+        "perms": [],
     },
     "persona_consol@accslegro.com": {    # H — Responsable Consolidation
         "name": "Persona H — Responsable Consolidation",

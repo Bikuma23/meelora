@@ -7,19 +7,24 @@ the technical access-level ladder (none < read < contribute < manage).
 from typing import Optional
 
 REPORTING = "REPORTING"
+BUDGETS = "BUDGETS"
 ACCOUNTING = "ACCOUNTING"
 FIXED_ASSETS = "FIXED_ASSETS"
 CONSOLIDATION = "CONSOLIDATION"
 
 # Canonical initial module registry. UI naming is decided later; codes are stable.
+# BUDGETS is the commercial module that owns the historical payroll/masse-salariale
+# engine as its first sub-domain (there is NO separate PAYROLL commercial module).
 MODULES = [
     {"code": REPORTING, "sort_order": 1,
      "name": {"en": "Reporting", "fr": "Reporting"}},
-    {"code": ACCOUNTING, "sort_order": 2,
+    {"code": BUDGETS, "sort_order": 2,
+     "name": {"en": "Budgets", "fr": "Gestion des Budgets"}},
+    {"code": ACCOUNTING, "sort_order": 3,
      "name": {"en": "Accounting", "fr": "Comptabilité"}},
-    {"code": FIXED_ASSETS, "sort_order": 3,
+    {"code": FIXED_ASSETS, "sort_order": 4,
      "name": {"en": "Fixed Assets", "fr": "Immobilisations"}},
-    {"code": CONSOLIDATION, "sort_order": 4,
+    {"code": CONSOLIDATION, "sort_order": 5,
      "name": {"en": "Consolidation", "fr": "Consolidation"}},
 ]
 

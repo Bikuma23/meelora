@@ -36,11 +36,11 @@ test.describe("Platform context (P1.13D.2)", () => {
     await expect(page.locator('[data-testid^="replace-admin-"]').first()).toBeVisible();
   });
 
-  test("context switch to Société Meelora reveals the financial app, then back to platform", async ({ page }) => {
+  test("context switch to Société Meelora reveals the company sidebar, then back to platform", async ({ page }) => {
     await login(page, "platformAdmin");
     await page.getByTestId("context-company").click();
-    // Financial nav appears (Salaires & Budget parent).
-    await expect(page.getByTestId("nav-budget")).toBeVisible();
+    // Company sidebar renders (platform_role grants no business modules by design).
+    await expect(page.getByTestId("company-nav")).toBeVisible();
     // Platform nav is gone in company context.
     await expect(page.getByTestId("nav-platform_home")).toHaveCount(0);
     // Switch back.

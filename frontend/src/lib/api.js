@@ -252,6 +252,10 @@ export const api = {
   replaceCompanyAdmin: (cid, body) => client.post(`/companies/${cid}/client-admin/replace`, body).then((r) => r.data),
 
   // P1.13D.2 — Meelora platform console (platform staff only)
+  // P1.13E — dynamic navigation manifest (backend is the authority)
+  getCompanyContext: () => client.get("/me/company-context").then((r) => r.data),
+  getCompanyNavigation: (cid) => client.get(`/companies/${cid}/navigation`).then((r) => r.data),
+
   platformSummary: () => client.get("/platform/summary").then((r) => r.data),
   platformClients: () => client.get("/platform/clients").then((r) => r.data),
   platformLogs: (params) => client.get("/platform/logs", { params: params || {} }).then((r) => r.data),

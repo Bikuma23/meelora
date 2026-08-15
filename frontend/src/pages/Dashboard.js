@@ -51,13 +51,14 @@ export default function Dashboard() {
   const [scenario, setScenario] = useState("ca");
   const [departments, setDepartments] = useState([]);
   const [dept, setDept] = useState("all");
-  useEffect(() => { api.listDepartments().then(setDepartments); }, []);
+  useEffect(() => { api.listDepartments().then(setDepartments).catch(() => setDepartments([])); }, []);
   useEffect(() => {
     setB(null);
     const p = dept !== "all" ? { department: dept } : {};
-    api.getBudget({ year, scenario, ...p }).then(setB);
-    api.getBudgetCompare({ year, ...p }).then(setCmp);
-    api.getBudgetEvolution(p).then(setEvo);
+    // Budget data requires the BUDGETS module; degrade gracefully otherwise (403).
+    api.getBudget({ year, scenario, ...p }).then(setB).catch(() => setB(false));
+    api.getBudgetCompare({ year, ...p }).then(setCmp).catch(() => setCmp(null));
+    api.getBudgetEvolution(p).then(setEvo).catch(() => setEvo(null));
   }, [dept, year, scenario]);
 
   return (
@@ -86,14 +87,16 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="font-mono-data text-xs text-slate-500">{b ? `${b.kpis.headcount} ${t("entrée(s) affichée(s)")}` : "…"}</span>
+          <span className="font-mono-data text-xs text-slate-500">{b && b.kpis ? `${b.kpis.headcount} ${t("entrée(s) affichée(s)")}` : "—"}</span>
           <PresentationButton />
         </div>
       </div>
 
       {cmp && <Comparatif cmp={cmp} />}
       {evo && evo.years.length > 1 && <Evolution evo={evo} />}
-      {!b ? <p className="font-mono-data text-sm text-slate-500">{t("Chargement…")}</p> : <DashboardBody b={b} />}
+      {b === false
+        ? <div className="card p-8 text-center" data-testid="dashboard-no-access"><p className="text-sm text-slate-500">{t("Le module Gestion des Budgets ne vous est pas attribué pour cette société.")}</p></div>
+        : !b ? <p className="font-mono-data text-sm text-slate-500">{t("Chargement…")}</p> : <DashboardBody b={b} />}
     </div>
   );
 }

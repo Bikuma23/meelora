@@ -146,6 +146,7 @@ from core.access import log_scope as access_log_scope
 from core.access import admin_governance as access_gov
 from core.access import platform_console as access_platform
 from core.access.platform_console import require_platform_staff
+from core.access import navigation as access_nav
 from core.access.effective_access import resolve_effective_access
 from core.access.indexes import ensure_indexes as _ensure_access_indexes
 
@@ -2449,6 +2450,51 @@ async def put_cmp_enablement(company_id: str, module_code: str, payload: ModuleE
                      details=f"Enablement {module_code}={payload.enabled}",
                      company_id=company_id, entity_id=module_code, event_type="module_enablement.updated")
     return row
+
+
+@api.get("/companies/{company_id}/navigation")
+async def get_company_navigation(company_id: str, user: dict = Depends(get_current_user)):
+    """P1.13E — dynamic sidebar manifest for a company, from effective access.
+    The backend is the authority; the UI only renders what this returns."""
+    ws = user.get("workspace_id")
+    if not ws:
+        raise HTTPException(status_code=403, detail="Aucun contexte workspace")
+    return await access_nav.build_company_navigation(db, user, ws, company_id)
+
+
+@api.get("/me/company-context")
+async def get_my_company_context(user: dict = Depends(get_current_user)):
+    """Companies the current user may operate in (for the company switcher).
+    Workspace/company admins see all workspace companies (management view);
+    business users see only companies where they have an active membership."""
+    ws = user.get("workspace_id")
+    if not ws:
+        return {"companies": []}
+    companies = await db.companies.find(
+        {"workspace_id": ws, "active": {"$ne": False}, "status": {"$ne": "inactive"}}).to_list(None)
+    is_ws_admin = user.get("role") == "admin"
+    out = []
+    for c in companies:
+        cid = c.get("id")
+        allowed = is_ws_admin
+        if not allowed:
+            m = await db.company_memberships.find_one(
+                {"workspace_id": ws, "company_id": cid, "user_id": user.get("id"), "status": "active"})
+            legacy = None if m else await db.company_access.find_one(
+                {"workspace_id": ws, "company_id": cid, "user_id": user.get("id"), "active": True})
+            allowed = bool(m or legacy)
+        if allowed:
+            # Relevance hint: does the user actually see modules here (admin or grants)?
+            has_modules = is_ws_admin or await access_nav.is_company_admin(db, user, ws, cid) or bool(
+                await db.user_module_access.find_one(
+                    {"workspace_id": ws, "company_id": cid, "user_id": user.get("id"),
+                     "access_level": {"$ne": "none"}}))
+            out.append({"id": cid, "name": c.get("name"), "legacy_prefix": c.get("legacy_prefix"),
+                        "has_modules": bool(has_modules)})
+    # Prefer companies where the user has actual module visibility (default select).
+    out.sort(key=lambda x: (not x["has_modules"], (x.get("name") or "").lower()))
+    return {"companies": out, "workspace_id": ws}
+
 
 
 @api.get("/companies/{company_id}/users/{uid}/module-access")
@@ -8745,17 +8791,39 @@ def _legacy_prefix_for_path(path: str):
         return "qc9434"
     return None
 
+# P1.13E — famille de routes métier legacy -> (module canonique, société legacy).
+# Le gating passe par resolve_effective_access (helper central access_nav.authorize_module)
+# afin qu'un menu masqué dans l'UI ne puisse JAMAIS être atteint par URL/API directe.
+# NB: /api/reports (rapports budgétaires) relève de BUDGETS (données budget). Le module
+# REPORTING commercial est distinct (pas de route métier existante) — décision P1.13E.
+MODULE_ROUTE_MAP = [
+    ("/api/qc9434", "ACCOUNTING", "qc9434"),
+    ("/api/acct", "ACCOUNTING", "acct"),
+    ("/api/budget", "BUDGETS", "acct"),
+    ("/api/employees", "BUDGETS", "acct"),
+    ("/api/hypotheses", "BUDGETS", "acct"),
+    ("/api/departments", "BUDGETS", "acct"),
+    ("/api/reports", "BUDGETS", "acct"),
+]
+
+def _module_for_path(path: str):
+    for prefix, module, legacy in MODULE_ROUTE_MAP:
+        if path == prefix or path.startswith(prefix + "/"):
+            return module, legacy
+    return None
+
 @app.middleware("http")
 async def write_guard(request: Request, call_next):
     path = request.url.path
-    if not path.startswith("/api"):
+    if not path.startswith("/api") or request.method in ("OPTIONS", "HEAD"):
         return await call_next(request)
 
     legacy = _legacy_prefix_for_path(path)
+    module_entry = _module_for_path(path)
     is_write = request.method in ("POST", "PUT", "DELETE", "PATCH")
-    # Le lookup utilisateur n'est nécessaire que pour une route financière legacy
-    # (contrôle d'accès société, toutes méthodes) ou une écriture (garde de rôle).
-    if not legacy and not is_write:
+    # Le lookup utilisateur est nécessaire pour : une route à gating module (toutes
+    # méthodes), une route financière legacy (accès société), ou une écriture (rôle).
+    if not module_entry and not legacy and not is_write:
         return await call_next(request)
 
     token = request.cookies.get("access_token")
@@ -8772,19 +8840,39 @@ async def write_guard(request: Request, call_next):
         except Exception:
             user_doc = None
 
+    auth_user = None
+    if user_doc is not None:
+        auth_user = build_auth_user(user_doc, await load_workspace_for_user(db, user_doc))
+
+    # 0. P1.13E — gating par module (autorité backend). Un utilisateur non identifié
+    #    laisse la route renvoyer 401 elle-même.
+    if module_entry and auth_user is not None:
+        module_code, legacy_key = module_entry
+        try:
+            mod_company_id = await _company_id(legacy_key)
+        except Exception:
+            mod_company_id = None
+        ws_id = auth_user.get("workspace_id")
+        if mod_company_id and ws_id:
+            required = "read" if request.method == "GET" else "contribute"
+            decision = await access_nav.authorize_module(
+                db, auth_user, ws_id, mod_company_id, module_code, required)
+            if not decision["allowed"]:
+                status = 404 if decision["reason"] == "cross_workspace" else 403
+                return JSONResponse(status_code=status,
+                                    content={"detail": f"Accès au module {module_code} non autorisé"})
+
     # 1. P1.11 — Enforcement d'accès société sur les routes financières legacy (toutes méthodes).
     #    Le legacy_prefix / _company_id sert UNIQUEMENT de pont pour résoudre la société ;
     #    l'autorisation passe systématiquement par le helper centralisé require_company_access
     #    (admin = toutes les sociétés du workspace ; cross-workspace/inexistant = 404 sans fuite).
     #    On n'agit que si un utilisateur valide est identifié — sinon la route renverra 401.
-    if legacy and user_doc is not None:
+    if legacy and auth_user is not None:
         try:
             company_id = await _company_id(legacy)
         except Exception:
             company_id = None
         if company_id is not None:
-            workspace_doc = await load_workspace_for_user(db, user_doc)
-            auth_user = build_auth_user(user_doc, workspace_doc)
             try:
                 await require_company_access(db, company_id, auth_user)
             except HTTPException as exc:

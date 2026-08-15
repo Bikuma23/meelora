@@ -1,49 +1,72 @@
 const { test, expect } = require("@playwright/test");
 const { login } = require("./helpers");
 
-// P1.13E — persona UX walkthroughs. NOTE: the legacy financial modules
-// (Salaires & Budget, Comptabilité) still use the P1.10 role gate and are NOT
-// yet wired to the new module/permission model — so this suite asserts CONTEXT
-// & navigation clarity per persona, not per-module financial gating (future).
-const PERSONAS = [
-  { key: { email: "persona_employe@accslegro.com", password: "persona123" }, name: "B Employé" },
-  { key: { email: "persona_clientadmin@accslegro.com", password: "persona123" }, name: "C Client Admin" },
-  { key: { email: "persona_junior@accslegro.com", password: "persona123" }, name: "D Junior" },
-  { key: { email: "persona_finance@accslegro.com", password: "persona123" }, name: "E Finance" },
-  { key: { email: "persona_reporting@accslegro.com", password: "persona123" }, name: "F Reporting" },
-  { key: { email: "persona_multi@accslegro.com", password: "persona123" }, name: "G Multi-société" },
-  { key: { email: "persona_consol@accslegro.com", password: "persona123" }, name: "H Consolidation" },
+// P1.13E — persona UX: the company sidebar is a projection of EFFECTIVE ACCESS
+// (data-testid nav-module-<CODE>), never derived from user.role.
+const CASES = [
+  { email: "persona_reporting@accslegro.com", name: "F Reporting-only", modules: ["REPORTING"] },
+  { email: "persona_budgets@accslegro.com", name: "Budgets-only", modules: ["BUDGETS"] },
+  { email: "persona_junior@accslegro.com", name: "D Junior (Accounting)", modules: ["ACCOUNTING"] },
+  { email: "persona_finance@accslegro.com", name: "E Finance (Accounting)", modules: ["ACCOUNTING"] },
+  { email: "persona_consol@accslegro.com", name: "H Consolidation", modules: ["CONSOLIDATION"] },
 ];
 
-test.describe("Persona UX & separation (P1.13E)", () => {
-  for (const p of PERSONAS) {
-    test(`${p.name} lands in the company app with NO platform context`, async ({ page }) => {
-      await login(page, p.key);
-      // No platform role -> no context switch, no platform nav.
+async function visibleModules(page, expectedCount) {
+  await page.getByTestId("company-nav").waitFor({ state: "visible" });
+  if (expectedCount != null) {
+    await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(expectedCount);
+  }
+  return page.$$eval('[data-testid^="nav-module-"]', (els) => els.map((e) => e.getAttribute("data-testid").replace("nav-module-", "")));
+}
+
+test.describe("Persona sidebar = effective access (P1.13E)", () => {
+  for (const c of CASES) {
+    test(`${c.name} sees exactly ${c.modules.join("+")}`, async ({ page }) => {
+      await login(page, { email: c.email, password: "persona123" });
       await expect(page.getByTestId("context-switcher")).toHaveCount(0);
-      await expect(page.getByTestId("nav-platform_home")).toHaveCount(0);
-      // The financial app shell is available.
-      await expect(page.getByTestId("nav-budget")).toBeVisible();
-      // Breadcrumb tells the persona where they are.
-      await expect(page.getByTestId("breadcrumb")).toBeVisible();
+      const mods = await visibleModules(page, c.modules.length);
+      expect(mods).toEqual(c.modules);
     });
   }
 
-  test("multi-société persona (G) can switch companies in the accounting selector", async ({ page }) => {
-    await login(page, { email: "persona_multi@accslegro.com", password: "persona123" });
-    await page.getByTestId("nav-acct_dashboard").click();
-    await expect(page.getByTestId("company-select")).toBeVisible();
-    await page.getByTestId("company-select").click();
-    await expect(page.locator('[data-testid^="company-option-"]')).toHaveCount(2);
+  test("Client Admin gets the management view (all entitled modules, no financial authority)", async ({ page }) => {
+    await login(page, { email: "persona_clientadmin@accslegro.com", password: "persona123" });
+    const mods = await visibleModules(page, 5);
+    expect(mods).toEqual(["REPORTING", "BUDGETS", "ACCOUNTING", "FIXED_ASSETS", "CONSOLIDATION"]);
+    // Administration section is available to the client admin.
+    await expect(page.getByTestId("nav-admin-section")).toBeVisible();
   });
 
-  test("platform_admin sees the context switch that separates platform from Société Meelora", async ({ page }) => {
+  test("multi-société persona recomputes the sidebar on company switch", async ({ page }) => {
+    await login(page, { email: "persona_multi@accslegro.com", password: "persona123" });
+    await expect(page.getByTestId("company-context-switcher")).toBeVisible();
+    const first = await visibleModules(page);
+    await page.getByTestId("company-context-select").click();
+    const opts = page.locator('[data-testid^="company-ctx-option-"]');
+    await expect(opts).toHaveCount(2);
+    await opts.nth(1).click();
+    await page.waitForTimeout(1200);
+    const second = await visibleModules(page);
+    // The module set changes with the active company (no rights carried over).
+    expect(second).not.toEqual(first);
+    for (const m of [...first, ...second]) expect(["REPORTING", "BUDGETS", "ACCOUNTING", "CONSOLIDATION"]).toContain(m);
+  });
+
+  test("Reporting-only opens the placeholder module page without errors", async ({ page }) => {
+    await login(page, { email: "persona_reporting@accslegro.com", password: "persona123" });
+    await page.getByTestId("nav-reporting_home").click();
+    await expect(page.getByTestId("module-placeholder-REPORTING")).toBeVisible();
+  });
+
+  test("platform_admin: company context shows the company sidebar, platform nav shows none of the 5 modules", async ({ page }) => {
     await login(page, { email: "platform@meelora.com", password: "platform123" });
-    await expect(page.getByTestId("context-switcher")).toBeVisible();
+    // Platform context: none of the business modules appear.
+    await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
     await expect(page.getByTestId("platform-home")).toBeVisible();
-    // Company context is a separate, explicit space.
+    // Switch to Société Meelora -> company sidebar renders (platform_role grants
+    // no business modules, so the business list may be empty by design).
     await page.getByTestId("context-company").click();
-    await expect(page.getByTestId("nav-budget")).toBeVisible();
+    await expect(page.getByTestId("company-nav")).toBeVisible();
     await expect(page.getByTestId("nav-platform_home")).toHaveCount(0);
   });
 });

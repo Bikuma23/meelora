@@ -167,6 +167,42 @@ async def main():
     check("platform -> /api/platform/summary (200)", "GET", "/api/platform/summary", tok_plat, 200)
 
     print("\n" + "=" * 78)
+    print("P1.13E — DYNAMIC NAVIGATION + LEGACY ROUTE GATING (live)")
+    print("=" * 78)
+    tok_rep = http_login("persona_reporting@accslegro.com", "persona123")
+    tok_bud = http_login("persona_budgets@accslegro.com", "persona123")
+    tok_jun = http_login("persona_junior@accslegro.com", "persona123")
+    tok_adm = http_login("admin@accslegro.com", "admin123")
+
+    def nav_codes(token):
+        r = requests.get(f"{API}/api/companies/{CA}/navigation",
+                         headers={"Authorization": f"Bearer {token}"}, timeout=20)
+        return [m["module_code"] for m in r.json().get("modules", [])]
+
+    def expect_nav(label, token, expected):
+        got = nav_codes(token)
+        ok = got == expected
+        print(f"  [{'OK ' if ok else 'FAIL'}] nav {label} -> {got} (attendu {expected})")
+        if not ok:
+            failures.append(f"NAV {label}: {got} != {expected}")
+
+    expect_nav("reporting-only (CA)", tok_rep, ["REPORTING"])
+    expect_nav("budgets-only (CA)", tok_bud, ["BUDGETS"])
+    expect_nav("junior/accounting (CA)", tok_jun, ["ACCOUNTING"])
+    expect_nav("admin management view (CA)", tok_adm,
+               ["REPORTING", "BUDGETS", "ACCOUNTING", "FIXED_ASSETS", "CONSOLIDATION"])
+
+    # Legacy route gating — a hidden menu must not be reachable by direct API.
+    check("reporting-only -> GET /api/budget (403)", "GET", "/api/budget", tok_rep, 403)
+    check("reporting-only -> GET /api/reports/pnl (403)", "GET", "/api/reports/pnl", tok_rep, 403)
+    check("reporting-only -> GET /api/acct/periods (403)", "GET", "/api/acct/periods", tok_rep, 403)
+    check("budgets-only -> GET /api/budget (200)", "GET", "/api/budget", tok_bud, 200)
+    check("budgets-only -> GET /api/acct/periods (403)", "GET", "/api/acct/periods", tok_bud, 403)
+    check("junior(ACCT) -> GET /api/acct/periods (200)", "GET", "/api/acct/periods", tok_jun, 200)
+    check("junior(ACCT) -> GET /api/budget (403)", "GET", "/api/budget", tok_jun, 403)
+    check("admin -> GET /api/budget (200)", "GET", "/api/budget", tok_adm, 200)
+
+    print("\n" + "=" * 78)
     if failures:
         print(f"RESULT: {len(failures)} FAILURE(S)")
         for f in failures:

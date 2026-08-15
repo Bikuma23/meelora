@@ -22,9 +22,11 @@ def _run(c):
 
 # ---- Registry & catalogue --------------------------------------------------
 def test_module_registry_codes():
-    assert mod.MODULE_CODES == {"REPORTING", "ACCOUNTING", "FIXED_ASSETS", "CONSOLIDATION"}
+    # P1.13E — canonical registry now has 5 commercial modules (BUDGETS added;
+    # NO separate PAYROLL module — payroll is the first BUDGETS sub-domain).
+    assert mod.MODULE_CODES == {"REPORTING", "BUDGETS", "ACCOUNTING", "FIXED_ASSETS", "CONSOLIDATION"}
     assert [m["code"] for m in mod.list_modules()] == \
-        ["REPORTING", "ACCOUNTING", "FIXED_ASSETS", "CONSOLIDATION"]
+        ["REPORTING", "BUDGETS", "ACCOUNTING", "FIXED_ASSETS", "CONSOLIDATION"]
 
 
 def test_access_level_ladder():

@@ -8,8 +8,8 @@ test.describe("Platform/company separation & security (P1.13D.2)", () => {
     await login(page, "julie");
     await expect(page.getByTestId("context-switcher")).toHaveCount(0);
     await expect(page.getByTestId("nav-platform_home")).toHaveCount(0);
-    // She sees the financial app instead.
-    await expect(page.getByTestId("nav-budget")).toBeVisible();
+    // She sees the company sidebar (business modules gated by her effective access).
+    await expect(page.getByTestId("company-nav")).toBeVisible();
   });
 
   test("platform API is fail-closed for non-platform users (403)", async ({ page }) => {
@@ -23,12 +23,12 @@ test.describe("Platform/company separation & security (P1.13D.2)", () => {
 
   test("platform staff has a workspace membership but NO automatic financial authority path in platform ctx", async ({ page }) => {
     await login(page, "platformAdmin");
-    // In platform context there is no financial navigation (budget/accounting).
-    await expect(page.getByTestId("nav-budget")).toHaveCount(0);
-    await expect(page.getByTestId("nav-acct_dashboard")).toHaveCount(0);
+    // In platform context there is no business module navigation at all.
+    await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
+    await expect(page.getByTestId("nav-platform_home")).toBeVisible();
     // Switching to the company context is an explicit, separate action.
     await page.getByTestId("context-company").click();
-    await expect(page.getByTestId("nav-budget")).toBeVisible();
+    await expect(page.getByTestId("company-nav")).toBeVisible();
   });
 
   test("platform logs endpoint returns only platform-scoped events (never the tenant stream)", async ({ page }) => {
@@ -42,5 +42,21 @@ test.describe("Platform/company separation & security (P1.13D.2)", () => {
       expect(String(e.event_type)).toMatch(/^(platform\.|client\.|client_admin\.|support\.)/);
     }
     await ctx.dispose();
+  });
+
+  test("legacy business routes are gated by module (hidden menu != protection)", async ({ page }) => {
+    // Separate request contexts to avoid auth-cookie contamination between users.
+    const repCtx = await request.newContext({ baseURL: API, ignoreHTTPSErrors: true });
+    await repCtx.post("/api/auth/login", { data: { email: "persona_reporting@accslegro.com", password: "persona123" } });
+    const budCtx = await request.newContext({ baseURL: API, ignoreHTTPSErrors: true });
+    await budCtx.post("/api/auth/login", { data: { email: "persona_budgets@accslegro.com", password: "persona123" } });
+    // Reporting-only user must be refused Budgets & Accounting endpoints.
+    expect((await repCtx.get("/api/budget")).status()).toBe(403);
+    expect((await repCtx.get("/api/acct/periods")).status()).toBe(403);
+    // Budgets-only user reaches Budgets but not Accounting.
+    expect((await budCtx.get("/api/budget")).status()).toBe(200);
+    expect((await budCtx.get("/api/acct/periods")).status()).toBe(403);
+    await repCtx.dispose();
+    await budCtx.dispose();
   });
 });

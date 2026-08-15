@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
 import { useLang } from "../context/LanguageContext";
 import {
-  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight, Minimize2, HelpCircle, Bell, Camera, Trash2, Pencil, AlertTriangle,
+  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight, Minimize2, HelpCircle, Bell, Camera, Trash2, Pencil, AlertTriangle, Layers,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
@@ -28,6 +28,7 @@ import { applyTheme } from "../lib/theme";
 import { AcctDashboard, AcctBV, AcctBilan, AcctPnl, AcctCashflow, AcctReports } from "../pages/Comptabilite";
 import QcEntity from "../pages/QcEntity";
 import { PlatformHome, PlatformClients, PlatformLogs } from "../pages/Platform";
+import { ReportingHome, FixedAssetsHome, ConsolidationHome } from "../pages/ModulePlaceholder";
 import { Calculator, Landmark, ClipboardList, Wallet, FileBarChart, Building, Server } from "lucide-react";
 
 const PAGES = {
@@ -52,6 +53,27 @@ const PAGES = {
   platform_home: { title: "Accueil plateforme", sub: "Supervision Meelora", comp: PlatformHome },
   platform_clients: { title: "Mandats / Clients", sub: "Portefeuille plateforme", comp: PlatformClients },
   platform_logs: { title: "Logs plateforme", sub: "Évènements plateforme", comp: PlatformLogs },
+  reporting_home: { title: "Reporting", sub: "Module Reporting", comp: ReportingHome },
+  fixed_assets_home: { title: "Immobilisations", sub: "Module Immobilisations", comp: FixedAssetsHome },
+  consolidation_home: { title: "Consolidation", sub: "Module Consolidation", comp: ConsolidationHome },
+};
+
+// P1.13E — module canonique -> rendu de navigation (aucun menu codé selon user.role).
+const MODULE_NAV = {
+  REPORTING: { type: "item", label: "Reporting", icon: FileBarChart, item: { key: "reporting_home", label: "Reporting", sub: "Module Reporting", icon: FileBarChart } },
+  BUDGETS: { type: "parent", label: "Gestion des Budgets", icon: DollarSign,
+             parent: { key: "budget", label: "Gestion des Budgets", sub: "Salaires & budget", icon: DollarSign }, children: null },
+  ACCOUNTING: { type: "group", label: "Comptabilité", icon: Calculator, items: null },
+  FIXED_ASSETS: { type: "item", label: "Immobilisations", icon: Landmark, item: { key: "fixed_assets_home", label: "Immobilisations", sub: "Module Immobilisations", icon: Landmark } },
+  CONSOLIDATION: { type: "item", label: "Consolidation", icon: Layers, item: { key: "consolidation_home", label: "Consolidation", sub: "Module Consolidation", icon: Layers } },
+};
+// Pages autorisées par module (pour garder la page active cohérente avec les droits).
+const MODULE_PAGES = {
+  REPORTING: ["reporting_home"],
+  BUDGETS: ["budget", "employes", "hypotheses", "departements", "rapports"],
+  ACCOUNTING: ["acct_dashboard", "acct_bv", "acct_bilan", "acct_pnl", "acct_cashflow", "acct_audit", "acct_qc9434"],
+  FIXED_ASSETS: ["fixed_assets_home"],
+  CONSOLIDATION: ["consolidation_home"],
 };
 
 const NAV_PLATFORM = [
@@ -380,6 +402,64 @@ export default function Layout() {
   return <YearProvider><LayoutInner /></YearProvider>;
 }
 
+function SectionHeader({ icon: Icon, label }) {
+  return (
+    <div className="flex items-center gap-2 px-3 pb-1 pt-4">
+      <Icon size={13} className="text-[#22C55E]" />
+      <span className="overline" style={{ color: "#94A3B8" }}>{label}</span>
+    </div>
+  );
+}
+
+function DynamicCompanyNav({ manifest, active, go, orgType, companies, activeCompanyId, onSwitchCompany }) {
+  const modules = manifest?.modules || [];
+  const adminView = !!manifest?.admin_view;
+  return (
+    <div data-testid="company-nav">
+      {companies && companies.length > 1 && (
+        <div className="mb-4" data-testid="company-context-switcher">
+          <span className="overline block px-3 pb-1.5" style={{ color: "#94A3B8" }}>{orgType === "fiduciary" ? "Mandat actif" : "Société active"}</span>
+          <Select value={activeCompanyId || undefined} onValueChange={onSwitchCompany}>
+            <SelectTrigger className="h-9" data-testid="company-context-select"><SelectValue placeholder="Choisir…" /></SelectTrigger>
+            <SelectContent>
+              {companies.map((c) => <SelectItem key={c.id} value={c.id} data-testid={`company-ctx-option-${c.id}`}>{c.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      <div className="flex items-center gap-2 px-3 pb-1 pt-1">
+        <LayoutDashboard size={13} className="text-[#22C55E]" />
+        <span className="overline" style={{ color: "#94A3B8" }}>Vue globale</span>
+      </div>
+      <NavItem item={{ key: "dashboard", label: "Tableau de bord", sub: "Vue globale", icon: LayoutDashboard }} active={active} onClick={go} />
+      {adminView && <NavItem item={{ key: "companies", label: orgType === "fiduciary" ? "Tous les mandats" : "Sociétés", sub: "Portefeuille", icon: Building2 }} active={active} onClick={go} />}
+
+      {modules.length === 0 && (
+        <p className="px-3 py-6 text-xs text-slate-400" data-testid="company-nav-empty">Aucun module ne vous est attribué pour cette société.</p>
+      )}
+      {modules.map((m) => {
+        const cfg = MODULE_NAV[m.module_code];
+        if (!cfg) return null;
+        return (
+          <div key={m.module_code} data-testid={`nav-module-${m.module_code}`}>
+            <SectionHeader icon={cfg.icon} label={cfg.label} />
+            {cfg.type === "parent" && <NavParent item={cfg.parent} children={BUDGET_CHILDREN} active={active} onClick={go} />}
+            {cfg.type === "group" && NAV_ACCT.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
+            {cfg.type === "item" && <NavItem item={cfg.item} active={active} onClick={go} />}
+          </div>
+        );
+      })}
+
+      {adminView && (
+        <div className="pt-4" data-testid="nav-admin-section">
+          <SectionHeader icon={ShieldCheck} label="Administration" />
+          {NAV_BOTTOM.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CompanySelector({ active, onNavigate }) {
   const [companies, setCompanies] = useState([]);
   useEffect(() => { api.getCompanies().then(setCompanies).catch(() => setCompanies([])); }, []);
@@ -418,6 +498,12 @@ function LayoutInner() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [avatarColor, setAvatarColor] = useState("#FBBF24");
   const [presentation, setPresentation] = useState(false);
+  // P1.13E — dynamic company navigation (backend authority).
+  const [navCompanies, setNavCompanies] = useState([]);
+  const [activeCompanyId, setActiveCompanyId] = useState(() => {
+    try { return localStorage.getItem("meelora:activeCompany") || null; } catch (e) { return null; }
+  });
+  const [navManifest, setNavManifest] = useState(null);
   // Guard: if a non-platform user somehow lands on platform ctx, force company.
   const effectiveCtx = isPlatformStaff ? ctx : "company";
   const isPlatformPage = active.startsWith("platform_");
@@ -436,6 +522,32 @@ function LayoutInner() {
     setMobileOpen(false);
   };
   useEffect(() => { try { localStorage.setItem("acct:lastPage", active); } catch (e) { /* ignore */ } }, [active]);
+  // Fetch the companies the user may operate in (company context only).
+  useEffect(() => {
+    if (effectiveCtx !== "company") return;
+    api.getCompanyContext().then((d) => {
+      const cs = d.companies || [];
+      setNavCompanies(cs);
+      setActiveCompanyId((prev) => (prev && cs.some((c) => c.id === prev)) ? prev : (cs[0]?.id || null));
+    }).catch(() => setNavCompanies([]));
+  }, [effectiveCtx]);
+  // Recompute the sidebar manifest whenever the active company changes.
+  useEffect(() => {
+    if (effectiveCtx !== "company" || !activeCompanyId) { setNavManifest(null); return; }
+    api.getCompanyNavigation(activeCompanyId).then(setNavManifest).catch(() => setNavManifest({ modules: [], admin_view: false }));
+  }, [effectiveCtx, activeCompanyId]);
+  const switchCompany = (cid) => {
+    setActiveCompanyId(cid);
+    try { localStorage.setItem("meelora:activeCompany", cid); } catch (e) { /* ignore */ }
+  };
+  // Keep the active page within the user's effective rights (no ghost pages).
+  useEffect(() => {
+    if (effectiveCtx !== "company" || !navManifest || active.startsWith("platform_")) return;
+    const allowed = new Set(["dashboard", "preferences"]);
+    if (navManifest.admin_view) ["companies", "access", "logs", "utilisateurs"].forEach((k) => allowed.add(k));
+    (navManifest.modules || []).forEach((m) => (MODULE_PAGES[m.module_code] || []).forEach((k) => allowed.add(k)));
+    if (!allowed.has(active)) setActive("dashboard");
+  }, [navManifest]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const handler = (e) => { if (e.detail) { setActive(e.detail); setMobileOpen(false); } };
     window.addEventListener("acct-navigate", handler);
@@ -449,6 +561,16 @@ function LayoutInner() {
     return () => { window.removeEventListener("acct-presentation", ph); document.removeEventListener("fullscreenchange", fh); };
   }, []);
   const exitPresentation = () => { try { document.exitFullscreen?.(); } catch (e) { /* ignore */ } setPresentation(false); };
+  const isPlaceholderPage = ["reporting_home", "fixed_assets_home", "consolidation_home"].includes(active);
+  const breadcrumbSection = isPlatformPage ? "Plateforme Meelora"
+    : active === "reporting_home" ? "Reporting"
+    : active === "fixed_assets_home" ? "Immobilisations"
+    : active === "consolidation_home" ? "Consolidation"
+    : active === "companies" ? t(user?.workspace?.organization_type === "fiduciary" ? "Mandats" : "Sociétés")
+    : active === "access" || active === "logs" || active === "utilisateurs" ? "Administration"
+    : active.startsWith("acct_") ? t("Comptabilité")
+    : active === "dashboard" ? t("Vue globale")
+    : "Gestion des Budgets";
   const roleMeta = { admin: { label: "Admin", c: "#0F172A", t: "#93B4FF" }, editor: { label: "Utilisateur", c: "#64748B", t: "#94A3B8" }, user: { label: "Utilisateur", c: "#64748B", t: "#94A3B8" } }[user?.role] || { label: "Utilisateur", c: "#64748B", t: "#94A3B8" };
   useEffect(() => { api.getPreferences().then((p) => { applyTheme(p?.theme); if (p?.avatar_color) setAvatarColor(p.avatar_color); }).catch(() => {}); }, []);
 
@@ -472,33 +594,15 @@ function LayoutInner() {
               {NAV_PLATFORM.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
             </>
           ) : (
-          <>
-          <div className="flex items-center gap-2 px-3 pb-1 pt-1">
-            <LayoutDashboard size={13} className="text-[#22C55E]" />
-            <span className="overline" style={{ color: "#94A3B8" }}>{t("Vue globale")}</span>
-          </div>
-          {NAV_GROUP.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
-          <div className="flex items-center gap-2 px-3 pb-1 pt-4">
-            <Building2 size={13} className="text-[#22C55E]" />
-            <span className="overline" style={{ color: "#94A3B8" }}>{t(user?.workspace?.organization_type === "fiduciary" ? "Mandats" : "Sociétés")}</span>
-          </div>
-          {NAV_FOUNDATION.map((i) => <NavItem key={i.key} item={{ ...i, label: user?.workspace?.organization_type === "fiduciary" ? "Tous les mandats" : "Sociétés" }} active={active} onClick={go} />)}
-          <div className="flex items-center gap-2 px-3 pb-1 pt-4">
-            <Briefcase size={13} className="text-[#22C55E]" />
-            <span className="overline" style={{ color: "#94A3B8" }}>{t("Masse Salariale")}</span>
-          </div>
-          <NavParent item={BUDGET_PARENT} children={BUDGET_CHILDREN} active={active} onClick={go} />
-          <div className="flex items-center gap-2 px-3 pb-1 pt-4">
-            <Calculator size={13} className="text-[#22C55E]" />
-            <span className="overline" style={{ color: "#94A3B8" }}>{t("Comptabilité")}</span>
-          </div>
-          {NAV_ACCT.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
-          {user?.role === "admin" && (
-            <div className="pt-4">
-              {NAV_BOTTOM.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
-            </div>
-          )}
-          </>
+          <DynamicCompanyNav
+            manifest={navManifest}
+            active={active}
+            go={go}
+            orgType={user?.workspace?.organization_type}
+            companies={navCompanies}
+            activeCompanyId={activeCompanyId}
+            onSwitchCompany={switchCompany}
+          />
           )}
         </nav>
       </aside>
@@ -509,15 +613,15 @@ function LayoutInner() {
           <div className="flex min-w-0 items-center gap-2.5">
             <button className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden" onClick={() => setMobileOpen(true)} data-testid="sidebar-open-btn"><Menu size={22} /></button>
             <div className="min-w-0">
-              <p className="overline mb-0.5" data-testid="breadcrumb">{isPlatformPage ? "Plateforme Meelora" : active === "companies" ? t(user?.workspace?.organization_type === "fiduciary" ? "Mandats" : "Sociétés") : active.startsWith("acct_") ? t("Comptabilité") : t("Masse salariale")} <span className="mx-1 text-slate-300">›</span> {t(page.title)}</p>
+              <p className="overline mb-0.5" data-testid="breadcrumb">{breadcrumbSection} <span className="mx-1 text-slate-300">›</span> {t(page.title)}</p>
               <h2 className="font-display truncate text-lg font-800 tracking-tight text-[#0F172A] dark:text-white sm:text-2xl">{t(page.title)}</h2>
               <p className="truncate text-xs text-slate-500">{t(page.sub)}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             {!isPlatformPage && active.startsWith("acct_") && <CompanySelector active={active} onNavigate={go} />}
-            {!isPlatformPage && !active.startsWith("acct_") && <span className="hidden rounded-full bg-[#22C55E]/10 px-3 py-1 text-xs font-600 text-[#22C55E] sm:inline-flex">{t("Budget actif")}</span>}
-            {!isPlatformPage && !active.startsWith("acct_") && <YearControls />}
+            {!isPlatformPage && !isPlaceholderPage && !active.startsWith("acct_") && <span className="hidden rounded-full bg-[#22C55E]/10 px-3 py-1 text-xs font-600 text-[#22C55E] sm:inline-flex">{t("Budget actif")}</span>}
+            {!isPlatformPage && !isPlaceholderPage && !active.startsWith("acct_") && <YearControls />}
             <div className="ml-1 flex items-center gap-1 border-l border-slate-200 pl-2">
               <button data-testid="header-help-btn" title={t("Aide")} className="hidden rounded-full p-2 text-slate-500 transition-colors hover:bg-[#F3F4F6] hover:text-[#0F172A] sm:block"><HelpCircle size={18} /></button>
               <NotificationsBell go={go} />

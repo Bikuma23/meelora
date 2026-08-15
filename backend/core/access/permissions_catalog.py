@@ -7,7 +7,7 @@ and catalogue; the business modules themselves are NOT implemented here.
 """
 from typing import Optional
 
-from .modules import ACCOUNTING, CONSOLIDATION, FIXED_ASSETS, REPORTING
+from .modules import ACCOUNTING, BUDGETS, CONSOLIDATION, FIXED_ASSETS, REPORTING
 
 # module_code -> ordered list of stable permission codes.
 PERMISSIONS: dict[str, list[str]] = {
@@ -20,6 +20,10 @@ PERMISSIONS: dict[str, list[str]] = {
         "reporting.template_manage",
         "reporting.settings_manage",
     ],
+    # BUDGETS sensitive permissions are not yet catalogued (the historical
+    # payroll engine keeps its existing controls). Placeholder keeps the module
+    # present in the catalogue without granting anything.
+    BUDGETS: [],
     ACCOUNTING: [
         "accounting.entry_post",
         "accounting.customer_invoice_post",

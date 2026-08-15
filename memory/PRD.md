@@ -1354,3 +1354,18 @@ Audit de bout en bout de l'identité/accès/UX avec 8 personas + tests négatifs
 - **Anomalie MEDIUM (différée, non bloquante)** : routes financières legacy (/api/budget*, /api/acct*, /api/employees*) pas encore câblées à `resolve_effective_access` (modèle de rôle P1.10 conservé) → gating par module non appliqué côté legacy. Travail futur explicite ; sans impact sur le nouveau modèle ni la migration.
 - **GATE** : **P1.13 ACCESS FOUNDATION: READY** — **P1.13A MIGRATION RECOMMENDATION: SAFE TO COMMIT** (attendre l'autorisation explicite ; NE PAS exécuter `--commit`).
 
+
+## P1.13E (finalisation) — Sidebar dynamique + gating modules + registre 5 modules (2026-06 — LIVRÉ & VALIDÉ)
+Refonte navigation/gating/sécurité, AUCUNE fonctionnalité métier, AUCUN calcul financier modifié.
+- [x] **Registre canonique 5 modules** : REPORTING, BUDGETS, ACCOUNTING, FIXED_ASSETS, CONSOLIDATION (`core/access/modules.py`). PAYROLL NON créé (masse salariale = 1er sous-domaine de BUDGETS). Entitlement BUDGETS auto-seedé (workspace Meelora).
+- [x] **Sidebar dynamique** (`Layout.js` `DynamicCompanyNav`) pilotée par `GET /api/companies/{cid}/navigation` (`core/access/navigation.build_company_navigation`). Plus aucun menu métier basé sur `user.role`. Module visible = entitlement ∩ enablement ∩ user_access. Recalcul immédiat au changement de société (`GET /api/me/company-context`, tri par pertinence).
+- [x] **Vue de gestion Admin** (option B.a) : admin workspace/société voit les modules souscrits+activés (`admin_view`) ; overlay n'accorde JAMAIS de permission sensible → ADMIN ≠ AUTORITÉ FINANCIÈRE.
+- [x] **Gating routes legacy** (middleware + `authorize_module`) : /api/acct,/api/qc9434→ACCOUNTING ; /api/budget,/api/employees,/api/hypotheses,/api/departments,/api/reports→BUDGETS ; GET=read, écriture=contribute ; cross-workspace=404. Correctif de la faille P1.13E (reporting-only→/api/budget désormais 403).
+- [x] **Placeholders** REPORTING/FIXED_ASSETS/CONSOLIDATION (`ModulePlaceholder.js`). Dashboard tolère 403 (dégradation gracieuse).
+- [x] **Décision documentée** : `/api/reports` (rapports budgétaires) classé BUDGETS (respect exigence O). REPORTING commercial = module dédié à page placeholder (à mapper sur une UI concrète quand son domaine de données sera tranché).
+- [x] **Utilisateurs existants NON seedés** (décision H) : sidebar minimale si aucun grant (comportement conservateur voulu).
+- [x] **Tests** : pytest 149 (dont `test_p1_13e_navigation.py` 16, `test_p1_13e_persona_matrix.py` 12) ; Playwright 24/24 ; `scripts/p1_13e_signoff.py` (nav+gating live) vert ; `testing_agent` iteration_62 = 100 % (28/28 backend, 7 personas + placeholders + multi-société), 0 BLOCKER/HIGH.
+- **Dry-run P1.13A (5 modules, NON committé)** : 5 entitlements présents ; 7 accès `read` ACCOUNTING conservateurs (membres d'une société en usage) ; 0 manage, 0 permission sensible, 0 accès via platform_role, 0 cross-workspace, 0 entitlement implicite. Legacy préservé.
+- **GATE** : **P1.13 ACCESS FOUNDATION: READY** — **P1.13A MIGRATION: SAFE TO COMMIT** (attendre autorisation ; `--commit` NON exécuté).
+- **Pré-existant (LOW, hors périmètre)** : 5 tests financiers périmés dans `test_backend.py` (échouent aussi sur le code d'origine, vérifié par git stash) — code financier NON modifié.
+

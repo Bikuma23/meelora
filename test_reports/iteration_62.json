@@ -1,0 +1,41 @@
+{
+  "summary": "P1.13E FINALISATION — Independent confirmation of the dynamic sidebar (5 canonical modules, NO PAYROLL) + legacy-route module gating via the write_guard MODULE_ROUTE_MAP. Backend pytest: 28/28 PASSED on the FakeDB navigation + persona matrix (test_p1_13e_navigation.py + test_p1_13e_persona_matrix.py). Backend live HTTP over the public REACT_APP_BACKEND_URL: 24/24 PASSED in the newly-authored regression file test_p1_13e_finalisation_gating.py covering (a) legacy-route gating matrix — reporting-only→/api/budget=403, /api/reports/pnl=403, /api/acct/periods=403; budgets-only→/api/budget=200, /api/acct/periods=403; junior(ACCOUNTING)→/api/acct/periods=200, /api/budget=403; admin→/api/budget=200 & /api/acct/periods=200 — (b) navigation endpoint GET /api/companies/{cid}/navigation returning EXACTLY the expected module_codes per persona (reporting=[REPORTING], budgets=[BUDGETS], junior=[ACCOUNTING], finance=[ACCOUNTING], consol=[CONSOLIDATION], multi CA={BUDGETS,ACCOUNTING} & CB={ACCOUNTING,CONSOLIDATION}, admin & clientadmin=all 5 with admin_view=true and NO sensitive capabilities), (c) platform isolation — platform@meelora.com bare Meelora membership yields 0 modules on GET /api/companies/{CA}/navigation AND 403 on both /api/budget and /api/acct/periods, (d) client-admin admin_view is read/write VISIBILITY only and never carries sensitive capabilities. Frontend Playwright over the public URL: sidebar data-testids match spec — company-nav present for every business persona, nav-module-<CODE> equals the expected set for reporting/budgets/junior/consol, clientadmin and admin see all five modules PLUS nav-admin-section, platform_admin in company context shows 0 nav-module- rows (bare membership), and the persona_multi company-context-switcher recomputes the sidebar IMMEDIATELY on switch (CA → [BUDGETS, ACCOUNTING], CB → [ACCOUNTING, CONSOLIDATION], no leftover rights). Placeholders REPORTING / FIXED_ASSETS / CONSOLIDATION each render module-placeholder-<CODE> plus the French 'Bientôt disponible' badge (screenshot captured). No regression on Dashboard/Comptabilité for admin@accslegro.com. The previously-noted MEDIUM tech-debt (legacy financial routes not gated) is now RESOLVED via /api/server.py MODULE_ROUTE_MAP + authorize_module — the API no longer answers 200 for a hidden module. No blockers found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_p1_13e_navigation.py",
+    "/app/backend/tests/test_p1_13e_persona_matrix.py",
+    "/app/backend/tests/test_p1_13e_finalisation_gating.py",
+    "/app/test_reports/pytest/p1_13e_finalisation.xml",
+    "/app/test_reports/pytest/p1_13e_finalisation_gating.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Excellent: the write_guard MODULE_ROUTE_MAP (/api/acct,/api/qc9434→ACCOUNTING; /api/budget,/api/employees,/api/hypotheses,/api/departments,/api/reports→BUDGETS) closes the P1.13E gap that was flagged MEDIUM in iteration_61 — legacy routes now go through access_nav.authorize_module and correctly return 403 for reporting-only + 403 for budgets-only on /api/acct/periods + 403 for junior on /api/budget.",
+    "Excellent: navigation endpoint response never carries sensitive capabilities under admin_view (verified live for admin@ and persona_clientadmin@ — capabilities:[] for every module).",
+    "Excellent: platform_admin bare Meelora membership yields navigation.modules=[] AND 403 on business APIs — confirms platform_role grants NO financial authority.",
+    "Excellent: multi-company recompute on the sidebar is immediate (CA↔CB switch triggers a re-fetch of /api/companies/{cid}/navigation) and no leftover access from the previously-active company appears.",
+    "Nit (documentation only): the legacy /api/budget route resolves its target company via the hardcoded legacy_prefix ('acct'), so a ?company_id=<other> query parameter is not honoured by the middleware — this is by design for a CA-only legacy route, but a comment near MODULE_ROUTE_MAP explicitly noting 'query parameter company_id is ignored — legacy routes are single-company by prefix' would remove ambiguity for future testers.",
+    "Nit (naming): Layout.js exposes both data-testid='company-ctx-option-<UUID>' (dynamic company switcher inside company-context-switcher) AND data-testid='company-option-<legacy_prefix>' (fiduciary mandate switcher). Both are correct but the near-identical names invite confusion — consider aligning to a single scheme."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_p1_13e_finalisation_gating.py (new regression file, 24 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (28/28 pytest FakeDB matrix + 24/24 live HTTP gating & navigation)",
+    "frontend": "100% (7 personas + placeholder pages + multi-company switch — all conform)"
+  },
+  "test_credentials": "All P1.13E persona credentials valid (persona123). admin@accslegro.com/admin123 valid. platform@meelora.com/platform123 valid.",
+  "seed_data_creation": "None — no throwaway users added. Persona seeding relied on the pre-existing idempotent script from iteration_61.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Two permanent regression suites cover P1.13E: (1) FakeDB deterministic — cd /app/backend && python -m pytest tests/test_p1_13e_navigation.py tests/test_p1_13e_persona_matrix.py (28 tests, ~0.5s, xdist-safe). (2) Live HTTP — cd /app/backend && python -m pytest tests/test_p1_13e_finalisation_gating.py -o 'addopts=' (24 tests, ~6s, MUST run WITHOUT xdist because the token cache is a module-scope fixture; the -o 'addopts=' disables the pytest.ini default -n auto). The live suite hits the public REACT_APP_BACKEND_URL and covers legacy-route gating, /api/companies/{cid}/navigation, platform_admin isolation and client-admin no-authority. The Playwright side is already covered by the existing e2e specs (persona-ux.spec.js, security.spec.js, platform-context.spec.js) — no new UI regression needed.",
+  "rca of the issue": "No defects. The MEDIUM legacy-route gating gap that iteration_61 documented as future work has been fully resolved by the new write_guard MODULE_ROUTE_MAP + access_nav.authorize_module pipeline. All hidden menus are now unreachable via URL/API."
+}

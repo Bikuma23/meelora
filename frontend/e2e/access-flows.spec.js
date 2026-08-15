@@ -68,12 +68,10 @@ test.describe("Access administration & lifecycle (P1.13D)", () => {
   });
 
   test("multi-company user sees more than one company in the accounting selector", async ({ page }) => {
-    await login(page, "marc");
-    // Marc has no platform role -> starts in the financial app.
-    await page.getByTestId("nav-acct_dashboard").click();
-    await expect(page.getByTestId("company-select")).toBeVisible();
-    await page.getByTestId("company-select").click();
-    const options = page.locator('[data-testid^="company-option-"]');
-    await expect(options).toHaveCount(2);
+    await login(page, { email: "persona_multi@accslegro.com", password: "persona123" });
+    // persona_multi has ACCOUNTING on both companies -> accounting nav available.
+    await expect(page.getByTestId("company-context-switcher")).toBeVisible();
+    await page.getByTestId("company-context-select").click();
+    await expect(page.locator('[data-testid^="company-ctx-option-"]')).toHaveCount(2);
   });
 });
