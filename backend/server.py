@@ -115,6 +115,17 @@ from core.financial.reporting_engine import (
     ReportRequest, preview_report, generate_report, list_reports, get_report,
     ensure_indexes as _ensure_report_runs_indexes,
 )
+from core.financial.custom_templates import (
+    CustomTemplateCreate, DeriveRequest, TemplateLineUpsert, ReorderRequest,
+    DefaultAssignment, UploadCommit,
+    create_custom_template, derive_template, new_custom_version,
+    add_line as ct_add_line, update_line as ct_update_line, remove_line as ct_remove_line,
+    reorder_lines as ct_reorder_lines, validate_template as ct_validate_template,
+    publish_template as ct_publish_template, archive_template as ct_archive_template,
+    list_available_templates, set_default_template, get_default_templates,
+    upload_preview as ct_upload_preview, upload_commit as ct_upload_commit,
+    ensure_indexes as _ensure_custom_template_indexes,
+)
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -761,16 +772,19 @@ def compute_budget(employees, hypo, depts, year=None, scenario="ca"):
 class LoginPayload(BaseModel):
     email: str
     password: str
+    remember: bool = True
+
 
 @api.post("/auth/login")
 async def login(payload: LoginPayload, response: Response):
     email = payload.email.strip().lower()
     user = await db.users.find_one({"email": email})
-    if not user or not verify_password(payload.password, user["password_hash"]):
+    if not user or not user.get("password_hash") or not verify_password(payload.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Courriel ou mot de passe invalide")
     uid = str(user["_id"])
     token = create_token(uid, email)
-    response.set_cookie("access_token", token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    response.set_cookie("access_token", token, httponly=True, secure=False, samesite="lax",
+                        max_age=(604800 if payload.remember else None), path="/")
     return {"token": token, "user": {"id": uid, "email": email, "name": user.get("name", ""), "role": _normalized_role(user.get("role", "user"))}}
 
 @api.post("/auth/logout")
@@ -781,6 +795,147 @@ async def logout(response: Response, user: dict = Depends(get_current_user)):
 @api.get("/auth/me")
 async def me(user: dict = Depends(get_current_user)):
     return auth_me_payload(user)
+
+
+# ---------------------------------------------------------------------------
+# Emergent Google Auth (social login). Coexists with email/password.
+# REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS,
+# THIS BREAKS THE AUTH. The redirect_url is derived on the FRONTEND from
+# window.location.origin; here we only exchange the session_id server-side.
+# ---------------------------------------------------------------------------
+_EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+
+
+class GoogleSessionPayload(BaseModel):
+    session_id: str
+
+
+@api.post("/auth/session")
+async def google_session(payload: GoogleSessionPayload, response: Response):
+    sid = (payload.session_id or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="session_id manquant")
+    try:
+        r = await asyncio.to_thread(
+            requests.get, _EMERGENT_SESSION_URL, headers={"X-Session-ID": sid}, timeout=15)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Service d'authentification Google indisponible")
+    if r.status_code != 200:
+        raise HTTPException(status_code=401, detail="Session Google invalide ou expirée")
+    data = r.json()
+    email = (data.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=401, detail="Compte Google sans courriel")
+    now = datetime.now(timezone.utc).isoformat()
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        uid = str(existing["_id"])
+        upd = {"last_login_at": now, "auth_provider": "google"}
+        if data.get("name") and not existing.get("name"):
+            upd["name"] = data.get("name")
+        if data.get("picture"):
+            prefs = {**(existing.get("preferences") or {})}
+            prefs.setdefault("google_picture", data.get("picture"))
+            upd["preferences"] = prefs
+        await db.users.update_one({"_id": existing["_id"]}, {"$set": upd})
+        role = _normalized_role(existing.get("role", "user"))
+        name = upd.get("name", existing.get("name", ""))
+    else:
+        doc = {"email": email, "name": data.get("name") or email, "password_hash": None,
+               "role": "user", "status": "active", "auth_provider": "google",
+               "preferences": ({"google_picture": data.get("picture")} if data.get("picture") else {}),
+               "created_at": now, "last_login_at": now}
+        res = await db.users.insert_one(doc)
+        uid = str(res.inserted_id)
+        role, name = "user", doc["name"]
+    token = create_token(uid, email)
+    response.set_cookie("access_token", token, httponly=True, secure=False, samesite="lax",
+                        max_age=604800, path="/")
+    return {"token": token, "user": {"id": uid, "email": email, "name": name, "role": role}}
+
+
+# ---------------------------------------------------------------------------
+# Password reset (single-use, 1h token, delivered via Resend).
+# ---------------------------------------------------------------------------
+class ForgotPasswordPayload(BaseModel):
+    email: str
+
+
+class ResetPasswordPayload(BaseModel):
+    token: str
+    password: str
+
+
+def _create_reset_token(user_id: str, email: str, jti: str) -> str:
+    payload = {"sub": user_id, "email": email, "type": "reset", "jti": jti,
+               "exp": datetime.now(timezone.utc) + timedelta(hours=1)}
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+async def _send_reset_email(email: str, name: str, link: str) -> bool:
+    if not os.environ.get("RESEND_API_KEY"):
+        return False
+    import resend
+    resend.api_key = os.environ["RESEND_API_KEY"]
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#0F172A">
+      <h2 style="color:#0F172A">Réinitialisation de votre mot de passe</h2>
+      <p>Bonjour {name or ''},</p>
+      <p>Vous avez demandé à réinitialiser votre mot de passe Meelora. Ce lien est valable 1 heure.</p>
+      <p style="margin:28px 0">
+        <a href="{link}" style="background:#22C55E;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600">Réinitialiser mon mot de passe</a>
+      </p>
+      <p style="color:#64748B;font-size:13px">Si vous n'êtes pas à l'origine de cette demande, ignorez ce courriel.</p>
+      <p style="color:#94A3B8;font-size:12px;margin-top:24px">Meelora — Votre entreprise, clairement.</p>
+    </div>"""
+    try:
+        await asyncio.to_thread(resend.Emails.send, {
+            "from": os.environ.get("SENDER_EMAIL", "onboarding@resend.dev"),
+            "to": [email], "subject": "Réinitialisation de votre mot de passe Meelora", "html": html})
+        return True
+    except Exception as e:
+        logger.error(f"Resend reset email échec: {e}")
+        return False
+
+
+@api.post("/auth/forgot-password")
+async def forgot_password(payload: ForgotPasswordPayload):
+    email = (payload.email or "").strip().lower()
+    generic = {"success": True,
+               "message": "Si un compte existe pour ce courriel, un lien de réinitialisation a été envoyé."}
+    if not email:
+        return generic
+    user = await db.users.find_one({"email": email})
+    # Only local (password) accounts can reset; never leak account existence.
+    if user and user.get("password_hash"):
+        jti = uuid.uuid4().hex
+        await db.users.update_one({"_id": user["_id"]}, {"$set": {"reset_token_jti": jti}})
+        token = _create_reset_token(str(user["_id"]), email, jti)
+        base = os.environ.get("FRONTEND_URL", "").rstrip("/")
+        link = f"{base}/reset-password?token={token}"
+        await _send_reset_email(email, user.get("name", ""), link)
+    return generic
+
+
+@api.post("/auth/reset-password")
+async def reset_password(payload: ResetPasswordPayload):
+    if len(payload.password or "") < 6:
+        raise HTTPException(status_code=422, detail="Le mot de passe doit contenir au moins 6 caractères")
+    try:
+        claims = jwt.decode(payload.token, JWT_SECRET, algorithms=[JWT_ALGO])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=400, detail="Lien expiré. Veuillez refaire une demande.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=400, detail="Lien invalide.")
+    if claims.get("type") != "reset":
+        raise HTTPException(status_code=400, detail="Lien invalide.")
+    user = await db.users.find_one({"_id": ObjectId(claims["sub"])})
+    if not user or user.get("reset_token_jti") != claims.get("jti"):
+        raise HTTPException(status_code=400, detail="Lien invalide ou déjà utilisé.")
+    await db.users.update_one({"_id": user["_id"]},
+                              {"$set": {"password_hash": hash_password(payload.password)},
+                               "$unset": {"reset_token_jti": ""}})
+    return {"success": True, "message": "Mot de passe réinitialisé. Vous pouvez vous connecter."}
 
 @api.get("/me/preferences")
 async def get_preferences(user: dict = Depends(get_current_user)):
@@ -1655,6 +1810,164 @@ async def version_reporting_template(template_id: str, user: dict = Depends(get_
 async def list_company_reporting_templates(company_id: str, statement_type: Optional[str] = None,
                                            user: dict = Depends(get_current_user)):
     return await list_company_templates(db, company_id, user, statement_type=statement_type)
+
+
+# ---------------------------------------------------------------------------
+# P3.5 — Custom reporting-template governance (create / derive / edit / publish
+# / upload / defaults). Reuses the P3.1 schema and P3.4 engine. Never mutates a
+# published version; publishing runs full structural validation (fail closed).
+# ---------------------------------------------------------------------------
+@api.post("/reporting-templates/custom")
+async def create_custom_reporting_template(payload: CustomTemplateCreate,
+                                           user: dict = Depends(get_current_user)):
+    rec = await create_custom_template(db, user, payload)
+    await log_action(user, "create", "reporting_template", rec.get("template_code", ""),
+                     company_id=rec.get("company_id"), entity_id=rec.get("id"),
+                     event_type="reporting_template.created",
+                     metadata={"scope": rec.get("scope"), "statement_type": rec.get("statement_type"),
+                               "version": rec.get("version")})
+    return rec
+
+
+@api.post("/reporting-templates/derive")
+async def derive_reporting_template(payload: DeriveRequest, user: dict = Depends(get_current_user)):
+    rec = await derive_template(db, user, payload)
+    await log_action(user, "derive", "reporting_template", rec.get("template_code", ""),
+                     company_id=rec.get("company_id"), entity_id=rec.get("id"),
+                     event_type="reporting_template.derived",
+                     metadata={"scope": rec.get("scope"), "statement_type": rec.get("statement_type"),
+                               "based_on_template_id": rec.get("based_on_template_id"),
+                               "based_on_template_version": rec.get("based_on_template_version")})
+    return rec
+
+
+@api.post("/reporting-templates/{template_id}/custom-lines")
+async def add_custom_line(template_id: str, payload: TemplateLineUpsert,
+                          user: dict = Depends(get_current_user)):
+    rec = await ct_add_line(db, user, template_id, payload)
+    await log_action(user, "update", "reporting_template", template_id, entity_id=template_id,
+                     event_type="reporting_template.updated", metadata={"line_added": rec.get("line_code")})
+    return rec
+
+
+@api.patch("/reporting-templates/{template_id}/custom-lines/{line_id}")
+async def update_custom_line(template_id: str, line_id: str, payload: TemplateLineUpsert,
+                             user: dict = Depends(get_current_user)):
+    rec = await ct_update_line(db, user, template_id, line_id, payload)
+    await log_action(user, "update", "reporting_template", template_id, entity_id=template_id,
+                     event_type="reporting_template.updated", metadata={"line_updated": line_id})
+    return rec
+
+
+@api.delete("/reporting-templates/{template_id}/custom-lines/{line_id}")
+async def delete_custom_line(template_id: str, line_id: str,
+                             user: dict = Depends(get_current_user)):
+    rec = await ct_remove_line(db, user, template_id, line_id)
+    await log_action(user, "update", "reporting_template", template_id, entity_id=template_id,
+                     event_type="reporting_template.updated", metadata={"line_removed": line_id})
+    return rec
+
+
+@api.post("/reporting-templates/{template_id}/reorder-lines")
+async def reorder_custom_lines(template_id: str, payload: ReorderRequest,
+                               user: dict = Depends(get_current_user)):
+    rec = await ct_reorder_lines(db, user, template_id, payload)
+    await log_action(user, "update", "reporting_template", template_id, entity_id=template_id,
+                     event_type="reporting_template.updated", metadata={"reordered": rec.get("reordered")})
+    return rec
+
+
+@api.get("/reporting-templates/{template_id}/validate")
+async def validate_reporting_template(template_id: str, user: dict = Depends(get_current_user)):
+    return await ct_validate_template(db, user, template_id)
+
+
+@api.post("/reporting-templates/{template_id}/publish-custom")
+async def publish_custom_reporting_template(template_id: str, user: dict = Depends(get_current_user)):
+    rec = await ct_publish_template(db, user, template_id)
+    await log_action(user, "publish", "reporting_template", rec.get("template_code", ""),
+                     company_id=rec.get("company_id"), entity_id=rec.get("id"),
+                     event_type="reporting_template.published",
+                     metadata={"scope": rec.get("scope"), "version": rec.get("version"),
+                               "statement_type": rec.get("statement_type")})
+    return rec
+
+
+@api.post("/reporting-templates/{template_id}/new-custom-version")
+async def new_custom_reporting_version(template_id: str, user: dict = Depends(get_current_user)):
+    rec = await new_custom_version(db, user, template_id)
+    await log_action(user, "derive", "reporting_template", rec.get("template_code", ""),
+                     company_id=rec.get("company_id"), entity_id=rec.get("id"),
+                     event_type="reporting_template.derived",
+                     metadata={"scope": rec.get("scope"), "version": rec.get("version"),
+                               "based_on_template_id": rec.get("based_on_template_id")})
+    return rec
+
+
+@api.post("/reporting-templates/{template_id}/archive-custom")
+async def archive_custom_reporting_template(template_id: str, user: dict = Depends(get_current_user)):
+    rec = await ct_archive_template(db, user, template_id)
+    await log_action(user, "archive", "reporting_template", rec.get("template_code", ""),
+                     company_id=rec.get("company_id"), entity_id=rec.get("id"),
+                     event_type="reporting_template.archived",
+                     metadata={"scope": rec.get("scope"), "version": rec.get("version")})
+    return rec
+
+
+@api.get("/companies/{company_id}/available-reporting-templates")
+async def list_company_available_templates(company_id: str, statement_type: Optional[str] = None,
+                                           user: dict = Depends(get_current_user)):
+    return await list_available_templates(db, company_id, user, statement_type=statement_type)
+
+
+@api.post("/companies/{company_id}/reporting-templates/upload/preview")
+async def preview_reporting_template_upload(company_id: str, statement_type: str = Form(...),
+                                            template_code: str = Form(...), name: str = Form(...),
+                                            scope: str = Form("company"),
+                                            jurisdiction: Optional[str] = Form(None),
+                                            file: UploadFile = File(...),
+                                            user: dict = Depends(get_current_user)):
+    content = await file.read()
+    rows = parse_rows(content, file.filename)
+    meta = UploadCommit(template_code=template_code, statement_type=statement_type, scope=scope,
+                        name=name, jurisdiction=jurisdiction, company_id=company_id, rows=rows)
+    return await ct_upload_preview(db, user, meta)
+
+
+@api.post("/companies/{company_id}/reporting-templates/upload/commit")
+async def commit_reporting_template_upload(company_id: str, statement_type: str = Form(...),
+                                           template_code: str = Form(...), name: str = Form(...),
+                                           scope: str = Form("company"),
+                                           jurisdiction: Optional[str] = Form(None),
+                                           file: UploadFile = File(...),
+                                           user: dict = Depends(get_current_user)):
+    content = await file.read()
+    rows = parse_rows(content, file.filename)
+    meta = UploadCommit(template_code=template_code, statement_type=statement_type, scope=scope,
+                        name=name, jurisdiction=jurisdiction, company_id=company_id, rows=rows)
+    rec = await ct_upload_commit(db, user, meta)
+    await log_action(user, "import", "reporting_template", rec.get("template_code", ""),
+                     company_id=company_id, entity_id=rec.get("id"),
+                     event_type="reporting_template.uploaded",
+                     metadata={"scope": rec.get("scope"), "line_count": rec.get("line_count"),
+                               "idempotent": rec.get("idempotent", False)})
+    return rec
+
+
+@api.get("/companies/{company_id}/reporting-template-defaults")
+async def get_company_template_defaults(company_id: str, user: dict = Depends(get_current_user)):
+    return await get_default_templates(db, user, company_id)
+
+
+@api.put("/companies/{company_id}/reporting-template-defaults")
+async def set_company_template_default(company_id: str, payload: DefaultAssignment,
+                                       user: dict = Depends(get_current_user)):
+    rec = await set_default_template(db, user, payload, company_id)
+    await log_action(user, "update", "reporting_template", rec.get("template_code", ""),
+                     company_id=company_id, entity_id=rec.get("template_id"),
+                     event_type="reporting_template.default_changed",
+                     metadata={"scope": rec.get("scope"), "statement_type": rec.get("statement_type")})
+    return rec
 
 
 @api.post("/system/reporting-seed")
@@ -7845,6 +8158,7 @@ async def startup():
         await _ensure_i18n_indexes(db)
         await _ensure_mapping_indexes(db)
         await _ensure_reporting_template_indexes(db)
+        await _ensure_custom_template_indexes(db)
         await _ensure_report_runs_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getToken } from "./token";
 
 const client = axios.create({
   baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`,
@@ -6,15 +7,20 @@ const client = axios.create({
 });
 
 client.interceptors.request.use((cfg) => {
-  const t = localStorage.getItem("token");
+  const t = getToken();
   if (t) cfg.headers.Authorization = `Bearer ${t}`;
   return cfg;
 });
 
 export const api = {
-  login: (email, password) => client.post("/auth/login", { email, password }).then((r) => r.data),
+  login: (email, password, remember = true) =>
+    client.post("/auth/login", { email, password, remember }).then((r) => r.data),
   logout: () => client.post("/auth/logout").then((r) => r.data),
   me: () => client.get("/auth/me").then((r) => r.data),
+  googleSession: (session_id) => client.post("/auth/session", { session_id }).then((r) => r.data),
+  forgotPassword: (email) => client.post("/auth/forgot-password", { email }).then((r) => r.data),
+  resetPassword: (token, password) =>
+    client.post("/auth/reset-password", { token, password }).then((r) => r.data),
 
   listEmployees: (params) => client.get("/employees", { params: params || {} }).then((r) => r.data),
   createEmployee: (d) => client.post("/employees", d).then((r) => r.data),

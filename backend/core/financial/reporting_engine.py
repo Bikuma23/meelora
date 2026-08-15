@@ -133,13 +133,20 @@ def _net(line, prefix):
     return v or 0
 
 
-async def _aggregate(db, ws, cid, period_id, tb_import):
-    """Returns (concept_raw, unmapped_populated, mapping_snapshot)."""
+async def _aggregate(db, ws, cid, period_id, tb_import, bypass_accounts=None):
+    """Returns (concept_raw, unmapped_populated, mapping_snapshot, account_raw).
+
+    ``bypass_accounts`` are account ids referenced directly by semantic_bypass
+    custom template lines (P3.5). They are intentionally not flagged as unmapped
+    since a custom template resolves them without a concept mapping.
+    """
+    bypass_accounts = bypass_accounts or set()
     lines = await db.trial_balance_lines.find({
         "workspace_id": ws, "company_id": cid, "import_id": tb_import["_id"]}).to_list(None)
     accounts = {a["_id"]: a for a in await db.accounts.find({
         "workspace_id": ws, "company_id": cid}).to_list(None)}
     concept_raw = {}   # concept_id -> {period_net, ytd_net}
+    account_raw = {}   # account_id -> {period_net, ytd_net} (P3.5 semantic_bypass)
     unmapped_populated, mapping_snapshot = [], []
     for l in lines:
         aid = l.get("account_id")
@@ -147,9 +154,10 @@ async def _aggregate(db, ws, cid, period_id, tb_import):
         if acc.get("active") is False:
             continue
         pnet, ynet = _net(l, "period"), _net(l, "ytd")
+        account_raw[aid] = {"period_net": pnet, "ytd_net": ynet}
         m = await resolve_confirmed_mapping(db, ws, cid, aid, period_id)  # raises 500 on integrity
         if not m:
-            if abs(pnet) > TOL or abs(ynet) > TOL:
+            if (abs(pnet) > TOL or abs(ynet) > TOL) and aid not in bypass_accounts:
                 unmapped_populated.append({"account_id": aid, "account_code": l.get("account_code"),
                                            "account_name": acc.get("account_name"),
                                            "period_net": pnet, "ytd_net": ynet})
@@ -160,7 +168,7 @@ async def _aggregate(db, ws, cid, period_id, tb_import):
         agg["ytd_net"] += ynet
         mapping_snapshot.append({"account_id": aid, "account_code": l.get("account_code"),
                                  "financial_concept_id": c, "mapping_id": m["id"]})
-    return concept_raw, unmapped_populated, mapping_snapshot
+    return concept_raw, unmapped_populated, mapping_snapshot, account_raw
 
 
 def _descendant_leaves(concept_id, concepts_by_id, children):
@@ -195,7 +203,9 @@ def _apply_display_sign(value, display_sign):
 
 
 # ---- Statement computation -------------------------------------------------
-async def _compute(db, ws, cid, template, concept_raw, concepts_by_id, children, measure_override, locale):
+async def _compute(db, ws, cid, template, concept_raw, concepts_by_id, children, measure_override,
+                   locale, account_raw=None):
+    account_raw = account_raw or {}
     tlines = await db.reporting_template_lines.find({"template_id": template["_id"]}).to_list(None)
     tlines.sort(key=lambda d: (d.get("sort_order") or 0, d.get("line_code") or ""))
     code_set = {l["line_code"] for l in tlines}
@@ -214,6 +224,22 @@ async def _compute(db, ws, cid, template, concept_raw, concepts_by_id, children,
                  "concept_codes": l.get("concept_codes") or [], "formula": l.get("formula")}
         if l["line_type"] == "concept":
             measure = measure_override or l.get("measure") or "ytd"
+            if l.get("semantic_bypass"):
+                # P3.5 — resolve account refs directly (no concept mapping).
+                raw = 0.0
+                for aid in (l.get("account_refs") or []):
+                    agg = account_raw.get(aid)
+                    if not agg:
+                        continue
+                    raw += agg["period_net"] if measure == "period" else agg["ytd_net"]
+                entry["measure"] = measure
+                entry["semantic_bypass"] = True
+                entry["raw_value"] = round(raw, 2)
+                entry["value"] = round(raw, 2)
+                entry["presented_value"] = round(_apply_display_sign(raw, entry["display_sign"]), 2)
+                values[lc] = entry["value"]
+                computed[lc] = entry
+                continue
             leaves = set()
             for ref in (l.get("concept_refs") or []):
                 leaves |= _descendant_leaves(ref, concepts_by_id, children)
@@ -304,19 +330,48 @@ def _pnl_net(concept_raw, concepts_by_id, measure):
     return round(income - expense, 2)
 
 
+async def _resolve_default_template(db, ws, cid, statement_type):
+    """P3.5 default resolution (inline to avoid a circular import): company
+    default > workspace default > None. Falls back to a published version of the
+    stored template_code if the exact stored version is no longer published."""
+    defaults_col = getattr(db, "reporting_template_defaults", None)
+    if defaults_col is None:
+        return None
+    for q in ({"workspace_id": ws, "company_id": cid, "statement_type": statement_type},
+              {"workspace_id": ws, "company_id": None, "statement_type": statement_type}):
+        d = await defaults_col.find_one(q)
+        if not d:
+            continue
+        tid = d.get("template_id")
+        t = await db.reporting_templates.find_one({"_id": tid}) if tid else None
+        if t and t.get("status") == "published":
+            return t
+        code = d.get("template_code")
+        if code:
+            cands = await db.reporting_templates.find(
+                {"template_code": code, "status": "published"}).to_list(None)
+            if cands:
+                return max(cands, key=lambda x: x.get("version") or 0)
+    return None
+
+
 async def _resolve_template(db, cid, company, statement_type, template_id, template_code):
     if template_id:
         t = await db.reporting_templates.find_one({"_id": template_id})
     elif template_code:
         t = await db.reporting_templates.find_one({"template_code": template_code, "status": "published"})
     else:
-        juris = company.get("jurisdiction") or company.get("jurisdiction_code")
-        if not juris:
-            raise HTTPException(status_code=422,
-                                detail="Aucun template fourni et juridiction de la société inconnue")
-        t = await db.reporting_templates.find_one({
-            "scope": "system", "jurisdiction": juris, "statement_type": statement_type,
-            "status": "published"})
+        # P3.5 — company default > workspace default > system jurisdiction fallback.
+        ws = company.get("workspace_id")
+        t = await _resolve_default_template(db, ws, cid, statement_type) if ws else None
+        if not t:
+            juris = company.get("jurisdiction") or company.get("jurisdiction_code")
+            if not juris:
+                raise HTTPException(status_code=422,
+                                    detail="Aucun template fourni et juridiction de la société inconnue")
+            t = await db.reporting_templates.find_one({
+                "scope": "system", "jurisdiction": juris, "statement_type": statement_type,
+                "status": "published"})
     if not t:
         raise HTTPException(status_code=422, detail="Template introuvable")
     if t.get("statement_type") != statement_type:
@@ -337,8 +392,14 @@ async def _build(db, company_id, user, req: ReportRequest, *, finalize: bool):
     template = await _resolve_template(db, company_id, company, req.statement_type,
                                        req.template_id, req.template_code)
     tb = await select_tb_import(db, ws, company_id, req.financial_period_id, req.normalized_import_id)
-    concept_raw, unmapped_populated, mapping_snapshot = await _aggregate(
-        db, ws, company_id, req.financial_period_id, tb)
+    # P3.5 — accounts referenced by semantic_bypass lines must not be flagged unmapped.
+    _tlines = await db.reporting_template_lines.find({"template_id": template["_id"]}).to_list(None)
+    bypass_accounts = set()
+    for _l in _tlines:
+        if _l.get("semantic_bypass"):
+            bypass_accounts |= set(_l.get("account_refs") or [])
+    concept_raw, unmapped_populated, mapping_snapshot, account_raw = await _aggregate(
+        db, ws, company_id, req.financial_period_id, tb, bypass_accounts=bypass_accounts)
 
     concepts = await db.financial_concepts.find({}).to_list(None)
     concepts_by_id = {c["_id"]: c for c in concepts}
@@ -355,7 +416,7 @@ async def _build(db, company_id, user, req: ReportRequest, *, finalize: bool):
             "unmapped_populated": unmapped_populated})
 
     lines = await _compute(db, ws, company_id, template, concept_raw, concepts_by_id, children,
-                           req.measure, req.locale)
+                           req.measure, req.locale, account_raw=account_raw)
     control_totals = (_bs_control(concept_raw, concepts_by_id)
                       if req.statement_type == "balance_sheet" else None)
     pnl_net = _pnl_net(concept_raw, concepts_by_id, req.measure or "ytd")
