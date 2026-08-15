@@ -41,49 +41,6 @@ const MicrosoftIcon = () => (
   </svg>
 );
 
-// Large translucent Meelora ribbon (upper-center/right of the navy panel).
-const Ribbon = () => (
-  <svg className="pointer-events-none absolute right-[-30px] top-[38px] h-[430px] w-[680px]"
-       viewBox="0 0 720 460" fill="none" aria-hidden="true">
-    <defs>
-      <linearGradient id="rib" x1="0" y1="0.2" x2="1" y2="0.6">
-        <stop offset="0" stopColor="#00344d" />
-        <stop offset="0.42" stopColor="#006b63" />
-        <stop offset="0.74" stopColor="#00a874" />
-        <stop offset="1" stopColor="#27c98c" />
-      </linearGradient>
-      <filter id="ribGlow" x="-30%" y="-30%" width="160%" height="160%">
-        <feGaussianBlur stdDeviation="22" />
-      </filter>
-    </defs>
-    <path d="M70 55 C 250 55, 300 400, 470 400 C 640 400, 690 80, 860 80"
-          stroke="url(#rib)" strokeWidth="128" strokeLinecap="round" opacity="0.30" filter="url(#ribGlow)" />
-    <path d="M70 55 C 250 55, 300 400, 470 400 C 640 400, 690 80, 860 80"
-          stroke="url(#rib)" strokeWidth="96" strokeLinecap="round" opacity="0.60" />
-  </svg>
-);
-
-// Decorative low-contrast financial chart (lower-right).
-const DecoChart = () => (
-  <svg className="pointer-events-none absolute bottom-0 right-0 h-[360px] w-[62%]"
-       viewBox="0 0 640 320" fill="none" aria-hidden="true" style={{ opacity: 0.25 }}>
-    {[0, 1, 2, 3, 4].map((i) => (
-      <line key={`h${i}`} x1="0" y1={60 + i * 55} x2="640" y2={60 + i * 55} stroke="#2f6f78" strokeWidth="0.6" opacity="0.4" />
-    ))}
-    {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-      <line key={`v${i}`} x1={70 + i * 90} y1="30" x2={70 + i * 90} y2="300" stroke="#2f6f78" strokeWidth="0.6" opacity="0.3" />
-    ))}
-    {[[430, 120], [520, 95], [610, 200]].map(([x, h], i) => (
-      <rect key={`b${i}`} x={x} y={300 - h} width="26" height={h} rx="3" fill="#2fa07a" opacity="0.18" />
-    ))}
-    <polyline points="20,250 110,215 200,235 300,150 400,175 500,90 620,60"
-              stroke="#3fd39a" strokeWidth="2" fill="none" opacity="0.7" />
-    {[[20, 250], [110, 215], [200, 235], [300, 150], [400, 175], [500, 90], [620, 60]].map(([x, y], i) => (
-      <circle key={`p${i}`} cx={x} cy={y} r="3.4" fill="#3fd39a" opacity="0.85" />
-    ))}
-  </svg>
-);
-
 const LANGS = ["FR", "EN", "DE", "IT"];
 const FEATURES = [
   [ShieldCheck, "Données protégées", ["Vos informations sont", "chiffrées et sécurisées", "en tout temps."]],
@@ -140,18 +97,12 @@ export default function Login() {
   };
 
   return (
-    <div className="grid min-h-screen grid-cols-1 bg-white lg:grid-cols-[64%_36%]" data-testid="login-page">
+    <div className="grid min-h-screen grid-cols-1 bg-white lg:grid-cols-[60%_40%]" data-testid="login-page">
       {/* ---------- LEFT BRAND PANEL ---------- */}
       <div
-        className="relative hidden flex-col overflow-hidden lg:flex"
-        style={{
-          background:
-            "radial-gradient(circle at 78% 28%, rgba(0,185,120,.10), transparent 32%), linear-gradient(145deg, #00152d 0%, #001a35 55%, #00233e 100%)",
-        }}
+        className="relative hidden flex-col overflow-hidden bg-cover bg-center lg:flex"
+        style={{ backgroundColor: "#03152e", backgroundImage: "url('/login-bg.png')" }}
       >
-        <Ribbon />
-        <DecoChart />
-
         <div className="relative z-10 flex h-full flex-col px-[60px] pb-[46px] pt-[58px]">
           <img src="/meelora-wordmark-white.png" alt="Meelora" className="h-auto w-[212px] shrink-0 self-start" data-testid="login-brand" />
 
