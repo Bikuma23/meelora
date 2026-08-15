@@ -424,7 +424,9 @@ function DynamicCompanyNav({ manifest, active, go, orgType, companies, activeCom
         <span className="overline" style={{ color: "#94A3B8" }}>Vue globale</span>
       </div>
       <NavItem item={{ key: "dashboard", label: "Tableau de bord", sub: "Vue globale", icon: LayoutDashboard }} active={active} onClick={go} />
-      <NavItem item={{ key: "mandats_list", label: "Tous les mandats", sub: "Vos sociétés accessibles", icon: Building2 }} active={active} onClick={go} />
+      {(companies || []).length > 1 && (
+        <NavItem item={{ key: "mandats_list", label: "Tous les mandats", sub: "Vos sociétés accessibles", icon: Building2 }} active={active} onClick={go} />
+      )}
 
       {activeCompany && (
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5" data-testid="active-mandat">
@@ -544,13 +546,22 @@ function LayoutInner() {
   };
   const enterMandat = (cid) => { switchCompany(cid); setActive("dashboard"); setMobileOpen(false); };
   const enterCompanyContext = () => { if (isPlatformStaff) switchCtx("company"); };
-  // Keep the active page within the user's effective rights (no ghost pages).
+  // Keep the active page within the user's effective rights (no ghost pages) and
+  // land a business user directly on their primary module (not an empty dashboard).
   useEffect(() => {
     if (effectiveCtx !== "company" || !navManifest || active.startsWith("platform_")) return;
     const allowed = new Set(["dashboard", "preferences", "mandats_list"]);
     if (navManifest.admin_view) ["companies", "access", "logs", "utilisateurs"].forEach((k) => allowed.add(k));
-    (navManifest.modules || []).forEach((m) => (MODULE_PAGES[m.module_code] || []).forEach((k) => allowed.add(k)));
-    if (!allowed.has(active)) setActive("dashboard");
+    const mods = navManifest.modules || [];
+    mods.forEach((m) => (MODULE_PAGES[m.module_code] || []).forEach((k) => allowed.add(k)));
+    if (!allowed.has(active)) { setActive("dashboard"); return; }
+    // Entry route: an employee whose modules don't include BUDGETS should not land
+    // on the (budget-centric) dashboard — send them to their first module.
+    const LANDING = { REPORTING: "reporting_home", BUDGETS: "budget", ACCOUNTING: "acct_dashboard", FIXED_ASSETS: "fixed_assets_home", CONSOLIDATION: "consolidation_home" };
+    const hasBudgets = mods.some((m) => m.module_code === "BUDGETS");
+    const entry = (!navManifest.admin_view && !hasBudgets && mods.length > 0) ? (LANDING[mods[0].module_code] || "dashboard") : "dashboard";
+    if (!allowed.has(active)) { setActive(entry); return; }
+    if (active === "dashboard" && entry !== "dashboard") setActive(entry);
   }, [navManifest]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const handler = (e) => { if (e.detail) { setActive(e.detail); setMobileOpen(false); } };

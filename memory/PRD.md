@@ -1382,3 +1382,9 @@ Modèle : **Client → Tous les mandats → Mandat → Modules**. Vocabulaire di
 - [x] **Validation** : Playwright **25/25** ; `testing_agent` iteration_63 (frontend 100 %, 2 HIGH backend nav guard) → corrigés → iteration_64 **backend 100 %, retest_needed False**. 0 BLOCKER/HIGH ouvert.
 - **Rappels** : migration P1.13A reste `--dry-run` (NON committée) ; ClientCard (fiche client externe) non E2E-testée ici faute de client externe dans l'environnement (attendu).
 
+
+## Nav V3 — Employé Meelano entrée directe (2026-06 — #1 LIVRÉ & TESTÉ)
+- [x] #1 Employé Meelora sans platform_role: aucun menu plateforme; "Tous les mandats" masqué en mono-mandat (companies.length<=1); entrée directe sur le 1er module (ACCOUNTING->Comptabilite, REPORTING->reporting_home...) au lieu d un dashboard budget vide. Playwright 25/25.
+- [ ] #2 Formulaire creation societe/client COMPLET (identification, coordonnees, fiscalite conditionnelle par juridiction/province [Canada: BN/TPS/TVQ; autres provinces sans TVQ], operationnel). Architecture extensible multi-juridictions. Aucun champ fiscal ne confere de droit. -> A FAIRE (prochaine iteration).
+- [ ] #3 Fiche "Societe Meelora" (Apercu/Admins/Users/Modules/Logs/Parametres) + bouton Acceder en mode EXTENSION (conserver menus plateforme + AJOUTER modules metier, ne pas remplacer la nav). -> A FAIRE (refonte du modele context-switch vers extension).
+- Rappels: migration P1.13A reste --dry-run (NON committee); aucun calcul financier modifie.

@@ -19,13 +19,21 @@ async function visibleModules(page, expectedCount) {
   return page.$$eval('[data-testid^="nav-module-"]', (els) => els.map((e) => e.getAttribute("data-testid").replace("nav-module-", "")));
 }
 
+const LANDING = { REPORTING: "Reporting", BUDGETS: "Gestion des Budgets", ACCOUNTING: "Comptabilité", FIXED_ASSETS: "Immobilisations", CONSOLIDATION: "Consolidation" };
+
 test.describe("Persona sidebar = effective access (P1.13E)", () => {
   for (const c of CASES) {
-    test(`${c.name} sees exactly ${c.modules.join("+")}`, async ({ page }) => {
+    test(`${c.name} sees exactly ${c.modules.join("+")} and lands on its module`, async ({ page }) => {
       await login(page, { email: c.email, password: "persona123" });
       await expect(page.getByTestId("context-switcher")).toHaveCount(0);
       const mods = await visibleModules(page, c.modules.length);
       expect(mods).toEqual(c.modules);
+      // Single-company employee: no "Tous les mandats" menu.
+      await expect(page.getByTestId("nav-mandats_list")).toHaveCount(0);
+      // Non-budget employee lands directly on its primary module (not empty dashboard).
+      if (!c.modules.includes("BUDGETS")) {
+        await expect(page.getByTestId("breadcrumb")).toContainText(LANDING[c.modules[0]]);
+      }
     });
   }
 
@@ -38,22 +46,21 @@ test.describe("Persona sidebar = effective access (P1.13E)", () => {
   });
 
   test("multi-société persona recomputes the sidebar on mandate switch", async ({ page }) => {
+    const CA = "965f0770-8cf2-4199-a99f-819ff270436a"; // meelora -> BUDGETS + ACCOUNTING
+    const CB = "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9"; // 9434 -> ACCOUNTING + CONSOLIDATION
     await login(page, { email: "persona_multi@accslegro.com", password: "persona123" });
-    // Enter the first mandate from "Tous les mandats".
     await page.getByTestId("nav-mandats_list").click();
     await expect(page.getByTestId("mandats-list")).toBeVisible();
-    const cards = page.locator('[data-testid^="mandat-access-"]');
-    await expect(cards).toHaveCount(2);
-    await cards.nth(0).click();
-    await page.waitForTimeout(1200);
-    const first = await visibleModules(page);
-    // Back to the list and enter the second mandate.
+    // Enter meelora mandate.
+    await page.getByTestId(`mandat-access-${CA}`).click();
+    await expect(page.getByTestId("active-mandat-name")).toBeVisible();
+    await expect(page.locator('[data-testid="nav-module-BUDGETS"]')).toBeVisible();
+    await expect(page.locator('[data-testid="nav-module-CONSOLIDATION"]')).toHaveCount(0);
+    // Switch to 9434 mandate -> sidebar recomputed, no rights carried over.
     await page.getByTestId("nav-mandats_list").click();
-    await page.locator('[data-testid^="mandat-access-"]').nth(1).click();
-    await page.waitForTimeout(1200);
-    const second = await visibleModules(page);
-    expect(second).not.toEqual(first);
-    for (const m of [...first, ...second]) expect(["REPORTING", "BUDGETS", "ACCOUNTING", "CONSOLIDATION"]).toContain(m);
+    await page.getByTestId(`mandat-access-${CB}`).click();
+    await expect(page.locator('[data-testid="nav-module-CONSOLIDATION"]')).toBeVisible();
+    await expect(page.locator('[data-testid="nav-module-BUDGETS"]')).toHaveCount(0);
   });
 
   test("Reporting-only opens the placeholder module page without errors", async ({ page }) => {
