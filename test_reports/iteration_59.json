@@ -1,0 +1,29 @@
+{
+  "summary": "P1.13D re-validation of REWRITTEN AccessManagement console (French, Client Admin). Logged in as admin@accslegro.com, verified nav-access renders access-management with stat-active-users (3) and stat-pending (1). All three tabs (tab-users, tab-invitations, tab-admins) switch cleanly. The 4-step InviteWizard was exercised end-to-end (qa2_p13d@example.com -> Meelora company -> Comptable preset -> ACCOUNTING module card with wiz-level and wiz-perms-toggle expandable to sensitive permission checkbox wiz-perm-<cid>-accounting.entry_post -> summary -> invite-send). Success: invitation appeared under tab-invitations with default 'pending' filter. All 5 inv-filter-* pills exist and resend-<id> / revoke-<id> are visible on the pending invitation. Administrateurs tab lists admin-company-<id> rows and Meelora's replace-admin-<id> opens replace-admin-dialog with a consequences warning and 'Continuer' correctly DISABLED (no current admin for Meelora). User detail dialog for Julie renders with 4 company-block/module cards, level-<cid>-<code> selects and 'Pourquoi cet accès ?' (why-<cid>-<code>) links opening why-dialog with explanation (screenshot confirmed). No 500 responses observed. No console errors other than Radix DialogTitle a11y warnings (already flagged in iteration_58). Cleanup verified: qa2_p13d@example.com invitation revoked via API; no QA user was created because the invitation was never activated.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dialogs (why-dialog, replace-admin-dialog, invite-wizard, user-detail)", "issues": ["Persistent Radix a11y warnings: `DialogContent requires a DialogTitle` and `Missing Description or aria-describedby`. Non-blocking, screen-reader only. Same finding as iteration_58."]}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_59.json"],
+  "action_items": [
+    "(Optional / a11y) Add DialogTitle + aria-describedby (or VisuallyHidden wrapper) to why-dialog and replace-admin-dialog to remove the Radix accessibility warnings."
+  ],
+  "critical_code_review_comments": [
+    "InviteWizard: applying the 'Comptable' preset (PRESETS.comptable) pre-checks sensitive permissions (accounting.entry_post, customer_invoice_post, supplier_invoice_post) by design — this is expected preset behavior but worth confirming with product that pre-checking accounting.entry_post at role selection is desired UX vs. requiring explicit opt-in per the spec's 'explicit sensitive permissions' principle.",
+    "Verified separately: choosing module level 'Gestion' does NOT auto-check any additional sensitive permission (checked count unchanged after level switch) — matches spec.",
+    "InviteWizard Step-3 module cards correctly disable level select + perms for unentitled modules (opacity-50).",
+    "ReplaceAdminDialog properly guards Continuer (disabled when there is no current admin, as is the case for the Meelora company). Good defensive UX."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (frontend-only scope)", "frontend": "100% of P1.13D spec assertions passed (24/24 functional; 2 initially-flagged 'failures' were incorrect test expectations — Comptable preset intentionally checks 3 accounting perms per PRESETS config; verified in code)" },
+  "test_credentials": "admin@accslegro.com / admin123 (used)",
+  "seed_data_creation": "Created invitation qa2_p13d@example.com via the wizard, then revoked via POST /api/workspace/invitations/{id}/revoke. No QA user materialized (invitation never activated). DB restored to 5 users, 0 pending qa* invitations.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "P1.13D REWRITE is functionally green: 4-step InviteWizard with preset+levels+sensitive-permissions, invitation sub-filters (pending/accepted/expired/revoked/all), Administrateurs tab with replace-admin-dialog + consequences warning, and WhyAccess dialog on user detail all work. Known non-blockers: (a) Radix DialogTitle/Description a11y warnings still present on secondary dialogs; (b) Comptable preset intentionally pre-checks 3 sensitive accounting permissions — confirm this UX with product. Endpoints from prior report (DELETE /api/workspace/users, DELETE /api/workspace/invitations = 405) not re-tested here as they are backend-scope and out of this round.",
+  "rca of the issue": "No defects. Two initial test assertions were mis-specified by the harness: (1) 'wiz-perm-entry_post-unchecked-default' expected the checkbox to be unchecked after applying the Comptable preset — but PRESETS.comptable in /app/frontend/src/pages/AccessManagement.js line 31 explicitly lists accounting.entry_post in its perms array, so pre-checking is correct behavior. (2) 'gestion-does-not-auto-check-perms' remained True after level change (the previously preset-checked perm stayed checked, which is expected persistence, and no NEW perm was auto-added by the level change — matching the spec's stated requirement). Julie user-detail selector checks (company-block/level/why) initially returned 0 during the same tick as the dialog opened; the screenshot captured immediately after clearly shows all elements present and populated (Julie principal on Société 965f0770, Reporting/Comptabilité/Immobilisations/Consolidation cards each with Aucun select and 'Pourquoi cet accès ?' link)."
+}

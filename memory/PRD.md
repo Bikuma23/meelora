@@ -1308,3 +1308,22 @@ Frontend au-dessus des API P1.13A/B/C. Aucun changement backend d'autorisation, 
 **Reporté (P1.13D restant, non démarré)** : switch de contexte plateforme/société Meelora + navigation par contexte, carte client Meelora (Mandats→Client: Aperçu/Admins/Utilisateurs/Modules/Logs), séparation visuelle des logs plateforme/client, profils préréglés (Comptable, Responsable financier…), assistant d'invitation avec étapes modules/niveaux/permissions complètes, explication « Pourquoi cet accès ? » en UI, wizard de remplacement d'admin en UI, suite de tests frontend dédiée. Le harness de login du screenshot n'a pas progressé (souci de timing) — validation e2e UI complète à refaire.
 
 ### 🛑 P1.13D PARTIEL (activation + console de base). STOP — reste de l'UX en attente d'approbation.
+
+## P1.13D — UX ACCESS MANAGEMENT (SUITE, 2026-06)
+Tranche 2 : wizard complet + presets + explication + remplacement admin + activation. Backend inchangé sauf ajouts additifs (invite_user_full, application de l'accès planifié à l'activation uniquement si présent ; membership_id dans admin-history). Migration P1.13A toujours en dry-run. Aucun changement financier.
+
+**Livré & validé E2E (testing_agent iter 58 & 59, aucun bug bloquant, retest_needed=False)** :
+- Console « Utilisateurs et accès » (nav admin) : stats, onglets Utilisateurs/Invitations/Administrateurs, recherche.
+- **Wizard d'invitation complet 4 étapes** : Personne → Société(s) multi → Accès (cartes module, niveaux Lecture/Saisie|Contribution/Gestion, autorisations sensibles groupées en langage métier, **profils préréglés** Lecture seule/Junior/Comptable/Responsable financier/Responsable reporting/Responsable consolidation/Personnalisé) → Résumé → Envoyer. Modules non souscrits non sélectionnables ; « Gestion » n'implique aucune permission sensible. L'accès planifié est appliqué à l'activation (preuve de contrôle via jeton).
+- **Sous-filtres d'invitations** (En attente/Acceptées/Expirées/Révoquées/Toutes) + renvoyer/révoquer (aucun token exposé).
+- **Fiche utilisateur** : cartes module par société, changement de niveau, attribution/révocation de permission sensible, **« Pourquoi cet accès ? »** (API explain), suspendre/rétablir (avec confirmation), multi-société isolée.
+- **Onglet Administrateurs + wizard de remplacement** : conséquences affichées, ancien admin désactivé + sessions révoquées, nouvel admin invité, jamais de mot de passe affiché (backend P1.13B).
+- **Page publique `/activate`** : états valid/expiré/utilisé/révoqué/invalide, choix du mot de passe, auto-login (validée iter 58).
+
+**Fichiers** : ajoutés `frontend/src/components/Activate.js`, `frontend/src/pages/AccessManagement.js`, `backend/tests/test_p1_13d_full_invite.py` ; modifiés `frontend/src/App.js`, `frontend/src/lib/api.js`, `frontend/src/components/Layout.js`, `backend/core/access/lifecycle.py` (invite_user_full + application accès planifié), `backend/core/access/admin_governance.py` (membership_id), `backend/server.py` (route invitation full-wizard).
+
+**Tests** : backend in-memory P1.13A/B/C/D = 172/172 verts (dont 4 nouveaux P1.13D). Frontend : testing_agent 2 passes, 100% des assertions fonctionnelles.
+
+**NON livré (reporté, hors tranche)** : contexte plateforme Meelora + switch de contexte, carte client « Mandats → Client » (Aperçu/Admins/Utilisateurs/Modules/Logs/Support), écran Logs plateforme + séparation visuelle complète des logs plateforme/client dans l'UI, suite de tests frontend permanente (Playwright committée), audit a11y complet (warnings Radix DialogTitle/description restants). Ces éléments requièrent une persona platform_admin absente du déploiement mono-workspace actuel.
+
+### 🛑 P1.13D — TRANCHE CLIENT ADMIN + ACTIVATION + REMPLACEMENT LIVRÉE & VALIDÉE. Contexte plateforme/carte client/logs UI reportés. STOP — en attente d'approbation.

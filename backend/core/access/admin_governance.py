@@ -293,12 +293,13 @@ async def company_admin_history(db, workspace_id: str, company_id: str) -> dict:
     replacements = await db.platform_logs.find(
         {"event_type": "client_admin.replaced", "metadata.company_id": company_id}).to_list(None)
     replacements.sort(key=lambda r: r.get("timestamp") or "", reverse=True)
-    async def _uinfo(uid):
+    async def _uinfo(m):
+        uid = m.get("user_id")
         u = await _user_by_id(db, uid) if uid else None
-        return {"user_id": uid, "email": (u or {}).get("email")} if uid else None
+        return {"membership_id": m.get("_id"), "user_id": uid, "email": (u or {}).get("email")}
     return {
-        "current_admins": [await _uinfo(m.get("user_id")) for m in active_admins],
-        "previous_admins": [await _uinfo(m.get("user_id")) for m in previous],
+        "current_admins": [await _uinfo(m) for m in active_admins],
+        "previous_admins": [await _uinfo(m) for m in previous],
         "replacements": [{
             "date": r.get("timestamp"),
             "actor_user_id": r.get("actor_user_id"),

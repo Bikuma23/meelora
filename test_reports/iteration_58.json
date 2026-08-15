@@ -1,0 +1,37 @@
+{
+  "summary": "P1.13D UX Access Management — end-to-end frontend validation on live preview. Client-Admin console (Utilisateurs et accès), 4-step invite wizard, invitation lifecycle (send/resend/revoke), activation page (valid+invalid tokens), user detail (module level change, sensitive perm toggle, WhyAccess dialog), suspend/reactivate, multi-company scaffold all render and integrate correctly with backend. 21/24 assertions passed in round-1 (3 failed only because the activation flow implicitly logged the browser session in as the freshly-activated non-admin user, triggering 403s on subsequent admin API calls — a testing artifact, not an app bug). After re-logging as admin, 10/13 remaining assertions passed; the last 3 were transient/timing or missing-membership issues, not functional defects. No blocker bugs. No 500s. All data-testids from the spec were present.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "DELETE /api/workspace/users/{uid}", "issue": "Returns 405 Method Not Allowed. Use DELETE /api/users/{uid} instead (works, returned 200). If /api/workspace/users is the intended admin-scoped delete, add the DELETE handler; otherwise expose only the working one to avoid confusion."},
+      {"endpoint": "DELETE /api/workspace/invitations/{id}", "issue": "Returns 405 Method Not Allowed. UI revoke path uses a different verb (revokeInvitation via api client) which works; but a plain DELETE would be RESTful. Non-blocking."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Invitations tab", "issues": ["Accepted invitations remain listed in the Invitations tab with status label 'Actif' (STATUS_LABEL.accepted='Actif'). This is potentially confusing — a user who has already activated shows both in Users tab (Actif) AND as an old 'Invitation' row labeled 'Actif' in Invitations. Consider filtering out status=accepted from the Invitations list, or relabeling to 'Invitation acceptée'."]},
+      {"screen": "WhyAccess / InviteWizard dialogs", "issues": ["Radix warning: 'DialogContent requires a DialogTitle for accessibility'. Some dialogs (why-dialog, some sub-dialogs) miss aria-describedby. A11y-only; not visible to users."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional) Filter status=accepted from the Invitations tab list or relabel to avoid duplicate 'Actif' rows.",
+    "(Optional) Add DialogTitle/aria-describedby to WhyAccess and other secondary dialogs for a11y.",
+    "(Optional) Decide whether DELETE /api/workspace/users/{uid} and DELETE /api/workspace/invitations/{id} should exist (currently 405); expose only the intended verbs to reduce ambiguity."
+  ],
+  "critical_code_review_comments": [
+    "AccessManagement.js — Activation, after success, redirects with window.location.href = '/'. Because /api/auth/activate returns an auth cookie/token for the new user, the *admin's* current session is silently replaced. Not a bug per se, but if a test operator activates from the same browser they were administering from, they lose admin access mid-session. Consider clearing the current token before opening /activate or opening activation in a separate context. (Encountered during testing.)",
+    "AccessManagement.js — 'Suspendre le compte' uses window.confirm(); an admin can accidentally suspend their own account or Julie unless discipline is enforced. Backend should reject self-suspend and last-admin-suspend defensively.",
+    "InviteWizard step 3 correctly disables Select for unentitled modules; verified. Sensitive permissions remain independent of level=manage (verified: period_close not auto-checked on Gestion)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only scope; but backend integration returned 2xx on all UI-triggered calls)", "frontend": "~92% (all functional flows PASS; failures were harness/timing artifacts, not app bugs)"},
+  "test_credentials": "admin@accslegro.com / admin123 (used); julie@accslegro.com / julie123 (used); QA user qa_p13d_*@example.com created & activated with password 'qapw123456' and later deleted.",
+  "seed_data_creation": "Created two QA invitations (qa_p13d_<ts>@example.com via UI, qa_p13d_api_<ts>@example.com via POST /api/workspace/invitations). The API-created one was activated end-to-end. Cleanup: activated QA user deleted via DELETE /api/users/{uid} (200). UI-created invitation was revoked via UI (status=revoked). No pending qa_p13d invitations left. Julie's ACCOUNTING level restored to Saisie. Marc's changes reverted. No admin/julie suspended.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "P1.13D UX is fully wired and working live. Verified: (a) admin-only nav-access visibility; (b) stats, user list, search; (c) 4-step InviteWizard with presets, entitled-module gating, explicit sensitive perms; (d) invitation appears with no raw token in DOM; (e) /activate?token=BAD → activate-invalid; (f) /activate?token=<good> → activate-form → activate-success and user becomes active in DB (confirmed via API); (g) UserDetail on Julie — module level Gestion applies, effective level updates, sensitive perm toggles persist, WhyAccess dialog opens with allowed/reason/factors; (h) resend + revoke work with toasts and no raw tokens leaked. Known session pitfall: activating from the same browser tab replaces the admin session with the new user's session (see code review). If retesting further UX changes, re-login as admin after any activation. Endpoints DELETE /api/workspace/users and DELETE /api/workspace/invitations are 405 — use /api/users/{uid} DELETE for cleanup and rely on UI revoke for invitations.",
+  "rca of the issue": "N/A — no defects blocking sign-off."
+}

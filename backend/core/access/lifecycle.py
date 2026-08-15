@@ -25,6 +25,8 @@ from .activation import (
     create_activation_token,
     peek_activation_token,
 )
+from .module_access import set_user_module_access, set_user_permission
+from .entitlements import is_module_entitled
 
 _now = lambda: datetime.now(timezone.utc).isoformat()
 
@@ -71,6 +73,39 @@ async def invite_user(db, *, actor_id: str, workspace_id: str, email: str,
 async def preview_activation(db, raw_token: str) -> dict:
     """Non-consuming validation for the activation page."""
     return await peek_activation_token(db, raw_token)
+
+
+async def invite_user_full(db, *, actor_id: str, workspace_id: str, email: str,
+                           name: Optional[str] = None, companies: list,
+                           access: Optional[list] = None, permissions: Optional[list] = None,
+                           ttl_hours: int = 48) -> dict:
+    """Full-wizard invitation: one or more companies + planned module levels +
+    explicit sensitive permissions. The planned access is stored on the invitation
+    and applied ONLY at activation (after the invitee proves email control). An
+    unentitled module can never be planned (rejected here, fail-closed)."""
+    norm = _norm(email)
+    if not norm:
+        raise HTTPException(status_code=422, detail="Email requis")
+    if not companies:
+        raise HTTPException(status_code=422, detail="Au moins une société est requise")
+    for c in companies:
+        if not c.get("company_id"):
+            raise HTTPException(status_code=422, detail="company_id requis")
+        validate_combo(c.get("membership_type", "company_user"), c.get("role", "user"))
+    for a in (access or []):
+        if a.get("access_level") not in ("none", "read", "contribute", "manage"):
+            raise HTTPException(status_code=422, detail="Niveau d'accès invalide")
+        if a.get("access_level") != "none" and not await is_module_entitled(db, workspace_id, a.get("module_code")):
+            raise HTTPException(status_code=409, detail=f"Module non souscrit: {a.get('module_code')}")
+    intent = {"type": "access_grant", "companies": companies,
+              "planned_access": [a for a in (access or []) if a.get("access_level") != "none"],
+              "planned_permissions": permissions or []}
+    existing = await _find_user_by_email(db, norm)
+    reused = str(existing["_id"]) if existing else None
+    activation, raw = await create_activation_token(
+        db, workspace_id, norm, purpose="company_invitation", actor_id=actor_id,
+        ttl_hours=ttl_hours, user_id=reused, intent=intent)
+    return {"activation": activation, "activation_token": raw, "reused_identity": bool(reused)}
 
 
 async def _provision_membership(db, workspace_id: str, user_id: str, intent: dict, actor_id: str) -> dict:
@@ -138,6 +173,19 @@ async def activate_account(db, raw_token: str, *, password_hash: str,
 
     membership = None
     if intent:
-        membership = await _provision_membership(db, workspace_id, uid, intent, actor_id="activation")
+        if intent.get("type") == "access_grant":
+            for c in intent.get("companies", []):
+                membership = await create_company_membership(
+                    db, workspace_id, c["company_id"], uid,
+                    c.get("membership_type", "company_user"), c.get("role", "user"), "activation")
+            # Apply admin-configured planned access (only after proof of control).
+            for a in intent.get("planned_access", []):
+                await set_user_module_access(db, workspace_id, a["company_id"], uid,
+                                             a["module_code"], a["access_level"], "activation")
+            for p in intent.get("planned_permissions", []):
+                await set_user_permission(db, workspace_id, p["company_id"], uid,
+                                          p["permission_code"], True, "activation")
+        else:
+            membership = await _provision_membership(db, workspace_id, uid, intent, actor_id="activation")
 
     return {"user_id": uid, "email": email, "workspace_id": workspace_id, "membership": membership}

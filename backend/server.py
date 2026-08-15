@@ -2514,11 +2514,16 @@ async def get_effective_access_route(company_id: str, uid: str,
 class InvitePayload(BaseModel):
     email: str
     name: Optional[str] = None
-    kind: str  # 'workspace' | 'company'
+    # Simple path (backward compatible)
+    kind: Optional[str] = None            # 'workspace' | 'company'
     role: Optional[str] = None            # workspace role: admin | user
     company_id: Optional[str] = None
-    membership_type: Optional[str] = None  # company: workspace_staff | company_user
-    company_role: Optional[str] = None     # company role
+    membership_type: Optional[str] = None
+    company_role: Optional[str] = None
+    # Full-wizard path
+    companies: Optional[list] = None      # [{company_id, role, membership_type?}]
+    access: Optional[list] = None         # [{company_id, module_code, access_level}]
+    permissions: Optional[list] = None    # [{company_id, permission_code}]
 
 
 class ReplaceAdminPayload(BaseModel):
@@ -2542,27 +2547,41 @@ async def _workspace_admin_emails(workspace_id: str) -> list:
 @api.post("/workspace/invitations", status_code=201)
 async def create_invitation(payload: InvitePayload, user: dict = Depends(get_current_user)):
     ws = await require_workspace_admin(db, user)
-    if payload.kind == "workspace":
-        purpose = "workspace_invitation"
-        intent = {"type": "workspace_member", "role": payload.role or "user"}
-        context = "Espace de travail"
-    elif payload.kind == "company":
-        if not payload.company_id:
-            raise HTTPException(status_code=422, detail="company_id requis")
-        company = await require_same_workspace(db, payload.company_id, user)
-        purpose = "company_invitation"
-        intent = {"type": "company_member", "company_id": payload.company_id,
-                  "membership_type": payload.membership_type, "role": payload.company_role}
-        context = f"Société {company.get('name', '')}"
+    # Full-wizard path: companies + planned access + permissions.
+    if payload.companies:
+        for c in payload.companies:
+            await require_same_workspace(db, c.get("company_id"), user)
+        out = await access_lifecycle.invite_user_full(
+            db, actor_id=user.get("id"), workspace_id=ws, email=payload.email, name=payload.name,
+            companies=[{"company_id": c.get("company_id"), "role": c.get("role", "user"),
+                        "membership_type": c.get("membership_type", "company_user")} for c in payload.companies],
+            access=payload.access, permissions=payload.permissions)
+        context = f"{len(payload.companies)} société(s)"
+        company_id = payload.companies[0].get("company_id")
     else:
-        raise HTTPException(status_code=422, detail="kind invalide")
-    out = await access_lifecycle.invite_user(
-        db, actor_id=user.get("id"), workspace_id=ws, email=payload.email,
-        purpose=purpose, intent=intent)
+        if payload.kind == "workspace":
+            purpose = "workspace_invitation"
+            intent = {"type": "workspace_member", "role": payload.role or "user"}
+            context = "Espace de travail"
+            company_id = None
+        elif payload.kind == "company":
+            if not payload.company_id:
+                raise HTTPException(status_code=422, detail="company_id requis")
+            company = await require_same_workspace(db, payload.company_id, user)
+            purpose = "company_invitation"
+            intent = {"type": "company_member", "company_id": payload.company_id,
+                      "membership_type": payload.membership_type, "role": payload.company_role}
+            context = f"Société {company.get('name', '')}"
+            company_id = payload.company_id
+        else:
+            raise HTTPException(status_code=422, detail="kind invalide")
+        out = await access_lifecycle.invite_user(
+            db, actor_id=user.get("id"), workspace_id=ws, email=payload.email,
+            purpose=purpose, intent=intent)
     link = _activation_link(out["activation_token"])
     await _send_invitation_email(payload.email, link, context)
     await log_action(user, "create", "invitation", payload.email,
-                     details=f"Invitation {purpose}", company_id=payload.company_id,
+                     details=f"Invitation ({context})", company_id=company_id,
                      entity_id=out["activation"]["id"], event_type="invitation.created")
     return {"invitation": out["activation"], "reused_identity": out["reused_identity"],
             "activation_link": link}
