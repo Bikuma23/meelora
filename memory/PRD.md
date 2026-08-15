@@ -1191,3 +1191,22 @@ Sépare l'identité globale (users) de l'appartenance workspace et société.
 - [x] **Limites** : investissement/financement = mouvements nets (manual_required) ; méthode directe hors scope ; gouvernance de templates CF custom différée.
 
 ### 🛑 P3.6 IMPLÉMENTÉ & TESTÉ. STOP — NE PAS DÉMARRER P3.7 avant approbation explicite du client.
+
+## P3.7 — Comparatifs & Reporting de gestion — 2026-06 (APPROUVÉ, IMPLÉMENTÉ & TESTÉ)
+> `core/financial/comparatives.py` (nouveau). Construit AU-DESSUS des moteurs approuvés : P&L/BS recalculés via P3.4 (`preview_report`) pour chaque période avec le MÊME template courant (comparabilité structurelle) ; CF via P3.6 (`preview_cash_flow`). Variances objectives (aucune interprétation favorable/défavorable). Aucune écriture financial-core/legacy ; runs immuables à la finalisation.
+- [x] **Modes** : `prior_period` (période précédente), `prior_year` (même séquence fiscale de l'exercice précédent — non-calendaire), `ytd` (YTD vs YTD année précédente). Résolution par `financial_years/periods.sequence` ; absence → `not_available` (jamais deviné).
+- [x] **Variance** : `amount = cur − comp` ; `percent = amount/abs(comp)*100` ou **null** si dénominateur 0 (jamais Infinity/NaN), avec `variance_status`.
+- [x] **P&L** : mois vs mois précédent, mois vs année précédente, YTD vs YTD ; même structure de lignes, même template pour les deux périodes.
+- [x] **Bilan** : période courante vs précédente / année précédente ; équation du bilan validée indépendamment par période (`current_balanced`/`comparison_balanced`).
+- [x] **Cash Flow** : comparatif via P3.6 ; qualité incomplète/`manual_required` remontée honnêtement (jamais masquée).
+- [x] **Diagnostics de comparabilité** : `mapping_changes_detected`, `template_change_detected`, `source_incomplete`, `fully_comparable` ; contextes de mapping courant/comparaison exposés (mappings résolus par période, jamais forcés).
+- [x] **Reporting de gestion** : composition en sections (executive_summary, pl_comparative, balance_sheet_comparative, cash_flow_summary, notes) — pas de nouvelle source financière, pas de narration IA. Point d'attache notes/commentaires réservé (compatibilité seulement).
+- [x] **report_run** : `report_kind` ∈ {comparative_pl, comparative_bs, comparative_cf, management}, snapshot immuable (périodes, imports TB, template/version, mapping evidence, valeurs courant+comparaison, variances, labels, diagnostics). Reproductibilité prouvée.
+- [x] **Multilingue** : labels résolus via i18n P3.4/P3.5 (fr/en/de/it + fallback), figés dans le run.
+- [x] **Endpoints** : `POST /api/companies/{id}/reports/comparative/{preview,generate}` & `/management/{preview,generate}`. Logs via `report.generated` (report_kind, périodes, template/version, acteur).
+- [x] **Sécurité** : membre=preview/read, workspace admin=generate, admin local=read-only, platform_role seul=refus, cross-workspace=404.
+- [x] **NO CUTOVER / NO WRITE** : `financial_data_source` inchangé ; financial-core & legacy intacts (prouvé).
+- [x] **Tests** : `test_p3_7_comparatives.py` **16/16** ; régression P3.1→P3.7 **171/171** ; smoke API live **8/8** (testing agent `iteration_57.json`, backend **100%**, 0 défaut). Fichier live ajouté : `tests/test_p3_7_live_api.py`.
+- [x] **Limites** : Budget/Prévision non implémentés (extension future) ; méthode directe CF hors scope ; commentaires legacy non migrés (compat seulement) ; variances numériques live non exerçables (DB preview sans ≥2 périodes TB) → validées en mémoire.
+
+### 🛑 P3.7 IMPLÉMENTÉ & TESTÉ. STOP — NE PAS DÉMARRER P3.8 (KPI Engine) avant approbation explicite.

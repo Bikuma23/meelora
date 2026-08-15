@@ -129,6 +129,37 @@ from core.financial.custom_templates import (
 from core.financial.cash_flow import (
     preview_cash_flow, generate_cash_flow, seed_cash_flow_templates,
 )
+from core.financial.comparatives import (
+    preview_statement_comparative, generate_statement_comparative,
+    preview_cash_flow_comparative, generate_cash_flow_comparative,
+    preview_management_report, generate_management_report,
+)
+
+
+class ComparativeRequest(BaseModel):
+    statement_type: str
+    financial_period_id: str
+    comparison_mode: str = "prior_period"
+    template_id: Optional[str] = None
+    template_code: Optional[str] = None
+    locale: str = "fr"
+    measure: Optional[str] = None
+    normalized_import_id: Optional[str] = None
+
+
+class CashFlowComparativeRequest(BaseModel):
+    financial_period_id: str
+    comparison_mode: str = "prior_year"
+    template_id: Optional[str] = None
+    template_code: Optional[str] = None
+    locale: str = "fr"
+
+
+class ManagementReportRequest(BaseModel):
+    financial_period_id: str
+    comparison_mode: str = "prior_period"
+    sections: Optional[list] = None
+    locale: str = "fr"
 
 
 class CashFlowRequest(BaseModel):
@@ -2007,6 +2038,66 @@ async def generate_company_cash_flow(company_id: str, payload: CashFlowRequest,
                      event_type="report.generated",
                      metadata={"statement_type": "cash_flow", "template_version": rec.get("template_version"),
                                "status": rec.get("diagnostics", {}).get("status")})
+    return rec
+
+
+# ---------------------------------------------------------------------------
+# P3.7 — Comparatives & Management Reporting. Recompute via P3.4/P3.6 per
+# comparison context; objective variances; immutable runs on generate.
+# ---------------------------------------------------------------------------
+@api.post("/companies/{company_id}/reports/comparative/preview")
+async def preview_comparative(company_id: str, payload: ComparativeRequest,
+                              user: dict = Depends(get_current_user)):
+    if payload.statement_type == "cash_flow":
+        return await preview_cash_flow_comparative(
+            db, company_id, user, financial_period_id=payload.financial_period_id,
+            mode=payload.comparison_mode, template_id=payload.template_id,
+            template_code=payload.template_code, locale=payload.locale)
+    return await preview_statement_comparative(
+        db, company_id, user, statement_type=payload.statement_type,
+        financial_period_id=payload.financial_period_id, mode=payload.comparison_mode,
+        template_id=payload.template_id, template_code=payload.template_code, locale=payload.locale,
+        measure=payload.measure, normalized_import_id=payload.normalized_import_id)
+
+
+@api.post("/companies/{company_id}/reports/comparative/generate")
+async def generate_comparative(company_id: str, payload: ComparativeRequest,
+                               user: dict = Depends(get_current_user)):
+    if payload.statement_type == "cash_flow":
+        rec = await generate_cash_flow_comparative(
+            db, company_id, user, financial_period_id=payload.financial_period_id,
+            mode=payload.comparison_mode, template_id=payload.template_id,
+            template_code=payload.template_code, locale=payload.locale)
+    else:
+        rec = await generate_statement_comparative(
+            db, company_id, user, statement_type=payload.statement_type,
+            financial_period_id=payload.financial_period_id, mode=payload.comparison_mode,
+            template_id=payload.template_id, template_code=payload.template_code, locale=payload.locale,
+            measure=payload.measure, normalized_import_id=payload.normalized_import_id)
+    await log_action(user, "generate", "report_run", rec.get("template_code", "") or rec.get("report_kind", ""),
+                     company_id=company_id, entity_id=rec.get("id"), event_type="report.generated",
+                     metadata={"report_kind": rec.get("report_kind"), "comparison_mode": payload.comparison_mode,
+                               "template_version": rec.get("template_version")})
+    return rec
+
+
+@api.post("/companies/{company_id}/reports/management/preview")
+async def preview_management(company_id: str, payload: ManagementReportRequest,
+                             user: dict = Depends(get_current_user)):
+    return await preview_management_report(
+        db, company_id, user, financial_period_id=payload.financial_period_id,
+        mode=payload.comparison_mode, sections=payload.sections, locale=payload.locale)
+
+
+@api.post("/companies/{company_id}/reports/management/generate")
+async def generate_management(company_id: str, payload: ManagementReportRequest,
+                              user: dict = Depends(get_current_user)):
+    rec = await generate_management_report(
+        db, company_id, user, financial_period_id=payload.financial_period_id,
+        mode=payload.comparison_mode, sections=payload.sections, locale=payload.locale)
+    await log_action(user, "generate", "report_run", rec.get("report_kind", ""),
+                     company_id=company_id, entity_id=rec.get("id"), event_type="report.generated",
+                     metadata={"report_kind": "management", "comparison_mode": payload.comparison_mode})
     return rec
 
 
