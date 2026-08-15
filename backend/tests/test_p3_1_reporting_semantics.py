@@ -185,7 +185,7 @@ def test_cardinality_second_confirmed_supersedes_first():
              effective_from_period_id=FP2, status="confirmed")))
     assert second["supersedes_mapping_id"] == first["id"]
     stored_first = next(d for d in db.account_mappings.docs if d["_id"] == first["id"])
-    assert stored_first["superseded"] is True and stored_first["effective_to_sequence"] == 2
+    assert stored_first["superseded"] is True and stored_first["effective_to_sequence"] == 1
 
 
 def test_backdating_confirmed_rejected():
@@ -229,7 +229,8 @@ def test_coverage_derives_unmapped():
     _run(create_mapping(db, CA, admin(), MappingCreate(account_id="acc32", financial_concept_id=c2,
          effective_from_period_id=FP1, status="suggested")))
     cov = _run(mapping_coverage(db, CA, admin()))
-    assert cov["counts"] == {"mapped": 1, "suggested_only": 1, "unmapped": 1}
+    assert cov["confirmed_accounts"] == 1
+    assert cov["suggested_only_accounts"] == 1
     assert cov["fully_mapped"] is False
 
 

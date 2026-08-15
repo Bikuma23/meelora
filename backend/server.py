@@ -95,9 +95,13 @@ from core.financial.i18n import (
     ensure_indexes as _ensure_i18n_indexes,
 )
 from core.financial.mappings import (
-    MappingCreate,
-    create_mapping, confirm_mapping, reject_mapping, list_mappings, get_mapping, mapping_coverage,
+    MappingCreate, MappingUpdate, BulkConfirm,
+    create_mapping, confirm_mapping, reject_mapping, update_mapping, bulk_confirm,
+    list_mappings, get_mapping, mapping_coverage, mapping_readiness,
     ensure_indexes as _ensure_mapping_indexes,
+)
+from core.financial.mapping_import import (
+    ImportCommit, parse_rows, import_preview, import_commit,
 )
 from core.financial.reporting_templates import (
     TemplateCreate, TemplateLineCreate, JurisdictionProfileCreate,
@@ -1489,9 +1493,15 @@ async def create_jurisdiction(payload: JurisdictionProfileCreate, user: dict = D
 # ---- Account mappings (client-scoped) ----
 @api.get("/companies/{company_id}/account-mappings")
 async def list_company_account_mappings(company_id: str, status: Optional[str] = None,
-                                         account_id: Optional[str] = None, include_superseded: bool = False,
+                                         account_id: Optional[str] = None,
+                                         financial_concept_id: Optional[str] = None,
+                                         source: Optional[str] = None,
+                                         effective_period_id: Optional[str] = None,
+                                         include_superseded: bool = False,
                                          user: dict = Depends(get_current_user)):
     return await list_mappings(db, company_id, user, status=status, account_id=account_id,
+                               financial_concept_id=financial_concept_id, source=source,
+                               effective_period_id=effective_period_id,
                                include_superseded=include_superseded)
 
 
@@ -1501,30 +1511,52 @@ async def company_mapping_coverage(company_id: str, financial_period_id: Optiona
     return await mapping_coverage(db, company_id, user, financial_period_id=financial_period_id)
 
 
+@api.get("/companies/{company_id}/mapping-readiness")
+async def company_mapping_readiness(company_id: str, financial_period_id: str,
+                                    template_code: Optional[str] = None,
+                                    user: dict = Depends(get_current_user)):
+    return await mapping_readiness(db, company_id, user, financial_period_id, template_code=template_code)
+
+
 @api.get("/companies/{company_id}/account-mappings/{mapping_id}")
 async def get_company_account_mapping(company_id: str, mapping_id: str,
                                       user: dict = Depends(get_current_user)):
     return await get_mapping(db, company_id, user, mapping_id)
 
 
+async def _log_mapping(user, company_id, record, event):
+    await log_action(user, event.split(".")[-1], "account_mapping", record.get("id", ""),
+                     company_id=company_id, entity_id=record.get("id"), event_type=event,
+                     metadata={"account_id": record.get("account_id"),
+                               "financial_concept_id": record.get("financial_concept_id"),
+                               "effective_from_period_id": record.get("effective_from_period_id"),
+                               "effective_to_period_id": record.get("effective_to_period_id"),
+                               "superseded_ids": record.get("superseded_ids", [])})
+
+
 @api.post("/companies/{company_id}/account-mappings")
 async def create_company_account_mapping(company_id: str, payload: MappingCreate,
                                          user: dict = Depends(get_current_user)):
     record = await create_mapping(db, company_id, user, payload)
-    await log_action(user, "create", "account_mapping", record.get("id", ""),
-                     company_id=company_id, entity_id=record.get("id"),
-                     event_type=f"account_mapping.{record.get('status')}",
-                     metadata={"account_id": payload.account_id,
-                               "financial_concept_id": payload.financial_concept_id})
+    await _log_mapping(user, company_id, record, f"account_mapping.{record.get('status')}")
+    if record.get("superseded_ids"):
+        await _log_mapping(user, company_id, record, "account_mapping.superseded")
     return record
+
+
+@api.patch("/companies/{company_id}/account-mappings/{mapping_id}")
+async def patch_company_account_mapping(company_id: str, mapping_id: str, payload: MappingUpdate,
+                                        user: dict = Depends(get_current_user)):
+    return await update_mapping(db, company_id, user, mapping_id, payload)
 
 
 @api.post("/companies/{company_id}/account-mappings/{mapping_id}/confirm")
 async def confirm_company_account_mapping(company_id: str, mapping_id: str,
                                           user: dict = Depends(get_current_user)):
     record = await confirm_mapping(db, company_id, user, mapping_id)
-    await log_action(user, "confirm", "account_mapping", mapping_id, company_id=company_id,
-                     entity_id=mapping_id, event_type="account_mapping.confirmed")
+    await _log_mapping(user, company_id, record, "account_mapping.confirmed")
+    if record.get("superseded_ids"):
+        await _log_mapping(user, company_id, record, "account_mapping.superseded")
     return record
 
 
@@ -1535,6 +1567,38 @@ async def reject_company_account_mapping(company_id: str, mapping_id: str, paylo
     await log_action(user, "reject", "account_mapping", mapping_id, company_id=company_id,
                      entity_id=mapping_id, event_type="account_mapping.rejected")
     return record
+
+
+@api.post("/companies/{company_id}/account-mappings/bulk-confirm")
+async def bulk_confirm_company_account_mappings(company_id: str, payload: BulkConfirm,
+                                                user: dict = Depends(get_current_user)):
+    result = await bulk_confirm(db, company_id, user, payload)
+    if not payload.dry_run:
+        await log_action(user, "bulk_confirm", "account_mapping", company_id, company_id=company_id,
+                         event_type="account_mapping.bulk_confirmed",
+                         metadata={"summary": result.get("summary")})
+    return result
+
+
+@api.post("/companies/{company_id}/account-mappings/import/preview")
+async def preview_company_mapping_import(company_id: str, file: UploadFile = File(...),
+                                         user: dict = Depends(get_current_user)):
+    content = await file.read()
+    rows = parse_rows(content, file.filename)
+    return await import_preview(db, company_id, user, rows)
+
+
+@api.post("/companies/{company_id}/account-mappings/import/commit")
+async def commit_company_mapping_import(company_id: str, as_confirmed: bool = False,
+                                        file: UploadFile = File(...),
+                                        user: dict = Depends(get_current_user)):
+    content = await file.read()
+    rows = parse_rows(content, file.filename)
+    result = await import_commit(db, company_id, user, rows, as_confirmed=as_confirmed)
+    await log_action(user, "import", "account_mapping", company_id, company_id=company_id,
+                     event_type="account_mapping.imported",
+                     metadata={"summary": result.get("summary"), "imported_status": result.get("imported_status")})
+    return result
 
 
 # ---- Reporting templates (system + custom skeleton) ----
