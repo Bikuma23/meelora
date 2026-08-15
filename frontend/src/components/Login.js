@@ -104,7 +104,7 @@ export default function Login() {
         style={{ backgroundColor: "#03152e", backgroundImage: "url('/login-bg.png')" }}
       >
         <div className="relative z-10 flex h-full flex-col px-[60px] pb-[46px] pt-[58px]">
-          <img src="/meelora-wordmark-white.png" alt="Meelora" className="h-auto w-[320px] shrink-0 self-start" data-testid="login-brand" />
+          <img src="/meelora-wordmark-white.png" alt="Meelora" className="h-auto w-[200px] shrink-0 self-start" data-testid="login-brand" />
 
           <div className="mt-[76px] max-w-[540px]">
             <p className="text-[16px] font-bold uppercase tracking-[0.12em]" style={{ color: GREEN }}>
