@@ -126,6 +126,18 @@ from core.financial.custom_templates import (
     upload_preview as ct_upload_preview, upload_commit as ct_upload_commit,
     ensure_indexes as _ensure_custom_template_indexes,
 )
+from core.financial.cash_flow import (
+    preview_cash_flow, generate_cash_flow, seed_cash_flow_templates,
+)
+
+
+class CashFlowRequest(BaseModel):
+    financial_period_id: str
+    template_id: Optional[str] = None
+    template_code: Optional[str] = None
+    locale: str = "fr"
+    normalized_import_id: Optional[str] = None
+
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -1970,10 +1982,39 @@ async def set_company_template_default(company_id: str, payload: DefaultAssignme
     return rec
 
 
+# ---------------------------------------------------------------------------
+# P3.6 — Cash Flow (indirect). Reuses TB + concepts + mappings; report_runs with
+# statement_type=cash_flow. preview (no run) / generate (immutable run).
+# ---------------------------------------------------------------------------
+@api.post("/companies/{company_id}/reports/cash-flow/preview")
+async def preview_company_cash_flow(company_id: str, payload: CashFlowRequest,
+                                    user: dict = Depends(get_current_user)):
+    return await preview_cash_flow(
+        db, company_id, user, payload.financial_period_id, template_id=payload.template_id,
+        template_code=payload.template_code, locale=payload.locale,
+        normalized_import_id=payload.normalized_import_id)
+
+
+@api.post("/companies/{company_id}/reports/cash-flow/generate")
+async def generate_company_cash_flow(company_id: str, payload: CashFlowRequest,
+                                     user: dict = Depends(get_current_user)):
+    rec = await generate_cash_flow(
+        db, company_id, user, payload.financial_period_id, template_id=payload.template_id,
+        template_code=payload.template_code, locale=payload.locale,
+        normalized_import_id=payload.normalized_import_id)
+    await log_action(user, "generate", "report_run", rec.get("template_code", ""),
+                     company_id=company_id, entity_id=rec.get("id"),
+                     event_type="report.generated",
+                     metadata={"statement_type": "cash_flow", "template_version": rec.get("template_version"),
+                               "status": rec.get("diagnostics", {}).get("status")})
+    return rec
+
+
 @api.post("/system/reporting-seed")
 async def system_reporting_seed(user: dict = Depends(get_current_user)):
     """P3.2 — platform-management seed of system reference data (idempotent)."""
     report = await run_system_seed_as(db, user)
+    report["cash_flow_templates"] = await seed_cash_flow_templates(db)
     await log_action(user, "seed", "system_reporting", report.get("seed_version", ""),
                      event_type="system_reporting.seeded",
                      metadata={"totals": report.get("totals"), "counts": report.get("counts")})

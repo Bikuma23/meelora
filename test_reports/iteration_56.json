@@ -1,0 +1,29 @@
+{
+  "summary": "P3.6 Cash Flow Engine — backend-only validation. In-memory pytest suite for P3.6 passes 23/23. Full P3.1–P3.6 regression suite passes 155/155 (request estimated ~171; actual collected total is 155: 27+18+34+21+32+23). Live API endpoints POST /api/companies/{cid}/reports/cash-flow/preview and /generate exist, are properly auth-gated (401 unauthenticated), return 422 for missing required body field financial_period_id (Pydantic validation), return 404 'Période introuvable' for unknown period_id (not 500), and 404 'Société introuvable' for unknown/cross-workspace company_id. The live workspace companies (Meelora acct + 9434-3977 QC) currently have zero financial-years/periods, so the diagnostics 'not_available/incomplete' JSON path could not be exercised end-to-end via live API — expected per review note (no fabrication of TB attempted).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_p3_6_cash_flow.py",
+    "/app/test_reports/pytest/p3_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now 8269 lines — well above the 700-line guideline; consider modularising route groups (cash-flow, reporting, mappings) into APIRouter modules under core/financial/.",
+    "CashFlowRequest requires financial_period_id (correct) — the review request's example payload used period_end which returns 422; docs/examples in the request should be updated to reflect real contract."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "n/a (skipped per request)"},
+  "test_credentials": "admin@accslegro.com / admin123 (workspace admin, Meelora)",
+  "seed_data_creation": "None. Live workspace companies have no financial-years/periods; TB was not fabricated per explicit review instruction.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "P3.6 CF engine is validated via in-memory tests (23 pass) which cover the full security matrix, opening/closing cash reconciliation, indirect method (NI + non-cash addbacks + WC changes), manual_required flags for investing/financing, and CA/CH template resolution. To exercise the diagnostics JSON path over the live API, one would need to create ≥2 financial periods with normalized trial balances for a company (none exist today in the preview DB). Endpoints confirmed live: POST /api/companies/{cid}/reports/cash-flow/{preview|generate}, both require Bearer token + JSON body {financial_period_id, template_id?|template_code?, locale?, normalized_import_id?}.",
+  "rca of the issue": "N/A — no defect detected. This is a new feature (P3.6) that meets acceptance criteria: (a) 23/23 dedicated tests pass, (b) 155/155 P3.1–P3.6 regression passes, (c) live routes are auth-gated, produce controlled 4xx (not 500) on missing/unknown period or unknown company, and (d) cross-workspace lookups return 404 without enumeration."
+}

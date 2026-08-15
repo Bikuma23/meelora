@@ -1172,3 +1172,22 @@ Sépare l'identité globale (users) de l'appartenance workspace et société.
 - [x] **Fond officiel + split 60/40** : image de fond fournie appliquée telle quelle (`frontend/public/login-bg.png` — navy + ruban « V » vert + graphique décoratif) via `bg-cover bg-center` ; split passé à `lg:grid-cols-[60%_40%]`. SVG ruban/graphique reconstruits retirés. Fidèle au design fourni.
 
 - [x] **Spec finale approuvée** : split ramené à **64/36** (`lg:grid-cols-[64%_36%]`), logo officiel agrandi à `w-[320px]` (~330px @1920), fond dédié fourni conservé (`login-bg.png` — navy + ruban V vert + graphique), tokens/typo conformes. Rendu 1920×1080 fidèle à la référence approuvée. Auth inchangée.
+
+## P3.6 — Moteur de flux de trésorerie (méthode INDIRECTE) — 2026-06 (APPROUVÉ, IMPLÉMENTÉ & TESTÉ)
+> `core/financial/cash_flow.py` (nouveau). Moteur jurisdiction-neutre réutilisant TB P2.5, concepts P3.2 (`cash_flow_category`), mappings confirmés P3.3, primitives P3.4 (`_aggregate`, `select_tb_import`, `_eval_formula`). Aucun moteur séparé, aucune écriture financial-core/legacy (seuls templates CF système + report_runs + logs).
+- [x] **Méthode indirecte** : Résultat net (flux période) + réintégrations non-cash (DEPRECIATION/AMORTIZATION) + variations du BFR = exploitation ; + investissement + financement = variation nette de trésorerie ; + trésorerie d'ouverture = trésorerie de clôture.
+- [x] **Périodes** : mouvement période courante vs période précédente via `financial_period.sequence` ; séquence 1 → dernière période de l'exercice précédent ; sinon diagnostic `not_available` contrôlé (jamais de solde d'ouverture inventé).
+- [x] **Trésorerie** : CASH_AND_CASH_EQUIVALENTS ; réconciliation exposée (opening/net_change/expected_ending/actual_ending/difference/reconciled, tolérance 0.01), aucun ajustement d'équilibrage.
+- [x] **BFR** : signe unifié `cash_effect = prior_net − cur_net` (actif↑=sortie, passif↑=entrée) ; trésorerie exclue. Signes testés.
+- [x] **Investissement / financement** : mouvements de solde indicatifs → `manual_required=true` (pas de CAPEX ni de flux de dette fabriqués) ; statut `incomplete` si présents ou réconciliation non équilibrée.
+- [x] **Règles CF** : couche système jurisdiction-neutre (constantes Python, jamais sur les mappings).
+- [x] **Templates CF système** : `CA_PRIVATE_ENTERPRISE_STANDARD_CF` + `CH_CO_SME_STANDARD_CF` (présentation multilingue uniquement, même noyau de calcul). Templates CF custom différés (hors scope P3.6).
+- [x] **report_runs** : `statement_type=cash_flow`, immuables (période, comparaison, template/version, TB courant+comparaison, mapping snapshot, cash_flow_rules, computed_lines, opening/ending cash, réconciliation, diagnostics, labels). Reproductibilité historique prouvée.
+- [x] **preview / generate** : preview sans run ; generate = run immuable. Sécurité : membre=preview/read, workspace admin=generate, admin local=read-only, platform_role seul=refus, cross-workspace=404.
+- [x] **Endpoints** : `POST /api/companies/{id}/reports/cash-flow/preview` & `/generate`. Seed CF branché dans `/api/system/reporting-seed` (plateforme).
+- [x] **NO CUTOVER / NO WRITE** : `financial_data_source` inchangé ; accounts/TB/journal/mappings/périodes/legacy `acct_*`/`qc9434_*` intacts (prouvé en tests).
+- [x] **Tests** : `test_p3_6_cash_flow.py` **23/23** ; régression P3.1→P3.6 **155/155** (testing agent `iteration_56.json`, backend 100%, aucun défaut). Endpoints live auth-gated, 4xx contrôlés (pas de 500), cross-workspace 404.
+- [x] **Validation live** : la DB preview n'a pas ≥2 périodes de TB normalisée → chemin diagnostic validé en mémoire (données déterministes) ; endpoints live confirmés opérationnels et sécurisés.
+- [x] **Limites** : investissement/financement = mouvements nets (manual_required) ; méthode directe hors scope ; gouvernance de templates CF custom différée.
+
+### 🛑 P3.6 IMPLÉMENTÉ & TESTÉ. STOP — NE PAS DÉMARRER P3.7 avant approbation explicite du client.
