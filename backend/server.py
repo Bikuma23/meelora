@@ -143,6 +143,7 @@ from core.access import module_access as access_module_access
 from core.access import activation as access_activation
 from core.access import lifecycle as access_lifecycle
 from core.access import log_scope as access_log_scope
+from core.access import admin_governance as access_gov
 from core.access.effective_access import resolve_effective_access
 from core.access.indexes import ensure_indexes as _ensure_access_indexes
 
@@ -2568,11 +2569,92 @@ async def create_invitation(payload: InvitePayload, user: dict = Depends(get_cur
 
 
 @api.get("/workspace/invitations")
-async def list_invitations(user: dict = Depends(get_current_user)):
+async def list_invitations(status: Optional[str] = None, user: dict = Depends(get_current_user)):
     ws = await require_workspace_admin(db, user)
-    rows = await db.client_admin_activations.find({"workspace_id": ws}).to_list(None)
-    rows.sort(key=lambda r: r.get("created_at", ""), reverse=True)
-    return {"invitations": [access_activation.public_activation(r) for r in rows]}
+    return {"invitations": await access_gov.list_invitations(db, ws, status)}
+
+
+@api.get("/workspace/invitations/{invitation_id}")
+async def get_invitation(invitation_id: str, user: dict = Depends(get_current_user)):
+    ws = await require_workspace_admin(db, user)
+    return await access_gov.get_invitation(db, ws, invitation_id)
+
+
+@api.post("/workspace/invitations/{invitation_id}/resend")
+async def resend_invitation(invitation_id: str, user: dict = Depends(get_current_user)):
+    ws = await require_workspace_admin(db, user)
+    inv = await access_gov.get_invitation(db, ws, invitation_id)
+    out = await access_gov.resend_invitation(db, ws, invitation_id, user.get("id"))
+    link = _activation_link(out["activation_token"])
+    await _send_invitation_email(inv.get("email"), link, "Invitation renvoyée")
+    await log_action(user, "resend", "invitation", inv.get("email", ""),
+                     company_id=inv.get("company_id"), entity_id=out["invitation"]["id"],
+                     event_type="invitation.resent")
+    return {"invitation": out["invitation"], "activation_link": link}
+
+
+@api.post("/workspace/invitations/{invitation_id}/revoke")
+async def revoke_invitation(invitation_id: str, user: dict = Depends(get_current_user)):
+    ws = await require_workspace_admin(db, user)
+    inv = await access_gov.revoke_invitation(db, ws, invitation_id, user.get("id"))
+    await log_action(user, "revoke", "invitation", inv.get("email", ""),
+                     company_id=inv.get("company_id"), entity_id=invitation_id,
+                     event_type="invitation.revoked")
+    return inv
+
+
+@api.get("/workspace/users")
+async def list_ws_users(user: dict = Depends(get_current_user)):
+    ws = await require_workspace_admin(db, user)
+    return {"users": await access_gov.list_workspace_users(db, ws)}
+
+
+@api.get("/workspace/users/{uid}")
+async def get_ws_user(uid: str, user: dict = Depends(get_current_user)):
+    ws = await require_workspace_admin(db, user)
+    return await access_gov.get_user_admin_view(db, ws, uid)
+
+
+class IdentityStatusPayload(BaseModel):
+    status: str
+
+
+@api.post("/workspace/users/{uid}/identity-status")
+async def set_user_identity_status(uid: str, payload: IdentityStatusPayload,
+                                   user: dict = Depends(get_current_user)):
+    ws = await require_workspace_admin(db, user)
+    res = await access_gov.set_identity_status(db, ws, uid, payload.status, user.get("id"))
+    evt = "identity.reactivated" if payload.status == "active" else "identity.suspended"
+    await log_action(user, "update", "identity_status", uid, details=f"identity={payload.status}",
+                     entity_id=uid, event_type=evt)
+    return res
+
+
+@api.get("/companies/{company_id}/users/{uid}/module-matrix")
+async def get_module_matrix(company_id: str, uid: str, user: dict = Depends(get_current_user)):
+    company = await require_company_local_admin(db, company_id, user)
+    ws = company.get("workspace_id")
+    target = await _access_target_user(uid, ws)
+    return {"module_access": await access_gov.module_access_matrix(db, ws, company_id, target)}
+
+
+@api.get("/companies/{company_id}/users/{uid}/effective-access/explain")
+async def explain_effective_access_route(company_id: str, uid: str,
+                                         module: Optional[str] = None, permission: Optional[str] = None,
+                                         required_level: str = "read", group_id: Optional[str] = None,
+                                         user: dict = Depends(get_current_user)):
+    company = await require_company_local_admin(db, company_id, user)
+    ws = company.get("workspace_id")
+    target = await _access_target_user(uid, ws)
+    return await access_gov.explain_effective_access(
+        db, target, workspace_id=ws, company_id=company_id, module=module,
+        permission=permission, required_level=required_level, group_id=group_id)
+
+
+@api.get("/companies/{company_id}/admin-history")
+async def get_company_admin_history(company_id: str, user: dict = Depends(get_current_user)):
+    company = await require_company_local_admin(db, company_id, user)
+    return await access_gov.company_admin_history(db, company.get("workspace_id"), company_id)
 
 
 @api.post("/companies/{company_id}/client-admin/replace")

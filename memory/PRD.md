@@ -1261,3 +1261,36 @@ Cycle de vie utilisateur backend uniquement (aucune refonte UI, P1.13C/D NON dé
 **Reporté (hors périmètre P1.13B, ne pas démarrer sans approbation)** : page frontend `/activate` (appartient au travail UI) ; P1.13C/D ; refonte UI.
 
 ### 🛑 P1.13B IMPLÉMENTÉ & TESTÉ. STOP — page UI d'activation et P1.13C/D en attente d'approbation explicite.
+
+## P1.13C — ACCESS ADMINISTRATION & LIFECYCLE GOVERNANCE (2026-06)
+Gouvernance backend/API uniquement pour la future UI de gestion des accès. AUCUNE refonte UI, migration P1.13A conservée en dry-run (non commit), aucun changement financier.
+
+**Fichiers ajoutés** : `core/access/admin_governance.py` ; `tests/test_p1_13c_governance.py`.
+**Fichiers modifiés** : `core/memberships.py` (statut `suspended` sur workspace/company memberships) ; `tests/_fake_access_db.py` (matcher notation pointée `metadata.company_id`) ; `server.py` (routes P1.13C + import gouvernance).
+
+**Sécurité (rappel P1.13B)** : `identity_is_verified()` — un email normalisé ne suffit JAMAIS à accorder un accès. La réutilisation d'identité ne provisionne un membership actif qu'après preuve de contrôle via le jeton d'activation (fail-closed). Une identité existante NON vérifiée ne gagne aucun membership actif par simple correspondance d'email (testé).
+
+**Cycle de vie invitation** : statuts pending / accepted / expired / revoked. Services : list (+filtre), view, resend (révoque l'ancien jeton → inutilisable, émet un jeton frais), revoke. **Aucun token brut exposé** dans les API admin (testé).
+
+**Cycle de vie identité/membership** : identité (pending_verification/active/suspended/disabled) distincte du membership (active/suspended/inactive). Suspendre/désactiver une identité pose `status=inactive` + révoque les JWT (401/403 immédiat). Retirer l'accès d'une société n'affecte pas l'identité globale ni les autres sociétés (isolation testée). Réactivation supportée. Aucune suppression physique.
+
+**Administration accès module** : `module_access_matrix` → par module : entitled, company_enabled, assigned_level, effective_level (dérivé UNIQUEMENT via `resolve_effective_access`), sensitive_permissions. Aucune duplication de logique d'accès.
+
+**Explication d'accès effectif** : `explain_effective_access` (admin) → allowed + reason_code + reason FR + facteurs (checks du résolveur). Diagnostic uniquement, aucune fuite d'info tenant non liée.
+
+**Visibilité remplacement admin** : `company_admin_history` → admins actuels, précédents/désactivés, date/acteur du remplacement, statut d'activation du nouvel admin (aucun secret/token/mot de passe).
+
+**Nouvelles routes** :
+- `GET /api/workspace/invitations?status=` · `GET /api/workspace/invitations/{id}` · `POST .../resend` · `POST .../revoke`
+- `GET /api/workspace/users` · `GET /api/workspace/users/{uid}` · `POST /api/workspace/users/{uid}/identity-status`
+- `GET /api/companies/{cid}/users/{uid}/module-matrix` · `GET .../effective-access/explain` · `GET /api/companies/{cid}/admin-history`
+
+**Logs** : événements `user.invited`/`invitation.resent`/`invitation.revoked`/`identity.suspended`/`identity.reactivated`/`module_access.updated`/`user_permission.updated` en logs tenant (contexte workspace/company) ; `client_admin.replaced` en `platform_logs`. Aucun GET journalisé. Pas de flux global d'évènements clients en plateforme.
+
+**Séparation Meelora plateforme/société** : `platform_role` toujours ignoré par le résolveur ; l'administration plateforme d'un employé Meelora reste indépendante de son accès aux modules de la société Meelora.
+
+**Tests** : 13 tests P1.13C (100%). Régression in-memory 168/168 (phase1 + P1.12 + P3.5→P3.7 + P1.13A/B/C). Validation live curl : invitation→list(sans token)→resend(ancien invalidé)→revoke ; users list/detail ; module-matrix ; explain (denied) ; suspend identité→**JWT 403**→réactivation→login OK ; admin-history. Artefacts nettoyés (Julie restaurée, 5 users, 0 activation résiduelle).
+
+**Dépendances legacy restantes** : `company_access` (pont lecture), `users.workspace_id`, route legacy `create_cmp_member`/`create_ws_member` P1.12 (ajout direct par admin avec mot de passe — action explicite, hors flux invitation).
+
+### 🛑 P1.13C IMPLÉMENTÉ & TESTÉ. STOP — NE PAS DÉMARRER P1.13D (UX & Navigation) avant approbation explicite.

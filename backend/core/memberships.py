@@ -38,7 +38,7 @@ class WorkspaceMemberCreate(BaseModel):
 
 class WorkspaceMemberUpdate(BaseModel):
     role: Optional[Literal["admin", "user"]] = None
-    status: Optional[Literal["active", "inactive"]] = None
+    status: Optional[Literal["active", "inactive", "suspended"]] = None
 
 
 class CompanyMemberCreate(BaseModel):
@@ -51,7 +51,7 @@ class CompanyMemberCreate(BaseModel):
 
 class CompanyMemberUpdate(BaseModel):
     role: Optional[str] = None
-    status: Optional[Literal["active", "inactive"]] = None
+    status: Optional[Literal["active", "inactive", "suspended"]] = None
 
 
 def public_workspace_member(m: dict, u: Optional[dict]) -> dict:

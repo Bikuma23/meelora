@@ -2,15 +2,28 @@
 import uuid
 
 
+def _get_path(doc, key):
+    if "." not in key:
+        return doc.get(key), (key in doc)
+    cur = doc
+    parts = key.split(".")
+    for p in parts:
+        if isinstance(cur, dict) and p in cur:
+            cur = cur[p]
+        else:
+            return None, False
+    return cur, True
+
+
 def _match(doc, query):
     for k, v in query.items():
-        actual = doc.get(k)
+        actual, present = _get_path(doc, k)
         if isinstance(v, dict):
             if "$ne" in v and actual == v["$ne"]:
                 return False
             if "$in" in v and actual not in v["$in"]:
                 return False
-            if "$exists" in v and (k in doc) != v["$exists"]:
+            if "$exists" in v and present != v["$exists"]:
                 return False
         elif actual != v:
             return False
