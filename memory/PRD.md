@@ -1294,3 +1294,17 @@ Gouvernance backend/API uniquement pour la future UI de gestion des accès. AUCU
 **Dépendances legacy restantes** : `company_access` (pont lecture), `users.workspace_id`, route legacy `create_cmp_member`/`create_ws_member` P1.12 (ajout direct par admin avec mot de passe — action explicite, hors flux invitation).
 
 ### 🛑 P1.13C IMPLÉMENTÉ & TESTÉ. STOP — NE PAS DÉMARRER P1.13D (UX & Navigation) avant approbation explicite.
+
+## P1.13D — UX & NAVIGATION (ACCESS MANAGEMENT) (2026-06) — PARTIEL
+Frontend au-dessus des API P1.13A/B/C. Aucun changement backend d'autorisation, migration P1.13A toujours en dry-run, aucun changement financier.
+
+**Fichiers ajoutés** : `frontend/src/components/Activate.js` (page publique `/activate`), `frontend/src/pages/AccessManagement.js` (console Utilisateurs et accès).
+**Fichiers modifiés** : `frontend/src/App.js` (route publique `/activate`), `frontend/src/lib/api.js` (méthodes activation/gouvernance), `frontend/src/components/Layout.js` (nav admin `access` + PAGES).
+
+**Livré & validé** :
+- **Page d'activation `/activate`** : états valid/invalid(expiré/utilisé/révoqué)/succès, carte contexte (organisation + objet + email), choix du mot de passe + confirmation, message identité existante, auto-login au succès. Rendu vérifié par capture ; endpoint `/api/auth/activate` validé par curl (token+user+membership).
+- **Console « Utilisateurs et accès »** (admin, nav bas) : compteurs (actifs/en attente/expirées), onglets Utilisateurs/Invitations, recherche, assistant d'invitation 3 étapes (personne → société+rôle → revue), fiche utilisateur (cartes module par société, niveaux Lecture/Saisie|Contribution/Gestion, autorisations sensibles groupées en langage métier, suspendre/rétablir), journal d'invitations (renvoyer/révoquer), états vides, libellés FR. Compile proprement, branchée aux API P1.13C testées.
+
+**Reporté (P1.13D restant, non démarré)** : switch de contexte plateforme/société Meelora + navigation par contexte, carte client Meelora (Mandats→Client: Aperçu/Admins/Utilisateurs/Modules/Logs), séparation visuelle des logs plateforme/client, profils préréglés (Comptable, Responsable financier…), assistant d'invitation avec étapes modules/niveaux/permissions complètes, explication « Pourquoi cet accès ? » en UI, wizard de remplacement d'admin en UI, suite de tests frontend dédiée. Le harness de login du screenshot n'a pas progressé (souci de timing) — validation e2e UI complète à refaire.
+
+### 🛑 P1.13D PARTIEL (activation + console de base). STOP — reste de l'UX en attente d'approbation.

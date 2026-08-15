@@ -21,6 +21,7 @@ import Departements from "../pages/Departements";
 import Rapports from "../pages/Rapports";
 import Logs from "../pages/Logs";
 import UsersPage from "../pages/Users";
+import AccessManagement from "../pages/AccessManagement";
 import CompaniesPage from "../pages/Companies";
 import Preferences from "../pages/Preferences";
 import { applyTheme } from "../lib/theme";
@@ -37,6 +38,7 @@ const PAGES = {
   rapports: { title: "Rapports", sub: "Prédéfinis & custom", comp: Rapports },
   companies: { title: "Sociétés / Mandats", sub: "Portefeuille & affectations", comp: CompaniesPage },
   utilisateurs: { title: "Utilisateurs", sub: "Comptes & accès", comp: UsersPage },
+  access: { title: "Utilisateurs et accès", sub: "Invitations & permissions", comp: AccessManagement },
   logs: { title: "Logs", sub: "Historique des activités", comp: Logs },
   preferences: { title: "Mon profil", sub: "Préférences & apparence", comp: Preferences },
   acct_dashboard: { title: "Tableau de bord", sub: "Vue d'ensemble du mois", comp: AcctDashboard },
@@ -69,6 +71,7 @@ const BUDGET_CHILDREN = [
   { key: "rapports", label: "Rapports", icon: FileText },
 ];
 const NAV_BOTTOM = [
+  { key: "access", label: "Utilisateurs et accès", sub: "Invitations & permissions", icon: ShieldCheck },
   { key: "logs", label: "Logs", sub: "Historique des activités", icon: ScrollText },
 ];
 
