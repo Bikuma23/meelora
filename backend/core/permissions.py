@@ -110,6 +110,19 @@ async def require_company_local_admin(db, company_id: str, user: dict) -> dict:
     return company
 
 
+def require_platform_manager(user: dict) -> bool:
+    """Authorize management of SYSTEM-managed reporting referential (financial
+    concepts, jurisdiction profiles, system templates, system i18n labels).
+
+    Requires ``platform_role == 'platform_admin'``. This is intentionally the
+    ONLY place a platform role is honored, and it NEVER grants access to any
+    client-scoped/tenant data (mappings, custom templates, reports).
+    """
+    if user.get("platform_role") != "platform_admin":
+        raise HTTPException(status_code=403, detail="Réservé à la gestion plateforme (référentiel système)")
+    return True
+
+
 async def require_company_access(
     db,
     company_id: str,

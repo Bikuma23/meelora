@@ -85,6 +85,27 @@ from core.financial.phase2_signoff import (
     create_signoff, list_signoffs, get_signoff, signoff_status,
     ensure_indexes as _ensure_phase2_signoff_indexes,
 )
+from core.financial.concepts import (
+    ConceptCreate, ConceptUpdate,
+    create_concept, update_concept, deprecate_concept, list_concepts, get_concept,
+    ensure_indexes as _ensure_concept_indexes,
+)
+from core.financial.i18n import (
+    LabelUpsert, set_label, get_labels,
+    ensure_indexes as _ensure_i18n_indexes,
+)
+from core.financial.mappings import (
+    MappingCreate,
+    create_mapping, confirm_mapping, reject_mapping, list_mappings, get_mapping, mapping_coverage,
+    ensure_indexes as _ensure_mapping_indexes,
+)
+from core.financial.reporting_templates import (
+    TemplateCreate, TemplateLineCreate, JurisdictionProfileCreate,
+    create_template, add_template_line, publish_template, archive_template, new_template_version,
+    list_system_templates, list_company_templates, get_template,
+    create_jurisdiction_profile, list_jurisdiction_profiles, get_jurisdiction_profile,
+    ensure_indexes as _ensure_reporting_template_indexes,
+)
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -1385,6 +1406,186 @@ async def company_phase2_signoff_status(company_id: str, financial_period_id: Op
 async def get_company_phase2_signoff(company_id: str, signoff_id: str,
                                      user: dict = Depends(get_current_user)):
     return await get_signoff(db, company_id, user, signoff_id)
+
+
+# ---------------------------------------------------------------------------
+# P3.1 — Reporting semantic layer (DESIGN-approved). SYSTEM referential
+# (financial_concepts / jurisdiction_profiles / system templates / i18n) is
+# platform-managed & global; client mappings + custom templates are tenant
+# scoped. No calculation engine here; no report_runs yet (P3.4). Never mutates
+# Phase 2 collections or legacy acct_*/qc9434_*.
+# ---------------------------------------------------------------------------
+class ConceptDeprecate(BaseModel):
+    replaced_by_concept_id: Optional[str] = None
+
+
+class MappingReject(BaseModel):
+    notes: Optional[str] = None
+
+
+# ---- Financial concepts (system-managed) ----
+@api.get("/financial-concepts")
+async def list_financial_concepts(statement_type: Optional[str] = None, include_deprecated: bool = False,
+                                  user: dict = Depends(get_current_user)):
+    return await list_concepts(db, user, statement_type=statement_type, include_deprecated=include_deprecated)
+
+
+@api.get("/financial-concepts/{concept_id}")
+async def get_financial_concept(concept_id: str, user: dict = Depends(get_current_user)):
+    return await get_concept(db, user, concept_id)
+
+
+@api.post("/financial-concepts")
+async def create_financial_concept(payload: ConceptCreate, user: dict = Depends(get_current_user)):
+    record = await create_concept(db, user, payload)
+    await log_action(user, "create", "financial_concept", record.get("concept_code", ""),
+                     entity_id=record.get("id"), event_type="financial_concept.created")
+    return record
+
+
+@api.patch("/financial-concepts/{concept_id}")
+async def update_financial_concept(concept_id: str, payload: ConceptUpdate,
+                                   user: dict = Depends(get_current_user)):
+    return await update_concept(db, user, concept_id, payload)
+
+
+@api.post("/financial-concepts/{concept_id}/deprecate")
+async def deprecate_financial_concept(concept_id: str, payload: ConceptDeprecate,
+                                      user: dict = Depends(get_current_user)):
+    record = await deprecate_concept(db, user, concept_id, payload.replaced_by_concept_id)
+    await log_action(user, "deprecate", "financial_concept", record.get("concept_code", ""),
+                     entity_id=record.get("id"), event_type="financial_concept.deprecated")
+    return record
+
+
+# ---- i18n labels (system-managed) ----
+@api.post("/financial-i18n/labels")
+async def upsert_i18n_label(payload: LabelUpsert, user: dict = Depends(get_current_user)):
+    return await set_label(db, user, payload)
+
+
+@api.get("/financial-i18n/labels")
+async def get_i18n_labels(entity_type: str, entity_id: str, user: dict = Depends(get_current_user)):
+    return await get_labels(db, user, entity_type, entity_id)
+
+
+# ---- Jurisdiction profiles (system-managed) ----
+@api.get("/jurisdiction-profiles")
+async def list_jurisdictions(user: dict = Depends(get_current_user)):
+    return await list_jurisdiction_profiles(db, user)
+
+
+@api.get("/jurisdiction-profiles/{jurisdiction_code}")
+async def get_jurisdiction(jurisdiction_code: str, user: dict = Depends(get_current_user)):
+    return await get_jurisdiction_profile(db, user, jurisdiction_code)
+
+
+@api.post("/jurisdiction-profiles")
+async def create_jurisdiction(payload: JurisdictionProfileCreate, user: dict = Depends(get_current_user)):
+    return await create_jurisdiction_profile(db, user, payload)
+
+
+# ---- Account mappings (client-scoped) ----
+@api.get("/companies/{company_id}/account-mappings")
+async def list_company_account_mappings(company_id: str, status: Optional[str] = None,
+                                         account_id: Optional[str] = None, include_superseded: bool = False,
+                                         user: dict = Depends(get_current_user)):
+    return await list_mappings(db, company_id, user, status=status, account_id=account_id,
+                               include_superseded=include_superseded)
+
+
+@api.get("/companies/{company_id}/mapping-coverage")
+async def company_mapping_coverage(company_id: str, financial_period_id: Optional[str] = None,
+                                   user: dict = Depends(get_current_user)):
+    return await mapping_coverage(db, company_id, user, financial_period_id=financial_period_id)
+
+
+@api.get("/companies/{company_id}/account-mappings/{mapping_id}")
+async def get_company_account_mapping(company_id: str, mapping_id: str,
+                                      user: dict = Depends(get_current_user)):
+    return await get_mapping(db, company_id, user, mapping_id)
+
+
+@api.post("/companies/{company_id}/account-mappings")
+async def create_company_account_mapping(company_id: str, payload: MappingCreate,
+                                         user: dict = Depends(get_current_user)):
+    record = await create_mapping(db, company_id, user, payload)
+    await log_action(user, "create", "account_mapping", record.get("id", ""),
+                     company_id=company_id, entity_id=record.get("id"),
+                     event_type=f"account_mapping.{record.get('status')}",
+                     metadata={"account_id": payload.account_id,
+                               "financial_concept_id": payload.financial_concept_id})
+    return record
+
+
+@api.post("/companies/{company_id}/account-mappings/{mapping_id}/confirm")
+async def confirm_company_account_mapping(company_id: str, mapping_id: str,
+                                          user: dict = Depends(get_current_user)):
+    record = await confirm_mapping(db, company_id, user, mapping_id)
+    await log_action(user, "confirm", "account_mapping", mapping_id, company_id=company_id,
+                     entity_id=mapping_id, event_type="account_mapping.confirmed")
+    return record
+
+
+@api.post("/companies/{company_id}/account-mappings/{mapping_id}/reject")
+async def reject_company_account_mapping(company_id: str, mapping_id: str, payload: MappingReject,
+                                         user: dict = Depends(get_current_user)):
+    record = await reject_mapping(db, company_id, user, mapping_id, notes=payload.notes)
+    await log_action(user, "reject", "account_mapping", mapping_id, company_id=company_id,
+                     entity_id=mapping_id, event_type="account_mapping.rejected")
+    return record
+
+
+# ---- Reporting templates (system + custom skeleton) ----
+@api.get("/reporting-templates")
+async def list_reporting_templates(jurisdiction: Optional[str] = None, statement_type: Optional[str] = None,
+                                   user: dict = Depends(get_current_user)):
+    return await list_system_templates(db, user, jurisdiction=jurisdiction, statement_type=statement_type)
+
+
+@api.post("/reporting-templates")
+async def create_reporting_template(payload: TemplateCreate, company_id: Optional[str] = None,
+                                    user: dict = Depends(get_current_user)):
+    record = await create_template(db, user, payload, company_id=company_id)
+    await log_action(user, "create", "reporting_template", record.get("template_code", ""),
+                     company_id=company_id, entity_id=record.get("id"),
+                     event_type="reporting_template.created")
+    return record
+
+
+@api.get("/reporting-templates/{template_id}")
+async def get_reporting_template(template_id: str, user: dict = Depends(get_current_user)):
+    return await get_template(db, user, template_id)
+
+
+@api.post("/reporting-templates/{template_id}/lines")
+async def add_reporting_template_line(template_id: str, payload: TemplateLineCreate,
+                                      user: dict = Depends(get_current_user)):
+    return await add_template_line(db, user, template_id, payload)
+
+
+@api.post("/reporting-templates/{template_id}/publish")
+async def publish_reporting_template(template_id: str, user: dict = Depends(get_current_user)):
+    record = await publish_template(db, user, template_id)
+    await log_action(user, "publish", "reporting_template", record.get("template_code", ""),
+                     entity_id=record.get("id"), event_type="reporting_template.published")
+    return record
+
+
+@api.post("/reporting-templates/{template_id}/archive")
+async def archive_reporting_template(template_id: str, user: dict = Depends(get_current_user)):
+    return await archive_template(db, user, template_id)
+
+
+@api.post("/reporting-templates/{template_id}/new-version")
+async def version_reporting_template(template_id: str, user: dict = Depends(get_current_user)):
+    return await new_template_version(db, user, template_id)
+
+
+@api.get("/companies/{company_id}/reporting-templates")
+async def list_company_reporting_templates(company_id: str, statement_type: Optional[str] = None,
+                                           user: dict = Depends(get_current_user)):
+    return await list_company_templates(db, company_id, user, statement_type=statement_type)
 
 
 # ---------------------------------------------------------------------------
@@ -7515,6 +7716,10 @@ async def startup():
         await _ensure_journal_indexes(db)
         await _ensure_financial_config_indexes(db)
         await _ensure_phase2_signoff_indexes(db)
+        await _ensure_concept_indexes(db)
+        await _ensure_i18n_indexes(db)
+        await _ensure_mapping_indexes(db)
+        await _ensure_reporting_template_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     try:
