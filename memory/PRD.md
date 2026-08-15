@@ -1210,3 +1210,31 @@ Sépare l'identité globale (users) de l'appartenance workspace et société.
 - [x] **Limites** : Budget/Prévision non implémentés (extension future) ; méthode directe CF hors scope ; commentaires legacy non migrés (compat seulement) ; variances numériques live non exerçables (DB preview sans ≥2 périodes TB) → validées en mémoire.
 
 ### 🛑 P3.7 IMPLÉMENTÉ & TESTÉ. STOP — NE PAS DÉMARRER P3.8 (KPI Engine) avant approbation explicite.
+
+## P1.13A — ACCESS & IDENTITY FOUNDATION V2 (2026-06)
+Infrastructure d'accès backend uniquement. AUCUNE modification financière, AUCUNE refonte UI, P1.13B NON démarré. Modèle en couches : Identité → Membership → Entitlement → Accès Module → Permission → Scope → Assignation → Accès Effectif. Deny-by-default (fail-closed). Le backend reste l'autorité de sécurité.
+
+**Principe clé** : IDENTITÉ ≠ AUTORISATION. Un compte auto-inscrit ne reçoit AUCUN workspace/société/rôle/module automatiquement. Email/domaine ne donnent jamais d'accès. ADMINISTRATEUR ≠ AUTORITÉ FINANCIÈRE (un admin gère les accès mais n'obtient aucune autorité de saisie/clôture/finalisation sans permission explicite). PLATEFORME ≠ SOCIÉTÉ (`platform_role` ne donne jamais d'accès client).
+
+**Fichiers ajoutés** :
+- `core/access/__init__.py`, `modules.py` (registre REPORTING/ACCOUNTING/FIXED_ASSETS/CONSOLIDATION + échelle none/read/contribute/manage), `permissions_catalog.py` (~37 permissions sensibles stables), `entitlements.py` (workspace_module_entitlements + company_module_enablement + seed Meelora), `module_access.py` (user_module_access + user_permissions), `scopes.py` (consolidation_group_scopes + workflow_assignments + politiques PO/SoD), `activation.py` (jetons activation/remplacement Client Admin à usage unique), `log_scope.py` (platform_logs séparés + scopes workspace/company), `effective_access.py` (résolveur central `resolve_effective_access`), `indexes.py`.
+- `scripts/migrate_p1_13a_access.py` (dry-run-first, conservateur, sans escalade).
+- `tests/_fake_access_db.py`, `tests/test_p1_13a_access_model.py`, `tests/test_p1_13a_effective_access.py`, `tests/test_p1_13a_activation_logs.py`.
+
+**Fichiers modifiés** : `server.py` (imports P1.13A ; routes : GET /api/access/modules, GET /api/access/permissions, GET/PATCH /api/workspace/module-entitlements, GET/PUT /api/companies/{cid}/module-enablement, GET/PUT /api/companies/{cid}/users/{uid}/module-access, PUT .../permissions/{code}, GET .../effective-access ; startup : ensure_indexes accès + seed entitlements Meelora idempotent).
+
+**Nouvelles collections** : workspace_module_entitlements, company_module_enablement, user_module_access, user_permissions, consolidation_group_scopes, workflow_assignments, client_admin_activations, platform_logs.
+
+**Autorités** : entitlements PATCH = `require_platform_manager` (plateforme/commercial) ; enablement société = admin workspace ; module-access/permissions utilisateur = `require_company_local_admin` (admin workspace OU admin local company_user). Client Admin ne peut jamais accorder un module non souscrit (409) ni un platform_role.
+
+**Compatibilité P1.12** : `company_access` et `users.workspace_id` PRÉSERVÉS (non destructif). Résolveur lit company_memberships avec pont legacy company_access. `permissions.py` legacy intact.
+
+**Seed Meelora** : les 4 modules entitled (active) pour le workspace Meelora — DISPONIBILITÉ seulement, aucun octroi utilisateur automatique.
+
+**Migration** : dry-run exécuté (rapport : 0 entitlement à activer [déjà seedés], 2 user_module_access read dérivés sur ACCOUNTING pour la société Meelora utilisée, 0 rapporté, 0 permission sensible, 0 'manage'). NON appliqué (dry-run only, décision utilisateur).
+
+**Tests** : 44 tests P1.13A permanents (100%). Régression in-memory : phase1 + P1.12 + P2 + P3.1→P3.7 = 189/189. Validation live via curl : identité sans accès → refus ; membership sans module → contexte OK mais module indisponible ; read accordé → effectif ; permission entry_post requise et accordée → effective ; 4 entitlements Meelora confirmés. Enregistrements de test nettoyés.
+
+**Dépendances legacy identité restantes** : `company_access` (pont lecture), `users.workspace_id` (contexte tenant), `require_company_access` admin-bypass legacy (pour routes financières existantes uniquement — le nouveau résolveur ne fait PAS de bypass admin). À retirer en phase ultérieure.
+
+### 🛑 P1.13A IMPLÉMENTÉ & TESTÉ. STOP — NE PAS DÉMARRER P1.13B (User Lifecycle & Admin Replacement) ni refonte UI avant approbation explicite.

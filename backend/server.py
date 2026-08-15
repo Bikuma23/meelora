@@ -32,7 +32,7 @@ from core.companies import CompanyCreate, CompanyUpdate, list_companies_for_user
 from core.mandates import MandateCreate, MandateUpdate, list_mandates_for_user, get_mandate_for_user, create_mandate_for_admin, update_mandate_for_admin
 from core.logs import write_log, list_logs_for_admin
 from core.access_management import UserCompanyAccessUpdate, list_user_company_access, replace_user_company_access
-from core.permissions import require_tenant_context, require_company_access, require_workspace_admin, require_company_local_admin
+from core.permissions import require_tenant_context, require_company_access, require_workspace_admin, require_company_local_admin, require_same_workspace
 from core.memberships import (
     WorkspaceMemberCreate, WorkspaceMemberUpdate, CompanyMemberCreate, CompanyMemberUpdate,
     list_workspace_members, upsert_workspace_membership, update_workspace_membership,
@@ -134,6 +134,14 @@ from core.financial.comparatives import (
     preview_cash_flow_comparative, generate_cash_flow_comparative,
     preview_management_report, generate_management_report,
 )
+# P1.13A — Access & Identity Foundation V2
+from core.permissions import require_platform_manager
+from core.access import modules as access_modules
+from core.access import permissions_catalog as access_perms
+from core.access import entitlements as access_entitlements
+from core.access import module_access as access_module_access
+from core.access.effective_access import resolve_effective_access
+from core.access.indexes import ensure_indexes as _ensure_access_indexes
 
 
 class ComparativeRequest(BaseModel):
@@ -2244,6 +2252,156 @@ async def patch_cmp_member(company_id: str, membership_id: str, payload: Company
     await log_action(user, "update", "company_member", m.get("email", ""), details=f"Membre société {membership_id}",
                      company_id=company_id, entity_id=membership_id, event_type=evt)
     return m
+
+
+
+# ---------------------------------------------------------------------------
+# P1.13A — Access & Identity Foundation V2 (module registry, entitlements,
+# per-user module access, sensitive permissions, effective-access diagnostic).
+# ---------------------------------------------------------------------------
+class ModuleEntitlementUpdate(BaseModel):
+    status: str
+    source: Optional[str] = None
+
+
+class ModuleEnablementUpdate(BaseModel):
+    enabled: bool
+
+
+class ModuleAccessUpdate(BaseModel):
+    access_level: str
+
+
+class PermissionUpdate(BaseModel):
+    granted: bool
+
+
+async def _access_target_user(uid: str, workspace_id: str) -> dict:
+    """Load a workspace user for admin access management (fail-closed)."""
+    candidates = []
+    try:
+        candidates.append(("_id", ObjectId(uid)))
+    except Exception:
+        pass
+    candidates.append(("id", uid))
+    for key, value in candidates:
+        doc = await db.users.find_one({key: value, "workspace_id": workspace_id})
+        if doc:
+            return doc
+    raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+
+@api.get("/access/modules")
+async def get_module_registry(user: dict = Depends(get_current_user)):
+    """System-defined commercial module registry."""
+    return {"modules": access_modules.list_modules(), "access_levels": access_modules.ACCESS_LEVELS}
+
+
+@api.get("/access/permissions")
+async def get_permission_catalogue(module: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """Sensitive permission catalogue (optionally filtered by module)."""
+    return {"permissions": access_perms.list_permissions(module)}
+
+
+@api.get("/workspace/module-entitlements")
+async def list_ws_entitlements(user: dict = Depends(get_current_user)):
+    ws = await require_workspace_admin(db, user)
+    return {"entitlements": await access_entitlements.get_workspace_entitlements(db, ws)}
+
+
+@api.patch("/workspace/module-entitlements/{module_code}")
+async def patch_ws_entitlement(module_code: str, payload: ModuleEntitlementUpdate,
+                               user: dict = Depends(get_current_user)):
+    # Commercial authority only — a Client Admin may NEVER grant a module.
+    require_platform_manager(user)
+    ws = require_tenant_context(user)
+    ent = await access_entitlements.set_workspace_entitlement(
+        db, ws, module_code, payload.status, user.get("id"), source=payload.source)
+    await log_action(user, "update", "module_entitlement", module_code,
+                     details=f"Entitlement {module_code}={payload.status}",
+                     entity_id=module_code, event_type="module_entitlement.updated")
+    return ent
+
+
+@api.get("/companies/{company_id}/module-enablement")
+async def get_cmp_enablement(company_id: str, user: dict = Depends(get_current_user)):
+    company = await require_company_access(db, company_id, user)
+    return {"enablement": await access_entitlements.get_company_enablement(
+        db, company.get("workspace_id"), company_id)}
+
+
+@api.put("/companies/{company_id}/module-enablement/{module_code}")
+async def put_cmp_enablement(company_id: str, module_code: str, payload: ModuleEnablementUpdate,
+                             user: dict = Depends(get_current_user)):
+    ws = await require_workspace_admin(db, user)
+    await require_same_workspace(db, company_id, user)
+    row = await access_entitlements.set_company_enablement(
+        db, ws, company_id, module_code, payload.enabled, user.get("id"))
+    await log_action(user, "update", "module_enablement", module_code,
+                     details=f"Enablement {module_code}={payload.enabled}",
+                     company_id=company_id, entity_id=module_code, event_type="module_enablement.updated")
+    return row
+
+
+@api.get("/companies/{company_id}/users/{uid}/module-access")
+async def get_user_module_access_route(company_id: str, uid: str, user: dict = Depends(get_current_user)):
+    company = await require_company_local_admin(db, company_id, user)
+    ws = company.get("workspace_id")
+    target = await _access_target_user(uid, ws)
+    tid = str(target["_id"])
+    return {
+        "user": {"id": tid, "email": target.get("email", ""), "name": target.get("name", "")},
+        "module_access": await access_module_access.list_user_module_access(db, ws, company_id, tid),
+        "permissions": await access_module_access.list_user_permissions(db, ws, company_id, tid),
+    }
+
+
+@api.put("/companies/{company_id}/users/{uid}/module-access/{module_code}")
+async def put_user_module_access_route(company_id: str, uid: str, module_code: str,
+                                       payload: ModuleAccessUpdate, user: dict = Depends(get_current_user)):
+    company = await require_company_local_admin(db, company_id, user)
+    ws = company.get("workspace_id")
+    target = await _access_target_user(uid, ws)
+    tid = str(target["_id"])
+    row = await access_module_access.set_user_module_access(
+        db, ws, company_id, tid, module_code, payload.access_level, user.get("id"))
+    await log_action(user, "update", "user_module_access", target.get("email", ""),
+                     details=f"{module_code}={payload.access_level}",
+                     company_id=company_id, entity_id=tid, event_type="user_module_access.updated")
+    return row
+
+
+@api.put("/companies/{company_id}/users/{uid}/permissions/{permission_code}")
+async def put_user_permission_route(company_id: str, uid: str, permission_code: str,
+                                    payload: PermissionUpdate, user: dict = Depends(get_current_user)):
+    company = await require_company_local_admin(db, company_id, user)
+    ws = company.get("workspace_id")
+    target = await _access_target_user(uid, ws)
+    tid = str(target["_id"])
+    row = await access_module_access.set_user_permission(
+        db, ws, company_id, tid, permission_code, payload.granted, user.get("id"))
+    await log_action(user, "update", "user_permission", target.get("email", ""),
+                     details=f"{permission_code} granted={payload.granted}",
+                     company_id=company_id, entity_id=tid, event_type="user_permission.updated")
+    return row
+
+
+@api.get("/companies/{company_id}/users/{uid}/effective-access")
+async def get_effective_access_route(company_id: str, uid: str,
+                                     module: Optional[str] = None, permission: Optional[str] = None,
+                                     required_level: str = "read", group_id: Optional[str] = None,
+                                     user: dict = Depends(get_current_user)):
+    company = await require_company_local_admin(db, company_id, user)
+    ws = company.get("workspace_id")
+    target = await _access_target_user(uid, ws)
+    target_ctx = {
+        "id": str(target["_id"]),
+        "status": target.get("status", "active"),
+        "identity_status": target.get("identity_status"),
+    }
+    return await resolve_effective_access(
+        db, target_ctx, workspace_id=ws, company_id=company_id,
+        module=module, permission=permission, required_level=required_level, group_id=group_id)
 
 
 
@@ -8292,8 +8450,18 @@ async def startup():
         await _ensure_reporting_template_indexes(db)
         await _ensure_custom_template_indexes(db)
         await _ensure_report_runs_indexes(db)
+        await _ensure_access_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
+    # P1.13A — seed Meelora workspace entitlements (availability only; grants no
+    # user access). Idempotent. Identified via the legacy 'acct' company.
+    try:
+        meelora_company = await db.companies.find_one({"legacy_prefix": "acct"})
+        if meelora_company and meelora_company.get("workspace_id"):
+            await access_entitlements.seed_workspace_entitlements(
+                db, meelora_company["workspace_id"], access_modules.MODULE_CODES)
+    except Exception as e:
+        logger.error(f"Seed entitlements Meelora échec : {e}")
     try:
         _qc_init_storage()
     except Exception as e:
