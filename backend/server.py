@@ -144,6 +144,8 @@ from core.access import activation as access_activation
 from core.access import lifecycle as access_lifecycle
 from core.access import log_scope as access_log_scope
 from core.access import admin_governance as access_gov
+from core.access import platform_console as access_platform
+from core.access.platform_console import require_platform_staff
 from core.access.effective_access import resolve_effective_access
 from core.access.indexes import ensure_indexes as _ensure_access_indexes
 
@@ -854,7 +856,9 @@ async def login(payload: LoginPayload, response: Response):
     token = create_token(uid, email)
     response.set_cookie("access_token", token, httponly=True, secure=False, samesite="lax",
                         max_age=(604800 if payload.remember else None), path="/")
-    return {"token": token, "user": {"id": uid, "email": email, "name": user.get("name", ""), "role": _normalized_role(user.get("role", "user"))}}
+    workspace_doc = await load_workspace_for_user(db, user)
+    ctx = build_auth_user(user, workspace_doc)
+    return {"token": token, "user": auth_me_payload(ctx)}
 
 @api.post("/auth/logout")
 async def logout(response: Response, user: dict = Depends(get_current_user)):
@@ -2712,6 +2716,72 @@ async def replace_company_admin(company_id: str, payload: ReplaceAdminPayload,
                      event_type="company_admin.replaced")
     return {"reused_identity": out["reused_identity"], "old_user_id": out["old_user_id"],
             "invitation": out["activation"], "activation_link": link}
+
+
+
+# ---------------------------------------------------------------------------
+# P1.13D.2 — Meelora PLATFORM context (platform staff only).
+# Strictly separated from the company/financial context. Read-only oversight;
+# the only mutating action reachable from this context is the emergency Client
+# Admin replacement above (platform_admin only). platform_role NEVER grants any
+# financial authority.
+# ---------------------------------------------------------------------------
+@api.get("/platform/summary")
+async def platform_summary_route(user: dict = Depends(get_current_user)):
+    require_platform_staff(user)
+    return await access_platform.platform_summary(db)
+
+
+@api.get("/platform/clients")
+async def platform_clients_route(user: dict = Depends(get_current_user)):
+    require_platform_staff(user)
+    return {"clients": await access_platform.list_clients(db)}
+
+
+@api.get("/platform/logs")
+async def platform_logs_route(target_workspace_id: Optional[str] = None,
+                              limit: int = Query(300, ge=1, le=1000),
+                              user: dict = Depends(get_current_user)):
+    # list_platform_logs enforces the platform role itself (fail-closed).
+    return await access_log_scope.list_platform_logs(
+        db, user, target_workspace_id=target_workspace_id, limit=limit)
+
+
+@api.get("/platform/clients/{ws_id}")
+async def platform_client_overview_route(ws_id: str, user: dict = Depends(get_current_user)):
+    require_platform_staff(user)
+    return await access_platform.client_overview(db, ws_id)
+
+
+@api.get("/platform/clients/{ws_id}/administrators")
+async def platform_client_admins_route(ws_id: str, user: dict = Depends(get_current_user)):
+    require_platform_staff(user)
+    return await access_platform.client_administrators(db, ws_id)
+
+
+@api.get("/platform/clients/{ws_id}/users")
+async def platform_client_users_route(ws_id: str, user: dict = Depends(get_current_user)):
+    require_platform_staff(user)
+    return await access_platform.client_users(db, ws_id)
+
+
+@api.get("/platform/clients/{ws_id}/modules")
+async def platform_client_modules_route(ws_id: str, user: dict = Depends(get_current_user)):
+    require_platform_staff(user)
+    return await access_platform.client_modules(db, ws_id)
+
+
+@api.get("/platform/clients/{ws_id}/logs")
+async def platform_client_logs_route(ws_id: str, limit: int = Query(300, ge=1, le=1000),
+                                     user: dict = Depends(get_current_user)):
+    require_platform_staff(user)
+    return await access_platform.client_tenant_logs(db, ws_id, limit=limit)
+
+
+@api.get("/platform/clients/{ws_id}/support")
+async def platform_client_support_route(ws_id: str, user: dict = Depends(get_current_user)):
+    require_platform_staff(user)
+    return await access_platform.client_support(db, ws_id)
 
 
 
@@ -8783,6 +8853,49 @@ async def startup():
                                    "name": "Administrateur", "role": "admin", "created_at": datetime.now(timezone.utc).isoformat()})
     elif not verify_password(os.environ["ADMIN_PASSWORD"], existing["password_hash"]):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(os.environ["ADMIN_PASSWORD"])}})
+    # P1.13D.2 — seed Meelora PLATFORM staff test identities (idempotent).
+    # platform_role is strictly separate from company access and grants NO
+    # financial authority. platform@ also holds a distinct Meelora company
+    # membership so the platform/company CONTEXT SWITCH can be validated.
+    try:
+        _mc = await db.companies.find_one({"legacy_prefix": "acct"})
+        _pws = _mc.get("workspace_id") if _mc else None
+        _pcid = _mc.get("id") if _mc else None
+        _staff = [
+            ("platform@meelora.com", "Plateforme Meelora", "platform_admin", "platform123", True),
+            ("support@meelora.com", "Support Meelora", "support", "support123", False),
+        ]
+        for p_email, p_name, p_role, p_pwd, p_member in _staff:
+            ex = await db.users.find_one({"email": p_email})
+            if not ex:
+                res = await db.users.insert_one({
+                    "email": p_email, "password_hash": hash_password(p_pwd), "name": p_name,
+                    "role": "user", "status": "active", "identity_status": "active",
+                    "platform_role": p_role, "workspace_id": (_pws if p_member else None),
+                    "created_at": datetime.now(timezone.utc).isoformat()})
+                uid = str(res.inserted_id)
+            else:
+                uid = str(ex["_id"])
+                upd = {"platform_role": p_role, "status": "active", "identity_status": "active"}
+                if p_member and _pws:
+                    upd["workspace_id"] = _pws
+                if not verify_password(p_pwd, ex.get("password_hash") or ""):
+                    upd["password_hash"] = hash_password(p_pwd)
+                await db.users.update_one({"_id": ex["_id"]}, {"$set": upd})
+            # Distinct Meelora membership for the platform_admin test identity.
+            if p_member and _pws and _pcid:
+                if not await db.workspace_memberships.find_one({"workspace_id": _pws, "user_id": uid}):
+                    await db.workspace_memberships.insert_one({
+                        "_id": f"wsm_{uuid.uuid4().hex}", "workspace_id": _pws, "user_id": uid,
+                        "role": "user", "status": "active",
+                        "created_at": datetime.now(timezone.utc).isoformat()})
+                if not await db.company_memberships.find_one({"workspace_id": _pws, "company_id": _pcid, "user_id": uid}):
+                    await db.company_memberships.insert_one({
+                        "_id": f"cm_{uuid.uuid4().hex}", "workspace_id": _pws, "company_id": _pcid,
+                        "user_id": uid, "membership_type": "workspace_staff", "role": "collaborator",
+                        "status": "active", "created_at": datetime.now(timezone.utc).isoformat()})
+    except Exception as e:
+        logger.error(f"Seed personnel plateforme échec : {e}")
     # Migration multi-années : renommer l'ancien doc "current" en clé annuelle.
     cur = await db.hypotheses.find_one({"key": "current"})
     if cur:

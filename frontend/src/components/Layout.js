@@ -27,7 +27,8 @@ import Preferences from "../pages/Preferences";
 import { applyTheme } from "../lib/theme";
 import { AcctDashboard, AcctBV, AcctBilan, AcctPnl, AcctCashflow, AcctReports } from "../pages/Comptabilite";
 import QcEntity from "../pages/QcEntity";
-import { Calculator, Landmark, ClipboardList, Wallet, FileBarChart, Building } from "lucide-react";
+import { PlatformHome, PlatformClients, PlatformLogs } from "../pages/Platform";
+import { Calculator, Landmark, ClipboardList, Wallet, FileBarChart, Building, Server } from "lucide-react";
 
 const PAGES = {
   dashboard: { title: "Tableau de bord", sub: "Vue globale", comp: Dashboard },
@@ -48,7 +49,16 @@ const PAGES = {
   acct_cashflow: { title: "Flux de trésorerie", sub: "Méthode indirecte", comp: AcctCashflow },
   acct_audit: { title: "Rapports", sub: "Génération centralisée", comp: AcctReports },
   acct_qc9434: { title: "9434-3977 QC inc.", sub: "Commandité", comp: QcEntity },
+  platform_home: { title: "Accueil plateforme", sub: "Supervision Meelora", comp: PlatformHome },
+  platform_clients: { title: "Mandats / Clients", sub: "Portefeuille plateforme", comp: PlatformClients },
+  platform_logs: { title: "Logs plateforme", sub: "Évènements plateforme", comp: PlatformLogs },
 };
+
+const NAV_PLATFORM = [
+  { key: "platform_home", label: "Accueil", sub: "Supervision Meelora", icon: LayoutDashboard },
+  { key: "platform_clients", label: "Mandats / Clients", sub: "Portefeuille plateforme", icon: Building2 },
+  { key: "platform_logs", label: "Logs plateforme", sub: "Évènements plateforme", icon: ScrollText },
+];
 
 const NAV_ACCT = [
   { key: "acct_dashboard", label: "Tableau de bord", sub: "Vue d'ensemble", icon: LayoutDashboard },
@@ -341,6 +351,31 @@ function YearControls() {
   );
 }
 
+function ContextSwitcher({ ctx, onSwitch, orgType }) {
+  const companyLabel = orgType === "fiduciary" ? "Cabinet" : "Société";
+  const OPTS = [
+    { key: "platform", label: "Administration plateforme", sub: "Supervision Meelora", icon: Server },
+    { key: "company", label: `Société Meelora`, sub: `Espace ${companyLabel.toLowerCase()}`, icon: Building2 },
+  ];
+  return (
+    <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-1.5" data-testid="context-switcher">
+      {OPTS.map((o) => {
+        const Icon = o.icon; const on = ctx === o.key;
+        return (
+          <button key={o.key} data-testid={`context-${o.key}`} onClick={() => onSwitch(o.key)}
+            className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${on ? "bg-[#063044] text-white shadow-sm" : "text-slate-600 hover:bg-white"}`}>
+            <Icon size={16} className={on ? "text-[#7fe3cf]" : "text-slate-400"} />
+            <span className="min-w-0">
+              <span className="block truncate text-xs font-700">{o.label}</span>
+              <span className={`block truncate text-[10px] ${on ? "text-white/60" : "text-slate-400"}`}>{o.sub}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Layout() {
   return <YearProvider><LayoutInner /></YearProvider>;
 }
@@ -370,6 +405,11 @@ function CompanySelector({ active, onNavigate }) {
 function LayoutInner() {
   const { user, logout } = useAuth();
   const { t } = useLang();
+  const isPlatformStaff = !!user?.platform_role;
+  const [ctx, setCtx] = useState(() => {
+    try { const s = localStorage.getItem("meelora:ctx"); if (s === "platform" || s === "company") return s; } catch (e) { /* ignore */ }
+    return isPlatformStaff ? "platform" : "company";
+  });
   const [active, setActive] = useState(() => {
     try { const s = localStorage.getItem("acct:lastPage"); if (s && PAGES[s]) return s; } catch (e) { /* ignore */ }
     return "dashboard";
@@ -378,9 +418,23 @@ function LayoutInner() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [avatarColor, setAvatarColor] = useState("#FBBF24");
   const [presentation, setPresentation] = useState(false);
-  const page = PAGES[active];
+  // Guard: if a non-platform user somehow lands on platform ctx, force company.
+  const effectiveCtx = isPlatformStaff ? ctx : "company";
+  const isPlatformPage = active.startsWith("platform_");
+  // Keep active page consistent with the current context.
+  useEffect(() => {
+    if (effectiveCtx === "platform" && !active.startsWith("platform_")) setActive("platform_home");
+    if (effectiveCtx === "company" && active.startsWith("platform_")) setActive("dashboard");
+  }, [effectiveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+  const page = PAGES[active] || PAGES.dashboard;
   const Active = page.comp;
   const go = (k) => { setActive(k); setMobileOpen(false); };
+  const switchCtx = (next) => {
+    setCtx(next);
+    try { localStorage.setItem("meelora:ctx", next); } catch (e) { /* ignore */ }
+    setActive(next === "platform" ? "platform_home" : "dashboard");
+    setMobileOpen(false);
+  };
   useEffect(() => { try { localStorage.setItem("acct:lastPage", active); } catch (e) { /* ignore */ } }, [active]);
   useEffect(() => {
     const handler = (e) => { if (e.detail) { setActive(e.detail); setMobileOpen(false); } };
@@ -408,6 +462,17 @@ function LayoutInner() {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto">
+          {isPlatformStaff && <ContextSwitcher ctx={effectiveCtx} onSwitch={switchCtx} orgType={user?.workspace?.organization_type} />}
+          {effectiveCtx === "platform" ? (
+            <>
+              <div className="flex items-center gap-2 px-3 pb-1 pt-1">
+                <Server size={13} className="text-[#15AF97]" />
+                <span className="overline" style={{ color: "#94A3B8" }}>Plateforme Meelora</span>
+              </div>
+              {NAV_PLATFORM.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
+            </>
+          ) : (
+          <>
           <div className="flex items-center gap-2 px-3 pb-1 pt-1">
             <LayoutDashboard size={13} className="text-[#22C55E]" />
             <span className="overline" style={{ color: "#94A3B8" }}>{t("Vue globale")}</span>
@@ -433,6 +498,8 @@ function LayoutInner() {
               {NAV_BOTTOM.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
             </div>
           )}
+          </>
+          )}
         </nav>
       </aside>
 
@@ -442,15 +509,15 @@ function LayoutInner() {
           <div className="flex min-w-0 items-center gap-2.5">
             <button className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden" onClick={() => setMobileOpen(true)} data-testid="sidebar-open-btn"><Menu size={22} /></button>
             <div className="min-w-0">
-              <p className="overline mb-0.5" data-testid="breadcrumb">{active === "companies" ? t(user?.workspace?.organization_type === "fiduciary" ? "Mandats" : "Sociétés") : active.startsWith("acct_") ? t("Comptabilité") : t("Masse salariale")} <span className="mx-1 text-slate-300">›</span> {t(page.title)}</p>
+              <p className="overline mb-0.5" data-testid="breadcrumb">{isPlatformPage ? "Plateforme Meelora" : active === "companies" ? t(user?.workspace?.organization_type === "fiduciary" ? "Mandats" : "Sociétés") : active.startsWith("acct_") ? t("Comptabilité") : t("Masse salariale")} <span className="mx-1 text-slate-300">›</span> {t(page.title)}</p>
               <h2 className="font-display truncate text-lg font-800 tracking-tight text-[#0F172A] dark:text-white sm:text-2xl">{t(page.title)}</h2>
               <p className="truncate text-xs text-slate-500">{t(page.sub)}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            {active.startsWith("acct_") && <CompanySelector active={active} onNavigate={go} />}
-            {!active.startsWith("acct_") && <span className="hidden rounded-full bg-[#22C55E]/10 px-3 py-1 text-xs font-600 text-[#22C55E] sm:inline-flex">{t("Budget actif")}</span>}
-            {!active.startsWith("acct_") && <YearControls />}
+            {!isPlatformPage && active.startsWith("acct_") && <CompanySelector active={active} onNavigate={go} />}
+            {!isPlatformPage && !active.startsWith("acct_") && <span className="hidden rounded-full bg-[#22C55E]/10 px-3 py-1 text-xs font-600 text-[#22C55E] sm:inline-flex">{t("Budget actif")}</span>}
+            {!isPlatformPage && !active.startsWith("acct_") && <YearControls />}
             <div className="ml-1 flex items-center gap-1 border-l border-slate-200 pl-2">
               <button data-testid="header-help-btn" title={t("Aide")} className="hidden rounded-full p-2 text-slate-500 transition-colors hover:bg-[#F3F4F6] hover:text-[#0F172A] sm:block"><HelpCircle size={18} /></button>
               <NotificationsBell go={go} />

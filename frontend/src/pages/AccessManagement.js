@@ -125,7 +125,7 @@ function InviteWizard({ open, onClose, companies, entitledCodes, onDone }) {
   const cname = (cid) => companies.find((c) => c.id === cid)?.name || cid;
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="invite-wizard">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" aria-describedby={undefined} data-testid="invite-wizard">
         <DialogHeader><DialogTitle>Inviter un utilisateur — étape {step}/4</DialogTitle></DialogHeader>
 
         {step === 1 && (
@@ -207,7 +207,7 @@ function WhyAccess({ cid, uid, code }) {
     <>
       <button type="button" onClick={load} className="mt-1 flex items-center gap-1 text-[11px] text-[#15AF97]" data-testid={`why-${cid}-${code}`}><HelpCircle size={12} /> Pourquoi cet accès ?</button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md" data-testid="why-dialog">
+        <DialogContent className="max-w-md" aria-describedby={undefined} data-testid="why-dialog">
           <DialogHeader><DialogTitle>{MODULE_LABEL[code]}</DialogTitle></DialogHeader>
           {!data ? <Loader2 className="animate-spin" size={16} /> : (
             <div className="space-y-2 text-sm">
@@ -237,7 +237,7 @@ function UserDetail({ uid, open, onClose, onChanged }) {
   };
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="user-detail">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" aria-describedby={undefined} data-testid="user-detail">
         {!data ? <div className="flex items-center gap-2 p-6 text-slate-500"><Loader2 className="animate-spin" size={16} /> Chargement…</div> : (
           <>
             <DialogHeader>
@@ -301,7 +301,7 @@ function ReplaceAdminDialog({ companyId, companyName, adminHist, open, onClose, 
   };
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md" data-testid="replace-admin-dialog">
+      <DialogContent className="max-w-md" aria-describedby={undefined} data-testid="replace-admin-dialog">
         <DialogHeader><DialogTitle>Remplacer l'administrateur — {companyName}</DialogTitle></DialogHeader>
         {step === 1 && (
           <div className="space-y-3 text-sm">

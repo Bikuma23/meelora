@@ -250,4 +250,15 @@ export const api = {
   explainAccess: (cid, uid, params) => client.get(`/companies/${cid}/users/${uid}/effective-access/explain`, { params }).then((r) => r.data),
   companyAdminHistory: (cid) => client.get(`/companies/${cid}/admin-history`).then((r) => r.data),
   replaceCompanyAdmin: (cid, body) => client.post(`/companies/${cid}/client-admin/replace`, body).then((r) => r.data),
+
+  // P1.13D.2 — Meelora platform console (platform staff only)
+  platformSummary: () => client.get("/platform/summary").then((r) => r.data),
+  platformClients: () => client.get("/platform/clients").then((r) => r.data),
+  platformLogs: (params) => client.get("/platform/logs", { params: params || {} }).then((r) => r.data),
+  platformClient: (wsId) => client.get(`/platform/clients/${wsId}`).then((r) => r.data),
+  platformClientAdmins: (wsId) => client.get(`/platform/clients/${wsId}/administrators`).then((r) => r.data),
+  platformClientUsers: (wsId) => client.get(`/platform/clients/${wsId}/users`).then((r) => r.data),
+  platformClientModules: (wsId) => client.get(`/platform/clients/${wsId}/modules`).then((r) => r.data),
+  platformClientLogs: (wsId, params) => client.get(`/platform/clients/${wsId}/logs`, { params: params || {} }).then((r) => r.data),
+  platformClientSupport: (wsId) => client.get(`/platform/clients/${wsId}/support`).then((r) => r.data),
 };
