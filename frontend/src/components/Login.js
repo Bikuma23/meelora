@@ -153,10 +153,7 @@ export default function Login() {
         <DecoChart />
 
         <div className="relative z-10 flex h-full flex-col px-[60px] pb-[46px] pt-[58px]">
-          <div className="flex items-center gap-3" data-testid="login-brand">
-            <img src="/meelora-mark.png" alt="" aria-hidden="true" className="h-11 w-auto" />
-            <span className="font-display text-[34px] font-semibold lowercase tracking-tight text-white">meelora</span>
-          </div>
+          <img src="/meelora-wordmark-white.png" alt="Meelora" className="h-auto w-[212px] shrink-0 self-start" data-testid="login-brand" />
 
           <div className="mt-[76px] max-w-[540px]">
             <p className="text-[16px] font-bold uppercase tracking-[0.12em]" style={{ color: GREEN }}>
