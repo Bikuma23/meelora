@@ -97,14 +97,14 @@ export default function Login() {
   };
 
   return (
-    <div className="grid min-h-screen grid-cols-1 bg-white lg:grid-cols-[60%_40%]" data-testid="login-page">
+    <div className="grid min-h-screen grid-cols-1 bg-white lg:grid-cols-[64%_36%]" data-testid="login-page">
       {/* ---------- LEFT BRAND PANEL ---------- */}
       <div
         className="relative hidden flex-col overflow-hidden bg-cover bg-center lg:flex"
         style={{ backgroundColor: "#03152e", backgroundImage: "url('/login-bg.png')" }}
       >
         <div className="relative z-10 flex h-full flex-col px-[60px] pb-[46px] pt-[58px]">
-          <img src="/meelora-wordmark-white.png" alt="Meelora" className="h-auto w-[212px] shrink-0 self-start" data-testid="login-brand" />
+          <img src="/meelora-wordmark-white.png" alt="Meelora" className="h-auto w-[320px] shrink-0 self-start" data-testid="login-brand" />
 
           <div className="mt-[76px] max-w-[540px]">
             <p className="text-[16px] font-bold uppercase tracking-[0.12em]" style={{ color: GREEN }}>

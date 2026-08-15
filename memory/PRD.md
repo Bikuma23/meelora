@@ -1170,3 +1170,5 @@ Sépare l'identité globale (users) de l'appartenance workspace et société.
 - [x] **Logo officiel exact** : à partir de « Meelora logo dark mode (FR).webp », le slogan a été retiré (effacement région droite-bas + recadrage `getbbox`) → `frontend/public/meelora-wordmark-white.png` (icône M dégradée + point jaune + mot-symbole « meelora » minuscule dans la police de marque exacte). Affiché à `w-[212px] self-start` dans le panneau navy — fidèle à `meelora login page.png`.
 
 - [x] **Fond officiel + split 60/40** : image de fond fournie appliquée telle quelle (`frontend/public/login-bg.png` — navy + ruban « V » vert + graphique décoratif) via `bg-cover bg-center` ; split passé à `lg:grid-cols-[60%_40%]`. SVG ruban/graphique reconstruits retirés. Fidèle au design fourni.
+
+- [x] **Spec finale approuvée** : split ramené à **64/36** (`lg:grid-cols-[64%_36%]`), logo officiel agrandi à `w-[320px]` (~330px @1920), fond dédié fourni conservé (`login-bg.png` — navy + ruban V vert + graphique), tokens/typo conformes. Rendu 1920×1080 fidèle à la référence approuvée. Auth inchangée.
