@@ -106,6 +106,7 @@ from core.financial.reporting_templates import (
     create_jurisdiction_profile, list_jurisdiction_profiles, get_jurisdiction_profile,
     ensure_indexes as _ensure_reporting_template_indexes,
 )
+from core.financial.system_seed import run_system_seed_as
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -1586,6 +1587,16 @@ async def version_reporting_template(template_id: str, user: dict = Depends(get_
 async def list_company_reporting_templates(company_id: str, statement_type: Optional[str] = None,
                                            user: dict = Depends(get_current_user)):
     return await list_company_templates(db, company_id, user, statement_type=statement_type)
+
+
+@api.post("/system/reporting-seed")
+async def system_reporting_seed(user: dict = Depends(get_current_user)):
+    """P3.2 — platform-management seed of system reference data (idempotent)."""
+    report = await run_system_seed_as(db, user)
+    await log_action(user, "seed", "system_reporting", report.get("seed_version", ""),
+                     event_type="system_reporting.seeded",
+                     metadata={"totals": report.get("totals"), "counts": report.get("counts")})
+    return report
 
 
 # ---------------------------------------------------------------------------

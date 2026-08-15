@@ -40,7 +40,7 @@ async def set_label(db, user, payload: LabelUpsert) -> dict:
     if existing:
         await db.financial_i18n_labels.update_one(
             {"_id": existing["_id"]}, {"$set": {"label": payload.label, "updated_at": now}})
-        return {"id": existing["_id"], **key, "label": payload.label,
+        return {"id": str(existing["_id"]), **key, "label": payload.label,
                 "created_at": existing.get("created_at"), "updated_at": now}
     new_id = f"i18n_{uuid.uuid4().hex}"
     await db.financial_i18n_labels.insert_one(
