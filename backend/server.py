@@ -111,6 +111,10 @@ from core.financial.reporting_templates import (
     ensure_indexes as _ensure_reporting_template_indexes,
 )
 from core.financial.system_seed import run_system_seed_as
+from core.financial.reporting_engine import (
+    ReportRequest, preview_report, generate_report, list_reports, get_report,
+    ensure_indexes as _ensure_report_runs_indexes,
+)
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -1661,6 +1665,52 @@ async def system_reporting_seed(user: dict = Depends(get_current_user)):
                      event_type="system_reporting.seeded",
                      metadata={"totals": report.get("totals"), "counts": report.get("counts")})
     return report
+
+
+# ---------------------------------------------------------------------------
+# P3.4 — Core Reporting Engine (P&L + Balance Sheet) + immutable report_runs.
+# Preview = read (company members); generate/finalize = workspace admin.
+# ---------------------------------------------------------------------------
+@api.post("/companies/{company_id}/reports/preview")
+async def preview_company_report(company_id: str, payload: ReportRequest,
+                                 user: dict = Depends(get_current_user)):
+    return await preview_report(db, company_id, user, payload)
+
+
+@api.post("/companies/{company_id}/reports")
+async def generate_company_report(company_id: str, payload: ReportRequest,
+                                  user: dict = Depends(get_current_user)):
+    try:
+        run = await generate_report(db, company_id, user, payload)
+    except HTTPException as e:
+        await log_action(user, "generate_failed", "report", company_id, company_id=company_id,
+                         event_type="report.generation_failed",
+                         metadata={"statement_type": payload.statement_type,
+                                   "financial_period_id": payload.financial_period_id,
+                                   "reason": str(e.detail)[:300]})
+        raise
+    await log_action(user, "generate", "report", run.get("id", ""), company_id=company_id,
+                     entity_id=run.get("id"), event_type="report.generated",
+                     metadata={"statement_type": run.get("statement_type"),
+                               "financial_period_id": run.get("financial_period_id"),
+                               "template_id": run.get("template_id"),
+                               "template_version": run.get("template_version"),
+                               "trial_balance_import_id": run.get("trial_balance_import_id")})
+    return run
+
+
+@api.get("/companies/{company_id}/reports")
+async def list_company_reports(company_id: str, statement_type: Optional[str] = None,
+                               financial_period_id: Optional[str] = None,
+                               template_code: Optional[str] = None,
+                               user: dict = Depends(get_current_user)):
+    return await list_reports(db, company_id, user, statement_type=statement_type,
+                              financial_period_id=financial_period_id, template_code=template_code)
+
+
+@api.get("/companies/{company_id}/reports/{run_id}")
+async def get_company_report(company_id: str, run_id: str, user: dict = Depends(get_current_user)):
+    return await get_report(db, company_id, user, run_id)
 
 
 # ---------------------------------------------------------------------------
@@ -7795,6 +7845,7 @@ async def startup():
         await _ensure_i18n_indexes(db)
         await _ensure_mapping_indexes(db)
         await _ensure_reporting_template_indexes(db)
+        await _ensure_report_runs_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     try:
