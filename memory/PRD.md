@@ -1479,3 +1479,11 @@ Rapport : `/app/RAPPORT_P1_13E.md` (§5 + tableau 7 grants). `--commit` NON exé
 - **Non câblé (routes pas encore réelles)** : réconciliation (routes GET diagnostiques en lecture seule uniquement), `accounting.po_approve` (aucune route PO), `accounting.supplier_invoice_post` (aucune route fournisseur générique). Documenté, non fabriqué.
 - **Tests** : `backend/tests/test_p1_13f_sensitive.py` — matrice positive/négative pour les 5 permissions + manage-insuffisant + cross-workspace + no-membership + société inactive (18/18 PASS). Curls HTTP réels : julie (read, sans perm) journal commit → 403 (permission_not_granted) ; société inconnue → 404 ; création facture 9434 → 403. **Suite E2E complète 42/42 verte.** Aucune formule financière modifiée.
 - STOP après rapport. P3.x non repris.
+
+## P1.13F — Vérification UI accès + audit + événements de refus (2026-06)
+- **Règle architecturale définitive** : niveau module ≠ permission sensible. `manage`/company admin/platform admin ne suffisent JAMAIS. `require_sensitive_permission` = garde central pour toute future opération sensible.
+- **UI P1.13D vérifiée** : la gestion des accès utilise le vrai catalogue P1.13F (`GET /access/permissions`) et octroie/révoque **par société** via `PUT /companies/{cid}/users/{uid}/permissions/{code}`. Aucun second système d'autorité : `PERM_GROUPS` (frontend) = libellés UX uniquement ; 0 code hors catalogue (vérifié). `accounting.entry_reverse` (câblé P1.13F) ajouté à l'UI (était manquant) → les 5 permissions câblées sont octroyables.
+- **Audit grant/revoke** (`user_permission.granted`/`revoked`) : acteur, utilisateur cible, société, permission, avant/après, horodatage (changes + metadata). Vérifié via curl.
+- **Événement de sécurité sur refus** : `security.sensitive_denied` dans `security_events` — structuré (actor, company, permission, reason), **coalescé sur fenêtre 60s** (anti-bruit : 3 refus → 1 doc count=3), **aucune donnée financière**. Émis par `require_sensitive_permission`, fail-safe (n'interrompt jamais la requête).
+- **Routes futures non créées artificiellement** : réconciliation (reconciliation_manage/approve), po_approve, supplier_invoice_post devront utiliser le même garde lors de leur implémentation réelle.
+- Tests rejoués : backend matrice 18/18 PASS + **E2E 42/42 verte**. Aucune logique/formule financière modifiée.

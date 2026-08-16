@@ -15,7 +15,7 @@ const STATUS_COLOR = { active: "bg-emerald-100 text-emerald-700", accepted: "bg-
 
 const PERM_GROUPS = {
   ACCOUNTING: [
-    { title: "Comptabilisation", perms: [["accounting.entry_post", "Comptabiliser les écritures"], ["accounting.customer_invoice_post", "Comptabiliser les factures clients"], ["accounting.supplier_invoice_post", "Comptabiliser les factures fournisseurs"]] },
+    { title: "Comptabilisation", perms: [["accounting.entry_post", "Comptabiliser les écritures"], ["accounting.entry_reverse", "Extourner une écriture"], ["accounting.customer_invoice_post", "Comptabiliser les factures clients"], ["accounting.supplier_invoice_post", "Comptabiliser les factures fournisseurs"]] },
     { title: "Validation", perms: [["accounting.po_approve", "Approuver les PO"], ["accounting.reconciliation_approve", "Valider les réconciliations"]] },
     { title: "Administration comptable", perms: [["accounting.chart_manage", "Gérer le plan comptable"], ["accounting.period_close", "Clôturer une période"], ["accounting.period_reopen", "Rouvrir une période"]] },
   ],

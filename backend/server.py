@@ -2714,11 +2714,20 @@ async def put_user_permission_route(company_id: str, uid: str, permission_code: 
     ws = company.get("workspace_id")
     target = await _access_target_user(uid, ws)
     tid = str(target["_id"])
+    # Sensitive-permission audit: capture the value BEFORE mutating (before/after).
+    before = await access_module_access.has_user_permission(db, ws, company_id, tid, permission_code)
     row = await access_module_access.set_user_permission(
         db, ws, company_id, tid, permission_code, payload.granted, user.get("id"))
-    await log_action(user, "update", "user_permission", target.get("email", ""),
-                     details=f"{permission_code} granted={payload.granted}",
-                     company_id=company_id, entity_id=tid, event_type="user_permission.updated")
+    after = bool(payload.granted)
+    await log_action(user, "grant" if after else "revoke", "user_permission", target.get("email", ""),
+                     details=f"{permission_code}: {before} → {after} (société {company.get('name', company_id)})",
+                     changes=[{"field": permission_code, "before": before, "after": after}],
+                     company_id=company_id, entity_id=tid,
+                     event_type="user_permission.granted" if after else "user_permission.revoked",
+                     metadata={"category": "access", "sensitive_permission": permission_code,
+                               "module": access_perms.module_for_permission(permission_code),
+                               "target_user_id": tid, "target_email": target.get("email"),
+                               "company_id": company_id, "before": before, "after": after})
     return row
 
 
