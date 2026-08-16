@@ -7,7 +7,8 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Building2, BriefcaseBusiness, Plus, Pencil, Search, Users, Loader2, CircleCheck, CircleAlert, Upload, FileSpreadsheet } from "lucide-react";
+import { Building2, BriefcaseBusiness, Plus, Pencil, Search, Users, Loader2, CircleCheck, CircleAlert, Upload, FileSpreadsheet, Ban, RotateCw, ArrowRight } from "lucide-react";
+import { useNav } from "../context/NavContext";
 import { toast } from "sonner";
 
 const INDUSTRIES = [
@@ -260,12 +261,15 @@ export default function Companies() {
   const [mandateDialog, setMandateDialog] = useState({ open:false, company:null, mandate:null });
   const [saving, setSaving] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusDialog, setStatusDialog] = useState({ open: false, company: null });
+  const { enterMandat } = useNav();
 
   const load = async () => {
     setLoading(true);
     try {
       const [cs, ms, us] = await Promise.all([
-        api.getCompanies(),
+        api.getCompanies(admin),
         fiduciary ? api.listMandates().catch(() => []) : Promise.resolve([]),
         admin ? api.listUsers().catch(() => []) : Promise.resolve([]),
       ]);
@@ -275,14 +279,24 @@ export default function Companies() {
   };
   useEffect(() => { load(); }, [fiduciary, admin]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const isActive = (c) => c.status !== "inactive" && c.active !== false;
+  const changeStatus = async (c, next) => {
+    try {
+      await api.updateCompany(c.id, { status: next });
+      toast.success(next === "inactive" ? t("Société rendue inactive") : t("Société réactivée"));
+      setStatusDialog({ open: false, company: null }); await load();
+    } catch (e) { toast.error(e.response?.data?.detail || t("Action impossible")); }
+  };
+
   const mandateByCompany = useMemo(() => Object.fromEntries(mandates.map((m) => [m.company_id, m])), [mandates]);
   const userById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const rows = useMemo(() => companies.filter((c) => {
     const m = mandateByCompany[c.id];
     const principal = userById[m?.principal_user_id]?.name || "";
     const needle = `${c.name || ""} ${c.company_code || ""} ${principal}`.toLowerCase();
-    return (!query || needle.includes(query.toLowerCase())) && (jurisdiction === "all" || c.jurisdiction === jurisdiction);
-  }), [companies, mandateByCompany, userById, query, jurisdiction]);
+    return (!query || needle.includes(query.toLowerCase())) && (jurisdiction === "all" || c.jurisdiction === jurisdiction)
+      && (statusFilter === "all" || (statusFilter === "active" ? isActive(c) : !isActive(c)));
+  }), [companies, mandateByCompany, userById, query, jurisdiction, statusFilter]);
 
   const saveCompany = async (payload) => {
     setSaving(true);
@@ -318,6 +332,7 @@ export default function Companies() {
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
       <div className="relative max-w-md flex-1"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><Input value={query} onChange={(e) => setQuery(e.target.value)} className="pl-9" placeholder={t("Rechercher société, code ou responsable...")} /></div>
       <Select value={jurisdiction} onValueChange={setJurisdiction}><SelectTrigger className="w-full sm:w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("Toutes juridictions")}</SelectItem><SelectItem value="CH">Suisse</SelectItem><SelectItem value="CA">Canada</SelectItem></SelectContent></Select>
+      <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="w-full sm:w-[150px]" data-testid="company-status-filter"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("Toutes")}</SelectItem><SelectItem value="active">{t("Actives")}</SelectItem><SelectItem value="inactive">{t("Inactives")}</SelectItem></SelectContent></Select>
     </div>
 
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -331,8 +346,18 @@ export default function Companies() {
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-lg bg-slate-50 px-2.5 py-2"><span className="block text-[10px] uppercase text-slate-400">{t("Secteur")}</span><b className="font-600 text-slate-700">{INDUSTRIES.find(([v]) => v === c.industry)?.[1] || c.industry || "—"}</b></div>
-            <div className="rounded-lg bg-slate-50 px-2.5 py-2"><span className="block text-[10px] uppercase text-slate-400">{t("Statut")}</span><b className="inline-flex items-center gap-1 font-600 text-[#15803D]"><CircleCheck size={12}/>{t("Actif")}</b></div>
+            <div className="rounded-lg bg-slate-50 px-2.5 py-2"><span className="block text-[10px] uppercase text-slate-400">{t("Statut")}</span>
+              {isActive(c)
+                ? <b className="inline-flex items-center gap-1 font-600 text-[#15803D]" data-testid={`company-status-${c.id}`}><CircleCheck size={12}/>{t("Active")}</b>
+                : <b className="inline-flex items-center gap-1 font-600 text-slate-500" data-testid={`company-status-${c.id}`}><Ban size={12}/>{t("Inactive")}</b>}
+            </div>
           </div>
+          {admin && <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" className="h-8 gap-1" data-testid={`company-access-${c.id}`} disabled={!isActive(c)} onClick={() => enterMandat(c.id)}>{t("Accéder")} <ArrowRight size={13}/></Button>
+            {c.legacy_prefix !== "acct" && (isActive(c)
+              ? <Button size="sm" variant="outline" className="h-8 gap-1 text-rose-600 hover:text-rose-700" data-testid={`company-deactivate-${c.id}`} onClick={() => setStatusDialog({ open:true, company:c })}><Ban size={13}/>{t("Rendre inactive")}</Button>
+              : <Button size="sm" variant="outline" className="h-8 gap-1 text-emerald-600 hover:text-emerald-700" data-testid={`company-reactivate-${c.id}`} onClick={() => changeStatus(c, "active")}><RotateCw size={13}/>{t("Réactiver")}</Button>)}
+          </div>}
           {fiduciary && <div className="mt-3 border-t border-slate-100 pt-3">
             {m ? <div className="flex items-center justify-between gap-2"><div className="min-w-0"><p className="text-[10px] uppercase text-slate-400">{t("Responsable principal")}</p><p className="truncate text-xs font-600 text-slate-700">{principal?.name || m.principal_user_id}</p><p className="mt-0.5 text-[10px] text-slate-400">{m.mandate_code} · {(m.collaborator_user_ids || []).length} {t("collaborateur(s)")}</p></div>{admin && <Button size="sm" variant="outline" className="h-8" onClick={() => setMandateDialog({ open:true, company:c, mandate:m })}><Users size={13} className="mr-1"/>{t("Affecter")}</Button>}</div>
             : <div className="flex items-center justify-between gap-2"><span className="inline-flex items-center gap-1 text-xs font-600 text-amber-600"><CircleAlert size={13}/>{t("Mandat à configurer")}</span>{admin && <Button size="sm" variant="outline" className="h-8" onClick={() => setMandateDialog({ open:true, company:c, mandate:null })}>{t("Configurer")}</Button>}</div>}
@@ -342,8 +367,19 @@ export default function Companies() {
       {!loading && rows.length === 0 && <div className="col-span-full rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center"><Building2 className="mx-auto mb-3 text-slate-300" size={34}/><p className="text-sm font-600 text-slate-500">{t("Aucune société trouvée")}</p>{admin && <p className="mt-1 text-xs text-slate-400">{t("Créez votre première société pour commencer.")}</p>}</div>}
     </div>
 
-    <ImportCompaniesDialog open={importOpen} onOpenChange={setImportOpen} onDone={load}/>
-    {companyDialog.open && <CompanyForm open={companyDialog.open} onOpenChange={(v) => setCompanyDialog((p) => ({...p, open:v}))} initial={companyDialog.item} onSubmit={saveCompany} saving={saving}/>} 
-    {mandateDialog.open && <MandateForm open={mandateDialog.open} onOpenChange={(v) => setMandateDialog((p) => ({...p, open:v}))} company={mandateDialog.company} mandate={mandateDialog.mandate} users={users} onSubmit={saveMandate} saving={saving}/>} 
+    <ImportCompaniesDialog open={importOpen} onOpenChange={setImportOpen} onDone={load}/>    {companyDialog.open && <CompanyForm open={companyDialog.open} onOpenChange={(v) => setCompanyDialog((p) => ({...p, open:v}))} initial={companyDialog.item} onSubmit={saveCompany} saving={saving}/>} 
+    {mandateDialog.open && <MandateForm open={mandateDialog.open} onOpenChange={(v) => setMandateDialog((p) => ({...p, open:v}))} company={mandateDialog.company} mandate={mandateDialog.mandate} users={users} onSubmit={saveMandate} saving={saving}/>}
+    <Dialog open={statusDialog.open} onOpenChange={(v) => setStatusDialog((p) => ({ ...p, open: v }))}>
+      <DialogContent data-testid="deactivate-dialog">
+        <DialogHeader>
+          <DialogTitle>{t("Rendre")} {statusDialog.company?.name} {t("inactive ?")}</DialogTitle>
+          <DialogDescription>{t("Les utilisateurs ne pourront plus accéder à cette société tant qu'elle n'aura pas été réactivée. Les données et l'historique seront conservés.")}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setStatusDialog({ open: false, company: null })}>{t("Annuler")}</Button>
+          <Button className="bg-rose-600 hover:bg-rose-700" data-testid="deactivate-confirm" onClick={() => changeStatus(statusDialog.company, "inactive")}>{t("Rendre inactive")}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>;
 }

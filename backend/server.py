@@ -1268,9 +1268,9 @@ async def get_avatar(uid: str):
 
 
 @api.get("/companies")
-async def list_companies(user: dict = Depends(get_current_user)):
-    """List only companies visible to the authenticated user (P1.4)."""
-    return await list_companies_for_user(db, user)
+async def list_companies(include_inactive: bool = False, user: dict = Depends(get_current_user)):
+    """List companies visible to the user (P1.4). include_inactive for admin registry."""
+    return await list_companies_for_user(db, user, include_inactive=include_inactive)
 
 
 @api.post("/companies/import/preview")
@@ -1308,14 +1308,32 @@ async def get_company(company_id: str, user: dict = Depends(get_current_user)):
 
 
 @api.patch("/companies/{company_id}")
-async def update_company(company_id: str, payload: CompanyUpdate, user: dict = Depends(require_admin)):
-    before = await get_company_for_user(db, company_id, user, admin_required=True)
+async def update_company(company_id: str, payload: CompanyUpdate, user: dict = Depends(require_company_creator)):
+    before = await db.companies.find_one({"id": company_id})
+    if not before:
+        raise HTTPException(status_code=404, detail="Société introuvable")
+    # The internal Meelora company can be edited but NOT deactivated from here.
+    if payload.status == "inactive" and before.get("legacy_prefix") == "acct":
+        raise HTTPException(status_code=403, detail="La société interne Meelora ne peut pas être rendue inactive depuis cette interface.")
     company = await update_company_for_admin(db, company_id, user, payload)
     await log_action(user, "update", "company", company.get("name") or company.get("legal_name", ""),
                      details=f"Société modifiée: {company_id}",
                      changes=[{"field": k, "before": before.get(k), "after": company.get(k)}
                               for k in payload.model_dump(exclude_unset=True).keys()],
                      company_id=company_id, entity_id=company_id, event_type="company.updated")
+    # Platform audit for status transitions by platform staff (before/after).
+    if user.get("platform_role") and payload.status in ("active", "inactive") and before.get("status") != payload.status:
+        try:
+            await access_log_scope.write_platform_log(
+                db, user,
+                event_type="client.deactivated" if payload.status == "inactive" else "client.activated",
+                label=f"Société {'rendue inactive' if payload.status == 'inactive' else 'réactivée'} : {company.get('name')}",
+                target_workspace_id=company.get("workspace_id"), details=company_id,
+                metadata={"category": "client", "result": "success", "action": "status_change",
+                          "resource": f"company:{company_id}",
+                          "before": {"status": before.get("status")}, "after": {"status": payload.status}})
+        except Exception as e:
+            logger.error(f"audit status change: {e}")
     return company
 
 
@@ -2578,6 +2596,9 @@ async def get_company_navigation(company_id: str, user: dict = Depends(get_curre
     company = await db.companies.find_one({"id": company_id})
     if not company or company.get("workspace_id") != ws:
         raise HTTPException(status_code=404, detail="Société introuvable")
+    # Inactive company: not selectable as an operational working context.
+    if company.get("status") == "inactive" or company.get("active") is False:
+        raise HTTPException(status_code=403, detail="Société inactive : accès opérationnel suspendu")
     # The caller must actually have access to this company (admin or membership).
     if user.get("role") != "admin":
         has_access = await db.company_memberships.find_one(

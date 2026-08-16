@@ -138,17 +138,22 @@ def _validate_modules(mods: Optional[list]) -> Optional[list]:
     return [m for m in order if m in set(mods)]
 
 
-async def list_companies_for_user(db, user: dict) -> list[dict]:
+async def list_companies_for_user(db, user: dict, include_inactive: bool = False) -> list[dict]:
     workspace_id = require_tenant_context(user)
+    # Admin registry with include_inactive: surface ALL workspace companies
+    # (accessible-id resolution otherwise drops inactive ones).
+    if include_inactive and user.get("role") == "admin":
+        docs = await db.companies.find({"workspace_id": workspace_id}).to_list(None)
+        docs.sort(key=lambda d: ((d.get("name") or d.get("display_name") or "").casefold(), d.get("id") or ""))
+        return [public_company(d) for d in docs]
     accessible_ids = await list_accessible_company_ids(db, user)
     if not accessible_ids:
         return []
-    docs = await db.companies.find({
-        "workspace_id": workspace_id,
-        "id": {"$in": accessible_ids},
-        "active": {"$ne": False},
-        "status": {"$ne": "inactive"},
-    }).to_list(None)
+    query = {"workspace_id": workspace_id, "id": {"$in": accessible_ids}}
+    if not include_inactive:
+        query["active"] = {"$ne": False}
+        query["status"] = {"$ne": "inactive"}
+    docs = await db.companies.find(query).to_list(None)
     docs.sort(key=lambda d: ((d.get("name") or d.get("display_name") or "").casefold(), d.get("id") or ""))
     return [public_company(d) for d in docs]
 
@@ -204,8 +209,15 @@ async def create_company_for_admin(db, user: dict, payload: CompanyCreate) -> di
 
 
 async def update_company_for_admin(db, company_id: str, user: dict, payload: CompanyUpdate) -> dict:
-    current = await require_company_admin(db, company_id, user)
     workspace_id = require_tenant_context(user)
+    if user.get("platform_role") != "platform_admin" and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
+    # Lifecycle management must reach INACTIVE companies too (reactivation),
+    # so we look up by workspace scope without the active/status filter used by
+    # operational access. Cross-workspace stays 404 (no tenant leak).
+    current = await db.companies.find_one({"workspace_id": workspace_id, "id": company_id})
+    if not current:
+        raise HTTPException(status_code=404, detail="Société introuvable")
     changes = payload.model_dump(exclude_unset=True)
     if not changes:
         return public_company(current)

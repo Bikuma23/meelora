@@ -88,10 +88,14 @@ async def resolve_effective_access(
     if not company_id:
         return deny("no_company_context")
 
-    company = await _company_in_workspace(db, workspace_id, company_id)
+    company = await db.companies.find_one({"workspace_id": workspace_id, "id": company_id})
     if not company:
         # Cross-workspace / unknown company — no-leak (404 at route level).
         return deny("cross_workspace")
+    if company.get("active") is False or company.get("status") == "inactive":
+        # Inactive company: data preserved, but NO operational access (fail-closed).
+        result["checks"]["company"] = "inactive"
+        return deny("company_inactive")
     result["checks"]["company"] = "in_workspace"
 
     membership = await _active_company_membership(db, workspace_id, company_id, user_id)

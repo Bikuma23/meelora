@@ -76,7 +76,7 @@ export const api = {
   getCustomReport: (params) => client.get("/reports/custom", { params }).then((r) => r.data),
   getPreferences: () => client.get("/me/preferences").then((r) => r.data),
   updatePreferences: (body) => client.put("/me/preferences", body).then((r) => r.data),
-  getCompanies: () => client.get("/companies").then((r) => r.data),
+  getCompanies: (includeInactive = false) => client.get("/companies", { params: includeInactive ? { include_inactive: true } : {} }).then((r) => r.data),
   previewCompaniesImport: (file) => { const fd = new FormData(); fd.append("file", file); return client.post("/companies/import/preview", fd).then((r) => r.data); },
   commitCompaniesImport: (file) => { const fd = new FormData(); fd.append("file", file); return client.post("/companies/import/commit", fd).then((r) => r.data); },
   getCompany: (id) => client.get(`/companies/${id}`).then((r) => r.data),
