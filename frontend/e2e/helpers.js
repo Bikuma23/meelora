@@ -12,7 +12,7 @@ async function login(page, who) {
   await page.goto("/");
   // Reset any stored context/page so defaults are deterministic.
   await page.evaluate(() => {
-    try { localStorage.removeItem("meelora:ctx"); localStorage.removeItem("acct:lastPage"); } catch (e) {}
+    try { localStorage.removeItem("meelora:ctx"); localStorage.removeItem("acct:lastPage"); localStorage.removeItem("meelora:accessed"); localStorage.removeItem("meelora:activeCompany"); } catch (e) {}
   });
   await page.goto("/");
   await page.getByTestId("login-email").fill(c.email);

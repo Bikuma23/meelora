@@ -69,7 +69,7 @@ export function PlatformHome() {
 // ---------------------------------------------------------------------------
 export function PlatformClients() {
   const { user } = useAuth();
-  const { enterCompanyContext } = useNav();
+  const { enterMeelora } = useNav();
   const internalWsId = user?.workspace?.id;
   const [clients, setClients] = useState(null);
   const [q, setQ] = useState("");
@@ -100,7 +100,7 @@ export function PlatformClients() {
               <div className="text-xs text-slate-500">{c.jurisdiction} · {c.companies_count} société(s) · {c.active_users_count} utilisateur(s)</div>
             </div>
           </div>
-          <Button className="gap-1.5 bg-[#063044] text-white hover:bg-[#0a4a68]" data-testid="platform-internal-access" onClick={enterCompanyContext}>
+          <Button className="gap-1.5 bg-[#063044] text-white hover:bg-[#0a4a68]" data-testid="platform-internal-access" onClick={enterMeelora}>
             Accéder <ArrowRight size={14} />
           </Button>
         </div>
@@ -123,6 +123,45 @@ export function PlatformClients() {
           </Button>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Société Meelora (entrée plateforme dédiée) — bouton Accéder = EXTENSION :
+// ajoute les modules métier réellement autorisés à la sidebar SANS retirer les
+// menus plateforme. platform_role n'accorde aucune autorité financière.
+// ---------------------------------------------------------------------------
+export function PlatformMeelora() {
+  const { enterMeelora, meeloraAccessed } = useNav();
+  const [company, setCompany] = useState(null);
+  useEffect(() => {
+    api.getCompanyContext().then((d) => {
+      const cs = d.companies || [];
+      setCompany(cs.find((c) => c.legacy_prefix === "acct") || cs[0] || false);
+    }).catch(() => setCompany(false));
+  }, []);
+  if (company === null) return <div className="flex items-center gap-2 text-slate-500"><Loader2 className="animate-spin" size={16} /> Chargement…</div>;
+  return (
+    <div className="space-y-4" data-testid="platform-meelora">
+      <p className="text-sm text-slate-500">Société interne de Meelora. « Accéder » ajoute vos modules métier réellement autorisés à la barre latérale, sans quitter le contexte plateforme.</p>
+      <div className="flex flex-col gap-3 rounded-xl border border-[#15AF97]/40 bg-[#15AF97]/8 p-5 sm:flex-row sm:items-center sm:justify-between" data-testid="platform-meelora-card">
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#15AF97]/20 text-[#0f8f7c]"><Building2 size={20} /></span>
+          <div>
+            <div className="flex items-center gap-2 font-medium text-[#063044]">{company ? company.name : "Société Meelora"}
+              <span className="rounded-full bg-[#15AF97] px-2 py-0.5 text-[10px] font-semibold uppercase text-white">Société interne</span>
+            </div>
+            <div className="text-xs text-slate-500">Le rôle plateforme n'accorde aucune permission financière. Seuls vos modules réellement attribués apparaîtront.</div>
+          </div>
+        </div>
+        <Button className="gap-1.5 bg-[#063044] text-white hover:bg-[#0a4a68]" data-testid="platform-meelora-access" onClick={enterMeelora} disabled={!company}>
+          {meeloraAccessed ? "Accédé" : "Accéder"} <ArrowRight size={14} />
+        </Button>
+      </div>
+      {meeloraAccessed && (
+        <p className="text-xs text-[#0f8f7c]" data-testid="platform-meelora-accessed-note">Vos modules métier autorisés ont été ajoutés à la barre latérale (section « Société Meelora »).</p>
+      )}
     </div>
   );
 }

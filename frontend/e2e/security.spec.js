@@ -21,14 +21,18 @@ test.describe("Platform/company separation & security (P1.13D.2)", () => {
     await ctx.dispose();
   });
 
-  test("platform staff has a workspace membership but NO automatic financial authority path in platform ctx", async ({ page }) => {
+  test("platform staff has a workspace membership but NO automatic financial authority path", async ({ page }) => {
     await login(page, "platformAdmin");
-    // In platform context there is no business module navigation at all.
+    // Platform sidebar shows no business module until "Société Meelora" is accessed.
     await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
     await expect(page.getByTestId("nav-platform_home")).toBeVisible();
-    // Switching to the company context is an explicit, separate action.
-    await page.getByTestId("context-company").click();
-    await expect(page.getByTestId("company-nav")).toBeVisible();
+    // Accessing Société Meelora is an explicit action; platform_role grants NO
+    // financial module -> the extension is empty (fail-closed).
+    await page.getByTestId("nav-platform_meelora").click();
+    await page.getByTestId("platform-meelora-access").click();
+    await page.waitForTimeout(1000);
+    await expect(page.getByTestId("platform-ext-empty")).toBeVisible();
+    await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
   });
 
   test("platform logs endpoint returns only platform-scoped events (never the tenant stream)", async ({ page }) => {

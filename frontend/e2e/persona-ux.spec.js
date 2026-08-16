@@ -69,15 +69,18 @@ test.describe("Persona sidebar = effective access (P1.13E)", () => {
     await expect(page.getByTestId("module-placeholder-REPORTING")).toBeVisible();
   });
 
-  test("platform_admin: company context shows the company sidebar, platform nav shows none of the 5 modules", async ({ page }) => {
+  test("platform_admin: extension keeps platform nav; platform_role adds no financial module", async ({ page }) => {
     await login(page, { email: "platform@meelora.com", password: "platform123" });
-    // Platform context: none of the business modules appear.
+    // No business modules appear before accessing Société Meelora.
     await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
     await expect(page.getByTestId("platform-home")).toBeVisible();
-    // Switch to Société Meelora -> company sidebar renders (platform_role grants
-    // no business modules, so the business list may be empty by design).
-    await page.getByTestId("context-company").click();
-    await expect(page.getByTestId("company-nav")).toBeVisible();
-    await expect(page.getByTestId("nav-platform_home")).toHaveCount(0);
+    // Access Société Meelora -> extension appended, platform menus RETAINED.
+    await page.getByTestId("nav-platform_meelora").click();
+    await page.getByTestId("platform-meelora-access").click();
+    await page.waitForTimeout(1000);
+    await expect(page.getByTestId("platform-business-ext")).toBeVisible();
+    await expect(page.getByTestId("platform-ext-empty")).toBeVisible(); // platform_role => no module
+    await expect(page.getByTestId("nav-platform_home")).toBeVisible();
+    await expect(page.getByTestId("nav-platform_meelora")).toBeVisible();
   });
 });

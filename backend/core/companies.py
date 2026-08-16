@@ -14,28 +14,65 @@ from .permissions import (
 )
 
 
+# --- Extensible tax model (per jurisdiction). Backend stays permissive: it stores
+# whatever tax_profile the caller sends, so new jurisdictions can be added without a
+# schema change. Known Canadian keys are documented for the UI but never mandatory. ---
+TAX_KEYS_BY_JURISDICTION = {
+    "CA": ["bn", "gst", "qst", "pst"],   # BN, TPS/GST, TVQ/QST (QC), PST (BC/SK/MB)
+    "CH": ["uid", "vat"],                # IDE/UID, TVA/MWST
+}
+CANONICAL_MODULES = {"REPORTING", "BUDGETS", "ACCOUNTING", "FIXED_ASSETS", "CONSOLIDATION"}
+
+
 class CompanyCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
-    legal_name: Optional[str] = Field(default=None, max_length=250)
+    name: str = Field(min_length=1, max_length=200)                       # nom d'affichage
+    legal_name: Optional[str] = Field(default=None, max_length=250)       # nom légal
+    trade_name: Optional[str] = Field(default=None, max_length=250)       # nom commercial
     company_code: Optional[str] = Field(default=None, max_length=80)
+    entity_type: Optional[str] = Field(default=None, max_length=60)       # type d'entité (extensible)
+    business_number: Optional[str] = Field(default=None, max_length=60)   # n° d'entreprise (BN/IDE...)
     jurisdiction: Optional[str] = Field(default=None, max_length=10)
-    region: Optional[str] = Field(default=None, max_length=80)
+    country: Optional[str] = Field(default=None, max_length=60)
+    region: Optional[str] = Field(default=None, max_length=80)            # province / canton
+    city: Optional[str] = Field(default=None, max_length=120)
+    address_line1: Optional[str] = Field(default=None, max_length=200)
+    address_line2: Optional[str] = Field(default=None, max_length=200)
+    postal_code: Optional[str] = Field(default=None, max_length=20)
+    phone: Optional[str] = Field(default=None, max_length=40)
+    email: Optional[str] = Field(default=None, max_length=200)
     functional_currency: Optional[str] = Field(default=None, min_length=3, max_length=3)
+    language: Optional[str] = Field(default=None, max_length=5)           # fr/en/de/it
     industry: Optional[str] = Field(default=None, max_length=100)
     company_type: Optional[Literal["operating", "holding", "real_estate", "nonprofit", "other"]] = None
     fiscal_year_start: Optional[str] = Field(default=None, max_length=5)
+    subscribed_modules: Optional[list[str]] = None
+    admin_email: Optional[str] = Field(default=None, max_length=200)      # administrateur à associer/inviter
+    tax_profile: Optional[dict] = None                                   # extensible par juridiction
 
 
 class CompanyUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     legal_name: Optional[str] = Field(default=None, max_length=250)
+    trade_name: Optional[str] = Field(default=None, max_length=250)
     company_code: Optional[str] = Field(default=None, max_length=80)
+    entity_type: Optional[str] = Field(default=None, max_length=60)
+    business_number: Optional[str] = Field(default=None, max_length=60)
     jurisdiction: Optional[str] = Field(default=None, max_length=10)
+    country: Optional[str] = Field(default=None, max_length=60)
     region: Optional[str] = Field(default=None, max_length=80)
+    city: Optional[str] = Field(default=None, max_length=120)
+    address_line1: Optional[str] = Field(default=None, max_length=200)
+    address_line2: Optional[str] = Field(default=None, max_length=200)
+    postal_code: Optional[str] = Field(default=None, max_length=20)
+    phone: Optional[str] = Field(default=None, max_length=40)
+    email: Optional[str] = Field(default=None, max_length=200)
     functional_currency: Optional[str] = Field(default=None, min_length=3, max_length=3)
+    language: Optional[str] = Field(default=None, max_length=5)
     industry: Optional[str] = Field(default=None, max_length=100)
     company_type: Optional[Literal["operating", "holding", "real_estate", "nonprofit", "other"]] = None
     fiscal_year_start: Optional[str] = Field(default=None, max_length=5)
+    subscribed_modules: Optional[list[str]] = None
+    tax_profile: Optional[dict] = None
     status: Optional[Literal["active", "inactive"]] = None
 
 
@@ -46,19 +83,59 @@ def public_company(doc: dict) -> dict:
         "workspace_id": doc.get("workspace_id"),
         "name": doc.get("name") or doc.get("display_name") or doc.get("legal_name") or "",
         "legal_name": doc.get("legal_name"),
+        "trade_name": doc.get("trade_name"),
         "display_name": doc.get("display_name") or doc.get("name"),
         "company_code": doc.get("company_code"),
+        "entity_type": doc.get("entity_type"),
+        "business_number": doc.get("business_number"),
         "jurisdiction": doc.get("jurisdiction"),
+        "country": doc.get("country"),
         "region": doc.get("region"),
+        "city": doc.get("city"),
+        "address_line1": doc.get("address_line1"),
+        "address_line2": doc.get("address_line2"),
+        "postal_code": doc.get("postal_code"),
+        "phone": doc.get("phone"),
+        "email": doc.get("email"),
         "functional_currency": doc.get("functional_currency"),
+        "language": doc.get("language"),
         "industry": doc.get("industry"),
         "company_type": doc.get("company_type"),
         "fiscal_year_start": doc.get("fiscal_year_start"),
+        "subscribed_modules": doc.get("subscribed_modules") or [],
+        "tax_profile": doc.get("tax_profile") or {},
+        "admin_email": doc.get("admin_email"),
         "status": doc.get("status", "active" if doc.get("active", True) else "inactive"),
         "active": doc.get("active", doc.get("status") != "inactive"),
         # Temporary compatibility bridge; removed with Financial Core migration.
         "legacy_prefix": doc.get("legacy_prefix"),
     }
+
+
+def _clean_tax_profile(jurisdiction: Optional[str], tax_profile: Optional[dict]) -> dict:
+    """Permissive, extensible-by-jurisdiction tax profile. Keeps only non-empty
+    string values; never enforces a Canada-only shape."""
+    if not isinstance(tax_profile, dict):
+        return {}
+    out = {}
+    for k, v in tax_profile.items():
+        if v is None:
+            continue
+        s = str(v).strip()
+        if s:
+            out[str(k)] = s
+    return out
+
+
+def _validate_modules(mods: Optional[list]) -> Optional[list]:
+    if mods is None:
+        return None
+    invalid = [m for m in mods if m not in CANONICAL_MODULES]
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"Modules inconnus: {', '.join(invalid)}")
+    # de-dupe, keep canonical order
+    order = ["REPORTING", "BUDGETS", "ACCOUNTING", "FIXED_ASSETS", "CONSOLIDATION"]
+    return [m for m in order if m in set(mods)]
 
 
 async def list_companies_for_user(db, user: dict) -> list[dict]:
@@ -101,6 +178,8 @@ async def create_company_for_admin(db, user: dict, payload: CompanyCreate) -> di
     workspace_id = require_tenant_context(user)
     data = payload.model_dump()
     await _ensure_company_code_unique(db, workspace_id, data.get("company_code"))
+    data["subscribed_modules"] = _validate_modules(data.get("subscribed_modules"))
+    data["tax_profile"] = _clean_tax_profile(data.get("jurisdiction"), data.get("tax_profile"))
     now = datetime.now(timezone.utc).isoformat()
     company_id = f"cmp_{uuid.uuid4().hex}"
     doc = {
@@ -130,6 +209,10 @@ async def update_company_for_admin(db, company_id: str, user: dict, payload: Com
         return public_company(current)
     if "company_code" in changes:
         await _ensure_company_code_unique(db, workspace_id, changes.get("company_code"), exclude_id=company_id)
+    if "subscribed_modules" in changes:
+        changes["subscribed_modules"] = _validate_modules(changes.get("subscribed_modules"))
+    if "tax_profile" in changes:
+        changes["tax_profile"] = _clean_tax_profile(changes.get("jurisdiction") or current.get("jurisdiction"), changes.get("tax_profile"))
     if changes.get("name") is not None:
         changes["name"] = changes["name"].strip()
     if changes.get("functional_currency"):

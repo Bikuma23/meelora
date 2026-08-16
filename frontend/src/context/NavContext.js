@@ -4,8 +4,9 @@ import { createContext, useContext } from "react";
 export const NavContext = createContext({
   go: () => {},
   enterMandat: () => {},
-  enterCompanyContext: () => {},
+  enterMeelora: () => {},
   activeCompanyId: null,
+  meeloraAccessed: false,
   companies: [],
 });
 

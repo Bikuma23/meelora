@@ -98,15 +98,15 @@ comptables présentes : `acct_periods` / `acct_bv`). Chaque grant dérive d'une
 **`company_membership` active** (pont legacy). Dérivation conservatrice = **read**
 (equal-or-less, aucune escalade).
 
-| # | Utilisateur | Société | Accès legacy justifiant | Module | Niveau | Justification |
-|---|---|---|---|---|---|---|
-| 1 | julie@accslegro.com | Meelora | company_membership `principal` (active) | ACCOUNTING | read | Meelora utilise ACCOUNTING ; adhésion active → read |
-| 2 | marc@accslegro.com | Meelora | company_membership `collaborator` (active) | ACCOUNTING | read | idem |
-| 3 | platform@meelora.com | Meelora | company_membership `collaborator` (active) — **dérivé de l'adhésion société, PAS du platform_role** | ACCOUNTING | read | idem ; le `platform_role=platform_admin` n'entre PAS dans le calcul |
-| 4 | persona_clientadmin@accslegro.com | Meelora | company_membership `admin` (active) | ACCOUNTING | read | admin société = read seulement (admin ≠ autorité financière) |
-| 5 | persona_reporting@accslegro.com | Meelora | company_membership `user` (active) | ACCOUNTING | read | idem |
-| 6 | persona_consol@accslegro.com | Meelora | company_membership `user` (active) | ACCOUNTING | read | idem |
-| 7 | persona_budgets@accslegro.com | Meelora | company_membership `user` (active) | ACCOUNTING | read | idem |
+| Utilisateur | Société | Accès legacy constaté | Module proposé | Niveau proposé | Justification |
+|---|---|---|---|---|---|
+| julie@accslegro.com | Meelora (`965f0770…436a`) | `company_membership` rôle **principal** (active) | ACCOUNTING | read | Société Meelora utilise ACCOUNTING (données `acct_periods`/`acct_bv`). Adhésion active → accès dérivé conservateur = read. Aucune escalade. |
+| marc@accslegro.com | Meelora (`965f0770…436a`) | `company_membership` rôle **collaborator** (active) | ACCOUNTING | read | Idem : société utilise ACCOUNTING ; collaborateur actif → read only. |
+| platform@meelora.com | Meelora (`965f0770…436a`) | `company_membership` rôle **collaborator** (active) — **dérivé de l'adhésion société, PAS du platform_role** | ACCOUNTING | read | Le grant provient de l'adhésion société collaborator, jamais de `platform_role=platform_admin`. read only. |
+| persona_clientadmin@accslegro.com | Meelora (`965f0770…436a`) | `company_membership` rôle **admin** (active) | ACCOUNTING | read | Admin société ⇒ read seulement (admin ≠ autorité financière ; aucun manage/sensible auto). |
+| persona_reporting@accslegro.com | Meelora (`965f0770…436a`) | `company_membership` rôle **user** (active) | ACCOUNTING | read | Société utilise ACCOUNTING ; membre actif → read only. |
+| persona_consol@accslegro.com | Meelora (`965f0770…436a`) | `company_membership` rôle **user** (active) | ACCOUNTING | read | Société utilise ACCOUNTING ; membre actif → read only. |
+| persona_budgets@accslegro.com | Meelora (`965f0770…436a`) | `company_membership` rôle **user** (active) | ACCOUNTING | read | Société utilise ACCOUNTING ; membre actif → read only. |
 
 ### 3.1 Invariants confirmés (script `scripts/p1_13a_grant_details.py`)
 - **0 `manage` automatique** — aucun niveau manage dérivé (aucun signal explicite en legacy).
@@ -166,3 +166,34 @@ modification financière n'a été faite ici.**
 - Les **7 grants** sont listés explicitement pour votre validation.
 - **`--commit` NON exécuté.** En attente de votre validation des 7 lignes.
 - **P3.x non repris.**
+
+---
+
+## 5. Parcours UX validés (tour complémentaire — nouvelle spec)
+
+Modifications de code (frontend uniquement, autorisées) + **28/28 E2E verts**.
+
+### 5.1 Employé Meelora SANS rôle plateforme
+- Sidebar = **uniquement ses modules métier effectifs** (entrée générique « Tableau de bord » retirée ; le tableau de bord budgétaire est désormais rattaché au module BUDGETS).
+- Aucun menu plateforme, aucun « Société Meelora », aucun « Logs plateforme ».
+- « Tous les mandats » n'apparaît que pour un utilisateur multi-mandats.
+- **Landing** : login → **Comptabilité en priorité si ACCOUNTING attribué**, sinon 1er module.
+- Preuves : `persona-ux.spec.js` (personas mono-module, Client Admin), `security.spec.js`.
+
+### 5.2 Employé Meelora AVEC rôle plateforme — EXTENSION (pas bascule)
+- Sidebar plateforme = **Tableau de bord · Sociétés / Clients · Société Meelora · Logs plateforme** (appellation « Sociétés / Clients » conservée, choix A).
+- **Société Meelora → Accéder** : **ajoute** les modules métier réellement autorisés à la sidebar **en conservant** les 4 menus plateforme (choix B — extension, pas remplacement de contexte).
+- `platform_role` n'accorde **aucune** permission financière : pour `platform@` (adhésion « nue »), l'extension est **vide** → preuve visible que platform_role ≠ autorité.
+- Preuves : `platform-context.spec.js`, `nav-hierarchy.spec.js`, `security.spec.js`.
+
+### 5.3 Accueil client & « Tous les mandats »
+- Multi-mandats : l'utilisateur **atterrit sur « Tous les mandats »** (accueil client), chaque mandat portant un bouton **Accéder**.
+- **Accéder** à un mandat : définit le contexte société, recharge les droits effectifs (`resolve_effective_access`), recompose la sidebar, ouvre les modules du mandat. Isolation A↛B prouvée.
+- Preuves : `nav-hierarchy.spec.js`, `access-flows.spec.js`.
+
+### 5.4 Formulaire « Créer une société / client » — complet & fiscalité extensible
+- Sections : Identification (nom d'affichage, **nom légal**, **nom commercial**, **type d'entité**, code, **n° d'entreprise**), Adresse & coordonnées (adresse, ville, **province/canton/état**, code postal, **pays**, **juridiction**, **téléphone**, **courriel**), **Fiscalité conditionnelle**, Paramètres (**devise**, **langue**, secteur, type, exercice), **Modules souscrits** (5 canoniques), **Administrateur à associer/inviter** (courriel).
+- **Modèle fiscal EXTENSIBLE par juridiction** (pas Canada-exclusif) : Canada → **BN**, **TPS/GST**, **TVQ/QST** (si province = QC), **PST** (si BC/SK/MB) ; Suisse → **IDE/UID**, **TVA**. Backend permissif (`tax_profile` dict, nettoyé, ordre modules canonique).
+- Preuves : `company-form.spec.js` (champs + bascule QC↔BC↔Suisse) + curl backend (création complète, devise normalisée, QST conservée / PST vide retirée).
+
+> Note d'interprétation « Accueil Client » : l'accueil d'un client multi-mandats **est** la liste « Tous les mandats » (avec un bouton Accéder par mandat). L'infra d'invitation admin existante (P1.13D) reste le canal d'invitation ; le courriel admin saisi au formulaire est stocké sur la société (`admin_email`).

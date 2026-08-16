@@ -1403,3 +1403,16 @@ Rapport complet : `/app/RAPPORT_P1_13E.md`. **Aucune migration appliquée** (`--
 - **Validation utilisateur** des 7 lignes P1.13A, puis autorisation explicite pour `--commit`.
 - P1.13F (câblage permissions sensibles) — sur décision.
 - P3.x — non repris (sur demande).
+
+
+## P1.13E — Refonte navigation (extension) + formulaire société complet (2026-06)
+Rapport : `/app/RAPPORT_P1_13E.md` (§5 + tableau 7 grants). `--commit` NON exécuté, P3.x non repris. Suite E2E **28/28 verte**.
+- **Employé SANS platform_role** : sidebar = uniquement ses modules métier (entrée générique « Tableau de bord » retirée ; dashboard budgétaire rattaché à BUDGETS via `MODULE_PAGES`/`ModulesNav`). Landing = **Comptabilité prioritaire si ACCOUNTING**, sinon 1er module ; multi-mandats → « Tous les mandats ».
+- **Employé AVEC platform_role — modèle EXTENSION** (remplace la bascule de contexte). Sidebar plateforme = Tableau de bord · Sociétés / Clients · **Société Meelora** · Logs plateforme. « Société Meelora → Accéder » (`enterMeelora`) **ajoute** les modules réellement autorisés SANS retirer les menus plateforme. `platform_role` = 0 module (extension vide pour platform@). `ContextSwitcher` supprimé.
+- **Formulaire « Créer une société / client »** (`Companies.js`) : sections Identification / Adresse / **Fiscalité conditionnelle** / Paramètres / Modules souscrits / Administrateur. Modèle fiscal **extensible par juridiction** (`TAX_FIELDS`) : CA → BN/TPS/TVQ(QC)/PST(BC,SK,MB) ; CH → UID/TVA. Backend `core/companies.py` : `CompanyCreate/Update` étendus (trade_name, entity_type, business_number, adresse complète, country, phone/email, language, subscribed_modules, admin_email, `tax_profile` permissif) + `public_company`.
+- Fichiers E2E : `nav-hierarchy.spec.js`, `platform-context.spec.js` (réécrit extension), `persona-ux.spec.js`, `security.spec.js`, `company-form.spec.js` (nouveau). `helpers.js` nettoie `meelora:accessed`/`activeCompany`.
+- Scripts (lecture seule) : `scripts/p1_13a_grant_details.py` (7 grants + invariants).
+
+### En attente
+- **Validation explicite des 7 grants P1.13A** avant `--commit`.
+- P1.13F (câblage permissions sensibles) ; P3.x — sur décision.

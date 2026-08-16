@@ -11,22 +11,22 @@ const CA = "965f0770-8cf2-4199-a99f-819ff270436a"; // Meelora  -> BUDGETS + ACCO
 const CB = "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9"; // 9434     -> ACCOUNTING + CONSOLIDATION
 
 test.describe("Navigation hiérarchique (sign-off P1.13E)", () => {
-  test("Meelora → Sociétés / Clients → Meelora → Accéder → contexte Société Meelora", async ({ page }) => {
+  test("Meelora → Sociétés / Clients → Meelora → Accéder → EXTENSION (menus plateforme conservés)", async ({ page }) => {
     await login(page, "platformAdmin");
-    // Sidebar plateforme = Tableau de bord + Sociétés/Clients + Logs plateforme.
+    // Sidebar plateforme = 4 entrées.
     await expect(page.getByTestId("nav-platform_home")).toBeVisible();
     await expect(page.getByTestId("nav-platform_clients")).toBeVisible();
+    await expect(page.getByTestId("nav-platform_meelora")).toBeVisible();
     await expect(page.getByTestId("nav-platform_logs")).toBeVisible();
-    // Page Sociétés / Clients : la carte Meelora est en 1re position, fond vert, Accéder.
+    // Page Sociétés / Clients : carte Meelora (fond vert) + Accéder.
     await page.getByTestId("nav-platform_clients").click();
-    const internal = page.getByTestId("platform-internal-card");
-    await expect(internal).toBeVisible();
-    await expect(page.getByTestId("platform-internal-access")).toBeVisible();
+    await expect(page.getByTestId("platform-internal-card")).toBeVisible();
     await page.getByTestId("platform-internal-access").click();
-    await page.waitForTimeout(800);
-    // On bascule dans le contexte Société Meelora : sidebar métier, plus de nav plateforme.
-    await expect(page.getByTestId("company-nav")).toBeVisible();
-    await expect(page.getByTestId("nav-platform_home")).toHaveCount(0);
+    await page.waitForTimeout(1000);
+    // EXTENSION : les menus plateforme restent + section « Société Meelora » ajoutée.
+    await expect(page.getByTestId("platform-business-ext")).toBeVisible();
+    await expect(page.getByTestId("nav-platform_home")).toBeVisible();
+    await expect(page.getByTestId("nav-platform_meelora")).toBeVisible();
   });
 
   test("Client → Tous les mandats → A → Accéder → modules A ; puis B → modules B (isolation A↛B)", async ({ page }) => {

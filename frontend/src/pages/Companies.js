@@ -20,42 +20,137 @@ const COMPANY_TYPES = [
   ["operating", "Société opérationnelle"], ["holding", "Holding"], ["real_estate", "Société immobilière"],
   ["nonprofit", "Association / Fondation"], ["other", "Autre"],
 ];
-const emptyCompany = {
-  name: "", legal_name: "", company_code: "", jurisdiction: "CH", region: "", functional_currency: "CHF",
-  industry: "services", company_type: "operating", fiscal_year_start: "01-01",
+// --- Extensible tax model, driven by jurisdiction (NOT Canada-exclusive) ---
+const TAX_FIELDS = {
+  CA: [
+    { key: "bn", label: "Numéro d'entreprise (BN)" },
+    { key: "gst", label: "TPS / GST" },
+    { key: "qst", label: "TVQ / QST (Québec)", when: (f) => {
+      const r = (f.region || "").toLowerCase();
+      return r === "qc" || r.includes("quebec") || r.includes("québec");
+    } },
+    { key: "pst", label: "PST (selon province)", when: (f) => ["bc", "sk", "mb"].includes((f.region || "").toLowerCase()) },
+  ],
+  CH: [
+    { key: "uid", label: "IDE / UID" },
+    { key: "vat", label: "TVA / MWST" },
+  ],
 };
+const ENTITY_TYPES = [
+  ["inc", "Société par actions (Inc.)"], ["sencrl", "SENCRL / SEC"], ["snc", "Société en nom collectif"],
+  ["enr", "Entreprise individuelle (Enr.)"], ["cooperative", "Coopérative"], ["asbl", "Association / OBNL"],
+  ["gmbh", "GmbH / Sàrl"], ["sa", "SA"], ["other", "Autre"],
+];
+const LANGUAGES = [["fr", "Français"], ["en", "English"], ["de", "Deutsch"], ["it", "Italiano"]];
+const COUNTRIES = [["CA", "Canada"], ["CH", "Suisse"], ["FR", "France"], ["US", "États-Unis"], ["other", "Autre"]];
+const MODULES_LIST = [
+  ["REPORTING", "Reporting"], ["BUDGETS", "Gestion des Budgets"], ["ACCOUNTING", "Comptabilité"],
+  ["FIXED_ASSETS", "Immobilisations"], ["CONSOLIDATION", "Consolidation"],
+];
+const emptyCompany = {
+  name: "", legal_name: "", trade_name: "", company_code: "", entity_type: "inc", business_number: "",
+  jurisdiction: "CA", country: "CA", region: "", city: "", address_line1: "", address_line2: "", postal_code: "",
+  phone: "", email: "", functional_currency: "CAD", language: "fr", industry: "services",
+  company_type: "operating", fiscal_year_start: "01-01", subscribed_modules: ["ACCOUNTING"], admin_email: "",
+  tax: {},
+};
+
+function FormSection({ title, children }) {
+  return (
+    <div className="space-y-3 rounded-xl border border-slate-200 p-4">
+      <p className="text-[11px] font-700 uppercase tracking-wide text-[#063044]">{title}</p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{children}</div>
+    </div>
+  );
+}
+function F({ label, children, full }) {
+  return <div className={full ? "sm:col-span-2" : ""}><Label className="text-[11px] uppercase text-slate-500">{label}</Label>{children}</div>;
+}
 
 function CompanyForm({ open, onOpenChange, initial, onSubmit, saving }) {
   const { t } = useLang();
   const [f, setF] = useState(emptyCompany);
   useEffect(() => {
-    setF(initial ? {
-      name: initial.name || "", legal_name: initial.legal_name || "", company_code: initial.company_code || "",
-      jurisdiction: initial.jurisdiction || "CH", region: initial.region || "", functional_currency: initial.functional_currency || (initial.jurisdiction === "CA" ? "CAD" : "CHF"),
-      industry: initial.industry || "services", company_type: initial.company_type || "operating", fiscal_year_start: initial.fiscal_year_start || "01-01",
+    setF(initial ? { ...emptyCompany,
+      ...Object.fromEntries(Object.keys(emptyCompany).map((k) => [k, initial[k] != null ? initial[k] : emptyCompany[k]])),
+      tax: initial.tax_profile || {},
+      subscribed_modules: initial.subscribed_modules?.length ? initial.subscribed_modules : emptyCompany.subscribed_modules,
     } : emptyCompany);
   }, [initial, open]);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const setTax = (k, v) => setF((p) => ({ ...p, tax: { ...p.tax, [k]: v } }));
+  const toggleModule = (code) => setF((p) => ({ ...p, subscribed_modules: p.subscribed_modules.includes(code) ? p.subscribed_modules.filter((x) => x !== code) : [...p.subscribed_modules, code] }));
+  const taxFields = (TAX_FIELDS[f.jurisdiction] || []).filter((x) => !x.when || x.when(f));
   const submit = () => {
     if (!f.name.trim()) return toast.error(t("Nom de société requis"));
     if (!f.functional_currency || f.functional_currency.length !== 3) return toast.error(t("Devise invalide"));
-    onSubmit({ ...f, name: f.name.trim(), legal_name: f.legal_name.trim() || null, company_code: f.company_code.trim() || null, region: f.region.trim() || null });
+    const tax_profile = Object.fromEntries(Object.entries(f.tax || {}).filter(([, v]) => (v || "").toString().trim()));
+    onSubmit({
+      name: f.name.trim(), legal_name: f.legal_name.trim() || null, trade_name: f.trade_name.trim() || null,
+      company_code: f.company_code.trim() || null, entity_type: f.entity_type || null, business_number: f.business_number.trim() || null,
+      jurisdiction: f.jurisdiction, country: f.country || null, region: f.region.trim() || null, city: f.city.trim() || null,
+      address_line1: f.address_line1.trim() || null, address_line2: f.address_line2.trim() || null, postal_code: f.postal_code.trim() || null,
+      phone: f.phone.trim() || null, email: f.email.trim() || null, functional_currency: f.functional_currency,
+      language: f.language, industry: f.industry, company_type: f.company_type, fiscal_year_start: f.fiscal_year_start,
+      subscribed_modules: f.subscribed_modules, admin_email: f.admin_email.trim() || null, tax_profile,
+    });
   };
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="max-w-2xl" data-testid="company-form-dialog">
-      <DialogHeader><DialogTitle>{initial ? t("Modifier la société") : t("Nouvelle société")}</DialogTitle><DialogDescription className="text-xs">{t("Les paramètres financiers détaillés seront configurés dans les phases suivantes.")}</DialogDescription></DialogHeader>
-      <div className="grid grid-cols-1 gap-3 py-1 sm:grid-cols-2">
-        <div><Label className="text-[11px] uppercase text-slate-500">{t("Nom d'affichage")}</Label><Input value={f.name} onChange={(e) => set("name", e.target.value)} data-testid="company-name" /></div>
-        <div><Label className="text-[11px] uppercase text-slate-500">{t("Nom légal")}</Label><Input value={f.legal_name} onChange={(e) => set("legal_name", e.target.value)} /></div>
-        <div><Label className="text-[11px] uppercase text-slate-500">{t("Code société")}</Label><Input value={f.company_code} onChange={(e) => set("company_code", e.target.value)} placeholder="CH-001" /></div>
-        <div><Label className="text-[11px] uppercase text-slate-500">{t("Juridiction")}</Label><Select value={f.jurisdiction} onValueChange={(v) => { set("jurisdiction", v); if (!initial) set("functional_currency", v === "CA" ? "CAD" : "CHF"); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CH">Suisse</SelectItem><SelectItem value="CA">Canada</SelectItem></SelectContent></Select></div>
-        <div><Label className="text-[11px] uppercase text-slate-500">{t("Canton / Province")}</Label><Input value={f.region} onChange={(e) => set("region", e.target.value)} /></div>
-        <div><Label className="text-[11px] uppercase text-slate-500">{t("Devise fonctionnelle")}</Label><Input maxLength={3} className="uppercase" value={f.functional_currency} onChange={(e) => set("functional_currency", e.target.value.toUpperCase())} /></div>
-        <div><Label className="text-[11px] uppercase text-slate-500">{t("Secteur")}</Label><Select value={f.industry} onValueChange={(v) => set("industry", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{INDUSTRIES.map(([v,l]) => <SelectItem key={v} value={v}>{t(l)}</SelectItem>)}</SelectContent></Select></div>
-        <div><Label className="text-[11px] uppercase text-slate-500">{t("Type de société")}</Label><Select value={f.company_type} onValueChange={(v) => set("company_type", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{COMPANY_TYPES.map(([v,l]) => <SelectItem key={v} value={v}>{t(l)}</SelectItem>)}</SelectContent></Select></div>
-        <div className="sm:col-span-2"><Label className="text-[11px] uppercase text-slate-500">{t("Début d'exercice (MM-JJ)")}</Label><Input value={f.fiscal_year_start} onChange={(e) => set("fiscal_year_start", e.target.value)} placeholder="01-01" className="max-w-[180px]" /></div>
+    <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto" data-testid="company-form-dialog">
+      <DialogHeader><DialogTitle>{initial ? t("Modifier la société / client") : t("Créer une société / client")}</DialogTitle><DialogDescription className="text-xs">{t("Renseignez l'identification, l'adresse, la fiscalité (selon la juridiction), les modules souscrits et l'administrateur.")}</DialogDescription></DialogHeader>
+      <div className="space-y-4 py-1">
+        <FormSection title={t("Identification")}>
+          <F label={t("Nom d'affichage")}><Input value={f.name} onChange={(e) => set("name", e.target.value)} data-testid="company-name" /></F>
+          <F label={t("Nom légal")}><Input value={f.legal_name} onChange={(e) => set("legal_name", e.target.value)} data-testid="company-legal-name" /></F>
+          <F label={t("Nom commercial")}><Input value={f.trade_name} onChange={(e) => set("trade_name", e.target.value)} data-testid="company-trade-name" /></F>
+          <F label={t("Type d'entité")}><Select value={f.entity_type} onValueChange={(v) => set("entity_type", v)}><SelectTrigger data-testid="company-entity-type"><SelectValue /></SelectTrigger><SelectContent>{ENTITY_TYPES.map(([v, l]) => <SelectItem key={v} value={v}>{t(l)}</SelectItem>)}</SelectContent></Select></F>
+          <F label={t("Code société")}><Input value={f.company_code} onChange={(e) => set("company_code", e.target.value)} placeholder="CA-001" data-testid="company-code" /></F>
+          <F label={t("Numéro d'entreprise")}><Input value={f.business_number} onChange={(e) => set("business_number", e.target.value)} data-testid="company-business-number" /></F>
+        </FormSection>
+
+        <FormSection title={t("Adresse & coordonnées")}>
+          <F label={t("Adresse (ligne 1)")} full><Input value={f.address_line1} onChange={(e) => set("address_line1", e.target.value)} data-testid="company-address1" /></F>
+          <F label={t("Adresse (ligne 2)")} full><Input value={f.address_line2} onChange={(e) => set("address_line2", e.target.value)} /></F>
+          <F label={t("Ville")}><Input value={f.city} onChange={(e) => set("city", e.target.value)} data-testid="company-city" /></F>
+          <F label={t("Province / Canton / État")}><Input value={f.region} onChange={(e) => set("region", e.target.value)} placeholder="QC, BC, VD…" data-testid="company-region" /></F>
+          <F label={t("Code postal")}><Input value={f.postal_code} onChange={(e) => set("postal_code", e.target.value)} data-testid="company-postal" /></F>
+          <F label={t("Pays")}><Select value={f.country} onValueChange={(v) => set("country", v)}><SelectTrigger data-testid="company-country"><SelectValue /></SelectTrigger><SelectContent>{COUNTRIES.map(([v, l]) => <SelectItem key={v} value={v}>{t(l)}</SelectItem>)}</SelectContent></Select></F>
+          <F label={t("Juridiction")}><Select value={f.jurisdiction} onValueChange={(v) => { set("jurisdiction", v); if (!initial) set("functional_currency", v === "CA" ? "CAD" : v === "CH" ? "CHF" : "EUR"); }}><SelectTrigger data-testid="company-jurisdiction"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CA">Canada</SelectItem><SelectItem value="CH">Suisse</SelectItem></SelectContent></Select></F>
+          <F label={t("Téléphone")}><Input value={f.phone} onChange={(e) => set("phone", e.target.value)} data-testid="company-phone" /></F>
+          <F label={t("Courriel")}><Input value={f.email} onChange={(e) => set("email", e.target.value)} data-testid="company-email" /></F>
+        </FormSection>
+
+        <FormSection title={t("Fiscalité")}>
+          {taxFields.length === 0
+            ? <p className="sm:col-span-2 text-xs text-slate-400" data-testid="tax-none">{t("Aucun champ fiscal spécifique pour cette juridiction.")}</p>
+            : taxFields.map((tf) => <F key={tf.key} label={t(tf.label)}><Input value={f.tax[tf.key] || ""} onChange={(e) => setTax(tf.key, e.target.value)} data-testid={`tax-${tf.key}`} /></F>)}
+        </FormSection>
+
+        <FormSection title={t("Paramètres")}>
+          <F label={t("Devise fonctionnelle")}><Input maxLength={3} className="uppercase" value={f.functional_currency} onChange={(e) => set("functional_currency", e.target.value.toUpperCase())} data-testid="company-currency" /></F>
+          <F label={t("Langue")}><Select value={f.language} onValueChange={(v) => set("language", v)}><SelectTrigger data-testid="company-language"><SelectValue /></SelectTrigger><SelectContent>{LANGUAGES.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent></Select></F>
+          <F label={t("Secteur")}><Select value={f.industry} onValueChange={(v) => set("industry", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{INDUSTRIES.map(([v, l]) => <SelectItem key={v} value={v}>{t(l)}</SelectItem>)}</SelectContent></Select></F>
+          <F label={t("Type de société")}><Select value={f.company_type} onValueChange={(v) => set("company_type", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{COMPANY_TYPES.map(([v, l]) => <SelectItem key={v} value={v}>{t(l)}</SelectItem>)}</SelectContent></Select></F>
+          <F label={t("Début d'exercice (MM-JJ)")}><Input value={f.fiscal_year_start} onChange={(e) => set("fiscal_year_start", e.target.value)} placeholder="01-01" className="max-w-[180px]" /></F>
+        </FormSection>
+
+        <FormSection title={t("Modules souscrits")}>
+          <div className="sm:col-span-2 grid grid-cols-2 gap-2" data-testid="company-modules">
+            {MODULES_LIST.map(([code, label]) => (
+              <button type="button" key={code} onClick={() => toggleModule(code)} data-testid={`module-${code}`}
+                className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm ${f.subscribed_modules.includes(code) ? "border-[#22C55E] bg-[#A7F3DD]/25 text-[#0F172A]" : "border-slate-200 hover:bg-slate-50"}`}>
+                <span>{t(label)}</span>
+                <span className={`h-4 w-4 rounded border ${f.subscribed_modules.includes(code) ? "border-[#22C55E] bg-[#22C55E]" : "border-slate-300"}`} />
+              </button>
+            ))}
+          </div>
+        </FormSection>
+
+        <FormSection title={t("Administrateur à associer / inviter")}>
+          <F label={t("Courriel de l'administrateur")} full><Input value={f.admin_email} onChange={(e) => set("admin_email", e.target.value)} placeholder="admin@societe.com" data-testid="company-admin-email" /></F>
+        </FormSection>
       </div>
-      <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>{t("Annuler")}</Button><Button disabled={saving} onClick={submit} className="bg-[#0F172A] hover:bg-[#0F172A]/90">{saving && <Loader2 size={14} className="mr-2 animate-spin" />}{t("Enregistrer")}</Button></DialogFooter>
+      <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>{t("Annuler")}</Button><Button disabled={saving} onClick={submit} className="bg-[#0F172A] hover:bg-[#0F172A]/90" data-testid="company-submit">{saving && <Loader2 size={14} className="mr-2 animate-spin" />}{t("Enregistrer")}</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
 }
