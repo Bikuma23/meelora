@@ -559,7 +559,7 @@ function LayoutInner() {
   // console (platform_meelora_manage), never granted to the platform admin.
   useEffect(() => {
     if (!isPlatformStaff) return;
-    if (!active.startsWith("platform_")) setActive("platform_home");
+    if (!active.startsWith("platform_") && active !== "preferences") setActive("platform_home");
   }, [isPlatformStaff, active]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const handler = (e) => { if (e.detail) { setActive(e.detail); setMobileOpen(false); } };

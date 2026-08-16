@@ -173,8 +173,10 @@ async def _ensure_company_code_unique(db, workspace_id: str, company_code: Optio
 
 
 async def create_company_for_admin(db, user: dict, payload: CompanyCreate) -> dict:
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
+    # Backend-gated: workspace admins OR platform administrators (platform authority).
+    # `support` platform role and plain client users are refused here (fail-closed).
+    if user.get("role") != "admin" and user.get("platform_role") != "platform_admin":
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs (workspace ou plateforme)")
     workspace_id = require_tenant_context(user)
     data = payload.model_dump()
     await _ensure_company_code_unique(db, workspace_id, data.get("company_code"))

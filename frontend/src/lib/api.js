@@ -82,6 +82,8 @@ export const api = {
   getCompany: (id) => client.get(`/companies/${id}`).then((r) => r.data),
   createCompany: (body) => client.post("/companies", body).then((r) => r.data),
   adminCandidate: (email) => client.get("/access/admin-candidate", { params: { email } }).then((r) => r.data),
+  requestEmailChange: (new_email) => client.post("/me/email-change/request", { new_email }).then((r) => r.data),
+  confirmEmailChange: (token) => client.post("/me/email-change/confirm", { token }).then((r) => r.data),
   createCompanyMember: (cid, body) => client.post(`/companies/${cid}/members`, body).then((r) => r.data),
   updateCompany: (id, body) => client.patch(`/companies/${id}`, body).then((r) => r.data),
   listMandates: () => client.get("/mandates").then((r) => r.data),

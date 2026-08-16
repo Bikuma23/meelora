@@ -161,6 +161,21 @@ async def run():
                                     details=s.get("resource", ""), metadata=md)
     print("  seeded platform audit logs (4 samples, secrets redacted)")
 
+    # P1.13E — throwaway account for the email-change E2E (idempotent). Plain
+    # workspace user; the E2E round-trips its login email A->B->A.
+    ec_email = "emailchange_demo@accslegro.com"
+    if not await db.users.find_one({"email": ec_email}):
+        res = await db.users.insert_one({
+            "email": ec_email, "password_hash": bcrypt.hashpw(PWD.encode(), bcrypt.gensalt()).decode(),
+            "name": "Email Change Demo", "role": "user", "workspace_id": WS,
+            "status": "active", "created_at": now})
+        euid = str(res.inserted_id)
+        await db.workspace_memberships.insert_one({
+            "_id": f"wsm_{uuid.uuid4().hex}", "workspace_id": WS, "user_id": euid,
+            "role": "user", "status": "active", "created_at": now})
+        print(f"  seeded email-change demo user {ec_email}")
+
+
     # P1.13E — a minimal EXTERNAL client workspace so the platform "Sociétés /
     # Clients -> client -> Accéder -> fiche" flow is testable (idempotent).
     if not await db.workspaces.find_one({"_id": "ws_demo_clientabc"}):

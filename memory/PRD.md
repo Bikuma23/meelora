@@ -1428,3 +1428,9 @@ Rapport : `/app/RAPPORT_P1_13E.md` (§5 + tableau 7 grants). `--commit` NON exé
 - Logs plateforme = outil d'audit : recherche texte + filtres (type/résultat/acteur/dates/catégorie) + contenu enrichi (acteur+rôle, ressource, résultat, before/after, IP, user-agent, request_id, motif) + REDACTION serveur des secrets. Isolation plateforme/client préservée. (`core/access/log_scope.py`, `/platform/logs`, `PlatformLogs`)
 - Tests : `platform-context.spec.js` (réécrit), `platform-logs.spec.js` (nouveau). Suite 33/33 verte. Seed : 4 logs plateforme + client externe démo (`ws_demo_clientabc`).
 - P1.13A `--commit` toujours NON exécuté. Aucun calcul financier modifié.
+
+## P1.13E — Création société (plateforme) + changement d'email de connexion (2026-06)
+- **Création société/client plateforme** : bouton « + Nouvelle société / client » (visible platform_admin) dans Sociétés/Clients ouvrant le formulaire complet. Gating backend `require_company_creator` sur POST /companies (workspace admin OU platform_admin) ; support/client user → 403. (`server.py`, `Platform.js`, `Companies.js` export CompanyForm + createCompanyWithAdmin)
+- **Changement d'email de connexion** (opération sensible, non hardcodé) : `POST /me/email-change/request` + `/confirm` (token JWT email_change + jti, vérification de la nouvelle adresse via Resend/fallback, unicité, ancienne active jusqu'à validation). Rôles/memberships/permissions inchangés. Journalisé (platform.config before/after). UI : Préférences → carte « Courriel de connexion » [Modifier]. (`server.py`, `Preferences.js` EmailChangeCard, guard platform autorise `preferences`)
+- Tests : `platform-context.spec.js` (bouton + gating), `email-change.spec.js` (round-trip A↔B, ancienne refusée, rôle inchangé). Seed : compte jetable `emailchange_demo@accslegro.com`. **Suite 36/36 verte.**
+- P1.13A `--commit` toujours NON exécuté. Aucun calcul financier modifié.

@@ -67,7 +67,28 @@ function F({ label, children, full }) {
   return <div className={full ? "sm:col-span-2" : ""}><Label className="text-[11px] uppercase text-slate-500">{label}</Label>{children}</div>;
 }
 
-function CompanyForm({ open, onOpenChange, initial, onSubmit, saving }) {
+export async function createCompanyWithAdmin(payload, t = (x) => x) {
+  const adminAction = payload._admin_action;
+  const adminEmail = payload.admin_email;
+  const body = { ...payload }; delete body._admin_action;
+  const created = await api.createCompany(body);
+  if (adminEmail && adminAction) {
+    try {
+      if (adminAction === "invite") {
+        await api.createInvitation({ email: adminEmail, kind: "company", company_id: created.id, membership_type: "company_user", company_role: "admin" });
+        toast.success(t("Invitation d'activation envoyée à l'administrateur"));
+      } else if (adminAction === "associate") {
+        await api.createCompanyMember(created.id, { email: adminEmail, membership_type: "company_user", role: "admin" });
+        toast.success(t("Administrateur associé (identité vérifiée)"));
+      } else if (adminAction === "activation_required") {
+        toast.warning(t("Administrateur non associé : activation/preuve de contrôle requise."));
+      }
+    } catch (e2) { toast.error(t("Société créée, mais action administrateur échouée : ") + (e2.response?.data?.detail || "")); }
+  }
+  return created;
+}
+
+export function CompanyForm({ open, onOpenChange, initial, onSubmit, saving }) {
   const { t } = useLang();
   const [f, setF] = useState(emptyCompany);
   const [adminCheck, setAdminCheck] = useState(null);
@@ -270,24 +291,7 @@ export default function Companies() {
     const body = { ...payload }; delete body._admin_action;
     try {
       if (companyDialog.item) { await api.updateCompany(companyDialog.item.id, body); toast.success(t("Société mise à jour")); }
-      else {
-        const created = await api.createCompany(body);
-        toast.success(t("Société créée"));
-        // Reuse P1.13B/C/D — email match NEVER auto-creates access.
-        if (adminEmail && adminAction) {
-          try {
-            if (adminAction === "invite") {
-              await api.createInvitation({ email: adminEmail, kind: "company", company_id: created.id, membership_type: "company_user", company_role: "admin" });
-              toast.success(t("Invitation d'activation envoyée à l'administrateur"));
-            } else if (adminAction === "associate") {
-              await api.createCompanyMember(created.id, { email: adminEmail, membership_type: "company_user", role: "admin" });
-              toast.success(t("Administrateur associé (identité vérifiée)"));
-            } else if (adminAction === "activation_required") {
-              toast.warning(t("Administrateur non associé : activation/preuve de contrôle requise."));
-            }
-          } catch (e2) { toast.error(t("Société créée, mais action administrateur échouée : ") + (e2.response?.data?.detail || "")); }
-        }
-      }
+      else { await createCompanyWithAdmin(payload, t); toast.success(t("Société créée")); }
       setCompanyDialog({ open:false, item:null }); await load();
     } catch (e) { toast.error(e.response?.data?.detail || t("Erreur lors de l'enregistrement")); }
     finally { setSaving(false); }

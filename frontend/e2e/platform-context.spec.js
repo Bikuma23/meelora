@@ -75,4 +75,31 @@ test.describe("Interface plateforme Meelora (P1.13E final)", () => {
     await expect(page.getByTestId("platform-home")).toBeVisible();
     await expect(page.locator('[data-testid^="nav-platform_"]')).toHaveCount(3);
   });
+
+  test("+ Nouvelle société / client : visible pour platform_admin, ouvre le formulaire complet", async ({ page }) => {
+    await login(page, "platformAdmin");
+    await page.getByTestId("nav-platform_clients").click();
+    await expect(page.getByTestId("platform-new-company-btn")).toBeVisible();
+    await page.getByTestId("platform-new-company-btn").click();
+    await expect(page.getByTestId("company-form-dialog")).toBeVisible();
+    await expect(page.getByTestId("company-name")).toBeVisible();
+    await expect(page.getByTestId("company-legal-name")).toBeVisible();
+    await expect(page.getByTestId("company-jurisdiction")).toBeVisible();
+    await expect(page.getByTestId("company-modules")).toBeVisible();
+    await expect(page.getByTestId("company-admin-email")).toBeVisible();
+  });
+
+  test("support : bouton de création ABSENT + API création refusée (403)", async ({ page }) => {
+    await login(page, "support");
+    await page.getByTestId("nav-platform_clients").click();
+    await expect(page.getByTestId("platform-new-company-btn")).toHaveCount(0);
+    // Backend-gated : appel API direct refusé pour support.
+    const status = await page.evaluate(async () => {
+      const r = await fetch("/api/companies", { method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "ZZ support forbidden", jurisdiction: "CA", functional_currency: "CAD" }) });
+      return r.status;
+    });
+    expect(status).toBe(403);
+  });
 });

@@ -254,3 +254,25 @@ PLATEFORME MEELORA
 **Tests (33/33 verts)** : `platform-context.spec.js` (3 menus, Meelora absente comme menu, carte 1re + badge, Logs ancré bas via boundingBox, Meelora Accéder → console, client externe → fiche), `platform-logs.spec.js` (recherche, filtres, redaction, isolation), `persona-ux.spec.js`, `security.spec.js`, `nav-hierarchy.spec.js`, `company-form.spec.js`. Seed `seed_p1_13e_personas.py` : 4 évènements plateforme d'audit + 1 client externe démo.
 
 **STOP** — `--commit` P1.13A non exécuté ; aucun calcul financier modifié ; P3.x non repris.
+
+---
+
+## 8. Corrections interface plateforme (2 points) · 36/36 E2E verts
+
+### 8.1 Création de société / client depuis la plateforme (backend-gated)
+- Bouton principal **« + Nouvelle société / client »** en haut de *Sociétés / Clients*, visible pour `platform_role == platform_admin`. Ouvre le formulaire société complet (nom légal, nom commercial, type d'entité, n° d'entreprise, juridiction/pays/province, adresse/coordonnées, devise, langue, profil fiscal BN/TPS/TVQ/PST conditionnel, modules souscrits, administrateur à associer/inviter).
+- **Gating backend réel** : nouvelle dépendance `require_company_creator` sur `POST /api/companies` = workspace admin **OU** platform_admin. `support` et utilisateur client → **403** (pas seulement masqué en frontend).
+- Tests : platform_admin → 201 + bouton visible + formulaire ; support → bouton absent + API 403 ; utilisateur client → 403 (curl). (`platform-context.spec.js`)
+
+### 8.2 Changement d'email de connexion (opération sensible)
+- `platform@meelora.com` **n'est plus un identifiant codé en dur** : profil « Mon profil » → carte **« Courriel de connexion » [Modifier]**.
+- Flux : saisie nouvelle adresse → normalisée + unicité → **vérification envoyée à la nouvelle adresse** (Resend, avec fallback préview) → l'adresse principale n'est remplacée **qu'après preuve de contrôle** (token JWT type `email_change`, `jti`, 1 h) → l'ancienne reste active jusqu'à validation → après validation, les connexions utilisent la nouvelle adresse (l'ancienne est refusée).
+- **Rôle/platform_role/memberships/accès modules/permissions inchangés** (seul le champ `email` est modifié).
+- **Journalisé dans les Logs plateforme** (`platform.config`, before/after) pour les comptes plateforme.
+- Un autre administrateur **ne peut pas** définir directement le mot de passe de ce compte (aucun endpoint de ce type ; réinitialisation uniquement via le flux self-service `forgot/reset`).
+- Endpoints : `POST /api/me/email-change/request`, `POST /api/me/email-change/confirm`.
+- Tests : requête → vérification → confirmation → login nouvelle adresse (rôle inchangé) → ancienne refusée (401) → restauration ; audit présent (curl). (`email-change.spec.js`)
+
+**Important** : privilèges dérivés du `platform_role` + memberships, **jamais de l'adresse email**. Aucune référence en dur à `platform@meelora.com` dans la navigation ni les règles d'accès.
+
+**STOP** — `--commit` P1.13A non exécuté · aucun calcul financier modifié · P3.x non repris.

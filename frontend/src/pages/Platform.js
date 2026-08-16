@@ -11,6 +11,8 @@ import {
   Loader2, Server, Search, CheckCircle2, AlertTriangle, Layers, ArrowRight,
 } from "lucide-react";
 import AccessManagement from "./AccessManagement";
+import { CompanyForm, createCompanyWithAdmin } from "./Companies";
+import { useLang } from "../context/LanguageContext";
 
 const MODULE_LABEL = { REPORTING: "Reporting", ACCOUNTING: "Comptabilité", FIXED_ASSETS: "Immobilisations", CONSOLIDATION: "Consolidation" };
 const ENT_LABEL = { active: "Actif", trial: "Essai", inactive: "Inactif", suspended: "Suspendu" };
@@ -71,11 +73,22 @@ export function PlatformHome() {
 export function PlatformClients() {
   const { user } = useAuth();
   const { enterMeelora } = useNav();
+  const { t } = useLang();
   const internalWsId = user?.workspace?.id;
+  const isPlatformAdmin = user?.platform_role === "platform_admin";
   const [clients, setClients] = useState(null);
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState(null);
-  useEffect(() => { api.platformClients().then((d) => setClients(d.clients || [])).catch(() => setClients([])); }, []);
+  const [formOpen, setFormOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const reload = useCallback(() => { api.platformClients().then((d) => setClients(d.clients || [])).catch(() => setClients([])); }, []);
+  useEffect(() => { reload(); }, [reload]);
+  const submitCompany = async (payload) => {
+    setSaving(true);
+    try { await createCompanyWithAdmin(payload, t); toast.success(t("Société / client créé")); setFormOpen(false); reload(); }
+    catch (e) { toast.error(e.response?.data?.detail || t("Création impossible")); }
+    finally { setSaving(false); }
+  };
   if (selected) return <ClientCard client={selected} onBack={() => setSelected(null)} />;
   if (!clients) return <div className="flex items-center gap-2 text-slate-500"><Loader2 className="animate-spin" size={16} /> Chargement…</div>;
   const filtered = clients.filter((c) => !q || (c.name || "").toLowerCase().includes(q.toLowerCase()));
@@ -84,11 +97,19 @@ export function PlatformClients() {
   const externals = filtered.filter((c) => c.id !== internalWsId);
   return (
     <div className="space-y-4" data-testid="platform-clients">
-      <p className="text-sm text-slate-500">Portefeuille commercial de Meelora. La société interne apparaît en premier.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-slate-500">Registre central des sociétés utilisant Meelora. La société interne apparaît en premier.</p>
+        {isPlatformAdmin && (
+          <Button className="gap-1.5 bg-[#22C55E] text-[#0F172A] hover:bg-[#22C55E]/90 font-600" data-testid="platform-new-company-btn" onClick={() => setFormOpen(true)}>
+            + Nouvelle société / client
+          </Button>
+        )}
+      </div>
       <div className="relative max-w-sm">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un client…" className="h-11 pl-9" data-testid="platform-clients-search" />
       </div>
+      <CompanyForm open={formOpen} onOpenChange={setFormOpen} initial={null} onSubmit={submitCompany} saving={saving} />
       {internal.map((c) => (
         <div key={c.id} data-testid="platform-internal-card"
           className="flex flex-col gap-3 rounded-xl border border-[#15AF97]/40 bg-[#15AF97]/8 p-4 sm:flex-row sm:items-center sm:justify-between">

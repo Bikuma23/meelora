@@ -313,6 +313,13 @@ async def require_admin(user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
     return user
 
+async def require_company_creator(user: dict = Depends(get_current_user)):
+    # Company/client creation: workspace admins OR platform administrators.
+    # `support` platform role and plain client users are refused (fail-closed).
+    if user.get("role") != "admin" and user.get("platform_role") != "platform_admin":
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs (workspace ou plateforme)")
+    return user
+
 async def log_action(
     user, action, entity, label, details="", changes=None, *,
     company_id=None, mandate_id=None, entity_id=None, event_type=None,
@@ -1013,6 +1020,114 @@ async def reset_password(payload: ResetPasswordPayload):
 
 
 # ---------------------------------------------------------------------------
+# Login email change — sensitive op: verify proof of control of the NEW address
+# before swapping the principal login email. Roles/memberships/permissions are
+# never touched. Mirrors the password-reset token pattern (JWT + jti + Resend).
+# ---------------------------------------------------------------------------
+class EmailChangeRequestPayload(BaseModel):
+    new_email: str
+
+
+class EmailChangeConfirmPayload(BaseModel):
+    token: str
+
+
+def _create_email_change_token(user_id: str, new_email: str, jti: str) -> str:
+    payload = {"sub": user_id, "new_email": new_email, "type": "email_change", "jti": jti,
+               "exp": datetime.now(timezone.utc) + timedelta(hours=1)}
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+async def _send_email_change_email(email: str, name: str, link: str) -> bool:
+    if not os.environ.get("RESEND_API_KEY"):
+        return False
+    import resend
+    resend.api_key = os.environ["RESEND_API_KEY"]
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#0F172A">
+      <h2>Vérifiez votre nouvelle adresse de connexion</h2>
+      <p>Bonjour {name or ''},</p>
+      <p>Confirmez cette adresse pour l'utiliser à vos prochaines connexions Meelora. Lien valable 1 heure.</p>
+      <p style="margin:28px 0"><a href="{link}" style="background:#22C55E;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600">Vérifier cette adresse</a></p>
+      <p style="color:#64748B;font-size:13px">Si vous n'êtes pas à l'origine de cette demande, ignorez ce courriel : votre adresse actuelle reste inchangée.</p>
+    </div>"""
+    try:
+        await asyncio.to_thread(resend.Emails.send, {
+            "from": os.environ.get("SENDER_EMAIL", "onboarding@resend.dev"),
+            "to": [email], "subject": "Vérifiez votre nouvelle adresse de connexion Meelora", "html": html})
+        return True
+    except Exception as e:
+        logger.error(f"Resend email-change échec: {e}")
+        return False
+
+
+@api.post("/me/email-change/request")
+async def request_email_change(payload: EmailChangeRequestPayload, user: dict = Depends(get_current_user)):
+    current = (user.get("email") or "").strip().lower()
+    new_email = (payload.new_email or "").strip().lower()
+    if not new_email or "@" not in new_email or "." not in new_email.split("@")[-1]:
+        raise HTTPException(status_code=422, detail="Adresse courriel invalide")
+    if new_email == current:
+        raise HTTPException(status_code=400, detail="La nouvelle adresse est identique à l'actuelle")
+    if await db.users.find_one({"email": new_email}):
+        raise HTTPException(status_code=409, detail="Cette adresse est déjà utilisée")
+    jti = uuid.uuid4().hex
+    await db.users.update_one({"email": current},
+                              {"$set": {"email_change_jti": jti, "pending_email": new_email}})
+    token = _create_email_change_token(current, new_email, jti)
+    base = os.environ.get("FRONTEND_URL", "").rstrip("/")
+    link = f"{base}/verify-email-change?token={token}"
+    sent = await _send_email_change_email(new_email, user.get("name", ""), link)
+    resp = {"success": True, "email_sent": sent, "pending_email": new_email,
+            "message": "Un lien de vérification a été envoyé à la nouvelle adresse. L'adresse actuelle reste active jusqu'à la validation."}
+    # Dev/preview fallback (no email provider configured): surface the token so
+    # the flow can be completed. Never returned once email delivery is configured.
+    if not sent:
+        resp["verify_token"] = token
+        resp["verify_link"] = link
+    return resp
+
+
+@api.post("/me/email-change/confirm")
+async def confirm_email_change(payload: EmailChangeConfirmPayload):
+    try:
+        claims = jwt.decode(payload.token, JWT_SECRET, algorithms=[JWT_ALGO])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=400, detail="Lien expiré. Veuillez refaire une demande.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=400, detail="Lien invalide.")
+    if claims.get("type") != "email_change":
+        raise HTTPException(status_code=400, detail="Lien invalide.")
+    new_email = (claims.get("new_email") or "").strip().lower()
+    jti = claims.get("jti")
+    u = await db.users.find_one({"email_change_jti": jti, "pending_email": new_email})
+    if not u:
+        raise HTTPException(status_code=400, detail="Lien invalide ou déjà utilisé.")
+    other = await db.users.find_one({"email": new_email})
+    if other and str(other["_id"]) != str(u["_id"]):
+        raise HTTPException(status_code=409, detail="Cette adresse est désormais utilisée par un autre compte.")
+    old_email = u.get("email")
+    # ONLY the login email changes — role/platform_role/memberships/permissions untouched.
+    await db.users.update_one({"_id": u["_id"]},
+                              {"$set": {"email": new_email},
+                               "$unset": {"email_change_jti": "", "pending_email": ""}})
+    if u.get("platform_role"):
+        actor = {"id": str(u.get("id") or u.get("_id")), "email": new_email, "platform_role": u.get("platform_role")}
+        try:
+            await access_log_scope.write_platform_log(
+                db, actor, event_type="platform.config",
+                label="Courriel de connexion modifié",
+                details=f"{old_email} → {new_email}",
+                metadata={"category": "platform", "result": "success", "action": "email_change",
+                          "before": {"email": old_email}, "after": {"email": new_email}})
+        except Exception as e:
+            logger.error(f"audit email_change: {e}")
+    return {"success": True, "email": new_email,
+            "message": "Adresse de connexion mise à jour. Utilisez la nouvelle adresse à la prochaine connexion."}
+
+
+
+# ---------------------------------------------------------------------------
 # P1.13B — User lifecycle: invitation, one-time activation, admin replacement.
 # No permanent password is ever set/visible by an admin; the user chooses their
 # own password when consuming a single-use, expiring token.
@@ -1178,7 +1293,7 @@ async def commit_companies_import(file: UploadFile = File(...), user: dict = Dep
     return result
 
 @api.post("/companies", status_code=201)
-async def create_company(payload: CompanyCreate, user: dict = Depends(require_admin)):
+async def create_company(payload: CompanyCreate, user: dict = Depends(require_company_creator)):
     company = await create_company_for_admin(db, user, payload)
     await log_action(user, "create", "company", company.get("name") or company.get("legal_name", ""),
                      details=f"Société créée: {company.get('id')}",

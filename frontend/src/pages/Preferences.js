@@ -4,6 +4,8 @@ import { applyTheme } from "../lib/theme";
 import { useAuth } from "../context/AuthContext";
 import { useLang } from "../context/LanguageContext";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 import { Sun, Moon, RotateCcw, SlidersHorizontal, Languages } from "lucide-react";
 import { toast } from "sonner";
 
@@ -13,6 +15,63 @@ const BUD_SORT = { employee_number: "#", name: "Nom", department: "Dépt", emplo
 const DIR = { asc: "croissant", desc: "décroissant" };
 const DEFAULTS = { theme: "light", default_year: null, budget_scenario: "ca", employees_sort: { key: "employee_number", dir: "asc" }, budget_sort: { key: "employee_number", dir: "asc" } };
 const AVATAR_COLORS = ["#FBBF24", "#0F172A", "#8B5CF6", "#F59E0B", "#EC4899", "#EF4444", "#0EA5E9", "#64748B"];
+
+function EmailChangeCard() {
+  const { user } = useAuth();
+  const { t } = useLang();
+  const [open, setOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [pending, setPending] = useState(null); // {verify_token, verify_link, email_sent}
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const request = async () => {
+    if (!newEmail.trim()) return toast.error(t("Saisissez la nouvelle adresse"));
+    setBusy(true);
+    try { const r = await api.requestEmailChange(newEmail.trim()); setPending(r); toast.success(t("Vérification envoyée à la nouvelle adresse")); }
+    catch (e) { toast.error(e.response?.data?.detail || t("Demande impossible")); }
+    finally { setBusy(false); }
+  };
+  const confirm = async () => {
+    if (!pending?.verify_token) return;
+    setBusy(true);
+    try {
+      const r = await api.confirmEmailChange(pending.verify_token);
+      setDone(true); setPending(null);
+      toast.success(t("Adresse de connexion mise à jour : ") + r.email);
+    } catch (e) { toast.error(e.response?.data?.detail || t("Confirmation impossible")); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="card p-5" data-testid="email-login-card">
+      <h3 className="mb-1 text-sm font-700">{t("Courriel de connexion")}</h3>
+      <p className="mb-3 text-xs text-slate-500">{t("Opération sensible : la nouvelle adresse doit être vérifiée. L'adresse actuelle reste active jusqu'à la validation. Vos rôles et accès ne changent pas.")}</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="font-mono-data text-sm text-slate-700" data-testid="current-login-email">{user?.email}</span>
+        {!open && !done && <Button variant="outline" size="sm" data-testid="email-change-open" onClick={() => setOpen(true)}>{t("Modifier")}</Button>}
+        {done && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-600 text-emerald-700" data-testid="email-change-done">{t("Reconnectez-vous avec la nouvelle adresse")}</span>}
+      </div>
+      {open && !done && (
+        <div className="mt-4 space-y-3 rounded-xl border border-slate-200 p-4" data-testid="email-change-panel">
+          <div>
+            <Label className="text-[11px] uppercase text-slate-500">{t("Nouvelle adresse de connexion")}</Label>
+            <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="nouvelle@meelora.com" data-testid="email-change-input" />
+          </div>
+          {!pending ? (
+            <div className="flex gap-2">
+              <Button size="sm" disabled={busy} onClick={request} data-testid="email-change-request">{t("Envoyer la vérification")}</Button>
+              <Button size="sm" variant="ghost" onClick={() => { setOpen(false); setNewEmail(""); }}>{t("Annuler")}</Button>
+            </div>
+          ) : (
+            <div className="space-y-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800" data-testid="email-change-verify">
+              <p><b>{t("Vérification requise")}</b> — {pending.email_sent ? t("un lien a été envoyé à ") : t("(aperçu : email non configuré) confirmez pour ")} <b>{pending.pending_email}</b>.</p>
+              <Button size="sm" disabled={busy} onClick={confirm} data-testid="email-change-confirm">{t("J'ai vérifié — appliquer le changement")}</Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Preferences() {
   const { user } = useAuth();
@@ -60,6 +119,8 @@ export default function Preferences() {
           <p className="text-xs text-slate-500">{user?.email}</p>
         </div>
       </div>
+
+      <EmailChangeCard />
 
       <div className="card p-5" data-testid="avatar-card">
         <h3 className="mb-1 text-sm font-700">{t("Avatar")}</h3>
