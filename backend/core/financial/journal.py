@@ -61,6 +61,8 @@ def public_entry(doc: dict) -> dict:
         "source_type": doc.get("source_type"),
         "source_system": doc.get("source_system"),
         "external_id": doc.get("external_id"),
+        "reverses_journal_entry_id": doc.get("reverses_journal_entry_id"),
+        "reversed_by_journal_entry_id": doc.get("reversed_by_journal_entry_id"),
         "status": doc.get("status", "posted"),
         "created_at": doc.get("created_at"),
         "created_by": doc.get("created_by"),
@@ -379,6 +381,70 @@ async def aggregate_journal(db, company_id, user, financial_period_id=None, impo
         "difference": round(tot_d - tot_c, 2),
         "by_account": sorted(by_account.values(), key=lambda x: (x.get("account_code") or "")),
     }
+
+
+# ---- Workflow posting (ACCOUNTING A2) -------------------------------------
+async def create_workflow_journal_entry(db, workspace_id, company_id, user, *,
+                                        financial_year_id, financial_period_id, entry_date,
+                                        reference, description, lines, external_id,
+                                        source_type="manual", reverses_journal_entry_id=None):
+    """Create EXACTLY ONE canonical journal entry (+lines) from an approved
+    Accounting workflow document. Idempotent on (source_system='accounting',
+    external_id): a retry reuses the existing entry instead of duplicating it.
+    The target ``financial_period`` must be OPEN (canonical gate). Account codes
+    are resolved best-effort against normalized ``accounts`` (P2.3); an unknown
+    code is kept as-is with account_id=None (the workflow does not require a
+    complete chart of accounts). ``net = debit - credit`` (sign never flipped)."""
+    period = await db.financial_periods.find_one(
+        {"_id": financial_period_id, "workspace_id": workspace_id, "company_id": company_id})
+    if not period:
+        raise HTTPException(status_code=404, detail="Période introuvable")
+    _check_period_open(period)
+
+    existing = await db.journal_entries.find_one({
+        "workspace_id": workspace_id, "company_id": company_id,
+        "source_system": "accounting", "external_id": external_id})
+    if existing:
+        return existing  # idempotent — no duplicate ledger write
+
+    company = await db.companies.find_one({"_id": company_id, "workspace_id": workspace_id})
+    currency = (company or {}).get("functional_currency")
+    accounts = await db.accounts.find({"workspace_id": workspace_id, "company_id": company_id}).to_list(None)
+    accounts_by_code = {a.get("account_code"): a for a in accounts}
+
+    now = datetime.now(timezone.utc).isoformat()
+    je_id = f"je_{uuid.uuid4().hex}"
+    je = {
+        "_id": je_id, "workspace_id": workspace_id, "company_id": company_id,
+        "financial_year_id": financial_year_id, "financial_period_id": financial_period_id,
+        "import_id": None, "entry_date": entry_date, "reference": reference, "description": description,
+        "source_type": source_type, "source_system": "accounting", "external_id": external_id,
+        "status": "posted", "reverses_journal_entry_id": reverses_journal_entry_id,
+        "created_at": now, "created_by": user.get("id"), "updated_at": now,
+    }
+    await db.journal_entries.insert_one(je)
+    for i, ln in enumerate(lines, start=1):
+        code = str(ln.get("account") or "").strip()
+        acc = accounts_by_code.get(code)
+        deb = round(float(ln.get("debit") or 0), 2)
+        cred = round(float(ln.get("credit") or 0), 2)
+        await db.journal_entry_lines.insert_one({
+            "_id": f"jel_{uuid.uuid4().hex}", "workspace_id": workspace_id, "company_id": company_id,
+            "journal_entry_id": je_id, "account_id": (acc or {}).get("_id"), "account_code": code,
+            "line_number": i, "description": ln.get("description"),
+            "debit": deb, "credit": cred, "net": round(deb - cred, 2), "currency": currency,
+            "external_line_id": None, "source_row": None, "created_at": now, "updated_at": now,
+        })
+    return je
+
+
+async def link_reversal(db, workspace_id, company_id, original_je_id, reversal_je_id):
+    """Add a non-financial back-reference on the original ledger entry pointing to
+    its reversal. Amounts/lines of the posted entry are NEVER mutated."""
+    await db.journal_entries.update_one(
+        {"_id": original_je_id, "workspace_id": workspace_id, "company_id": company_id},
+        {"$set": {"reversed_by_journal_entry_id": reversal_je_id,
+                  "updated_at": datetime.now(timezone.utc).isoformat()}})
 
 
 async def ensure_indexes(db) -> None:

@@ -21,11 +21,15 @@ PeriodStatus = Literal["open", "locked", "closed"]
 
 _DATE_FMT = "%Y-%m-%d"
 
-# Explicit allowed status transitions (P2.2 lock/close state machine).
+# Explicit allowed status transitions (canonical period state machine, aligned
+# with ACCOUNTING A2). ``closed`` is TERMINAL — historical reopening (closed→open)
+# is permanently removed/deprecated for everyone; corrections happen via a later
+# period. This is the SINGLE source of truth consumed by both the Financial Core
+# and the Accounting workflow.
 _ALLOWED_TRANSITIONS = {
     "open": {"locked", "closed", "open"},
     "locked": {"open", "closed", "locked"},
-    "closed": {"open", "closed"},
+    "closed": {"closed"},
 }
 
 _FR_MONTHS = ["", "janvier", "février", "mars", "avril", "mai", "juin",

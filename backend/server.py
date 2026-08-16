@@ -3080,12 +3080,13 @@ async def gl_list_periods(company_id: str, user: dict = Depends(get_current_user
 
 @api.post("/companies/{company_id}/gl/periods")
 async def gl_create_period(company_id: str, payload: GLPeriodIn, user: dict = Depends(get_current_user)):
-    ws = require_tenant_context(user)
-    await require_module_level(db, user, company_id, "ACCOUNTING", "manage", workspace_id=ws)
-    p = await gl_service.create_period(db, ws, company_id, user, code=payload.code, label=payload.label)
-    await log_action(user, "create", "gl_period", p["code"], details=f"Période GL créée: {p['code']}",
-                     company_id=company_id, entity_id=p["id"], event_type="gl.period.created")
-    return p
+    # A2 alignment — periods are the canonical Financial Core ``financial_periods``
+    # (P2.2). The Accounting workflow no longer maintains a second calendar; a
+    # period is created via the Financial Core (exercise + monthly generation),
+    # then SELECTED here. This standalone creation route is permanently deprecated.
+    raise HTTPException(
+        status_code=410,
+        detail="Création de période dépréciée (A2). Les périodes proviennent du Cœur financier (exercice + périodes financières). Sélectionnez une période existante.")
 
 
 @api.post("/companies/{company_id}/gl/periods/{period_id}/transition")

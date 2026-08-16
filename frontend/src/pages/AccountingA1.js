@@ -41,20 +41,15 @@ function useCid() {
   return activeCompanyId;
 }
 
-// ------------------------------------------------------------------ Clôture & Réconciliation (périodes)
+// ------------------------------------------------------------------ Clôture & Réconciliation (périodes canoniques du Cœur financier)
 export function AcctPeriods() {
   const cid = useCid();
   const [periods, setPeriods] = useState(null);
-  const [code, setCode] = useState("");
   const reload = useCallback(() => {
     if (!cid) return;
-    api.glPeriods(cid).then((d) => setPeriods(d.periods || [])).catch((e) => { setPeriods([]); });
+    api.glPeriods(cid).then((d) => setPeriods(d.periods || [])).catch(() => { setPeriods([]); });
   }, [cid]);
   useEffect(() => { reload(); }, [reload]);
-  const create = async () => {
-    try { await api.glCreatePeriod(cid, { code }); toast.success("Période créée"); setCode(""); reload(); }
-    catch (e) { toast.error(e.response?.data?.detail || "Création impossible"); }
-  };
   const transition = async (pid, status) => {
     try { await api.glTransitionPeriod(cid, pid, status); toast.success(`Période → ${PERIOD_META[status].label}`); reload(); }
     catch (e) { toast.error(e.response?.data?.detail || "Transition refusée"); }
@@ -63,16 +58,11 @@ export function AcctPeriods() {
   if (periods === null) return <div className="flex items-center gap-2 text-slate-500"><Loader2 className="animate-spin" size={16}/> Chargement…</div>;
   return (
     <div className="space-y-5" data-testid="acct-periods-page">
-      <div className="flex flex-wrap items-end gap-2">
-        <div>
-          <label className="text-[11px] uppercase text-slate-500">Nouvelle période (code)</label>
-          <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="2026-01" className="mt-1 h-10 w-40 font-mono-data" data-testid="period-code-input" />
-        </div>
-        <Button onClick={create} disabled={!code.trim()} className="h-10 gap-1.5 bg-[#063044] text-white" data-testid="period-create-btn"><Plus size={15}/> Créer</Button>
-      </div>
-      <p className="text-xs text-slate-400">Transitions permises : ouverte → verrouillée → clôturée (déverrouillage possible tant que non clôturée). La réouverture d'une période clôturée est définitivement interdite.</p>
+      <p className="text-xs text-slate-400" data-testid="periods-canonical-note">
+        Les périodes proviennent du Cœur financier (exercice + périodes financières). Transitions permises : ouverte → verrouillée → clôturée (déverrouillage possible tant que non clôturée). La réouverture d'une période clôturée est définitivement interdite.
+      </p>
       <div className="space-y-2">
-        {periods.length === 0 && <p className="text-sm text-slate-400" data-testid="periods-empty">Aucune période. Créez la première.</p>}
+        {periods.length === 0 && <p className="text-sm text-slate-400" data-testid="periods-empty">Aucune période financière. Créez un exercice et générez les périodes mensuelles dans le Cœur financier.</p>}
         {periods.map((p) => {
           const M = PERIOD_META[p.status]; const Icon = M.icon;
           return (

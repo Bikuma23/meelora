@@ -210,8 +210,11 @@ def test_admin_lock_unlock_close_reopen():
     assert unlocked["status"] == "open" and prev == "locked"
     closed, prev = _run(update_financial_period(db, CA, p["id"], admin(), FinancialPeriodUpdate(status="closed")))
     assert closed["status"] == "closed" and prev == "open"
-    reopened, prev = _run(update_financial_period(db, CA, p["id"], admin(), FinancialPeriodUpdate(status="open")))
-    assert reopened["status"] == "open" and prev == "closed"
+    # A2 alignment — ``closed`` is TERMINAL. Historical reopening (closed→open) is
+    # permanently removed; it must now be rejected for everyone.
+    with pytest.raises(HTTPException) as e:
+        _run(update_financial_period(db, CA, p["id"], admin(), FinancialPeriodUpdate(status="open")))
+    assert e.value.status_code == 409
 
 
 def test_invalid_transition_rejected():
