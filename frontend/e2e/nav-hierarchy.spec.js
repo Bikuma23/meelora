@@ -30,9 +30,7 @@ test.describe("Navigation hiérarchique (sign-off P1.13E)", () => {
 
   test("Client → Tous les mandats → A → Accéder → modules A ; puis B → modules B (isolation A↛B)", async ({ page }) => {
     await login(page, { email: "persona_multi@accslegro.com", password: "persona123" });
-    // Le libellé reste « Tous les mandats ».
-    await expect(page.getByTestId("nav-mandats_list")).toBeVisible();
-    await page.getByTestId("nav-mandats_list").click();
+    // Multi-mandate user lands directly on the "Tous les mandats" chooser.
     await expect(page.getByTestId("mandats-list")).toBeVisible();
     // Chaque mandat autorisé a un bouton Accéder.
     await expect(page.getByTestId(`mandat-access-${CA}`)).toBeVisible();
@@ -46,7 +44,8 @@ test.describe("Navigation hiérarchique (sign-off P1.13E)", () => {
     // A n'a PAS Consolidation.
     await expect(page.locator('[data-testid="nav-module-CONSOLIDATION"]')).toHaveCount(0);
 
-    // Retour Tous les mandats -> Accéder à B -> sidebar recomposée sur l'accès effectif de B.
+    // Retour Tous les mandats (via le sélecteur) -> Accéder à B -> sidebar recomposée.
+    await page.getByTestId("mandat-switcher").click();
     await page.getByTestId("nav-mandats_list").click();
     await page.getByTestId(`mandat-access-${CB}`).click();
     await expect(page.locator('[data-testid="nav-module-CONSOLIDATION"]')).toBeVisible();

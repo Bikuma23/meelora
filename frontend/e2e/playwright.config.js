@@ -7,6 +7,7 @@ const baseURL = process.env.E2E_BASE_URL || process.env.REACT_APP_BACKEND_URL;
 
 module.exports = defineConfig({
   testDir: __dirname,
+  globalTeardown: require.resolve("./global-teardown.js"),
   timeout: 60_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,

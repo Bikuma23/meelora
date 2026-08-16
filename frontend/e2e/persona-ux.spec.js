@@ -28,8 +28,9 @@ test.describe("Persona sidebar = effective access (P1.13E)", () => {
       await expect(page.getByTestId("context-switcher")).toHaveCount(0);
       const mods = await visibleModules(page, c.modules.length);
       expect(mods).toEqual(c.modules);
-      // Single-company employee: no "Tous les mandats" menu.
-      await expect(page.getByTestId("nav-mandats_list")).toHaveCount(0);
+      // Single-company employee: no mandate switcher dropdown (single mandate =
+      // static label, so no "Tous les mandats" entry surfaces).
+      await expect(page.getByTestId("mandat-switcher-menu")).toHaveCount(0);
       // Non-budget employee lands directly on its primary module (not empty dashboard).
       if (!c.modules.includes("BUDGETS")) {
         await expect(page.getByTestId("breadcrumb")).toContainText(LANDING[c.modules[0]]);
@@ -37,34 +38,44 @@ test.describe("Persona sidebar = effective access (P1.13E)", () => {
     });
   }
 
-  test("Client Admin gets the management view (all entitled modules, no financial authority)", async ({ page }) => {
+  test("Client Admin gets the management view (entitled modules, no financial authority)", async ({ page }) => {
+    const CA = "965f0770-8cf2-4199-a99f-819ff270436a";
     await login(page, { email: "persona_clientadmin@accslegro.com", password: "persona123" });
-    const mods = await visibleModules(page, 5);
-    expect(mods).toEqual(["REPORTING", "BUDGETS", "ACCOUNTING", "FIXED_ASSETS", "CONSOLIDATION"]);
-    // Administration section is available to the client admin.
-    await expect(page.getByTestId("nav-admin-section")).toBeVisible();
+    // Multi-mandate admin lands on the chooser; enter Meelora to see its modules.
+    await expect(page.getByTestId("mandats-list")).toBeVisible();
+    await page.getByTestId(`mandat-access-${CA}`).click();
+    await expect(page.getByTestId("active-mandat-name")).toBeVisible();
+    // Both REPORTING + ACCOUNTING entitled -> Reporting folded into Comptabilité
+    // (product composition), so 4 root modules are shown.
+    const mods = await visibleModules(page, 4);
+    expect(mods).toEqual(["BUDGETS", "ACCOUNTING", "FIXED_ASSETS", "CONSOLIDATION"]);
+    // Admin functions live in the avatar → Administration menu (never in the sidebar).
+    await expect(page.getByTestId("nav-admin-section")).toHaveCount(0);
+    await page.getByTestId("user-menu-toggle").click();
+    await expect(page.getByTestId("menu-admin")).toBeVisible();
+    await expect(page.getByTestId("menu-logs")).toBeVisible();
   });
 
   test("multi-société persona recomputes the sidebar on mandate switch", async ({ page }) => {
     const CA = "965f0770-8cf2-4199-a99f-819ff270436a"; // meelora -> BUDGETS + ACCOUNTING
     const CB = "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9"; // 9434 -> ACCOUNTING + CONSOLIDATION
     await login(page, { email: "persona_multi@accslegro.com", password: "persona123" });
-    await page.getByTestId("nav-mandats_list").click();
     await expect(page.getByTestId("mandats-list")).toBeVisible();
     // Enter meelora mandate.
     await page.getByTestId(`mandat-access-${CA}`).click();
     await expect(page.getByTestId("active-mandat-name")).toBeVisible();
     await expect(page.locator('[data-testid="nav-module-BUDGETS"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-module-CONSOLIDATION"]')).toHaveCount(0);
-    // Switch to 9434 mandate -> sidebar recomputed, no rights carried over.
-    await page.getByTestId("nav-mandats_list").click();
-    await page.getByTestId(`mandat-access-${CB}`).click();
+    // Switch to 9434 via the mandate switcher -> sidebar recomputed, no carry-over.
+    await page.getByTestId("mandat-switcher").click();
+    await page.getByTestId(`mandat-switch-${CB}`).click();
     await expect(page.locator('[data-testid="nav-module-CONSOLIDATION"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-module-BUDGETS"]')).toHaveCount(0);
   });
 
   test("Reporting-only opens the placeholder module page without errors", async ({ page }) => {
     await login(page, { email: "persona_reporting@accslegro.com", password: "persona123" });
+    await page.getByTestId("nav-module-REPORTING").click();
     await page.getByTestId("nav-reporting_home").click();
     await expect(page.getByTestId("module-placeholder-REPORTING")).toBeVisible();
   });

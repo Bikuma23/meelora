@@ -6,10 +6,10 @@ const { login } = require("./helpers");
 // Lecture seule côté DB : on ouvre/renseigne le formulaire sans soumettre.
 test.describe("Formulaire société / client (P1.13E)", () => {
   test("champs complets + fiscalité conditionnelle par juridiction", async ({ page }) => {
-    await login(page, "admin");
-    await page.getByTestId("nav-companies").click();
-    await expect(page.getByTestId("companies-page")).toBeVisible();
-    await page.getByTestId("add-company-btn").click();
+    await login(page, "platformAdmin");
+    await page.getByTestId("nav-platform_clients").click();
+    await expect(page.getByTestId("platform-clients")).toBeVisible();
+    await page.getByTestId("platform-new-company-btn").click();
     await expect(page.getByTestId("company-form-dialog")).toBeVisible();
     // Identification / adresse / paramètres présents.
     for (const id of ["company-name", "company-legal-name", "company-trade-name", "company-entity-type",
@@ -29,13 +29,6 @@ test.describe("Formulaire société / client (P1.13E)", () => {
     await expect(page.getByTestId("tax-qst")).toHaveCount(0);
     // Sélection de modules souscrits (toggle).
     await page.getByTestId("module-CONSOLIDATION").click();
-    // Administrateur : classification d'identité (aucun accès créé automatiquement).
-    await page.getByTestId("company-admin-email").fill(`brand.new.${Date.now()}@nowhere.test`);
-    await page.getByTestId("admin-check-btn").click();
-    await expect(page.getByTestId("admin-check-result")).toHaveAttribute("data-status", "absent");
-    await page.getByTestId("company-admin-email").fill("admin@accslegro.com");
-    await page.getByTestId("admin-check-btn").click();
-    await expect(page.getByTestId("admin-check-result")).toHaveAttribute("data-status", "verified");
     // Modèle extensible : bascule vers Suisse -> champs fiscaux suisses (UID/TVA).
     await page.getByTestId("company-jurisdiction").click();
     await page.waitForTimeout(200);

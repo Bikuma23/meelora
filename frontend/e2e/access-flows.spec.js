@@ -14,8 +14,9 @@ async function adminToken(pw) {
 test.describe("Access administration & lifecycle (P1.13D)", () => {
   test("admin invitation wizard walks through the 4 steps", async ({ page }) => {
     await login(page, "admin");
-    // Access console is admin-only (bottom nav).
-    await page.getByTestId("nav-access").click();
+    // Access console is reached from the avatar → Administration menu.
+    await page.getByTestId("user-menu-toggle").click();
+    await page.getByTestId("menu-admin").click();
     await expect(page.getByTestId("access-management")).toBeVisible();
     await page.getByTestId("invite-user-btn").click();
     await expect(page.getByTestId("invite-wizard")).toBeVisible();
@@ -69,7 +70,6 @@ test.describe("Access administration & lifecycle (P1.13D)", () => {
 
   test("multi-company user reaches all accessible mandates via Tous les mandats", async ({ page }) => {
     await login(page, { email: "persona_multi@accslegro.com", password: "persona123" });
-    await page.getByTestId("nav-mandats_list").click();
     await expect(page.getByTestId("mandats-list")).toBeVisible();
     await expect(page.locator('[data-testid^="mandat-access-"]')).toHaveCount(2);
   });

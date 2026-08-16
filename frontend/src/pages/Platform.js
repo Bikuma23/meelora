@@ -4,11 +4,13 @@ import { useAuth } from "../context/AuthContext";
 import { useNav } from "../context/NavContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
+import { Label } from "../components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { toast } from "sonner";
 import {
   Building2, Users, ScrollText, ChevronLeft,
-  Loader2, Server, Search, Layers, ArrowRight, Pencil, Ban, CircleCheck,
+  Loader2, Server, Search, Layers, ArrowRight, Pencil, Ban, CircleCheck, RotateCw, History,
 } from "lucide-react";
 import AccessManagement from "./AccessManagement";
 import { CompanyForm, createCompanyWithAdmin } from "./Companies";
@@ -80,10 +82,22 @@ export function PlatformClients() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [statusDialog, setStatusDialog] = useState({ open: false, company: null, next: "inactive" });
+  const [statusReason, setStatusReason] = useState("");
+  const [historyDialog, setHistoryDialog] = useState({ open: false, company: null });
   const reload = useCallback(() => {
     api.platformCompanies().then((d) => setCompanies(d.companies || [])).catch(() => setCompanies([]));
   }, []);
   useEffect(() => { reload(); }, [reload]);
+
+  const openStatusDialog = (c, next) => { setStatusReason(""); setStatusDialog({ open: true, company: c, next }); };
+  const changeStatus = async (c, next, reason) => {
+    try {
+      await api.updateCompany(c.id, { status: next, status_reason: reason });
+      toast.success(next === "inactive" ? t("Société rendue inactive") : t("Société réactivée"));
+      setStatusDialog({ open: false, company: null, next: "inactive" }); setStatusReason(""); reload();
+    } catch (e) { toast.error(e.response?.data?.detail || t("Action impossible")); }
+  };
 
   const submitCreate = async (payload) => {
     setSaving(true);
@@ -118,6 +132,17 @@ export function PlatformClients() {
   const StatusBadge = ({ c }) => isActive(c)
     ? <span className="inline-flex items-center gap-1 text-[11px] font-600 text-[#15803D]" data-testid={`platform-company-status-${c.id}`}><CircleCheck size={12}/>Active</span>
     : <span className="inline-flex items-center gap-1 text-[11px] font-600 text-slate-500" data-testid={`platform-company-status-${c.id}`}><Ban size={12}/>Inactive</span>;
+  const LifecycleBtns = ({ c }) => isPlatformAdmin ? (
+    <>
+      {isActive(c)
+        ? <Button size="sm" variant="outline" className="h-8 gap-1 text-rose-600 hover:text-rose-700" data-testid={`company-deactivate-${c.id}`} onClick={() => openStatusDialog(c, "inactive")}><Ban size={13}/>{t("Rendre inactive")}</Button>
+        : <Button size="sm" variant="outline" className="h-8 gap-1 text-emerald-600 hover:text-emerald-700" data-testid={`company-reactivate-${c.id}`} onClick={() => openStatusDialog(c, "active")}><RotateCw size={13}/>{t("Réactiver")}</Button>}
+      {(c.status_history || []).length > 0 && <Button size="sm" variant="ghost" className="h-8 gap-1 text-slate-500" data-testid={`company-history-${c.id}`} onClick={() => setHistoryDialog({ open: true, company: c })}><History size={13}/>{t("Historique")}</Button>}
+    </>
+  ) : null;
+  const ReasonNote = ({ c }) => (!isActive(c) && c.status_reason)
+    ? <div className="mt-2 rounded-lg bg-rose-50 px-2.5 py-1.5 text-[11px] text-rose-700" data-testid={`company-reason-${c.id}`}><span className="font-600">{t("Motif")} : </span>{c.status_reason}</div>
+    : null;
 
   return (
     <div className="space-y-4" data-testid="platform-clients">
@@ -154,10 +179,12 @@ export function PlatformClients() {
                 <StatusBadge c={c} />
               </div>
               <div className="text-xs text-slate-500">{[c.jurisdiction, c.functional_currency, c.company_code].filter(Boolean).join(" · ")}</div>
+              <ReasonNote c={c} />
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <EditBtn c={c} />
+            <LifecycleBtns c={c} />
             <Button variant="outline" size="sm" className="gap-1" data-testid={`platform-company-access-${c.id}`} onClick={() => setSelected(c)}>Fiche</Button>
             <Button className="gap-1.5 bg-[#063044] text-white hover:bg-[#0a4a68]" size="sm" data-testid="platform-internal-access" onClick={enterMeelora}>
               Accéder <ArrowRight size={14} />
@@ -176,16 +203,66 @@ export function PlatformClients() {
             <div>
               <div className="flex items-center gap-2 font-medium text-[#0F172A]">{c.name} <StatusBadge c={c} /></div>
               <div className="text-xs text-slate-400">{[c.jurisdiction, c.functional_currency, c.company_code].filter(Boolean).join(" · ")}</div>
+              <ReasonNote c={c} />
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <EditBtn c={c} />
+            <LifecycleBtns c={c} />
             <Button variant="outline" size="sm" data-testid={`platform-company-access-${c.id}`} onClick={() => setSelected(c)}>
               Accéder <ArrowRight size={14} className="ml-1" />
             </Button>
           </div>
         </div>
       ))}
+
+      <Dialog open={statusDialog.open} onOpenChange={(v) => { if (!v) setStatusReason(""); setStatusDialog((p) => ({ ...p, open: v })); }}>
+        <DialogContent data-testid={statusDialog.next === "inactive" ? "deactivate-dialog" : "reactivate-dialog"}>
+          <DialogHeader>
+            <DialogTitle>{statusDialog.next === "inactive"
+              ? <>{t("Rendre")} {statusDialog.company?.name} {t("inactive ?")}</>
+              : <>{t("Réactiver")} {statusDialog.company?.name} ?</>}</DialogTitle>
+            <DialogDescription>{statusDialog.next === "inactive"
+              ? t("Les utilisateurs ne pourront plus accéder à cette société tant qu'elle n'aura pas été réactivée. Les données et l'historique seront conservés.")
+              : t("La société redeviendra accessible. Cette action est tracée dans l'historique de statut.")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label className="text-[11px] uppercase text-slate-500">{t("Motif")} {statusDialog.next === "inactive" ? <span className="text-rose-600">*</span> : <span className="text-slate-400">({t("optionnel")})</span>}</Label>
+            <Textarea data-testid="status-reason" value={statusReason} onChange={(e) => setStatusReason(e.target.value)} rows={3}
+              placeholder={statusDialog.next === "inactive" ? t("Expliquez pourquoi cette société est rendue inactive...") : t("Note de réactivation (optionnelle)...")} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setStatusReason(""); setStatusDialog({ open: false, company: null, next: "inactive" }); }}>{t("Annuler")}</Button>
+            {statusDialog.next === "inactive"
+              ? <Button className="bg-rose-600 hover:bg-rose-700" data-testid="deactivate-confirm" disabled={!statusReason.trim()} onClick={() => changeStatus(statusDialog.company, "inactive", statusReason.trim())}>{t("Rendre inactive")}</Button>
+              : <Button className="bg-emerald-600 hover:bg-emerald-700" data-testid="reactivate-confirm" onClick={() => changeStatus(statusDialog.company, "active", statusReason.trim())}>{t("Réactiver")}</Button>}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={historyDialog.open} onOpenChange={(v) => setHistoryDialog((p) => ({ ...p, open: v }))}>
+        <DialogContent data-testid="status-history-dialog">
+          <DialogHeader>
+            <DialogTitle>{t("Historique de statut")} — {historyDialog.company?.name}</DialogTitle>
+            <DialogDescription>{t("Chaque désactivation et réactivation est tracée (date, statut, acteur, motif).")}</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[50vh] space-y-2 overflow-auto">
+            {[...(historyDialog.company?.status_history || [])].reverse().map((h, i) => (
+              <div key={i} className="rounded-lg border border-slate-200 p-3 text-xs" data-testid="status-history-entry">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`inline-flex items-center gap-1 font-600 ${h.to === "active" ? "text-emerald-600" : "text-rose-600"}`}>
+                    {h.to === "active" ? <RotateCw size={12}/> : <Ban size={12}/>}
+                    {t(h.from === "active" ? "Active" : "Inactive")} → {t(h.to === "active" ? "Active" : "Inactive")}
+                  </span>
+                  <span className="text-[10px] text-slate-400">{h.at ? new Date(h.at).toLocaleString() : ""}</span>
+                </div>
+                <p className="mt-1 text-slate-500">{t("Acteur")} : <b className="font-600 text-slate-700">{h.by || h.by_id || "—"}</b></p>
+                {h.reason && <p className="mt-0.5 text-slate-500">{t("Motif")} : <span className="text-slate-700">{h.reason}</span></p>}
+              </div>
+            ))}
+            {(historyDialog.company?.status_history || []).length === 0 && <p className="py-6 text-center text-sm text-slate-400">{t("Aucun changement de statut enregistré.")}</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

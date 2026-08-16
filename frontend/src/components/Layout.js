@@ -8,6 +8,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "./ui/dropdown-menu";
+import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
@@ -70,6 +71,14 @@ const PAGES = {
   acct_close: { title: "Clôture & Réconciliation", sub: "Périodes GL", comp: AcctPeriods },
   acct_imports: { title: "Imports & Migration", sub: "Comptabilité", comp: makePlaceholder("Imports & Migration") },
   acct_reports2: { title: "Rapports & Analyses", sub: "Comptabilité", comp: makePlaceholder("Rapports & Analyses") },
+  rep_statements: { title: "États financiers", sub: "Reporting", comp: makePlaceholder("États financiers") },
+  rep_analytics: { title: "Analyses", sub: "Reporting", comp: makePlaceholder("Analyses") },
+  fa_registry: { title: "Registre des actifs", sub: "Immobilisations", comp: makePlaceholder("Registre des actifs") },
+  fa_depreciation: { title: "Amortissements", sub: "Immobilisations", comp: makePlaceholder("Amortissements") },
+  fa_disposals: { title: "Cessions", sub: "Immobilisations", comp: makePlaceholder("Cessions") },
+  cons_scope: { title: "Périmètre", sub: "Consolidation", comp: makePlaceholder("Périmètre de consolidation") },
+  cons_elim: { title: "Éliminations", sub: "Consolidation", comp: makePlaceholder("Éliminations") },
+  cons_statements: { title: "États consolidés", sub: "Consolidation", comp: makePlaceholder("États consolidés") },
   platform_home: { title: "Tableau de bord", sub: "Supervision Meelora", comp: PlatformHome },
   platform_clients: { title: "Sociétés / Clients", sub: "Registre des sociétés Meelora", comp: PlatformClients },
   platform_meelora_manage: { title: "Société Meelora — Gestion", sub: "Environnement opérationnel interne", comp: PlatformMeeloraManage },
@@ -80,67 +89,76 @@ const PAGES = {
   consolidation_home: { title: "Consolidation", sub: "Module Consolidation", comp: ConsolidationHome },
 };
 
-// P1.13E — module canonique -> rendu de navigation (aucun menu codé selon user.role).
-const MODULE_NAV = {
-  REPORTING: { type: "item", label: "Reporting", icon: FileBarChart, item: { key: "reporting_home", label: "Reporting", sub: "Module Reporting", icon: FileBarChart } },
-  BUDGETS: { type: "parent", label: "Gestion des Budgets", icon: DollarSign,
-             parent: { key: "budget", label: "Gestion des Budgets", sub: "Salaires & budget", icon: DollarSign }, children: null },
-  ACCOUNTING: { type: "accordion", label: "Comptabilité", icon: Calculator,
-                parent: { key: "acct_overview", label: "Comptabilité", sub: "Grand livre & opérations", icon: Calculator } },
-  FIXED_ASSETS: { type: "item", label: "Immobilisations", icon: Landmark, item: { key: "fixed_assets_home", label: "Immobilisations", sub: "Module Immobilisations", icon: Landmark } },
-  CONSOLIDATION: { type: "item", label: "Consolidation", icon: Layers, item: { key: "consolidation_home", label: "Consolidation", sub: "Module Consolidation", icon: Layers } },
+// P1.13E — module canonique -> configuration du panneau flottant (flyout).
+// Aucun menu n'est déduit de user.role : le manifest/effective access décide de
+// la visibilité des modules racines ; les sous-menus n'accordent aucun droit.
+const MODULE_FLYOUT = {
+  REPORTING: { label: "Reporting", icon: FileBarChart, landing: "reporting_home",
+    groups: [{ label: null, items: [
+      { key: "reporting_home", label: "Aperçu", icon: LayoutDashboard },
+      { key: "rep_statements", label: "États financiers", icon: FileText },
+      { key: "rep_analytics", label: "Analyses", icon: PieChart },
+    ] }] },
+  BUDGETS: { label: "Gestion des Budgets", icon: DollarSign, landing: "dashboard",
+    groups: [{ label: null, items: [
+      { key: "dashboard", label: "Aperçu", icon: LayoutDashboard },
+      { key: "budget", label: "Salaires & Budget", icon: DollarSign },
+      { key: "employes", label: "Employés", icon: Users },
+      { key: "hypotheses", label: "Hypothèses", icon: Settings },
+      { key: "departements", label: "Départements", icon: Building2 },
+      { key: "rapports", label: "Rapports", icon: FileText },
+    ] }] },
+  ACCOUNTING: { label: "Comptabilité", icon: Calculator, landing: "acct_apercu",
+    groups: [
+      { label: "Opérations", items: [
+        { key: "acct_apercu", label: "Aperçu", icon: LayoutDashboard },
+        { key: "acct_sales", label: "Ventes & Clients", icon: Receipt },
+        { key: "acct_purchases", label: "Achats & Fournisseurs", icon: ShoppingCart },
+        { key: "acct_po", label: "Bons de commande", icon: ClipboardCheck },
+        { key: "acct_bank", label: "Banque & Trésorerie", icon: Banknote },
+      ] },
+      { label: "Comptabilité", items: [
+        { key: "acct_entries", label: "Écritures comptables", icon: BookOpen },
+        { key: "acct_ledger", label: "Grand livre", icon: BookText },
+        { key: "acct_tb", label: "Balance de vérification", icon: Scale },
+        { key: "acct_coa", label: "Plan comptable", icon: ListTree },
+        { key: "acct_analytics", label: "Analytique & Projets", icon: PieChart },
+        { key: "acct_taxes", label: "Taxes", icon: Percent },
+        { key: "acct_assets", label: "Actifs & amortissements", icon: Landmark },
+      ] },
+      { label: "Contrôle & analyse", items: [
+        { key: "acct_close", label: "Clôture & Réconciliation", icon: Lock },
+        { key: "acct_imports", label: "Imports & Migration", icon: Boxes },
+        { key: "acct_reports2", label: "Rapports & Analyses", icon: FileBarChart },
+      ] },
+    ] },
+  FIXED_ASSETS: { label: "Immobilisations", icon: Landmark, landing: "fixed_assets_home",
+    groups: [{ label: null, items: [
+      { key: "fixed_assets_home", label: "Aperçu", icon: LayoutDashboard },
+      { key: "fa_registry", label: "Registre des actifs", icon: ListTree },
+      { key: "fa_depreciation", label: "Amortissements", icon: Percent },
+      { key: "fa_disposals", label: "Cessions", icon: Boxes },
+    ] }] },
+  CONSOLIDATION: { label: "Consolidation", icon: Layers, landing: "consolidation_home",
+    groups: [{ label: null, items: [
+      { key: "consolidation_home", label: "Aperçu", icon: LayoutDashboard },
+      { key: "cons_scope", label: "Périmètre", icon: Building2 },
+      { key: "cons_elim", label: "Éliminations", icon: Scale },
+      { key: "cons_statements", label: "États consolidés", icon: FileBarChart },
+    ] }] },
 };
-// Pages autorisées par module (pour garder la page active cohérente avec les droits).
-const MODULE_PAGES = {
-  REPORTING: ["reporting_home"],
-  BUDGETS: ["dashboard", "budget", "employes", "hypotheses", "departements", "rapports"],
-  ACCOUNTING: ["acct_overview", "acct_apercu", "acct_sales", "acct_purchases", "acct_po", "acct_bank", "acct_entries", "acct_ledger", "acct_tb", "acct_coa", "acct_analytics", "acct_taxes", "acct_assets", "acct_close", "acct_imports", "acct_reports2", "acct_dashboard", "acct_bv", "acct_bilan", "acct_pnl", "acct_cashflow", "acct_audit", "acct_qc9434"],
-  FIXED_ASSETS: ["fixed_assets_home"],
-  CONSOLIDATION: ["consolidation_home"],
-};
+// Pages autorisées par module (dérivées du flyout) — cohérence page active/droits.
+const MODULE_PAGES = Object.fromEntries(Object.entries(MODULE_FLYOUT).map(([code, cfg]) => [
+  code, cfg.groups.flatMap((g) => g.items.map((i) => i.key)),
+]));
+// ACCOUNTING englobe fonctionnellement les pages Comptabilité legacy déjà câblées.
+MODULE_PAGES.ACCOUNTING = [...MODULE_PAGES.ACCOUNTING, "acct_dashboard", "acct_bv", "acct_bilan", "acct_pnl", "acct_cashflow", "acct_audit", "acct_qc9434", "acct_overview"];
 
 const NAV_PLATFORM = [
   { key: "platform_home", label: "Tableau de bord", sub: "Pilotage plateforme", icon: LayoutDashboard },
   { key: "platform_clients", label: "Sociétés / Clients", sub: "Registre des sociétés", icon: Building2 },
 ];
 const NAV_PLATFORM_LOGS = { key: "platform_logs", label: "Logs plateforme", sub: "Audit plateforme", icon: ScrollText };
-
-const NAV_ACCT_A1 = [
-  { key: "acct_apercu", label: "Aperçu", icon: LayoutDashboard },
-  { key: "acct_sales", label: "Ventes & Clients", icon: Receipt },
-  { key: "acct_purchases", label: "Achats & Fournisseurs", icon: ShoppingCart },
-  { key: "acct_po", label: "Bons de commande", icon: ClipboardCheck },
-  { key: "acct_bank", label: "Banque & Trésorerie", icon: Banknote },
-  { key: "acct_entries", label: "Écritures comptables", icon: BookOpen },
-  { key: "acct_ledger", label: "Grand livre", icon: BookText },
-  { key: "acct_tb", label: "Balance de vérification", icon: Scale },
-  { key: "acct_coa", label: "Plan comptable", icon: ListTree },
-  { key: "acct_analytics", label: "Analytique & Projets", icon: PieChart },
-  { key: "acct_taxes", label: "Taxes", icon: Percent },
-  { key: "acct_assets", label: "Actifs & amortissements", icon: Landmark },
-  { key: "acct_close", label: "Clôture & Réconciliation", icon: Lock },
-  { key: "acct_imports", label: "Imports & Migration", icon: Boxes },
-  { key: "acct_reports2", label: "Rapports & Analyses", icon: FileBarChart },
-];
-
-const NAV_GROUP = [
-  { key: "dashboard", label: "Tableau de bord", sub: "Vue globale", icon: LayoutDashboard },
-];
-const NAV_FOUNDATION = [
-  { key: "companies", label: "Sociétés / Mandats", sub: "Portefeuille & affectations", icon: Building2 },
-];
-const BUDGET_PARENT = { key: "budget", label: "Salaires & Budget", sub: "Saisie & calculs", icon: DollarSign };
-const BUDGET_CHILDREN = [
-  { key: "employes", label: "Employés", icon: Users },
-  { key: "hypotheses", label: "Hypothèses", icon: Settings },
-  { key: "departements", label: "Départements", icon: Building2 },
-  { key: "rapports", label: "Rapports", icon: FileText },
-];
-const NAV_BOTTOM = [
-  { key: "companies", label: "Sociétés / Clients", sub: "Portefeuille & création", icon: Building2 },
-  { key: "access", label: "Utilisateurs et accès", sub: "Invitations & permissions", icon: ShieldCheck },
-  { key: "logs", label: "Logs", sub: "Historique des activités", icon: ScrollText },
-];
 
 export function MeeloraLogo({ compact = false, className = "" }) {
   return (
@@ -203,7 +221,7 @@ function NotificationsBell({ go }) {
   );
 }
 
-function UserMenu({ user, logout, go, t }) {
+function UserMenu({ user, logout, go, t, adminView }) {
   const { lang, setLang } = useLang();
   const [ts, setTs] = useState(0);
   const [hasAvatar, setHasAvatar] = useState(!!user?.has_avatar);
@@ -268,10 +286,18 @@ function UserMenu({ user, logout, go, t }) {
         <DropdownMenuItem data-testid="menu-profile" onSelect={() => go("preferences")}>
           <UserCog size={15} className="mr-2 text-slate-500" /> {t("Mon profil")}
         </DropdownMenuItem>
-        {user?.role === "admin" && (
-          <DropdownMenuItem data-testid="menu-admin" onSelect={() => go("access")}>
-            <ShieldCheck size={15} className="mr-2 text-slate-500" /> {t("Administration")}
-          </DropdownMenuItem>
+        {adminView && (
+          <>
+            <DropdownMenuSeparator />
+            <div className="px-2 pb-1 pt-1.5 overline" style={{ color: "#94A3B8" }} data-testid="menu-admin-section">{t("Administration")}</div>
+            <DropdownMenuItem data-testid="menu-admin" onSelect={() => go("access")}>
+              <ShieldCheck size={15} className="mr-2 text-slate-500" /> {t("Utilisateurs et accès")}
+            </DropdownMenuItem>
+            <DropdownMenuItem data-testid="menu-logs" onSelect={() => go("logs")}>
+              <ScrollText size={15} className="mr-2 text-slate-500" /> {t("Logs")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
         )}
         <DropdownMenuItem data-testid="menu-security" onSelect={() => go("preferences")}>
           <ShieldAlert size={15} className="mr-2 text-slate-500" /> {t("Sécurité")}
@@ -309,53 +335,6 @@ function NavItem({ item, active, onClick }) {
         <span className={`block truncate text-[11px] ${on ? "text-[#22C55E]" : "text-slate-400"}`}>{t(item.sub)}</span>
       </span>
     </button>
-  );
-}
-
-function NavSubItem({ item, active, onClick }) {
-  const { t } = useLang();
-  const Icon = item.icon;
-  const on = active === item.key;
-  return (
-    <button data-testid={`nav-${item.key}`} onClick={() => onClick(item.key)}
-      className={`group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors duration-150 ${on ? "bg-[#A7F3DD]/40 font-700 text-[#0F172A]" : "font-600 text-slate-600 hover:bg-[#F3F4F6] hover:text-[#0F172A]"}`}>
-      {on && <span className="absolute left-0 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r-full bg-[#22C55E]" />}
-      <Icon size={15} strokeWidth={2.2} className={on ? "text-[#22C55E]" : "text-slate-400 group-hover:text-[#22C55E]"} />
-      <span className="truncate">{t(item.label)}</span>
-    </button>
-  );
-}
-
-function NavParent({ item, children, active, onClick }) {
-  const { t } = useLang();
-  const Icon = item.icon;
-  const childActive = children.some((c) => c.key === active);
-  const on = active === item.key;
-  const [open, setOpen] = useState(childActive || on);
-  useEffect(() => { if (childActive || on) setOpen(true); }, [childActive, on]);
-  return (
-    <div>
-      <div className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors duration-150 ${on ? "bg-[#A7F3DD]/40 text-[#0F172A]" : "text-slate-600 hover:bg-[#F3F4F6] hover:text-[#0F172A]"}`}>
-        {on && <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[#22C55E]" />}
-        <button data-testid={`nav-${item.key}`} onClick={() => { onClick(item.key); setOpen(true); }} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-          <span className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${on ? "bg-[#22C55E] text-white" : "bg-[#F3F4F6] text-slate-500 group-hover:bg-[#A7F3DD]/50 group-hover:text-[#22C55E]"}`}>
-            <Icon size={16} strokeWidth={2.2} />
-          </span>
-          <span className="min-w-0">
-            <span className={`block truncate text-sm ${on ? "font-700" : "font-600"}`}>{t(item.label)}</span>
-            <span className={`block truncate text-[11px] ${on ? "text-[#22C55E]" : "text-slate-400"}`}>{t(item.sub)}</span>
-          </span>
-        </button>
-        <button data-testid={`nav-${item.key}-toggle`} onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }} className="rounded-md p-1 text-slate-400 hover:text-[#0F172A]">
-          {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-        </button>
-      </div>
-      {open && (
-        <div className="mt-1 space-y-1 border-l border-[#F3F4F6] pl-3 ml-5">
-          {children.map((c) => <NavSubItem key={c.key} item={c} active={active} onClick={onClick} />)}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -419,71 +398,124 @@ export default function Layout() {
   return <YearProvider><LayoutInner /></YearProvider>;
 }
 
-function SectionHeader({ icon: Icon, label }) {
+// Reusable floating module navigation (popover) — same UX principle as the avatar
+// menu. The sidebar stays compact (root modules only); sub-menus live in the flyout
+// and never grant any authorization (P1.13 remains the sole authority).
+function ModuleFlyout({ code, active, go, openModule, setOpenModule }) {
+  const { t } = useLang();
+  const cfg = MODULE_FLYOUT[code];
+  if (!cfg) return null;
+  const Icon = cfg.icon;
+  const moduleActive = (MODULE_PAGES[code] || []).includes(active);
+  const open = openModule === code;
   return (
-    <div className="flex items-center gap-2 px-3 pb-1 pt-4">
-      <Icon size={13} className="text-[#22C55E]" />
-      <span className="overline" style={{ color: "#94A3B8" }}>{label}</span>
-    </div>
+    <Popover open={open} onOpenChange={(o) => setOpenModule(o ? code : null)}>
+      <PopoverTrigger asChild>
+        <button data-testid={`nav-module-${code}`}
+          className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors duration-150 ${moduleActive ? "bg-[#A7F3DD]/40 text-[#0F172A]" : "text-slate-600 hover:bg-[#F3F4F6] hover:text-[#0F172A]"}`}>
+          {moduleActive && <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[#22C55E]" />}
+          <span className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${moduleActive ? "bg-[#22C55E] text-white" : "bg-[#F3F4F6] text-slate-500 group-hover:bg-[#A7F3DD]/50 group-hover:text-[#22C55E]"}`}><Icon size={16} strokeWidth={2.2} /></span>
+          <span className="min-w-0 flex-1"><span className={`block truncate text-sm ${moduleActive ? "font-700" : "font-600"}`}>{t(cfg.label)}</span></span>
+          <ChevronRight size={15} className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-90 text-[#22C55E]" : ""}`} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="right" align="start" sideOffset={12} collisionPadding={12}
+        className="w-72 max-h-[85vh] overflow-auto p-2" data-testid={`flyout-${code}`}>
+        <div className="flex items-center gap-2 px-2 pb-2 pt-1">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#22C55E]/12 text-[#22C55E]"><Icon size={15} /></span>
+          <span className="text-sm font-700 text-[#0F172A]">{t(cfg.label)}</span>
+        </div>
+        {cfg.groups.map((g, gi) => (
+          <div key={gi} className="mb-1">
+            {g.label && <div className="px-2 pb-1 pt-2 overline" style={{ color: "#94A3B8" }}>{t(g.label)}</div>}
+            {g.items.map((it) => {
+              const on = active === it.key; const I = it.icon;
+              return (
+                <button key={it.key} data-testid={`nav-${it.key}`} onClick={() => { go(it.key); setOpenModule(null); }}
+                  className={`group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors duration-150 ${on ? "bg-[#A7F3DD]/40 font-700 text-[#0F172A]" : "font-600 text-slate-600 hover:bg-[#F3F4F6] hover:text-[#0F172A]"}`}>
+                  <I size={15} strokeWidth={2.2} className={on ? "text-[#22C55E]" : "text-slate-400 group-hover:text-[#22C55E]"} />
+                  <span className="truncate">{t(it.label)}</span>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }
 
-// Shared module rendering (used by the company sidebar AND the platform extension).
-function ModulesNav({ modules, active, go }) {
-  return (modules || []).map((m) => {
-    const cfg = MODULE_NAV[m.module_code];
-    if (!cfg) return null;
-    return (
-      <div key={m.module_code} data-testid={`nav-module-${m.module_code}`}>
-        <SectionHeader icon={cfg.icon} label={cfg.label} />
-        {cfg.type === "parent" && (
-          <>
-            <NavItem item={{ key: "dashboard", label: "Tableau de bord", sub: "Vue budgétaire", icon: LayoutDashboard }} active={active} onClick={go} />
-            <NavParent item={cfg.parent} children={BUDGET_CHILDREN} active={active} onClick={go} />
-          </>
-        )}
-        {cfg.type === "group" && NAV_ACCT_A1.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
-        {cfg.type === "accordion" && (
-          <NavParent item={cfg.parent} children={NAV_ACCT_A1} active={active} onClick={go} />
-        )}
-        {cfg.type === "item" && <NavItem item={cfg.item} active={active} onClick={go} />}
-      </div>
-    );
-  });
+function ModulesNav({ modules, active, go, openModule, setOpenModule }) {
+  // Product composition: when ACCOUNTING is accessible, REPORTING is not a separate
+  // root module (its capabilities live in Comptabilité → Rapports & Analyses).
+  // This is a navigation rule only; module codes stay canonically distinct and no
+  // sensitive permission is ever inferred.
+  const codes = (modules || []).map((m) => m.module_code);
+  const hasAcct = codes.includes("ACCOUNTING");
+  const visible = codes.filter((c) => MODULE_FLYOUT[c] && !(hasAcct && c === "REPORTING"));
+  return visible.map((code) => (
+    <ModuleFlyout key={code} code={code} active={active} go={go} openModule={openModule} setOpenModule={setOpenModule} />
+  ));
 }
 
-function DynamicCompanyNav({ manifest, active, go, companies, activeCompanyId }) {
+// Compact active-mandate switcher — shown ONLY once inside a mandate's operational
+// env (never on the "Tous les mandats" chooser). Switching recomputes the whole
+// sidebar from the new mandate's effective access (fail-closed during load).
+function MandatSwitcher({ companies, activeCompanyId, active, go, enterMandat }) {
+  const list = companies || [];
+  const activeCompany = list.find((c) => c.id === activeCompanyId);
+  const multi = list.length > 1;
+  if (active === "mandats_list" || !activeCompany) return null;
+  if (!multi) {
+    return (
+      <div className="mb-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2" data-testid="mandat-switcher">
+        <span className="overline block" style={{ color: "#94A3B8" }}>Mandat actif</span>
+        <span className="mt-0.5 block truncate text-sm font-700 text-[#063044]" data-testid="active-mandat-name">{activeCompany.name}</span>
+      </div>
+    );
+  }
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button data-testid="mandat-switcher" className="mb-2 flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:border-[#15AF97]">
+          <span className="min-w-0 flex-1">
+            <span className="overline block" style={{ color: "#94A3B8" }}>Mandat actif</span>
+            <span className="mt-0.5 block truncate text-sm font-700 text-[#063044]" data-testid="active-mandat-name">{activeCompany.name}</span>
+          </span>
+          <ChevronDown size={15} className="shrink-0 text-slate-400" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-60" data-testid="mandat-switcher-menu">
+        {list.map((c) => (
+          <DropdownMenuItem key={c.id} data-testid={`mandat-switch-${c.id}`} onSelect={() => enterMandat(c.id)}
+            className={c.id === activeCompanyId ? "font-700 text-[#063044]" : ""}>
+            <Building2 size={14} className="mr-2 text-slate-400" /> <span className="truncate">{c.name}</span>
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem data-testid="nav-mandats_list" onSelect={() => go("mandats_list")}>
+          <Layers size={14} className="mr-2 text-slate-400" /> Tous les mandats
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function DynamicCompanyNav({ manifest, active, go, companies, activeCompanyId, enterMandat, openModule, setOpenModule }) {
   const modules = manifest?.modules || [];
-  const adminView = !!manifest?.admin_view;
-  const activeCompany = (companies || []).find((c) => c.id === activeCompanyId);
-  const multi = (companies || []).length > 1;
+  const choosing = active === "mandats_list";
   return (
     <div data-testid="company-nav">
-      {multi && (
-        <NavItem item={{ key: "mandats_list", label: "Tous les mandats", sub: "Vos sociétés accessibles", icon: Building2 }} active={active} onClick={go} />
-      )}
+      <MandatSwitcher companies={companies} activeCompanyId={activeCompanyId} active={active} go={go} enterMandat={enterMandat} />
 
-      {activeCompany && (
-        <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5" data-testid="active-mandat">
-          <span className="overline block" style={{ color: "#94A3B8" }}>Mandat actif</span>
-          <span className="mt-0.5 block truncate text-sm font-700 text-[#063044]" data-testid="active-mandat-name">{activeCompany.name}</span>
-        </div>
-      )}
-
-      {!activeCompanyId && (
+      {!activeCompanyId && !choosing && (
         <p className="px-3 py-6 text-xs text-slate-400" data-testid="company-nav-choose">Choisissez un mandat dans « Tous les mandats » pour afficher ses modules.</p>
       )}
-      {activeCompanyId && modules.length === 0 && (
+      {activeCompanyId && !choosing && modules.length === 0 && (
         <p className="px-3 py-4 text-xs text-slate-400" data-testid="company-nav-empty">Aucun module ne vous est attribué pour ce mandat.</p>
       )}
-
-      <ModulesNav modules={modules} active={active} go={go} />
-
-      {adminView && (
-        <div className="pt-4" data-testid="nav-admin-section">
-          <SectionHeader icon={ShieldCheck} label="Administration" />
-          {NAV_BOTTOM.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
-        </div>
+      {!choosing && (
+        <ModulesNav modules={modules} active={active} go={go} openModule={openModule} setOpenModule={setOpenModule} />
       )}
     </div>
   );
@@ -535,6 +567,8 @@ function LayoutInner() {
     try { return localStorage.getItem("meelora:activeCompany") || null; } catch (e) { return null; }
   });
   const [navManifest, setNavManifest] = useState(null);
+  const [openModule, setOpenModule] = useState(null);
+  const [justEntered, setJustEntered] = useState(false);
   const isPlatformPage = active.startsWith("platform_");
   const page = PAGES[active] || PAGES.dashboard;
   const Active = page.comp;
@@ -557,38 +591,54 @@ function LayoutInner() {
     api.getCompanyNavigation(activeCompanyId).then(setNavManifest).catch(() => setNavManifest({ modules: [], admin_view: false }));
   }, [activeCompanyId]);
   const switchCompany = (cid) => {
+    if (cid === activeCompanyId) return;
+    // Fail-closed: drop the previous mandate's manifest/menus immediately so no
+    // stale modules survive during the recompute.
+    setNavManifest(null);
+    setOpenModule(null);
     setActiveCompanyId(cid);
     try { localStorage.setItem("meelora:activeCompany", cid); } catch (e) { /* ignore */ }
   };
-  const enterMandat = (cid) => { switchCompany(cid); setActive("dashboard"); setMobileOpen(false); };
+  const enterMandat = (cid) => { switchCompany(cid); setJustEntered(true); setActive("dashboard"); setMobileOpen(false); };
   // Platform staff: "Accéder" on Société Meelora opens its full operational
   // management console (users / invitations / module access / sensitive perms /
   // effective access). It NEVER adds financial modules to the platform sidebar
   // and grants no financial authority (platform_role ≠ authority).
   const enterMeelora = () => { setActive("platform_meelora_manage"); setMobileOpen(false); };
-  const LANDING = { REPORTING: "reporting_home", BUDGETS: "budget", ACCOUNTING: "acct_overview", FIXED_ASSETS: "fixed_assets_home", CONSOLIDATION: "consolidation_home" };
   const moduleEntry = (mods, adminView) => {
-    if (adminView) return "dashboard";
-    if (mods.some((m) => m.module_code === "ACCOUNTING")) return "acct_overview"; // Comptabilité prioritaire
-    if (mods.some((m) => m.module_code === "BUDGETS")) return "dashboard";
-    return mods.length ? (LANDING[mods[0].module_code] || "dashboard") : "dashboard";
+    const codes = mods.map((m) => m.module_code);
+    if (codes.includes("ACCOUNTING")) return MODULE_FLYOUT.ACCOUNTING.landing; // Comptabilité prioritaire
+    if (codes.includes("BUDGETS")) return MODULE_FLYOUT.BUDGETS.landing;
+    for (const c of codes) if (MODULE_FLYOUT[c]) return MODULE_FLYOUT[c].landing;
+    return adminView ? "preferences" : "mandats_list";
   };
   const allowedBusinessPages = (mods, adminView) => {
     const allowed = new Set(["preferences", "mandats_list"]);
-    if (adminView) ["companies", "access", "logs", "utilisateurs", "dashboard"].forEach((k) => allowed.add(k));
+    // Admin functions moved to the avatar → Administration menu (Sociétés/Clients
+    // is platform-only). Keep the pages reachable for company admins.
+    if (adminView) ["access", "logs", "utilisateurs"].forEach((k) => allowed.add(k));
     mods.forEach((m) => (MODULE_PAGES[m.module_code] || []).forEach((k) => allowed.add(k)));
     return allowed;
   };
-  // Non-platform business users: land on modules (Comptabilité first); multi-mandate
-  // users land on "Tous les mandats" (client home with Accéder). No ghost pages.
+  // Non-platform business users: multi-mandate users land on "Tous les mandats"
+  // (chooser); single-mandate users land on their module entry. No ghost pages.
   useEffect(() => {
     if (isPlatformStaff || !navManifest || active.startsWith("platform_")) return;
     const mods = navManifest.modules || [];
     const adminView = !!navManifest.admin_view;
     const multi = navCompanies.length > 1;
     const allowed = allowedBusinessPages(mods, adminView);
-    if (!allowed.has(active)) { setActive(multi && !adminView ? "mandats_list" : moduleEntry(mods, adminView)); return; }
-    if (active === "dashboard" && !adminView) {
+    // Just entered a mandate from the chooser: land on the mandate's module entry
+    // (never bounce back to the chooser even for multi-mandate users).
+    if (justEntered) {
+      setJustEntered(false);
+      setActive(moduleEntry(mods, adminView));
+      return;
+    }
+    if (!allowed.has(active)) { setActive(multi ? "mandats_list" : moduleEntry(mods, adminView)); return; }
+    // "dashboard" is the app default landing: route multi users to the chooser and
+    // single users to their module entry (Budgets "Aperçu" stays on dashboard).
+    if (active === "dashboard") {
       if (multi) { setActive("mandats_list"); return; }
       const entry = moduleEntry(mods, adminView);
       if (entry !== "dashboard") setActive(entry);
@@ -656,6 +706,9 @@ function LayoutInner() {
             go={go}
             companies={navCompanies}
             activeCompanyId={activeCompanyId}
+            enterMandat={enterMandat}
+            openModule={openModule}
+            setOpenModule={setOpenModule}
           />
           )}
         </nav>
@@ -679,7 +732,7 @@ function LayoutInner() {
             <div className="ml-1 flex items-center gap-1 border-l border-slate-200 pl-2">
               <button data-testid="header-help-btn" title={t("Aide")} className="hidden rounded-full p-2 text-slate-500 transition-colors hover:bg-[#F3F4F6] hover:text-[#0F172A] sm:block"><HelpCircle size={18} /></button>
               <NotificationsBell go={go} />
-              <UserMenu user={user} logout={logout} go={go} t={t} />
+              <UserMenu user={user} logout={logout} go={go} t={t} adminView={!!navManifest?.admin_view} />
             </div>
           </div>
         </header>
