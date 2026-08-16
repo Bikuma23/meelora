@@ -34,6 +34,9 @@ load_dotenv(ROOT / ".env")
 
 from core.access.modules import MODULE_CODES
 
+SCRIPT_NAME = "migrate_p1_13a_access.py"
+SCRIPT_VERSION = "v2-legacy-company_access"
+
 
 async def _find_user(db, uid):
     """Resolve a user whose id may be an ObjectId hex string or a uuid."""
@@ -71,7 +74,7 @@ async def _company_used_modules(db, company) -> set[str]:
     return used
 
 
-async def run(commit: bool):
+async def run(commit: bool, actor_email: str = "platform@meelora.com"):
     client = AsyncIOMotorClient(os.environ["MONGO_URL"])
     db = client[os.environ["DB_NAME"]]
     now = datetime.now(timezone.utc).isoformat()
@@ -144,13 +147,60 @@ async def run(commit: bool):
                 {"workspace_id": wsid, "company_id": cid, "user_id": uid, "module_code": code})
             if existing:
                 continue  # never widen an existing grant
-            report["module_access"].append({"user_id": uid, "company_id": cid, "module_code": code, "level": "read"})
+            report["module_access"].append({"user_id": uid, "email": email, "workspace_id": wsid,
+                                             "company_id": cid, "module_code": code, "level": "read",
+                                             "legacy_role": legacy_role})
             print(f"  + module_access read : user={uid} ({email}) company={cid} module={code} [legacy company_access role={legacy_role}]")
-            if commit:
-                await db.user_module_access.insert_one(
-                    {"_id": f"uma_{uuid.uuid4().hex}", "workspace_id": wsid, "company_id": cid,
-                     "user_id": uid, "module_code": code, "access_level": "read",
-                     "created_at": now, "created_by": "migration_p1_13a", "updated_at": now})
+
+    # 2b) SAFETY GUARD (commit only) — apply ONLY the explicitly validated grants.
+    #     Julie + Marc -> ACCOUNTING/read on Meelora. Abort if the computed set
+    #     diverges (never write an unvalidated grant).
+    if commit:
+        meelora_id = meelora.get("id") if meelora else None
+        validated = set()
+        for em in ("julie@accslegro.com", "marc@accslegro.com"):
+            vu = await db.users.find_one({"email": em})
+            if vu:
+                validated.add((str(vu.get("id") or vu.get("_id")), meelora_id, "ACCOUNTING"))
+        computed = {(g["user_id"], g["company_id"], g["module_code"]) for g in report["module_access"]}
+        if computed != validated:
+            print("\n[ABORT] Le jeu de grants calculé ne correspond PAS aux 2 grants validés.")
+            print(f"        validés  : {sorted(validated)}")
+            print(f"        calculés : {sorted(computed)}")
+            print("        Aucune écriture d'accès effectuée.")
+            client.close()
+            raise SystemExit(2)
+        for g in report["module_access"]:
+            await db.user_module_access.insert_one(
+                {"_id": f"uma_{uuid.uuid4().hex}", "workspace_id": g["workspace_id"], "company_id": g["company_id"],
+                 "user_id": g["user_id"], "module_code": g["module_code"], "access_level": "read",
+                 "created_at": now, "created_by": "migration_p1_13a", "updated_at": now})
+        # 2c) Journalise the migration into Platform Logs (audit trail).
+        try:
+            from core.access import log_scope
+            actor = await db.users.find_one({"email": actor_email}) or {}
+            actor_dict = {"id": str(actor.get("id") or actor.get("_id") or "system"),
+                          "email": actor.get("email", actor_email),
+                          "platform_role": actor.get("platform_role", "platform_admin")}
+            await log_scope.write_platform_log(
+                db, actor_dict,
+                event_type="platform.migration",
+                label=f"Migration P1.13A appliquée ({SCRIPT_VERSION}) — {len(report['module_access'])} grant(s) d'accès module",
+                target_workspace_id=(meelora.get("workspace_id") if meelora else None),
+                details=f"script={SCRIPT_NAME} version={SCRIPT_VERSION}",
+                metadata={"category": "platform", "result": "success", "action": "access_migration",
+                          "script": SCRIPT_NAME, "version": SCRIPT_VERSION,
+                          "applied_at": now, "actor_email": actor_dict["email"],
+                          "grants_applied": [{"user_id": g["user_id"], "email": g["email"],
+                                              "company_id": g["company_id"], "module": g["module_code"],
+                                              "level": g["level"]} for g in report["module_access"]],
+                          "entitlements_activated": report["entitlements"],
+                          "reported_none": report["reported"],
+                          "invariants": {"manage_auto": 0, "sensitive_auto": 0, "via_platform_role": 0,
+                                         "by_membership_only": 0, "cross_workspace": 0, "budgets_implicit": 0}})
+            print(f"  = platform log écrit (event=platform.migration, acteur={actor_dict['email']})")
+        except Exception as e:
+            print(f"  ! WARN: échec écriture platform log: {e}")
 
     print("\n--- SUMMARY ---")
     print(f"entitlements to activate : {len(report['entitlements'])}")
@@ -167,4 +217,7 @@ async def run(commit: bool):
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--commit", action="store_true")
-    asyncio.run(run(p.parse_args().commit))
+    p.add_argument("--actor-email", default="platform@meelora.com",
+                   help="Compte platform_admin enregistré comme acteur dans les Logs plateforme.")
+    args = p.parse_args()
+    asyncio.run(run(args.commit, args.actor_email))

@@ -1,0 +1,67 @@
+[
+  {
+    "_id": "wme_0c2a5cee180a4132b6c0e4870f64df12",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "module_code": "ACCOUNTING",
+    "source": "seed",
+    "created_at": "2026-08-15T19:55:18.338709+00:00",
+    "created_by": "system_seed",
+    "status": "active",
+    "updated_at": "2026-08-15T19:55:18.338709+00:00",
+    "updated_by": "system_seed",
+    "activated_at": "2026-08-15T19:55:18.338709+00:00",
+    "deactivated_at": null
+  },
+  {
+    "_id": "wme_d7ba7c10fcbb4ca388d4f25c7a3f679e",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "module_code": "REPORTING",
+    "source": "seed",
+    "created_at": "2026-08-15T19:55:18.340492+00:00",
+    "created_by": "system_seed",
+    "status": "active",
+    "updated_at": "2026-08-15T19:55:18.340492+00:00",
+    "updated_by": "system_seed",
+    "activated_at": "2026-08-15T19:55:18.340492+00:00",
+    "deactivated_at": null
+  },
+  {
+    "_id": "wme_68be51c9b3054b12bd10dbcb9831345e",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "module_code": "CONSOLIDATION",
+    "source": "seed",
+    "created_at": "2026-08-15T19:55:18.341965+00:00",
+    "created_by": "system_seed",
+    "status": "active",
+    "updated_at": "2026-08-15T19:55:18.341965+00:00",
+    "updated_by": "system_seed",
+    "activated_at": "2026-08-15T19:55:18.341965+00:00",
+    "deactivated_at": null
+  },
+  {
+    "_id": "wme_b84a75555cb741b9a206861506bf497b",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "module_code": "FIXED_ASSETS",
+    "source": "seed",
+    "created_at": "2026-08-15T19:55:18.343462+00:00",
+    "created_by": "system_seed",
+    "status": "active",
+    "updated_at": "2026-08-15T19:55:18.343462+00:00",
+    "updated_by": "system_seed",
+    "activated_at": "2026-08-15T19:55:18.343462+00:00",
+    "deactivated_at": null
+  },
+  {
+    "_id": "wme_70ebc2bfd7a24460a37d4b3196f43fc8",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "module_code": "BUDGETS",
+    "source": "seed",
+    "created_at": "2026-08-15T22:08:54.683764+00:00",
+    "created_by": "system_seed",
+    "status": "active",
+    "updated_at": "2026-08-15T22:08:54.683764+00:00",
+    "updated_by": "system_seed",
+    "activated_at": "2026-08-15T22:08:54.683764+00:00",
+    "deactivated_at": null
+  }
+]

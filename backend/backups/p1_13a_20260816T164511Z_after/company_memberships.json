@@ -1,0 +1,289 @@
+[
+  {
+    "_id": "cpm_0c812312c4974d91a5d4a9120bcf4b6d",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "965f0770-8cf2-4199-a99f-819ff270436a",
+    "user_id": "6a7f7827cceeee87b86128c6",
+    "membership_type": "workspace_staff",
+    "role": "principal",
+    "status": "active",
+    "created_at": "2026-08-14T21:52:31.917454+00:00",
+    "created_by": "migration_p1_12"
+  },
+  {
+    "_id": "cpm_4cc73a77a88844918e94d25dec550bcf",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "965f0770-8cf2-4199-a99f-819ff270436a",
+    "user_id": "6a7f7827cceeee87b86128c8",
+    "membership_type": "workspace_staff",
+    "role": "collaborator",
+    "status": "active",
+    "created_at": "2026-08-14T21:52:31.917454+00:00",
+    "created_by": "migration_p1_12"
+  },
+  {
+    "_id": "cpm_ca5813184779434cbdaa2c3ac742649d",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a7f7827cceeee87b86128c8",
+    "membership_type": "workspace_staff",
+    "role": "principal",
+    "status": "active",
+    "created_at": "2026-08-14T21:52:31.917454+00:00",
+    "created_by": "migration_p1_12"
+  },
+  {
+    "_id": "cm_563e467282e64b0ca3cfac41e46f6eaa",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "965f0770-8cf2-4199-a99f-819ff270436a",
+    "user_id": "6a80d59dfdc5ac0cdb48a0f5",
+    "membership_type": "workspace_staff",
+    "role": "collaborator",
+    "status": "active",
+    "created_at": "2026-08-15T21:09:49.287854+00:00"
+  },
+  {
+    "_id": "cm_b033447cea054379ae2bd03d5205d6a3",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "965f0770-8cf2-4199-a99f-819ff270436a",
+    "user_id": "6a80dbacef10a10c004bb87d",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "cm_4ead43682a7244c7850f8dc19ca0455e",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "965f0770-8cf2-4199-a99f-819ff270436a",
+    "user_id": "6a80dbadef10a10c004bb87e",
+    "membership_type": "company_user",
+    "role": "admin",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "cm_635e0a5f04cd4f87ac15233449e1610a",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "965f0770-8cf2-4199-a99f-819ff270436a",
+    "user_id": "6a80dbadef10a10c004bb87f",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "cm_8cf0d024acbe43c58cd22d6c4accc201",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "965f0770-8cf2-4199-a99f-819ff270436a",
+    "user_id": "6a80dbadef10a10c004bb880",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "cm_5ffc590a83db4df28d3112528e5d32ae",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "965f0770-8cf2-4199-a99f-819ff270436a",
+    "user_id": "6a80dbadef10a10c004bb881",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "cm_3d1f0bbcc6d74556a979c3d975513170",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "965f0770-8cf2-4199-a99f-819ff270436a",
+    "user_id": "6a80dbadef10a10c004bb882",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "cm_c1794595a0e1466aaeb47742d49c3c27",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a80dbadef10a10c004bb882",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "cm_bb4e3c73a5664ae5ba6663664304e2d8",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "965f0770-8cf2-4199-a99f-819ff270436a",
+    "user_id": "6a80dbaeef10a10c004bb883",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "cm_d701752c64274149875f7863554a1c7e",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "965f0770-8cf2-4199-a99f-819ff270436a",
+    "user_id": "6a80e48ae4e7ffd34c04ae4c",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T22:13:30.540257+00:00"
+  },
+  {
+    "_id": "cpm_a1dcbca922c245958853eefded75d0b2",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a80ed8f7fc584a4f7d8aacb",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T22:51:59.791063+00:00",
+    "created_by": "activation"
+  },
+  {
+    "_id": "cpm_d32684e74dd04f36a32ffc368afc0102",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a80efb7da2c59c310985376",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T23:01:11.231349+00:00",
+    "created_by": "activation"
+  },
+  {
+    "_id": "cpm_7dc5e53c216041caa7b66c08d17dd633",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a80f6e7da2c59c310985379",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T23:31:51.893390+00:00",
+    "created_by": "activation"
+  },
+  {
+    "_id": "cpm_f0d97a8fe53b4b8493ec91f5ac6926d8",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a80f769da2c59c31098537c",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T23:34:01.826475+00:00",
+    "created_by": "activation"
+  },
+  {
+    "_id": "cpm_655ce6d4f541480099e768ce2c11b60c",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a80f80dda2c59c31098537e",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T23:36:45.544030+00:00",
+    "created_by": "activation"
+  },
+  {
+    "_id": "cpm_f9fd65d9b9c84719aeb3d65d13003b4c",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a80fcc9b4bc4c923ec0457d",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T23:56:57.469627+00:00",
+    "created_by": "activation"
+  },
+  {
+    "_id": "cpm_2b0e1291a31d41cb8c85dc7806f5d1b9",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a8144d1f8d4790d2510f8c3",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-16T05:04:17.718578+00:00",
+    "created_by": "activation"
+  },
+  {
+    "_id": "cpm_730e76ccef224c2db82f134d4a64ee84",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a81457cf8d4790d2510f8c6",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-16T05:07:08.195250+00:00",
+    "created_by": "activation"
+  },
+  {
+    "_id": "cpm_801350d8e5bc4b0280e8e6db168f7ad1",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a81483ee835dc5cd03b08aa",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-16T05:18:54.506946+00:00",
+    "created_by": "activation"
+  },
+  {
+    "_id": "cpm_6846529807dd4d20bd37213fdb80aaa1",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a814f093fe4baad0f0965c8",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-16T05:47:53.632479+00:00",
+    "created_by": "activation"
+  },
+  {
+    "_id": "cpm_84ead893fe2a4aa3879c1beb0e3e82ed",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a81509557cb33410c44d2ac",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-16T05:54:29.035510+00:00",
+    "created_by": "activation"
+  },
+  {
+    "_id": "cpm_cb03f5b30f064538a5ff2e463d6ae07d",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a81d8bf3ae51c8a563c6ea9",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-16T15:35:27.013238+00:00",
+    "created_by": "activation"
+  },
+  {
+    "_id": "cpm_6db0c68da54340e0a99b1cfc84ab1374",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a81e0849a48afef9900f888",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-16T16:08:36.225491+00:00",
+    "created_by": "activation"
+  },
+  {
+    "_id": "cpm_7972209ca7104ae3b02edaeade7ded3c",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "user_id": "6a81e2b0913ea7110352e89b",
+    "membership_type": "company_user",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-16T16:17:52.530811+00:00",
+    "created_by": "activation"
+  }
+]

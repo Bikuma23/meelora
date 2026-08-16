@@ -1,0 +1,109 @@
+[
+  {
+    "_id": "wsm_f76e0ab795e14fd2b3d34d4ff3125817",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a5111729171cdcc224d441c",
+    "role": "admin",
+    "status": "active",
+    "created_at": "2026-08-14T21:52:31.917454+00:00",
+    "created_by": "migration_p1_12"
+  },
+  {
+    "_id": "wsm_0923c360b510497ab6f809958909b144",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a7f7827cceeee87b86128c6",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-14T21:52:31.917454+00:00",
+    "created_by": "migration_p1_12"
+  },
+  {
+    "_id": "wsm_b0973f4286634deb833ea5fbc8c26463",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a7f7827cceeee87b86128c8",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-14T21:52:31.917454+00:00",
+    "created_by": "migration_p1_12"
+  },
+  {
+    "_id": "wsm_73e474cc7b4448de92a270b5cd59fde8",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a80d59dfdc5ac0cdb48a0f5",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:09:49.286696+00:00"
+  },
+  {
+    "_id": "wsm_5b82d8ca39614f3ebabf656855edaa1b",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a80dbacef10a10c004bb87d",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "wsm_7c959d733fe3483dafe2d2f65883377c",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a80dbadef10a10c004bb87e",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "wsm_648a69e7dbc349249b52ee1de46e07f9",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a80dbadef10a10c004bb87f",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "wsm_556b34bd958447a686f8fc288876c8e0",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a80dbadef10a10c004bb880",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "wsm_542254a3fd684010a9d75e1ce187c27c",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a80dbadef10a10c004bb881",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "wsm_d48ba8ad8dcf47df9a0648a64062a140",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a80dbadef10a10c004bb882",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "wsm_8dab261544c844c3a6f0fe558c9776a2",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a80dbaeef10a10c004bb883",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T21:35:40.579437+00:00"
+  },
+  {
+    "_id": "wsm_ef97a767e43c4b888e9cc30a44740e47",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a80e48ae4e7ffd34c04ae4c",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-15T22:13:30.540257+00:00"
+  },
+  {
+    "_id": "wsm_5e4fe79db1d14b02b7f35b9e8a81d4f1",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a81d83c0bc55f54b4b81c87",
+    "role": "user",
+    "status": "active",
+    "created_at": "2026-08-16T15:33:16.232246+00:00"
+  }
+]

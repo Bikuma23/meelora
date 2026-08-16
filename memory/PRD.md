@@ -1450,3 +1450,13 @@ Rapport : `/app/RAPPORT_P1_13E.md` (§5 + tableau 7 grants). `--commit` NON exé
 - **Correctif** (`scripts/migrate_p1_13a_access.py`, `p1_13a_grant_details.py`) : l'étape 2 itère désormais le `company_access` legacy (au lieu de `company_memberships`), exclut tout utilisateur `platform_role`, exige un module réellement utilisé par la société ; sinon reporté en `none`. Aucune écriture (dry-run only).
 - **Dry-run corrigé** : `user_module_access (read) = 2` — **Julie (ACCOUNTING/read)** + **Marc (ACCOUNTING/read)** sur Meelora. Exclus : Marc@9434 (aucun module), platform@ (platform_role), persona_clientadmin@9434 (aucun module) ; persona_reporting/consol/budgets = aucun `company_access` → aucun grant. Invariants : 0 manage · 0 permission sensible · 0 via platform_role · 0 par membership seul · 0 cross-workspace · 0 BUDGETS implicite.
 - **`--commit` NON exécuté.** En attente de validation ligne par ligne. **P1.13F non démarré.** Sociétés de test « ZZ » nettoyées.
+
+## P1.13A — MIGRATION APPLIQUÉE (--commit) — 2026-06
+- **Autorisation utilisateur** : 2 grants validés explicitement (Julie + Marc → ACCOUNTING/read). Commit exécuté avec sauvegarde préalable, journalisation Platform Logs, garde de sécurité (allowlist stricte), confirmation invariants, smoke sécurité et vérification d'invariance financière.
+- **Scripts** : `backup_p1_13a.py` (dump JSON des collections d'accès/identité + snapshot compteurs financiers), `migrate_p1_13a_access.py --commit --actor-email` (garde allowlist Julie/Marc ACCOUNTING/Meelora → abort si divergence ; écrit platform log `platform.migration`), `smoke_p1_13a.py` (accès effectif via API réelle).
+- **Résultat** : `user_module_access` 11 → 13 (+2). Seule collection modifiée. Grants : Julie ACCOUNTING/read + Marc ACCOUNTING/read sur Meelora (created_by=migration_p1_13a).
+- **Invariants confirmés post-commit** : 0 manage · 0 permission sensible (collection user_permission_grants absente) · 0 via platform_role · 0 par membership seul · 0 cross-workspace · 0 BUDGETS implicite.
+- **Smoke sécurité (API réelle)** : AVANT → tous AUCUN ACCOUNTING ; APRÈS → Julie=read(user_access), Marc=read(user_access), platform@=AUCUN, persona_reporting/consol/budgets=AUCUN. No-leak intact (société inconnue 404, Julie→9434 403).
+- **Invariance financière** : snapshots before/after IDENTIQUES (acct_periods 20, acct_bv 19, acct_ledger 19, journal 1953, employees 123, departments 26, hypotheses 1). Aucune donnée/formule financière modifiée.
+- **Audit** : platform log `platform.migration` (timestamp, acteur platform@meelora.com, script+version v2-legacy-company_access, grants_applied, invariants). Backups : `/app/backend/backups/p1_13a_*_before|after/`.
+- **P1.13F non démarré** (attente validation du rapport post-migration).

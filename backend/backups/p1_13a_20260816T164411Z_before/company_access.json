@@ -1,0 +1,62 @@
+[
+  {
+    "_id": "cacc_97837b176b8a4d21a1b8ec7ab4da1e7e",
+    "company_id": "965f0770-8cf2-4199-a99f-819ff270436a",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a7f7827cceeee87b86128c6",
+    "access_role": "principal",
+    "active": false,
+    "created_at": "2026-08-14T20:18:47.780007+00:00",
+    "created_by": "6a5111729171cdcc224d441c",
+    "updated_at": "2026-08-15T21:14:20.739180+00:00",
+    "updated_by": "6a5111729171cdcc224d441c"
+  },
+  {
+    "_id": "cacc_3ed0e1841a9f4c3086bc536de19ad88a",
+    "company_id": "965f0770-8cf2-4199-a99f-819ff270436a",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a7f7827cceeee87b86128c8",
+    "access_role": "collaborator",
+    "active": false,
+    "created_at": "2026-08-14T20:18:47.978381+00:00",
+    "created_by": "6a5111729171cdcc224d441c",
+    "updated_at": "2026-08-15T21:14:20.739180+00:00",
+    "updated_by": "6a5111729171cdcc224d441c"
+  },
+  {
+    "_id": "cacc_18aa8d3d2f754ebb970dd3ca75328159",
+    "user_id": "6a7f7827cceeee87b86128c8",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "access_role": "principal",
+    "active": false,
+    "created_at": "2026-08-14T20:18:47.978381+00:00",
+    "created_by": "6a5111729171cdcc224d441c",
+    "updated_at": "2026-08-15T21:43:15.892333+00:00",
+    "updated_by": "6a5111729171cdcc224d441c"
+  },
+  {
+    "_id": "cacc_c5fd1e8843de4fbaaeeaf16f967556ef",
+    "user_id": "6a80d59dfdc5ac0cdb48a0f5",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "company_id": "965f0770-8cf2-4199-a99f-819ff270436a",
+    "access_role": "principal",
+    "active": true,
+    "created_at": "2026-08-15T21:14:20.739180+00:00",
+    "created_by": "6a5111729171cdcc224d441c",
+    "updated_at": "2026-08-15T21:14:20.739180+00:00",
+    "updated_by": "6a5111729171cdcc224d441c"
+  },
+  {
+    "_id": "cacc_b2caa6054e9d4096b5c1c9af0172e9dc",
+    "company_id": "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9",
+    "workspace_id": "ws_56c492936ea64c4db53a2f14a0825ef5",
+    "user_id": "6a80dbadef10a10c004bb87e",
+    "access_role": "principal",
+    "active": true,
+    "created_at": "2026-08-15T21:43:15.892333+00:00",
+    "created_by": "6a5111729171cdcc224d441c",
+    "updated_at": "2026-08-15T21:43:15.892333+00:00",
+    "updated_by": "6a5111729171cdcc224d441c"
+  }
+]

@@ -1,0 +1,29 @@
+{
+  "created_at": "2026-08-16T16:45:11.565678+00:00",
+  "tag": "after",
+  "db": "test_database",
+  "access_counts": {
+    "company_access": 5,
+    "company_memberships": 27,
+    "workspace_memberships": 13,
+    "user_module_access": 13,
+    "user_permission_grants": 0,
+    "workspace_module_entitlements": 5,
+    "users": 30,
+    "companies": 2
+  },
+  "financial_counts": {
+    "acct_periods": 20,
+    "acct_bv": 19,
+    "acct_ledger": 19,
+    "trial_balance_lines": 0,
+    "journal_entries": 0,
+    "journal_entry_lines": 0,
+    "journal": 1953,
+    "account_mappings": 0,
+    "report_runs": 0,
+    "employees": 123,
+    "departments": 26,
+    "hypotheses": 1
+  }
+}
