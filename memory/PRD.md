@@ -1388,3 +1388,18 @@ Modèle : **Client → Tous les mandats → Mandat → Modules**. Vocabulaire di
 - [ ] #2 Formulaire creation societe/client COMPLET (identification, coordonnees, fiscalite conditionnelle par juridiction/province [Canada: BN/TPS/TVQ; autres provinces sans TVQ], operationnel). Architecture extensible multi-juridictions. Aucun champ fiscal ne confere de droit. -> A FAIRE (prochaine iteration).
 - [ ] #3 Fiche "Societe Meelora" (Apercu/Admins/Users/Modules/Logs/Parametres) + bouton Acceder en mode EXTENSION (conserver menus plateforme + AJOUTER modules metier, ne pas remplacer la nav). -> A FAIRE (refonte du modele context-switch vers extension).
 - Rappels: migration P1.13A reste --dry-run (NON committee); aucun calcul financier modifie.
+
+
+
+## P1.13E — Sign-off complémentaire sécurité & UX (2026-06)
+Rapport complet : `/app/RAPPORT_P1_13E.md`. **Aucune migration appliquée** (`--commit` NON exécuté), P3.x non repris.
+- **REPORTING vs legacy /api/reports (doc seule)** : `/api/reports` = rapports budgétaires legacy → gaté **BUDGETS** (inchangé). REPORTING (module commercial) = reporting financier normalisé (Bilan, P&L, Flux, report_runs, états financiers, dashboards, analyses/variances, diffusion externe) servi via `/api/acct/*` + `core/financial/*` — moteurs **non modifiés**. Décision : ne pas assimiler REPORTING au legacy /api/reports.
+- **Navigation hiérarchique** : conforme (plateforme = Tableau de bord + Sociétés/Clients ; carte Meelora 1re/verte/Accéder → contexte Société ; client = « Tous les mandats » + Accéder par mandat → recharge entitlements + droits effectifs → sidebar métier). **Ajout « Logs plateforme » à la sidebar plateforme (choix client 1.b)**, strictement scopé plateforme. `Layout.js` `NAV_PLATFORM` (3 items).
+- **Preuves E2E** : nouvelle spec `e2e/nav-hierarchy.spec.js` (3 tests : flux Meelora, flux A→B avec **preuve isolation A↛B**, isolation API). 2 tests `platform-context.spec.js` adaptés (Logs = menu scopé). **Suite complète : 28/28 verts.**
+- **Migration P1.13A — 7 grants explicites (à valider AVANT commit)** : 7× read ACCOUNTING sur Meelora, dérivés de `company_membership` actifs. Script `scripts/p1_13a_grant_details.py` (lecture seule). Invariants confirmés : 0 manage auto · 0 permission sensible auto · 0 via platform_role (cas platform@ dérive de son adhésion société) · 0 cross-workspace · 0 BUDGETS implicite (ajout du 5e module ne crée aucun grant).
+- **Permissions sensibles (P1.13F recommandé)** : catalogue existant (`permissions_catalog.py`) mais **pas encore câblé** sur les routes d'action sensibles (clôture/réouverture = `require_admin` ; extourne legacy = accès société + verrou ; réconciliation = lecture seule/diagnostic ; post GL générique = non disponible). Sous-phase dédiée à activer quand ces opérations seront réelles dans le nouveau module Comptabilité.
+
+### En attente / prochaines étapes
+- **Validation utilisateur** des 7 lignes P1.13A, puis autorisation explicite pour `--commit`.
+- P1.13F (câblage permissions sensibles) — sur décision.
+- P3.x — non repris (sur demande).

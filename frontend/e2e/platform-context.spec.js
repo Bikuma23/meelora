@@ -20,8 +20,8 @@ test.describe("Platform context (P1.13D.2)", () => {
     await expect(page.getByTestId("platform-internal-card")).toBeVisible();
     await page.getByTestId("nav-platform_home").click();
     await expect(page.getByTestId("platform-home")).toBeVisible();
-    // "Logs plateforme" no longer a top-level platform menu.
-    await expect(page.getByTestId("nav-platform_logs")).toHaveCount(0);
+    // "Logs plateforme" is a dedicated platform menu (platform-scoped only).
+    await expect(page.getByTestId("nav-platform_logs")).toBeVisible();
   });
 
   test("internal Meelora card 'Accéder' enters the Société Meelora (company) context", async ({ page }) => {
@@ -47,11 +47,14 @@ test.describe("Platform context (P1.13D.2)", () => {
     await expect(page.getByTestId("platform-home")).toBeVisible();
   });
 
-  test("no aggregated cross-client stream: platform logs is not a top-level menu", async ({ page }) => {
+  test("platform logs is a dedicated platform-scoped menu (no aggregated cross-client stream)", async ({ page }) => {
     await login(page, "platformAdmin");
     // Log separation is enforced by scoped endpoints (see security.spec.js). The
-    // platform sidebar exposes no global operational log stream.
-    await expect(page.getByTestId("nav-platform_logs")).toHaveCount(0);
+    // platform "Logs plateforme" menu exposes ONLY platform-scoped events —
+    // never an aggregated operational stream of the tenants.
+    await expect(page.getByTestId("nav-platform_logs")).toBeVisible();
+    await page.getByTestId("nav-platform_logs").click();
+    await expect(page.getByTestId("platform-logs")).toBeVisible();
     await page.getByTestId("nav-platform_clients").click();
     await expect(page.getByTestId("platform-clients")).toBeVisible();
   });

@@ -82,6 +82,7 @@ const MODULE_PAGES = {
 const NAV_PLATFORM = [
   { key: "platform_home", label: "Tableau de bord", sub: "Supervision Meelora", icon: LayoutDashboard },
   { key: "platform_clients", label: "Sociétés / Clients", sub: "Portefeuille Meelora", icon: Building2 },
+  { key: "platform_logs", label: "Logs plateforme", sub: "Évènements plateforme", icon: ScrollText },
 ];
 
 const NAV_ACCT = [
