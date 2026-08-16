@@ -1,8 +1,26 @@
 import { useEffect, useState } from "react";
 import { useNav } from "../context/NavContext";
 import { useLang } from "../context/LanguageContext";
+import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/api";
 import { MapPin, Phone, Mail, Globe, Building2, Loader2, TrendingUp, FileText, Wallet, Receipt } from "lucide-react";
+
+function CompanyLogo({ cid, hasLogo, name }) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    let obj = null;
+    if (cid && hasLogo) {
+      api.getCompanyLogoBlob(cid).then((blob) => { obj = URL.createObjectURL(blob); setUrl(obj); }).catch(() => setUrl(null));
+    } else setUrl(null);
+    return () => { if (obj) URL.revokeObjectURL(obj); };
+  }, [cid, hasLogo]);
+  if (url) return <img src={url} alt={name} className="h-9 w-9 rounded-lg object-contain" data-testid="company-logo-img" />;
+  return (
+    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#063044] text-white" data-testid="company-logo-initials">
+      {name ? <span className="text-xs font-800">{name.trim().slice(0, 2).toUpperCase()}</span> : <Building2 size={16} />}
+    </span>
+  );
+}
 
 function Kpi({ icon: Icon, label, value, sub, testid }) {
   return (
@@ -22,6 +40,7 @@ const money = (v, c) => `${Number(v || 0).toLocaleString("fr-CA", { minimumFract
 export default function CompanyHome() {
   const { activeCompanyId } = useNav();
   const { t } = useLang();
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -38,26 +57,29 @@ export default function CompanyHome() {
   const cur = c.currency;
   const kpis = data.kpis;
   const locality = [c.city, c.region].filter(Boolean).join(", ");
+  const userName = (user && (user.name || user.email)) || "";
 
   return (
     <div className="mx-auto max-w-5xl space-y-8" data-testid="company-home">
-      {/* Welcome header */}
+      {/* Welcome header — the connected user is the primary element; the company/
+          mandate is identified below in a clearly smaller size. */}
       <div className="flex flex-col items-center py-10 text-center" data-testid="company-home-header">
-        <span className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#063044] text-white shadow-sm">
-          <Building2 size={26} />
-        </span>
-        <p className="text-sm font-500 tracking-wide text-slate-400">{t("Bienvenue chez")}</p>
-        <h1 className="font-display mt-1 text-4xl font-800 tracking-tight text-[#063044] sm:text-5xl" data-testid="company-home-name">{c.name}</h1>
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-slate-500">
+        <p className="text-sm font-500 tracking-wide text-slate-400">{t("Bonjour")}</p>
+        <h1 className="font-display mt-1 text-4xl font-800 tracking-tight text-[#063044] sm:text-5xl" data-testid="company-home-user">{userName}</h1>
+        <div className="mt-5 flex items-center gap-2.5 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm" data-testid="company-home-company">
+          <CompanyLogo cid={activeCompanyId} hasLogo={c.branding?.has_logo} name={c.name} />
+          <span className="text-base font-700 text-[#0F172A]" data-testid="company-home-name">{c.name}</span>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-500">
           {(c.address || locality || c.country) && (
             <span className="flex items-center gap-1.5" data-testid="company-home-address">
-              <MapPin size={14} className="text-slate-400" />
+              <MapPin size={13} className="text-slate-400" />
               {[c.address, locality, c.postal_code, c.country].filter(Boolean).join(" · ")}
             </span>
           )}
-          {c.phone && <span className="flex items-center gap-1.5" data-testid="company-home-phone"><Phone size={14} className="text-slate-400" /> {c.phone}</span>}
-          {c.email && <span className="flex items-center gap-1.5" data-testid="company-home-email"><Mail size={14} className="text-slate-400" /> {c.email}</span>}
-          {c.website && <a href={c.website} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 hover:text-[#22C55E]" data-testid="company-home-website"><Globe size={14} className="text-slate-400" /> {c.website.replace(/^https?:\/\//, "")}</a>}
+          {c.phone && <span className="flex items-center gap-1.5" data-testid="company-home-phone"><Phone size={13} className="text-slate-400" /> {c.phone}</span>}
+          {c.email && <span className="flex items-center gap-1.5" data-testid="company-home-email"><Mail size={13} className="text-slate-400" /> {c.email}</span>}
+          {c.website && <a href={c.website} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 hover:text-[#22C55E]" data-testid="company-home-website"><Globe size={13} className="text-slate-400" /> {c.website.replace(/^https?:\/\//, "")}</a>}
         </div>
       </div>
 

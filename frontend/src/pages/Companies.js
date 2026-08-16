@@ -8,7 +8,7 @@ import { Label } from "../components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { Textarea } from "../components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Building2, BriefcaseBusiness, Plus, Pencil, Search, Users, Loader2, CircleCheck, CircleAlert, Upload, FileSpreadsheet, Ban, RotateCw, ArrowRight, History } from "lucide-react";
+import { Building2, BriefcaseBusiness, Plus, Pencil, Search, Users, Loader2, CircleCheck, CircleAlert, Upload, FileSpreadsheet, Ban, RotateCw, ArrowRight, History, ImagePlus, Trash2 } from "lucide-react";
 import { useNav } from "../context/NavContext";
 import { toast } from "sonner";
 
@@ -69,11 +69,21 @@ function F({ label, children, full }) {
   return <div className={full ? "sm:col-span-2" : ""}><Label className="text-[11px] uppercase text-slate-500">{label}</Label>{children}</div>;
 }
 
+export async function applyCompanyLogo(companyId, payload) {
+  if (!companyId) return;
+  if (payload?._logo?.data_base64) {
+    await api.uploadCompanyLogo(companyId, payload._logo);
+  } else if (payload?._logoRemove) {
+    try { await api.deleteCompanyLogo(companyId); } catch (e) { /* no logo to remove */ }
+  }
+}
+
 export async function createCompanyWithAdmin(payload, t = (x) => x) {
   const adminAction = payload._admin_action;
   const adminEmail = payload.admin_email;
-  const body = { ...payload }; delete body._admin_action;
+  const body = { ...payload }; delete body._admin_action; delete body._logo; delete body._logoRemove;
   const created = await api.createCompany(body);
+  await applyCompanyLogo(created.id, payload);
   if (adminEmail && adminAction) {
     try {
       if (adminAction === "invite") {
@@ -95,6 +105,27 @@ export function CompanyForm({ open, onOpenChange, initial, onSubmit, saving }) {
   const [f, setF] = useState(emptyCompany);
   const [adminCheck, setAdminCheck] = useState(null);
   const [checking, setChecking] = useState(false);
+  const [logo, setLogo] = useState({ preview: null, data: null, remove: false });
+  useEffect(() => {
+    // Load the current company logo (edit) for preview; reset on open/create.
+    let url = null;
+    setLogo({ preview: null, data: null, remove: false });
+    if (initial?.id && initial?.branding?.has_logo) {
+      api.getCompanyLogoBlob(initial.id).then((blob) => { url = URL.createObjectURL(blob); setLogo((p) => ({ ...p, preview: url })); }).catch(() => {});
+    }
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [initial, open]);
+  const LOGO_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/svg+xml", "image/webp"];
+  const onLogoFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!LOGO_TYPES.includes(file.type)) { toast.error(t("Format non supporté (PNG, JPG, SVG, WEBP)")); return; }
+    if (file.size > 2 * 1024 * 1024) { toast.error(t("Image trop volumineuse (max 2 Mo)")); return; }
+    const reader = new FileReader();
+    reader.onload = () => setLogo({ preview: reader.result, data: { data_base64: reader.result, mime: file.type, filename: file.name }, remove: false });
+    reader.readAsDataURL(file);
+  };
+  const clearLogo = () => setLogo({ preview: null, data: null, remove: true });
   const checkAdmin = async () => {
     const email = f.admin_email.trim();
     if (!email) return toast.error(t("Saisissez d'abord un courriel"));
@@ -127,6 +158,7 @@ export function CompanyForm({ open, onOpenChange, initial, onSubmit, saving }) {
       language: f.language, industry: f.industry, company_type: f.company_type, fiscal_year_start: f.fiscal_year_start,
       subscribed_modules: f.subscribed_modules, admin_email: f.admin_email.trim() || null, tax_profile,
       _admin_action: f.admin_email.trim() ? (adminCheck?.action || null) : null,
+      _logo: logo.data || null, _logoRemove: logo.remove || false,
     });
   };
   return <Dialog open={open} onOpenChange={onOpenChange}>
@@ -140,6 +172,26 @@ export function CompanyForm({ open, onOpenChange, initial, onSubmit, saving }) {
           <F label={t("Type d'entité")}><Select value={f.entity_type} onValueChange={(v) => set("entity_type", v)}><SelectTrigger data-testid="company-entity-type"><SelectValue /></SelectTrigger><SelectContent>{ENTITY_TYPES.map(([v, l]) => <SelectItem key={v} value={v}>{t(l)}</SelectItem>)}</SelectContent></Select></F>
           <F label={t("Code société")}><Input value={f.company_code} onChange={(e) => set("company_code", e.target.value)} placeholder="CA-001" data-testid="company-code" /></F>
           <F label={t("Numéro d'entreprise")}><Input value={f.business_number} onChange={(e) => set("business_number", e.target.value)} data-testid="company-business-number" /></F>
+        </FormSection>
+
+        <FormSection title={t("Logo & identité visuelle")}>
+          <div className="sm:col-span-2 flex items-center gap-4" data-testid="company-logo-section">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+              {logo.preview
+                ? <img src={logo.preview} alt="logo" className="h-full w-full object-contain" data-testid="company-logo-preview" />
+                : <span className="text-lg font-800 text-slate-300" data-testid="company-logo-fallback">{(f.name || "?").trim().slice(0, 2).toUpperCase()}</span>}
+            </div>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-600 text-[#063044] hover:bg-slate-50" data-testid="company-logo-upload">
+                  <ImagePlus size={15} /> {logo.preview ? t("Remplacer") : t("Téléverser un logo")}
+                  <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" className="hidden" onChange={onLogoFile} data-testid="company-logo-input" />
+                </label>
+                {logo.preview && <Button type="button" variant="ghost" size="sm" className="h-9 text-rose-500" onClick={clearLogo} data-testid="company-logo-remove"><Trash2 size={14} /> {t("Retirer")}</Button>}
+              </div>
+              <p className="text-xs text-slate-400">{t("PNG, JPG, SVG ou WEBP · max 2 Mo · le ratio est conservé. Utilisé comme identité officielle dans les rapports.")}</p>
+            </div>
+          </div>
         </FormSection>
 
         <FormSection title={t("Adresse & coordonnées")}>
@@ -306,9 +358,9 @@ export default function Companies() {
     setSaving(true);
     const adminAction = payload._admin_action;
     const adminEmail = payload.admin_email;
-    const body = { ...payload }; delete body._admin_action;
+    const body = { ...payload }; delete body._admin_action; delete body._logo; delete body._logoRemove;
     try {
-      if (companyDialog.item) { await api.updateCompany(companyDialog.item.id, body); toast.success(t("Société mise à jour")); }
+      if (companyDialog.item) { await api.updateCompany(companyDialog.item.id, body); await applyCompanyLogo(companyDialog.item.id, payload); toast.success(t("Société mise à jour")); }
       else { await createCompanyWithAdmin(payload, t); toast.success(t("Société créée")); }
       setCompanyDialog({ open:false, item:null }); await load();
     } catch (e) { toast.error(e.response?.data?.detail || t("Erreur lors de l'enregistrement")); }

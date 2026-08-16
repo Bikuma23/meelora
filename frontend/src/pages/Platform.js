@@ -13,7 +13,7 @@ import {
   Loader2, Server, Search, Layers, ArrowRight, Pencil, Ban, CircleCheck, RotateCw, History,
 } from "lucide-react";
 import AccessManagement from "./AccessManagement";
-import { CompanyForm, createCompanyWithAdmin } from "./Companies";
+import { CompanyForm, createCompanyWithAdmin, applyCompanyLogo } from "./Companies";
 import { useLang } from "../context/LanguageContext";
 
 const MODULE_LABEL = { REPORTING: "Reporting", ACCOUNTING: "Comptabilité", FIXED_ASSETS: "Immobilisations", CONSOLIDATION: "Consolidation" };
@@ -107,8 +107,8 @@ export function PlatformClients() {
   };
   const submitEdit = async (payload) => {
     setSaving(true);
-    const body = { ...payload }; delete body._admin_action;
-    try { await api.updateCompany(editing.id, body); toast.success(t("Société mise à jour")); setEditing(null); reload(); }
+    const body = { ...payload }; delete body._admin_action; delete body._logo; delete body._logoRemove;
+    try { await api.updateCompany(editing.id, body); await applyCompanyLogo(editing.id, payload); toast.success(t("Société mise à jour")); setEditing(null); reload(); }
     catch (e) { toast.error(e.response?.data?.detail || t("Modification impossible")); }
     finally { setSaving(false); }
   };

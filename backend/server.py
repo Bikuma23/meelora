@@ -1363,6 +1363,92 @@ async def get_company(company_id: str, user: dict = Depends(get_current_user)):
     return await get_company_for_user(db, company_id, user)
 
 
+# --------------------------------------------------------------------------- #
+# Company logo — canonical visual identity stored ONCE in the company
+# referential (binary in Object Storage via the shared Document Service; only a
+# reference lives on the company doc). Any module can consume it via the logo
+# endpoint; never re-uploaded per module.
+# --------------------------------------------------------------------------- #
+_LOGO_MIMES = {"image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg", "image/svg+xml": "svg", "image/webp": "webp"}
+_LOGO_MAX_BYTES = 2 * 1024 * 1024  # 2 MB
+
+
+class CompanyLogoUpload(BaseModel):
+    data_base64: str
+    mime: str
+    filename: Optional[str] = None
+
+
+async def _company_in_ws(company_id: str, user: dict):
+    ws = user.get("workspace_id")
+    company = await db.companies.find_one({"id": company_id})
+    if not ws or not company or company.get("workspace_id") != ws:
+        raise HTTPException(status_code=404, detail="Société introuvable")
+    return ws, company
+
+
+@api.post("/companies/{company_id}/logo")
+async def upload_company_logo(company_id: str, payload: CompanyLogoUpload,
+                              user: dict = Depends(require_company_creator)):
+    ws, company = await _company_in_ws(company_id, user)
+    mime = (payload.mime or "").lower().strip()
+    if mime not in _LOGO_MIMES:
+        raise HTTPException(status_code=422, detail="Format non supporté (PNG, JPG, SVG ou WEBP)")
+    raw = payload.data_base64.split(",", 1)[-1]
+    try:
+        data = base64.b64decode(raw, validate=True)
+    except Exception:
+        raise HTTPException(status_code=422, detail="Image invalide")
+    if not data:
+        raise HTTPException(status_code=422, detail="Image vide")
+    if len(data) > _LOGO_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Image trop volumineuse (max 2 Mo)")
+    ext = _LOGO_MIMES[mime]
+    filename = payload.filename or f"logo_{company_id}.{ext}"
+    stored = await doc_service.store_document(
+        db, ws, company_id, user, source_type="company_logo", source_id=company_id, data=data,
+        filename=filename, mime_type=mime, kind="logo", meta={"company": company.get("name")})
+    branding = {**(company.get("branding") or {}),
+                "logo_document_id": stored["id"], "logo_mime": mime, "logo_filename": filename,
+                "logo_sha256": stored["sha256"], "logo_version": stored["version"],
+                "logo_updated_at": stored["generated_at"], "logo_updated_by": user.get("id")}
+    await db.companies.update_one({"id": company_id, "workspace_id": ws},
+                                  {"$set": {"branding": branding, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    await log_action(user, "update", "company", company.get("name") or company_id,
+                     details="Logo société mis à jour", company_id=company_id, entity_id=company_id,
+                     event_type="company.logo_updated")
+    return {"success": True, "branding": {"has_logo": True, "logo_mime": mime, "logo_updated_at": stored["generated_at"]}}
+
+
+@api.delete("/companies/{company_id}/logo")
+async def delete_company_logo(company_id: str, user: dict = Depends(require_company_creator)):
+    ws, company = await _company_in_ws(company_id, user)
+    await db.companies.update_one({"id": company_id, "workspace_id": ws},
+                                  {"$unset": {"branding.logo_document_id": "", "branding.logo_mime": "",
+                                              "branding.logo_filename": "", "branding.logo_sha256": "",
+                                              "branding.logo_version": "", "branding.logo_updated_at": "",
+                                              "branding.logo_updated_by": ""},
+                                   "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    await log_action(user, "delete", "company", company.get("name") or company_id,
+                     details="Logo société supprimé", company_id=company_id, entity_id=company_id,
+                     event_type="company.logo_removed")
+    return {"success": True, "branding": {"has_logo": False}}
+
+
+@api.get("/companies/{company_id}/logo")
+async def get_company_logo(company_id: str, user: dict = Depends(get_current_user)):
+    ws, company = await _company_in_ws(company_id, user)
+    doc_id = (company.get("branding") or {}).get("logo_document_id")
+    if not doc_id:
+        raise HTTPException(status_code=404, detail="Aucun logo")
+    data, mime, filename = await doc_service.download_document(db, ws, company_id, doc_id)
+    return StreamingResponse(iter([data]), media_type=mime,
+                             headers={"Cache-Control": "private, max-age=60",
+                                      "Content-Disposition": f'inline; filename="{filename}"'})
+
+
+
+
 @api.patch("/companies/{company_id}")
 async def update_company(company_id: str, payload: CompanyUpdate, user: dict = Depends(require_company_creator)):
     before = await db.companies.find_one({"id": company_id})
@@ -2735,6 +2821,7 @@ async def get_company_home(company_id: str, user: dict = Depends(get_current_use
         "email": company.get("email"), "website": company.get("website"),
         "currency": company.get("functional_currency") or company.get("currency"),
         "industry": company.get("industry"),
+        "branding": {"has_logo": bool((company.get("branding") or {}).get("logo_document_id"))},
     }
     kpis = None
     if "ACCOUNTING" in module_codes:

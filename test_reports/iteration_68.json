@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend testing of Meelora V2 'Logo société canonique' slice (4A/4B/4C). All 10 request checkpoints PASS. Company Home prioritises the user (large heading) over the company badge (smaller pill with logo/initials + name); Meelora renders company-logo-img (blob served via Document Service). CompanyForm dialog (platform admin) supports upload/preview/save/persist, replace, remove-with-Retirer (persistent), initials fallback when no logo, and bad-MIME rejection via toast 'Format non supporté (PNG, JPG, SVG, WEBP)'. Mandate switcher isolation verified: switching from Meelora→9434-3977 QC inc. reloads the target company's own logo (initials for 9434), no cross-leak; switching back reloads Meelora logo. No blocking console errors.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "detailed_results": {
+    "1_home_priority_user": "PASS — persona_finance@accslegro.com lands on data-testid=company-home. company-home-user='Persona E — Responsable financier' rendered at ~48px vs company-home-name 'meelora' at ~24px (user title ~2× bigger). company-home-company pill visible with logo and name; company-home-kpis present.",
+    "2_home_logo_meelora": "PASS — company-logo-img present (count=1), company-logo-initials count=0. Blob fetched via authenticated GET /companies/{id}/logo and rendered via objectURL.",
+    "3_create_with_logo": "PASS — Platform admin → Sociétés/Clients → '+ Nouvelle société / client' opens data-testid=company-form-dialog. Filled company-name 'TEST Logo SA 1196729', code TL6729. company-logo-section visible; upload PNG via company-logo-input → company-logo-preview appears; save (Enregistrer) creates row. Reopen via Modifier → company-logo-preview reloads (blob refetched). Logo persisted server-side.",
+    "4_create_without_logo": "PASS — Fresh form shows company-logo-fallback (initials '?') with no preview; created 'TEST NoLogo 1196753' with no logo and no error.",
+    "5_replace_logo": "PASS — Edit existing company, upload a different PNG → preview updates; Enregistrer → new version stored (Document Service immutable/versioned, single canonical reference remains on company).",
+    "6_remove_logo": "PASS — Click data-testid=company-logo-remove → preview cleared, fallback initials shown; save → reopen dialog: fallback=1, preview=0 (removal persisted).",
+    "7_bad_mime_validation": "PASS — Upload .txt via company-logo-input → toast 'Format non supporté (PNG, JPG, SVG, WEBP)' shown, no preview set.",
+    "8_isolation_between_companies": "PASS — Meelora shows company-logo-img; 9434-3977 QC inc. shows company-logo-initials. No cross-leak of Meelora blob to 9434 in header/pill.",
+    "9_mandate_switch_correct_logo": "PASS — admin@accslegro.com session: sidebar 'MANDAT ACTIF' popover switches between meelora and 9434-3977 QC inc. On meelora → company-logo-img=1; switch → 9434 → company-logo-initials=1, img=0; switch back → meelora shows logo again. Company Home reload uses the new active companyId (objectURL refetched).",
+    "10_console_clean": "PASS — Only 1 unrelated 404 console entry on Home (no PAGEERROR). No red errors on the CompanyForm dialog, upload, replace, remove, or bad-mime flows."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "CompanyForm dialog + upload logic is duplicated pattern between /pages/Companies.js and /pages/Platform.js (both re-import applyCompanyLogo). Good: uses the shared helper. Keep an eye on Layout.js and Companies.js sizes as the module grows.",
+    "The logo blob is fetched every time the dialog opens and every time CompanyHome mounts (URL.createObjectURL + fetch). Consider a very short in-memory cache keyed by companyId+version to avoid redundant blob downloads when navigating between modules."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (skipped per request)", "frontend": "100%" },
+  "test_credentials": "platform@meelora.com/platform123, admin@accslegro.com/admin123, persona_finance@accslegro.com/persona123 — all working.",
+  "seed_data_creation": "Left 2 test companies in workspace 'Meelora client': 'TEST Logo SA 1196729' (CA, code TL6729, no logo now — removed during test 6) and 'TEST NoLogo 1196753' (CA, code NL6753, no logo). Safe to leave or prune.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Logo canonique end-to-end verified on platform admin surface + Company Home. The Retirer button is data-testid=company-logo-remove; the upload input is company-logo-input. Toast copy on bad MIME is 'Format non supporté (PNG, JPG, SVG, WEBP)'. If future tests need to remove test companies, use the 'Rendre inactive' row action (delete not exposed to platform admin)."
+}

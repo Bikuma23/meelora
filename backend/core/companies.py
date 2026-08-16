@@ -105,6 +105,11 @@ def public_company(doc: dict) -> dict:
         "fiscal_year_start": doc.get("fiscal_year_start"),
         "subscribed_modules": doc.get("subscribed_modules") or [],
         "tax_profile": doc.get("tax_profile") or {},
+        "branding": {
+            "has_logo": bool((doc.get("branding") or {}).get("logo_document_id")),
+            "logo_mime": (doc.get("branding") or {}).get("logo_mime"),
+            "logo_updated_at": (doc.get("branding") or {}).get("logo_updated_at"),
+        },
         "admin_email": doc.get("admin_email"),
         "status": doc.get("status", "active" if doc.get("active", True) else "inactive"),
         "active": doc.get("active", doc.get("status") != "inactive"),
