@@ -2595,6 +2595,35 @@ class ReplaceAdminPayload(BaseModel):
     name: Optional[str] = None
 
 
+@api.get("/access/admin-candidate")
+async def admin_candidate_lookup(email: str, user: dict = Depends(get_current_user)):
+    """P1.13E — classify an admin email BEFORE any access is created (reuses the
+    P1.13B/C/D identity model). Email match NEVER grants access by itself.
+      absent               -> propose an activation invitation
+      exists + verified    -> propose to associate as administrator
+      exists + unverified  -> require proof of control (activation) first
+    """
+    ws = await require_workspace_admin(db, user)
+    norm = (email or "").strip().lower()
+    if not norm:
+        raise HTTPException(status_code=422, detail="Courriel requis")
+    u = await db.users.find_one({"email": norm})
+    if not u:
+        return {"status": "absent", "action": "invite", "email": norm,
+                "message": "Aucune identité Meelora — une invitation d'activation sera envoyée."}
+    verified = access_gov.identity_is_verified(u)
+    same_ws = (u.get("workspace_id") == ws) or bool(await db.workspace_memberships.find_one(
+        {"workspace_id": ws, "user_id": u.get("id"), "status": "active"}))
+    if verified:
+        return {"status": "verified", "action": "associate", "email": norm,
+                "name": u.get("name"), "same_workspace": bool(same_ws),
+                "message": "Identité Meelora vérifiée — peut être associée comme administrateur."}
+    return {"status": "unverified", "action": "activation_required", "email": norm,
+            "name": u.get("name"),
+            "message": "Identité existante NON vérifiée — activation/preuve de contrôle requise avant tout accès actif."}
+
+
+
 async def _workspace_admin_emails(workspace_id: str) -> list:
     emails = set()
     async for u in db.users.find({"workspace_id": workspace_id, "role": "admin", "status": {"$ne": "inactive"}}):

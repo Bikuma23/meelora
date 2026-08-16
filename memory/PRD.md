@@ -1416,3 +1416,8 @@ Rapport : `/app/RAPPORT_P1_13E.md` (§5 + tableau 7 grants). `--commit` NON exé
 ### En attente
 - **Validation explicite des 7 grants P1.13A** avant `--commit`.
 - P1.13F (câblage permissions sensibles) ; P3.x — sur décision.
+
+## P1.13E — Ajustements finaux (vocabulaire + admin identity) (2026-06)
+- **Sidebar plateforme** : « Sociétés / Clients » renommé **« Tous les mandats »** (vue des sociétés clientes). Sidebar plateforme = Tableau de bord · Tous les mandats · Société Meelora · Logs plateforme.
+- **Admin création société** : endpoint `GET /api/access/admin-candidate?email=` (classe verified/absent/unverified via `admin_governance.identity_is_verified`). Formulaire propose Associer (vérifié) / Inviter (absent) / Activation requise (non vérifié). L'action réutilise `POST /workspace/invitations` ou `POST /companies/{id}/members` — jamais d'accès auto sur simple email. Aucun 2e mécanisme d'identité.
+- Tests : `company-form.spec.js` étendu (lookup identité). Suite 28/28 verte. `--commit` P1.13A toujours NON exécuté.

@@ -53,7 +53,7 @@ const PAGES = {
   acct_audit: { title: "Rapports", sub: "Génération centralisée", comp: AcctReports },
   acct_qc9434: { title: "9434-3977 QC inc.", sub: "Commandité", comp: QcEntity },
   platform_home: { title: "Tableau de bord", sub: "Supervision Meelora", comp: PlatformHome },
-  platform_clients: { title: "Sociétés / Clients", sub: "Portefeuille Meelora", comp: PlatformClients },
+  platform_clients: { title: "Tous les mandats", sub: "Sociétés clientes de Meelora", comp: PlatformClients },
   platform_meelora: { title: "Société Meelora", sub: "Société interne", comp: PlatformMeelora },
   platform_logs: { title: "Logs plateforme", sub: "Évènements plateforme", comp: PlatformLogs },
   mandats_list: { title: "Tous les mandats", sub: "Vos sociétés accessibles", comp: MandatsList },
@@ -82,7 +82,7 @@ const MODULE_PAGES = {
 
 const NAV_PLATFORM = [
   { key: "platform_home", label: "Tableau de bord", sub: "Supervision Meelora", icon: LayoutDashboard },
-  { key: "platform_clients", label: "Sociétés / Clients", sub: "Portefeuille Meelora", icon: Building2 },
+  { key: "platform_clients", label: "Tous les mandats", sub: "Sociétés clientes", icon: Building2 },
   { key: "platform_meelora", label: "Société Meelora", sub: "Société interne", icon: Briefcase },
   { key: "platform_logs", label: "Logs plateforme", sub: "Évènements plateforme", icon: ScrollText },
 ];

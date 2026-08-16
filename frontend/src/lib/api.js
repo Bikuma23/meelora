@@ -81,6 +81,8 @@ export const api = {
   commitCompaniesImport: (file) => { const fd = new FormData(); fd.append("file", file); return client.post("/companies/import/commit", fd).then((r) => r.data); },
   getCompany: (id) => client.get(`/companies/${id}`).then((r) => r.data),
   createCompany: (body) => client.post("/companies", body).then((r) => r.data),
+  adminCandidate: (email) => client.get("/access/admin-candidate", { params: { email } }).then((r) => r.data),
+  createCompanyMember: (cid, body) => client.post(`/companies/${cid}/members`, body).then((r) => r.data),
   updateCompany: (id, body) => client.patch(`/companies/${id}`, body).then((r) => r.data),
   listMandates: () => client.get("/mandates").then((r) => r.data),
   getMandate: (id) => client.get(`/mandates/${id}`).then((r) => r.data),

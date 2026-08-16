@@ -70,6 +70,16 @@ function F({ label, children, full }) {
 function CompanyForm({ open, onOpenChange, initial, onSubmit, saving }) {
   const { t } = useLang();
   const [f, setF] = useState(emptyCompany);
+  const [adminCheck, setAdminCheck] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const checkAdmin = async () => {
+    const email = f.admin_email.trim();
+    if (!email) return toast.error(t("Saisissez d'abord un courriel"));
+    setChecking(true);
+    try { setAdminCheck(await api.adminCandidate(email)); }
+    catch (e) { toast.error(e.response?.data?.detail || t("Vérification impossible")); setAdminCheck(null); }
+    finally { setChecking(false); }
+  };
   useEffect(() => {
     setF(initial ? { ...emptyCompany,
       ...Object.fromEntries(Object.keys(emptyCompany).map((k) => [k, initial[k] != null ? initial[k] : emptyCompany[k]])),
@@ -93,6 +103,7 @@ function CompanyForm({ open, onOpenChange, initial, onSubmit, saving }) {
       phone: f.phone.trim() || null, email: f.email.trim() || null, functional_currency: f.functional_currency,
       language: f.language, industry: f.industry, company_type: f.company_type, fiscal_year_start: f.fiscal_year_start,
       subscribed_modules: f.subscribed_modules, admin_email: f.admin_email.trim() || null, tax_profile,
+      _admin_action: f.admin_email.trim() ? (adminCheck?.action || null) : null,
     });
   };
   return <Dialog open={open} onOpenChange={onOpenChange}>
@@ -147,7 +158,20 @@ function CompanyForm({ open, onOpenChange, initial, onSubmit, saving }) {
         </FormSection>
 
         <FormSection title={t("Administrateur à associer / inviter")}>
-          <F label={t("Courriel de l'administrateur")} full><Input value={f.admin_email} onChange={(e) => set("admin_email", e.target.value)} placeholder="admin@societe.com" data-testid="company-admin-email" /></F>
+          <div className="sm:col-span-2 space-y-2">
+            <div className="flex items-end gap-2">
+              <div className="flex-1"><Label className="text-[11px] uppercase text-slate-500">{t("Courriel de l'administrateur")}</Label><Input value={f.admin_email} onChange={(e) => { set("admin_email", e.target.value); setAdminCheck(null); }} placeholder="admin@societe.com" data-testid="company-admin-email" /></div>
+              <Button type="button" variant="outline" onClick={checkAdmin} disabled={checking || !f.admin_email.trim()} data-testid="admin-check-btn">{checking ? <Loader2 size={14} className="animate-spin" /> : t("Vérifier l'identité")}</Button>
+            </div>
+            {adminCheck && (
+              <div className={`rounded-lg border p-3 text-xs ${adminCheck.status === "verified" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : adminCheck.status === "absent" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-amber-200 bg-amber-50 text-amber-700"}`} data-testid="admin-check-result" data-status={adminCheck.status}>
+                <p className="font-600">{adminCheck.status === "verified" ? t("Associer comme administrateur") : adminCheck.status === "absent" ? t("Envoyer une invitation d'activation") : t("Activation / preuve de contrôle requise")}</p>
+                <p className="mt-0.5">{adminCheck.message}</p>
+                {adminCheck.status === "unverified" && <p className="mt-1 font-600">{t("Aucun accès ne sera créé tant que l'identité n'est pas activée.")}</p>}
+              </div>
+            )}
+            <p className="text-[11px] text-slate-400">{t("La simple correspondance d'un courriel ne crée jamais d'accès automatiquement (réutilise l'invitation/activation P1.13).")}</p>
+          </div>
         </FormSection>
       </div>
       <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>{t("Annuler")}</Button><Button disabled={saving} onClick={submit} className="bg-[#0F172A] hover:bg-[#0F172A]/90" data-testid="company-submit">{saving && <Loader2 size={14} className="mr-2 animate-spin" />}{t("Enregistrer")}</Button></DialogFooter>
@@ -241,9 +265,29 @@ export default function Companies() {
 
   const saveCompany = async (payload) => {
     setSaving(true);
+    const adminAction = payload._admin_action;
+    const adminEmail = payload.admin_email;
+    const body = { ...payload }; delete body._admin_action;
     try {
-      if (companyDialog.item) { await api.updateCompany(companyDialog.item.id, payload); toast.success(t("Société mise à jour")); }
-      else { await api.createCompany(payload); toast.success(t("Société créée")); }
+      if (companyDialog.item) { await api.updateCompany(companyDialog.item.id, body); toast.success(t("Société mise à jour")); }
+      else {
+        const created = await api.createCompany(body);
+        toast.success(t("Société créée"));
+        // Reuse P1.13B/C/D — email match NEVER auto-creates access.
+        if (adminEmail && adminAction) {
+          try {
+            if (adminAction === "invite") {
+              await api.createInvitation({ email: adminEmail, kind: "company", company_id: created.id, membership_type: "company_user", company_role: "admin" });
+              toast.success(t("Invitation d'activation envoyée à l'administrateur"));
+            } else if (adminAction === "associate") {
+              await api.createCompanyMember(created.id, { email: adminEmail, membership_type: "company_user", role: "admin" });
+              toast.success(t("Administrateur associé (identité vérifiée)"));
+            } else if (adminAction === "activation_required") {
+              toast.warning(t("Administrateur non associé : activation/preuve de contrôle requise."));
+            }
+          } catch (e2) { toast.error(t("Société créée, mais action administrateur échouée : ") + (e2.response?.data?.detail || "")); }
+        }
+      }
       setCompanyDialog({ open:false, item:null }); await load();
     } catch (e) { toast.error(e.response?.data?.detail || t("Erreur lors de l'enregistrement")); }
     finally { setSaving(false); }

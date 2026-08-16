@@ -29,6 +29,13 @@ test.describe("Formulaire société / client (P1.13E)", () => {
     await expect(page.getByTestId("tax-qst")).toHaveCount(0);
     // Sélection de modules souscrits (toggle).
     await page.getByTestId("module-CONSOLIDATION").click();
+    // Administrateur : classification d'identité (aucun accès créé automatiquement).
+    await page.getByTestId("company-admin-email").fill(`brand.new.${Date.now()}@nowhere.test`);
+    await page.getByTestId("admin-check-btn").click();
+    await expect(page.getByTestId("admin-check-result")).toHaveAttribute("data-status", "absent");
+    await page.getByTestId("company-admin-email").fill("admin@accslegro.com");
+    await page.getByTestId("admin-check-btn").click();
+    await expect(page.getByTestId("admin-check-result")).toHaveAttribute("data-status", "verified");
     // Modèle extensible : bascule vers Suisse -> champs fiscaux suisses (UID/TVA).
     await page.getByTestId("company-jurisdiction").click();
     await page.waitForTimeout(200);

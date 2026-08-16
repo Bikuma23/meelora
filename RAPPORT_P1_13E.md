@@ -197,3 +197,30 @@ Modifications de code (frontend uniquement, autorisées) + **28/28 E2E verts**.
 - Preuves : `company-form.spec.js` (champs + bascule QC↔BC↔Suisse) + curl backend (création complète, devise normalisée, QST conservée / PST vide retirée).
 
 > Note d'interprétation « Accueil Client » : l'accueil d'un client multi-mandats **est** la liste « Tous les mandats » (avec un bouton Accéder par mandat). L'infra d'invitation admin existante (P1.13D) reste le canal d'invitation ; le courriel admin saisi au formulaire est stocké sur la société (`admin_email`).
+
+---
+
+## 6. Ajustements du dernier tour (3 points) — livrés & testés (28/28 E2E verts)
+
+### 6.1 Vocabulaire plateforme
+La vue plateforme listant toutes les sociétés clientes utilisant Meelora est désormais
+libellée **« Tous les mandats »** (sidebar `platform_clients` + titre de page). L'appellation
+« Sociétés / Clients » ne remplace plus ce libellé. Sidebar plateforme finale :
+**Tableau de bord · Tous les mandats · Société Meelora · Logs plateforme**.
+
+### 6.2 Administrateur à la création d'une société (réutilise P1.13B/C/D, aucun 2e mécanisme)
+Nouveau endpoint `GET /api/access/admin-candidate?email=` (workspace-admin) qui **classe** le
+courriel via `admin_governance.identity_is_verified` (modèle d'identité P1.13) — **la simple
+correspondance d'email ne crée JAMAIS d'accès** :
+- **identité inexistante** → action `invite` → « Envoyer une invitation d'activation »
+  (`POST /workspace/invitations`, kind=company, role=admin).
+- **identité existante + vérifiée** → action `associate` → « Associer comme administrateur »
+  (`POST /companies/{id}/members`, company_user/admin).
+- **identité existante + NON vérifiée** → action `activation_required` → membership actif
+  **refusé** tant que l'activation/preuve de contrôle n'est pas faite (aucun accès créé).
+Le formulaire affiche le CTA adapté (bouton « Vérifier l'identité » → bandeau vert/bleu/ambre).
+Preuves : `company-form.spec.js` (absent→invite, vérifié→associate) + curl (absent/verified).
+
+### 6.3 Migration — 7 lignes reproduites inline (voir §3), invariants conservés
+`--commit` NON exécuté. Invariants : 0 manage auto · 0 permission sensible auto · 0 grant via
+platform_role · 0 cross-workspace · 0 BUDGETS implicite. STOP.
