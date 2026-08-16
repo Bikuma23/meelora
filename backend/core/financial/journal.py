@@ -387,7 +387,9 @@ async def aggregate_journal(db, company_id, user, financial_period_id=None, impo
 async def create_workflow_journal_entry(db, workspace_id, company_id, user, *,
                                         financial_year_id, financial_period_id, entry_date,
                                         reference, description, lines, external_id,
-                                        source_type="manual", reverses_journal_entry_id=None):
+                                        source_type="manual", source_system="accounting",
+                                        reverses_journal_entry_id=None,
+                                        transaction_currency=None, fx=None):
     """Create EXACTLY ONE canonical journal entry (+lines) from an approved
     Accounting workflow document. Idempotent on (source_system='accounting',
     external_id): a retry reuses the existing entry instead of duplicating it.
@@ -403,11 +405,11 @@ async def create_workflow_journal_entry(db, workspace_id, company_id, user, *,
 
     existing = await db.journal_entries.find_one({
         "workspace_id": workspace_id, "company_id": company_id,
-        "source_system": "accounting", "external_id": external_id})
+        "source_system": source_system, "external_id": external_id})
     if existing:
         return existing  # idempotent — no duplicate ledger write
 
-    company = await db.companies.find_one({"_id": company_id, "workspace_id": workspace_id})
+    company = await db.companies.find_one({"workspace_id": workspace_id, "$or": [{"id": company_id}, {"_id": company_id}]})
     currency = (company or {}).get("functional_currency")
     accounts = await db.accounts.find({"workspace_id": workspace_id, "company_id": company_id}).to_list(None)
     accounts_by_code = {a.get("account_code"): a for a in accounts}
@@ -418,8 +420,11 @@ async def create_workflow_journal_entry(db, workspace_id, company_id, user, *,
         "_id": je_id, "workspace_id": workspace_id, "company_id": company_id,
         "financial_year_id": financial_year_id, "financial_period_id": financial_period_id,
         "import_id": None, "entry_date": entry_date, "reference": reference, "description": description,
-        "source_type": source_type, "source_system": "accounting", "external_id": external_id,
+        "source_type": source_type, "source_system": source_system, "external_id": external_id,
         "status": "posted", "reverses_journal_entry_id": reverses_journal_entry_id,
+        # Multi-currency: the journal is balanced in FUNCTIONAL currency; the
+        # transaction currency + immutable FX snapshot travel as metadata.
+        "transaction_currency": transaction_currency, "fx": fx,
         "created_at": now, "created_by": user.get("id"), "updated_at": now,
     }
     await db.journal_entries.insert_one(je)
@@ -433,6 +438,9 @@ async def create_workflow_journal_entry(db, workspace_id, company_id, user, *,
             "journal_entry_id": je_id, "account_id": (acc or {}).get("_id"), "account_code": code,
             "line_number": i, "description": ln.get("description"),
             "debit": deb, "credit": cred, "net": round(deb - cred, 2), "currency": currency,
+            # Transaction-currency amounts (metadata only; functional stays canonical).
+            "txn_debit": ln.get("txn_debit"), "txn_credit": ln.get("txn_credit"),
+            "txn_currency": ln.get("txn_currency"),
             "external_line_id": None, "source_row": None, "created_at": now, "updated_at": now,
         })
     return je

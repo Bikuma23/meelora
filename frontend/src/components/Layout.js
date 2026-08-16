@@ -28,6 +28,7 @@ import Preferences from "../pages/Preferences";
 import { applyTheme } from "../lib/theme";
 import { AcctDashboard, AcctBV, AcctBilan, AcctPnl, AcctCashflow, AcctReports } from "../pages/Comptabilite";
 import { AcctEntries, AcctPeriods, makePlaceholder } from "../pages/AccountingA1";
+import SalesAR from "../pages/SalesAR";
 import QcEntity from "../pages/QcEntity";
 import { PlatformHome, PlatformClients, PlatformLogs, PlatformMeeloraManage } from "../pages/Platform";
 import { ReportingHome, FixedAssetsHome, ConsolidationHome } from "../pages/ModulePlaceholder";
@@ -57,7 +58,7 @@ const PAGES = {
   // ACCOUNTING A1 — shell (Comptabilité en accordéon, 15 sous-menus).
   acct_overview: { title: "Aperçu", sub: "Comptabilité", comp: makePlaceholder("Aperçu comptable", "Vue d'ensemble du module Comptabilité (à venir).") },
   acct_apercu: { title: "Aperçu", sub: "Comptabilité", comp: makePlaceholder("Aperçu comptable", "Vue d'ensemble du module Comptabilité (à venir).") },
-  acct_sales: { title: "Ventes & Clients", sub: "Comptabilité", comp: makePlaceholder("Ventes & Clients") },
+  acct_sales: { title: "Ventes & Clients", sub: "Comptabilité", comp: SalesAR },
   acct_purchases: { title: "Achats & Fournisseurs", sub: "Comptabilité", comp: makePlaceholder("Achats & Fournisseurs") },
   acct_po: { title: "Bons de commande", sub: "Comptabilité", comp: makePlaceholder("Bons de commande") },
   acct_bank: { title: "Banque & Trésorerie", sub: "Comptabilité", comp: makePlaceholder("Banque & Trésorerie") },

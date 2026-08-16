@@ -61,7 +61,12 @@ PERSONAS = {
         "companies": [(CA, "company_user", "user")],
         "modules": [(CA, "ACCOUNTING", "manage")],
         "perms": [(CA, "accounting.entry_post"), (CA, "accounting.reconciliation_approve"),
-                  (CA, "accounting.period_close")],   # granular: NO period_reopen
+                  (CA, "accounting.period_close"),
+                  # A3 — Ventes & Clients sensitive permissions (approver/poster).
+                  (CA, "accounting.customer_invoice_approve"), (CA, "accounting.customer_invoice_post"),
+                  (CA, "accounting.customer_payment_post"),
+                  (CA, "accounting.customer_credit_note_approve"), (CA, "accounting.customer_credit_note_post"),
+                  (CA, "accounting.entry_reverse"), (CA, "accounting.chart_manage")],   # granular: NO period_reopen
     },
     "persona_reporting@accslegro.com": {  # F — Responsable Reporting
         "name": "Persona F — Responsable Reporting",

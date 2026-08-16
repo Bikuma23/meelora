@@ -150,6 +150,9 @@ from core.access import navigation as access_nav
 from core.access.effective_access import resolve_effective_access
 from core.access.sensitive import require_sensitive_permission, require_module_level
 from core.accounting import gl as gl_service
+from core.accounting import ar as ar_service
+from core.financial import tax_engine as tax_engine
+from core.financial import fx as fx_service
 from core.access.indexes import ensure_indexes as _ensure_access_indexes
 
 
@@ -3176,6 +3179,305 @@ async def gl_reverse_entry(company_id: str, entry_id: str, payload: GLReverseIn,
     await log_action(user, "reverse", "gl_entry", e["reference"] or e["id"], details=f"Extourne de {entry_id}",
                      company_id=company_id, entity_id=e["id"], event_type="gl.entry.reversed")
     return e
+
+
+# ===================== ACCOUNTING A3 — Accounts Receivable (Ventes & Clients) =====================
+class ARCustomerIn(BaseModel):
+    code: Optional[str] = ""
+    name: str
+    emails: Optional[List[str]] = None
+    billing_address: Optional[str] = None
+    tax_ids: Optional[dict] = None
+    default_tax_code: Optional[str] = None
+    default_currency: Optional[str] = None
+    default_revenue_account_code: Optional[str] = None
+    status: Optional[str] = None
+
+
+class ARInvoiceLineIn(BaseModel):
+    description: Optional[str] = ""
+    qty: Optional[float] = 1
+    unit_price: Optional[float] = 0
+    revenue_account_code: Optional[str] = None
+    tax_code: Optional[str] = "EXEMPT"
+
+
+class ARInvoiceIn(BaseModel):
+    customer_id: str
+    period_id: str
+    currency: Optional[str] = None
+    fx_rate: Optional[float] = None
+    issue_date: Optional[str] = None
+    due_date: Optional[str] = None
+    lines: List[ARInvoiceLineIn] = []
+
+
+class ARInvoiceUpdate(BaseModel):
+    currency: Optional[str] = None
+    fx_rate: Optional[float] = None
+    issue_date: Optional[str] = None
+    due_date: Optional[str] = None
+    lines: Optional[List[ARInvoiceLineIn]] = None
+
+
+class ARPaymentIn(BaseModel):
+    invoice_id: str
+    amount: float
+    currency: Optional[str] = None
+    fx_rate: Optional[float] = None
+    date: Optional[str] = None
+    method: Optional[str] = "bank"
+    period_id: Optional[str] = None
+
+
+class ARCreditLineIn(BaseModel):
+    invoice_line_index: int
+    net_credit: float
+
+
+class ARCreditNoteIn(BaseModel):
+    invoice_id: str
+    period_id: Optional[str] = None
+    lines: List[ARCreditLineIn] = []
+
+
+class ARMappingIn(BaseModel):
+    ar_account_code: Optional[str] = None
+    bank_account_code: Optional[str] = None
+    default_revenue_account_code: Optional[str] = None
+    fx_gain_account_code: Optional[str] = None
+    fx_loss_account_code: Optional[str] = None
+    rounding_account_code: Optional[str] = None
+
+
+class ARTaxCodeIn(BaseModel):
+    code: str
+    label: Optional[str] = None
+    jurisdiction: Optional[str] = None
+    tax_kind: Optional[str] = "taxable"
+    versions: Optional[List[dict]] = None
+
+
+class ARFxRateIn(BaseModel):
+    from_currency: str
+    to_currency: str
+    rate: float
+    rate_date: str
+    source: Optional[str] = "manual"
+
+
+async def _ar_read_scope(company_id: str, user: dict):
+    ws = require_tenant_context(user)
+    await require_module_level(db, user, company_id, "ACCOUNTING", "read", workspace_id=ws)
+    return ws
+
+
+async def _ar_write_scope(company_id: str, user: dict):
+    ws = require_tenant_context(user)
+    await require_module_level(db, user, company_id, "ACCOUNTING", "contribute", workspace_id=ws)
+    return ws
+
+
+# ---- Config: tax codes, GL mapping, FX rates -------------------------------
+@api.get("/companies/{company_id}/ar/tax-codes")
+async def ar_list_tax_codes(company_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"tax_codes": await tax_engine.list_tax_codes(db, ws, company_id)}
+
+
+@api.post("/companies/{company_id}/ar/tax-codes/seed")
+async def ar_seed_tax_codes(company_id: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.chart_manage", workspace_id=ws)
+    company = await db.companies.find_one({"workspace_id": ws, "$or": [{"id": company_id}, {"_id": company_id}]})
+    created = await tax_engine.ensure_default_tax_codes(db, ws, company_id, (company or {}).get("jurisdiction"))
+    return {"created": created}
+
+
+@api.post("/companies/{company_id}/ar/tax-codes")
+async def ar_create_tax_code(company_id: str, payload: ARTaxCodeIn, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.chart_manage", workspace_id=ws)
+    return await tax_engine.create_tax_code(db, ws, company_id, payload.model_dump(exclude_unset=True))
+
+
+@api.get("/companies/{company_id}/ar/mapping")
+async def ar_get_mapping(company_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await ar_service.get_mapping(db, ws, company_id)
+
+
+@api.put("/companies/{company_id}/ar/mapping")
+async def ar_set_mapping(company_id: str, payload: ARMappingIn, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.chart_manage", workspace_id=ws)
+    return await ar_service.set_mapping(db, ws, company_id, payload.model_dump(exclude_unset=True))
+
+
+@api.post("/companies/{company_id}/ar/fx-rates")
+async def ar_record_fx_rate(company_id: str, payload: ARFxRateIn, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.chart_manage", workspace_id=ws)
+    r = await fx_service.record_rate(db, ws, company_id, from_currency=payload.from_currency,
+                                     to_currency=payload.to_currency, rate=payload.rate,
+                                     rate_date=payload.rate_date, source=payload.source)
+    return {"id": r["_id"], "from_currency": r["from_currency"], "to_currency": r["to_currency"], "rate": r["rate"]}
+
+
+# ---- Customers -------------------------------------------------------------
+@api.get("/companies/{company_id}/ar/customers")
+async def ar_list_customers(company_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"customers": await ar_service.list_customers(db, ws, company_id)}
+
+
+@api.post("/companies/{company_id}/ar/customers")
+async def ar_create_customer(company_id: str, payload: ARCustomerIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    c = await ar_service.create_customer(db, ws, company_id, user, payload.model_dump(exclude_unset=True))
+    await log_action(user, "create", "ar_customer", c["name"], company_id=company_id, entity_id=c["id"],
+                     event_type="ar.customer.created")
+    return c
+
+
+@api.patch("/companies/{company_id}/ar/customers/{customer_id}")
+async def ar_update_customer(company_id: str, customer_id: str, payload: ARCustomerIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ar_service.update_customer(db, ws, company_id, user, customer_id, payload.model_dump(exclude_unset=True))
+
+
+# ---- Invoices --------------------------------------------------------------
+@api.get("/companies/{company_id}/ar/invoices")
+async def ar_list_invoices(company_id: str, status: Optional[str] = None, customer_id: Optional[str] = None,
+                           user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"invoices": await ar_service.list_invoices(db, ws, company_id, status=status, customer_id=customer_id)}
+
+
+@api.get("/companies/{company_id}/ar/invoices/{invoice_id}")
+async def ar_get_invoice(company_id: str, invoice_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return ar_service.public_invoice(await ar_service.get_invoice(db, ws, company_id, invoice_id))
+
+
+@api.post("/companies/{company_id}/ar/invoices")
+async def ar_create_invoice(company_id: str, payload: ARInvoiceIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    inv = await ar_service.create_invoice(db, ws, company_id, user, payload.model_dump())
+    await log_action(user, "create", "ar_invoice", inv["id"], details="Facture (brouillon)",
+                     company_id=company_id, entity_id=inv["id"], event_type="ar.invoice.created")
+    return inv
+
+
+@api.patch("/companies/{company_id}/ar/invoices/{invoice_id}")
+async def ar_update_invoice(company_id: str, invoice_id: str, payload: ARInvoiceUpdate, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ar_service.update_invoice_draft(db, ws, company_id, user, invoice_id, payload.model_dump(exclude_unset=True))
+
+
+@api.post("/companies/{company_id}/ar/invoices/{invoice_id}/submit")
+async def ar_submit_invoice(company_id: str, invoice_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ar_service.submit_invoice(db, ws, company_id, user, invoice_id)
+
+
+@api.post("/companies/{company_id}/ar/invoices/{invoice_id}/approve")
+async def ar_approve_invoice(company_id: str, invoice_id: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.customer_invoice_approve", workspace_id=ws)
+    inv = await ar_service.approve_invoice(db, ws, company_id, user, invoice_id)
+    await log_action(user, "approve", "ar_invoice", inv["id"], company_id=company_id, entity_id=inv["id"],
+                     event_type="ar.invoice.approved")
+    return inv
+
+
+@api.post("/companies/{company_id}/ar/invoices/{invoice_id}/post")
+async def ar_post_invoice(company_id: str, invoice_id: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.customer_invoice_post", workspace_id=ws)
+    inv = await ar_service.post_invoice(db, ws, company_id, user, invoice_id)
+    await log_action(user, "post", "ar_invoice", inv["number"] or inv["id"], details="Facture comptabilisée",
+                     company_id=company_id, entity_id=inv["id"], event_type="ar.invoice.posted")
+    return inv
+
+
+@api.post("/companies/{company_id}/ar/invoices/{invoice_id}/void")
+async def ar_void_invoice(company_id: str, invoice_id: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.entry_reverse", workspace_id=ws)
+    inv = await ar_service.void_invoice(db, ws, company_id, user, invoice_id)
+    await log_action(user, "reverse", "ar_invoice", inv["number"] or inv["id"], details="Facture extournée",
+                     company_id=company_id, entity_id=inv["id"], event_type="ar.invoice.void")
+    return inv
+
+
+# ---- Payments --------------------------------------------------------------
+@api.get("/companies/{company_id}/ar/payments")
+async def ar_list_payments(company_id: str, invoice_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"payments": await ar_service.list_payments(db, ws, company_id, invoice_id=invoice_id)}
+
+
+@api.post("/companies/{company_id}/ar/payments")
+async def ar_create_payment(company_id: str, payload: ARPaymentIn, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.customer_payment_post", workspace_id=ws)
+    p = await ar_service.create_payment(db, ws, company_id, user, payload.model_dump())
+    await log_action(user, "post", "ar_payment", p["id"], details="Encaissement client",
+                     company_id=company_id, entity_id=p["id"], event_type="ar.payment.posted")
+    return p
+
+
+# ---- Credit notes ----------------------------------------------------------
+@api.get("/companies/{company_id}/ar/credit-notes")
+async def ar_list_credit_notes(company_id: str, invoice_id: Optional[str] = None, status: Optional[str] = None,
+                               user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"credit_notes": await ar_service.list_credit_notes(db, ws, company_id, invoice_id=invoice_id, status=status)}
+
+
+@api.get("/companies/{company_id}/ar/credit-notes/{cn_id}")
+async def ar_get_credit_note(company_id: str, cn_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return ar_service.public_credit_note(await ar_service.get_credit_note(db, ws, company_id, cn_id))
+
+
+@api.post("/companies/{company_id}/ar/credit-notes")
+async def ar_create_credit_note(company_id: str, payload: ARCreditNoteIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ar_service.create_credit_note(db, ws, company_id, user, payload.model_dump())
+
+
+@api.post("/companies/{company_id}/ar/credit-notes/{cn_id}/submit")
+async def ar_submit_credit_note(company_id: str, cn_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ar_service.submit_credit_note(db, ws, company_id, user, cn_id)
+
+
+@api.post("/companies/{company_id}/ar/credit-notes/{cn_id}/approve")
+async def ar_approve_credit_note(company_id: str, cn_id: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.customer_credit_note_approve", workspace_id=ws)
+    return await ar_service.approve_credit_note(db, ws, company_id, user, cn_id)
+
+
+@api.post("/companies/{company_id}/ar/credit-notes/{cn_id}/post")
+async def ar_post_credit_note(company_id: str, cn_id: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.customer_credit_note_post", workspace_id=ws)
+    cn = await ar_service.post_credit_note(db, ws, company_id, user, cn_id)
+    await log_action(user, "post", "ar_credit_note", cn["number"] or cn["id"], details="Note de crédit comptabilisée",
+                     company_id=company_id, entity_id=cn["id"], event_type="ar.credit_note.posted")
+    return cn
+
+
+# ---- Aging -----------------------------------------------------------------
+@api.get("/companies/{company_id}/ar/aging")
+async def ar_aging(company_id: str, as_of: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await ar_service.aging(db, ws, company_id, as_of=as_of)
+
+
 
 
 @api.get("/platform/logs")
