@@ -6,8 +6,9 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
+import { Textarea } from "../components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Building2, BriefcaseBusiness, Plus, Pencil, Search, Users, Loader2, CircleCheck, CircleAlert, Upload, FileSpreadsheet, Ban, RotateCw, ArrowRight } from "lucide-react";
+import { Building2, BriefcaseBusiness, Plus, Pencil, Search, Users, Loader2, CircleCheck, CircleAlert, Upload, FileSpreadsheet, Ban, RotateCw, ArrowRight, History } from "lucide-react";
 import { useNav } from "../context/NavContext";
 import { toast } from "sonner";
 
@@ -262,7 +263,9 @@ export default function Companies() {
   const [saving, setSaving] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
-  const [statusDialog, setStatusDialog] = useState({ open: false, company: null });
+  const [statusDialog, setStatusDialog] = useState({ open: false, company: null, next: "inactive" });
+  const [statusReason, setStatusReason] = useState("");
+  const [historyDialog, setHistoryDialog] = useState({ open: false, company: null });
   const { enterMandat } = useNav();
 
   const load = async () => {
@@ -280,13 +283,14 @@ export default function Companies() {
   useEffect(() => { load(); }, [fiduciary, admin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isActive = (c) => c.status !== "inactive" && c.active !== false;
-  const changeStatus = async (c, next) => {
+  const changeStatus = async (c, next, reason = "") => {
     try {
-      await api.updateCompany(c.id, { status: next });
+      await api.updateCompany(c.id, { status: next, status_reason: reason });
       toast.success(next === "inactive" ? t("Société rendue inactive") : t("Société réactivée"));
-      setStatusDialog({ open: false, company: null }); await load();
+      setStatusDialog({ open: false, company: null, next: "inactive" }); setStatusReason(""); await load();
     } catch (e) { toast.error(e.response?.data?.detail || t("Action impossible")); }
   };
+  const openStatusDialog = (c, next) => { setStatusReason(""); setStatusDialog({ open: true, company: c, next }); };
 
   const mandateByCompany = useMemo(() => Object.fromEntries(mandates.map((m) => [m.company_id, m])), [mandates]);
   const userById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
@@ -355,9 +359,11 @@ export default function Companies() {
           {admin && <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" className="h-8 gap-1" data-testid={`company-access-${c.id}`} disabled={!isActive(c)} onClick={() => enterMandat(c.id)}>{t("Accéder")} <ArrowRight size={13}/></Button>
             {c.legacy_prefix !== "acct" && (isActive(c)
-              ? <Button size="sm" variant="outline" className="h-8 gap-1 text-rose-600 hover:text-rose-700" data-testid={`company-deactivate-${c.id}`} onClick={() => setStatusDialog({ open:true, company:c })}><Ban size={13}/>{t("Rendre inactive")}</Button>
-              : <Button size="sm" variant="outline" className="h-8 gap-1 text-emerald-600 hover:text-emerald-700" data-testid={`company-reactivate-${c.id}`} onClick={() => changeStatus(c, "active")}><RotateCw size={13}/>{t("Réactiver")}</Button>)}
+              ? <Button size="sm" variant="outline" className="h-8 gap-1 text-rose-600 hover:text-rose-700" data-testid={`company-deactivate-${c.id}`} onClick={() => openStatusDialog(c, "inactive")}><Ban size={13}/>{t("Rendre inactive")}</Button>
+              : <Button size="sm" variant="outline" className="h-8 gap-1 text-emerald-600 hover:text-emerald-700" data-testid={`company-reactivate-${c.id}`} onClick={() => openStatusDialog(c, "active")}><RotateCw size={13}/>{t("Réactiver")}</Button>)}
+            {(c.status_history || []).length > 0 && <Button size="sm" variant="ghost" className="h-8 gap-1 text-slate-500" data-testid={`company-history-${c.id}`} onClick={() => setHistoryDialog({ open: true, company: c })}><History size={13}/>{t("Historique")}</Button>}
           </div>}
+          {!isActive(c) && c.status_reason && <div className="mt-2 rounded-lg bg-rose-50 px-2.5 py-1.5 text-[11px] text-rose-700" data-testid={`company-reason-${c.id}`}><span className="font-600">{t("Motif")} : </span>{c.status_reason}</div>}
           {fiduciary && <div className="mt-3 border-t border-slate-100 pt-3">
             {m ? <div className="flex items-center justify-between gap-2"><div className="min-w-0"><p className="text-[10px] uppercase text-slate-400">{t("Responsable principal")}</p><p className="truncate text-xs font-600 text-slate-700">{principal?.name || m.principal_user_id}</p><p className="mt-0.5 text-[10px] text-slate-400">{m.mandate_code} · {(m.collaborator_user_ids || []).length} {t("collaborateur(s)")}</p></div>{admin && <Button size="sm" variant="outline" className="h-8" onClick={() => setMandateDialog({ open:true, company:c, mandate:m })}><Users size={13} className="mr-1"/>{t("Affecter")}</Button>}</div>
             : <div className="flex items-center justify-between gap-2"><span className="inline-flex items-center gap-1 text-xs font-600 text-amber-600"><CircleAlert size={13}/>{t("Mandat à configurer")}</span>{admin && <Button size="sm" variant="outline" className="h-8" onClick={() => setMandateDialog({ open:true, company:c, mandate:null })}>{t("Configurer")}</Button>}</div>}
@@ -369,16 +375,51 @@ export default function Companies() {
 
     <ImportCompaniesDialog open={importOpen} onOpenChange={setImportOpen} onDone={load}/>    {companyDialog.open && <CompanyForm open={companyDialog.open} onOpenChange={(v) => setCompanyDialog((p) => ({...p, open:v}))} initial={companyDialog.item} onSubmit={saveCompany} saving={saving}/>} 
     {mandateDialog.open && <MandateForm open={mandateDialog.open} onOpenChange={(v) => setMandateDialog((p) => ({...p, open:v}))} company={mandateDialog.company} mandate={mandateDialog.mandate} users={users} onSubmit={saveMandate} saving={saving}/>}
-    <Dialog open={statusDialog.open} onOpenChange={(v) => setStatusDialog((p) => ({ ...p, open: v }))}>
-      <DialogContent data-testid="deactivate-dialog">
+    <Dialog open={statusDialog.open} onOpenChange={(v) => { if (!v) setStatusReason(""); setStatusDialog((p) => ({ ...p, open: v })); }}>
+      <DialogContent data-testid={statusDialog.next === "inactive" ? "deactivate-dialog" : "reactivate-dialog"}>
         <DialogHeader>
-          <DialogTitle>{t("Rendre")} {statusDialog.company?.name} {t("inactive ?")}</DialogTitle>
-          <DialogDescription>{t("Les utilisateurs ne pourront plus accéder à cette société tant qu'elle n'aura pas été réactivée. Les données et l'historique seront conservés.")}</DialogDescription>
+          <DialogTitle>{statusDialog.next === "inactive"
+            ? <>{t("Rendre")} {statusDialog.company?.name} {t("inactive ?")}</>
+            : <>{t("Réactiver")} {statusDialog.company?.name} ?</>}</DialogTitle>
+          <DialogDescription>{statusDialog.next === "inactive"
+            ? t("Les utilisateurs ne pourront plus accéder à cette société tant qu'elle n'aura pas été réactivée. Les données et l'historique seront conservés.")
+            : t("La société redeviendra accessible. Cette action est tracée dans l'historique de statut.")}</DialogDescription>
         </DialogHeader>
+        <div className="space-y-1.5">
+          <Label className="text-[11px] uppercase text-slate-500">{t("Motif")} {statusDialog.next === "inactive" ? <span className="text-rose-600">*</span> : <span className="text-slate-400">({t("optionnel")})</span>}</Label>
+          <Textarea data-testid="status-reason" value={statusReason} onChange={(e) => setStatusReason(e.target.value)} rows={3}
+            placeholder={statusDialog.next === "inactive" ? t("Expliquez pourquoi cette société est rendue inactive...") : t("Note de réactivation (optionnelle)...")} />
+        </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setStatusDialog({ open: false, company: null })}>{t("Annuler")}</Button>
-          <Button className="bg-rose-600 hover:bg-rose-700" data-testid="deactivate-confirm" onClick={() => changeStatus(statusDialog.company, "inactive")}>{t("Rendre inactive")}</Button>
+          <Button variant="outline" onClick={() => { setStatusReason(""); setStatusDialog({ open: false, company: null, next: "inactive" }); }}>{t("Annuler")}</Button>
+          {statusDialog.next === "inactive"
+            ? <Button className="bg-rose-600 hover:bg-rose-700" data-testid="deactivate-confirm" disabled={!statusReason.trim()} onClick={() => changeStatus(statusDialog.company, "inactive", statusReason.trim())}>{t("Rendre inactive")}</Button>
+            : <Button className="bg-emerald-600 hover:bg-emerald-700" data-testid="reactivate-confirm" onClick={() => changeStatus(statusDialog.company, "active", statusReason.trim())}>{t("Réactiver")}</Button>}
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    <Dialog open={historyDialog.open} onOpenChange={(v) => setHistoryDialog((p) => ({ ...p, open: v }))}>
+      <DialogContent data-testid="status-history-dialog">
+        <DialogHeader>
+          <DialogTitle>{t("Historique de statut")} — {historyDialog.company?.name}</DialogTitle>
+          <DialogDescription>{t("Chaque désactivation et réactivation est tracée (date, statut, acteur, motif).")}</DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[50vh] space-y-2 overflow-auto">
+          {[...(historyDialog.company?.status_history || [])].reverse().map((h, i) => (
+            <div key={i} className="rounded-lg border border-slate-200 p-3 text-xs" data-testid="status-history-entry">
+              <div className="flex items-center justify-between gap-2">
+                <span className={`inline-flex items-center gap-1 font-600 ${h.to === "active" ? "text-emerald-600" : "text-rose-600"}`}>
+                  {h.to === "active" ? <RotateCw size={12}/> : <Ban size={12}/>}
+                  {t(h.from === "active" ? "Active" : "Inactive")} → {t(h.to === "active" ? "Active" : "Inactive")}
+                </span>
+                <span className="text-[10px] text-slate-400">{h.at ? new Date(h.at).toLocaleString() : ""}</span>
+              </div>
+              <p className="mt-1 text-slate-500">{t("Acteur")} : <b className="font-600 text-slate-700">{h.by || h.by_id || "—"}</b></p>
+              {h.reason && <p className="mt-0.5 text-slate-500">{t("Motif")} : <span className="text-slate-700">{h.reason}</span></p>}
+            </div>
+          ))}
+          {(historyDialog.company?.status_history || []).length === 0 && <p className="py-6 text-center text-sm text-slate-400">{t("Aucun changement de statut enregistré.")}</p>}
+        </div>
       </DialogContent>
     </Dialog>
   </div>;

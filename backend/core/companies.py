@@ -74,6 +74,7 @@ class CompanyUpdate(BaseModel):
     subscribed_modules: Optional[list[str]] = None
     tax_profile: Optional[dict] = None
     status: Optional[Literal["active", "inactive"]] = None
+    status_reason: Optional[str] = Field(default=None, max_length=500)
 
 
 def public_company(doc: dict) -> dict:
@@ -107,6 +108,8 @@ def public_company(doc: dict) -> dict:
         "admin_email": doc.get("admin_email"),
         "status": doc.get("status", "active" if doc.get("active", True) else "inactive"),
         "active": doc.get("active", doc.get("status") != "inactive"),
+        "status_reason": doc.get("status_reason"),
+        "status_history": doc.get("status_history") or [],
         # Temporary compatibility bridge; removed with Financial Core migration.
         "legacy_prefix": doc.get("legacy_prefix"),
     }
@@ -221,6 +224,12 @@ async def update_company_for_admin(db, company_id: str, user: dict, payload: Com
     changes = payload.model_dump(exclude_unset=True)
     if not changes:
         return public_company(current)
+    # Status transition reason is metadata, not a plain settable field.
+    reason = changes.pop("status_reason", None)
+    if isinstance(reason, str):
+        reason = reason.strip()
+    if not changes and reason is None:
+        return public_company(current)
     if "company_code" in changes:
         await _ensure_company_code_unique(db, workspace_id, changes.get("company_code"), exclude_id=company_id)
     if "subscribed_modules" in changes:
@@ -233,12 +242,27 @@ async def update_company_for_admin(db, company_id: str, user: dict, payload: Com
         changes["functional_currency"] = changes["functional_currency"].upper()
     if changes.get("jurisdiction"):
         changes["jurisdiction"] = changes["jurisdiction"].upper()
+    ops = {}
+    now_iso = datetime.now(timezone.utc).isoformat()
     if "status" in changes:
         changes["active"] = changes["status"] == "active"
-    changes["updated_at"] = datetime.now(timezone.utc).isoformat()
+        prev_status = current.get("status", "active" if current.get("active", True) else "inactive")
+        if changes["status"] != prev_status:
+            # Trace every status transition (deactivation AND reactivation).
+            changes["status_reason"] = reason or ""
+            ops["$push"] = {"status_history": {
+                "at": now_iso,
+                "from": prev_status,
+                "to": changes["status"],
+                "by_id": user.get("id"),
+                "by": user.get("email") or user.get("name") or user.get("id"),
+                "reason": reason or "",
+            }}
+    changes["updated_at"] = now_iso
+    ops["$set"] = changes
     await db.companies.update_one(
         {"workspace_id": workspace_id, "id": company_id},
-        {"$set": changes},
+        ops,
     )
     updated = await db.companies.find_one({"workspace_id": workspace_id, "id": company_id})
     if not updated:

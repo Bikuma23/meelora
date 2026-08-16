@@ -1315,9 +1315,14 @@ async def update_company(company_id: str, payload: CompanyUpdate, user: dict = D
     # The internal Meelora company can be edited but NOT deactivated from here.
     if payload.status == "inactive" and before.get("legacy_prefix") == "acct":
         raise HTTPException(status_code=403, detail="La société interne Meelora ne peut pas être rendue inactive depuis cette interface.")
+    # Deactivation requires an explicit, non-empty reason (traceability).
+    prev_status = before.get("status", "active" if before.get("active", True) else "inactive")
+    if payload.status == "inactive" and prev_status != "inactive" and not (payload.status_reason and payload.status_reason.strip()):
+        raise HTTPException(status_code=400, detail="Un motif de désactivation est obligatoire.")
+    reason = (payload.status_reason or "").strip()
     company = await update_company_for_admin(db, company_id, user, payload)
     await log_action(user, "update", "company", company.get("name") or company.get("legal_name", ""),
-                     details=f"Société modifiée: {company_id}",
+                     details=f"Société modifiée: {company_id}" + (f" · motif: {reason}" if reason else ""),
                      changes=[{"field": k, "before": before.get(k), "after": company.get(k)}
                               for k in payload.model_dump(exclude_unset=True).keys()],
                      company_id=company_id, entity_id=company_id, event_type="company.updated")
@@ -1327,10 +1332,10 @@ async def update_company(company_id: str, payload: CompanyUpdate, user: dict = D
             await access_log_scope.write_platform_log(
                 db, user,
                 event_type="client.deactivated" if payload.status == "inactive" else "client.activated",
-                label=f"Société {'rendue inactive' if payload.status == 'inactive' else 'réactivée'} : {company.get('name')}",
+                label=f"Société {'rendue inactive' if payload.status == 'inactive' else 'réactivée'} : {company.get('name')}" + (f" — motif : {reason}" if reason else ""),
                 target_workspace_id=company.get("workspace_id"), details=company_id,
                 metadata={"category": "client", "result": "success", "action": "status_change",
-                          "resource": f"company:{company_id}",
+                          "resource": f"company:{company_id}", "reason": reason,
                           "before": {"status": before.get("status")}, "after": {"status": payload.status}})
         except Exception as e:
             logger.error(f"audit status change: {e}")
