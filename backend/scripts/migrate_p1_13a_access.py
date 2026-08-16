@@ -1,17 +1,21 @@
-"""P1.13A migration — derive conservative access from P1.12 memberships.
+"""P1.13A migration — derive conservative access from REAL legacy business access.
 
 DRY-RUN by default (reports only; writes nothing). Pass --commit to apply.
 
 Strategy (equal-or-less; NO privilege escalation):
-* Ensure the Meelora workspace has all four module entitlements (availability).
-* For every ACTIVE company_membership, derive ``user_module_access = read`` on
-  the modules the company already USES (has data for). ``manage`` is only granted
-  when an explicit signal exists (none is derivable from legacy data, so none is
-  granted). Sensitive permissions are NEVER auto-granted.
-* Any membership whose role cannot be safely translated is REPORTED, not granted.
+* Ensure the Meelora workspace has all module entitlements (availability).
+* Derive ``user_module_access = read`` ONLY from a **real legacy business-access
+  artifact**: a P1.10 ``company_access`` grant on the company, AND the company
+  operationally USES the module (has data). Membership alone (P1.12
+  ``company_memberships``) is NEVER sufficient — membership != module access.
+* Platform/support staff (``platform_role`` set) NEVER receive an automatic
+  business module (a right they need is granted explicitly via access management).
+* ``manage`` is never derived; sensitive permissions are NEVER auto-granted.
+* Ambiguous cases stay ``none`` (reported, not granted).
 
-The company_access / users.workspace_id legacy structures are preserved untouched.
-No financial data is read for mutation — only for a used/not-used signal.
+The company_access / company_memberships / users.workspace_id structures are
+preserved untouched. No financial data is read for mutation — only for a
+used/not-used signal.
 """
 import argparse
 import asyncio
@@ -29,6 +33,18 @@ sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
 
 from core.access.modules import MODULE_CODES
+
+
+async def _find_user(db, uid):
+    """Resolve a user whose id may be an ObjectId hex string or a uuid."""
+    u = await db.users.find_one({"id": uid}) or await db.users.find_one({"_id": uid})
+    if u is None:
+        try:
+            from bson import ObjectId
+            u = await db.users.find_one({"_id": ObjectId(uid)})
+        except Exception:
+            u = None
+    return u
 
 
 async def _company_used_modules(db, company) -> set[str]:
@@ -86,35 +102,50 @@ async def run(commit: bool):
                                       "module_code": code, "created_at": now, "created_by": "migration_p1_13a"}},
                     upsert=True)
 
-    # 2) Conservative user_module_access from active company memberships.
+    # 2) Conservative user_module_access derived from REAL legacy business access
+    #    (P1.10 company_access) — NOT from company_memberships. Membership alone is
+    #    never a proof of module access. A grant requires: (a) a legacy company_access
+    #    artifact on the company, (b) the company operationally USES the module, and
+    #    (c) the user is NOT platform/support staff. Ambiguous -> none (reported).
     company_cache: dict[str, dict] = {}
     used_cache: dict[str, set[str]] = {}
-    async for m in db.company_memberships.find({"status": "active"}):
-        cid = m.get("company_id")
-        wsid = m.get("workspace_id")
-        uid = m.get("user_id")
-        role = m.get("role")
+    user_cache: dict[str, dict] = {}
+    async for a in db.company_access.find({}):
+        cid = a.get("company_id")
+        wsid = a.get("workspace_id")
+        uid = a.get("user_id")
+        legacy_role = a.get("access_role") or a.get("role")
+        if uid not in user_cache:
+            user_cache[uid] = await _find_user(db, uid) or {}
+        u = user_cache[uid]
+        email = u.get("email", uid)
+        # RULE: platform/support staff never receive an automatic business module.
+        if u.get("platform_role"):
+            report["reported"].append({"reason": "platform_staff_no_auto_module", "user_id": uid, "company_id": cid})
+            print(f"  ! reported: {email} a platform_role='{u.get('platform_role')}' → aucun module métier automatique (none)")
+            continue
         if cid not in company_cache:
             company_cache[cid] = await db.companies.find_one({"id": cid}) or {}
         company = company_cache[cid]
         if not company:
-            report["reported"].append({"reason": "company_missing", "membership": m.get("_id")})
-            print(f"  ! reported: membership {m.get('_id')} -> company {cid} introuvable (skip)")
-            continue
-        if role not in ("admin", "user", "principal", "collaborator"):
-            report["reported"].append({"reason": "ambiguous_role", "membership": m.get("_id"), "role": role})
-            print(f"  ! reported: rôle ambigu '{role}' pour {uid}@{cid} — aucun accès dérivé")
+            report["reported"].append({"reason": "company_missing", "user_id": uid, "company_id": cid})
+            print(f"  ! reported: company_access {email} -> company {cid} introuvable (skip)")
             continue
         if cid not in used_cache:
             used_cache[cid] = await _company_used_modules(db, company)
         used = used_cache[cid]
+        if not used:
+            # No operational data → no real business module access to migrate.
+            report["reported"].append({"reason": "company_uses_no_module", "user_id": uid, "company_id": cid})
+            print(f"  ! reported: {email} @ {company.get('name')} — société n'utilise aucun module → none")
+            continue
         for code in sorted(used):
             existing = await db.user_module_access.find_one(
                 {"workspace_id": wsid, "company_id": cid, "user_id": uid, "module_code": code})
             if existing:
                 continue  # never widen an existing grant
             report["module_access"].append({"user_id": uid, "company_id": cid, "module_code": code, "level": "read"})
-            print(f"  + module_access read : user={uid} company={cid} module={code}")
+            print(f"  + module_access read : user={uid} ({email}) company={cid} module={code} [legacy company_access role={legacy_role}]")
             if commit:
                 await db.user_module_access.insert_one(
                     {"_id": f"uma_{uuid.uuid4().hex}", "workspace_id": wsid, "company_id": cid,
@@ -125,8 +156,9 @@ async def run(commit: bool):
     print(f"entitlements to activate : {len(report['entitlements'])}")
     print(f"user module_access (read): {len(report['module_access'])}")
     print(f"reported (no auto-grant) : {len(report['reported'])}")
+    print("Rule: grants derive from LEGACY company_access + module used; membership alone = NEVER; platform_role = NEVER auto.")
     print("Sensitive permissions: NONE auto-granted. 'manage': NONE derived (no explicit signal).")
-    print("Legacy company_access / users.workspace_id preserved untouched.")
+    print("Legacy company_access / company_memberships / users.workspace_id preserved untouched.")
     if not commit:
         print("\nDRY-RUN terminé — relancer avec --commit pour écrire.")
     client.close()
