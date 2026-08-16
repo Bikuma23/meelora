@@ -271,4 +271,15 @@ export const api = {
   platformClientSupport: (wsId) => client.get(`/platform/clients/${wsId}/support`).then((r) => r.data),
   platformCompanies: () => client.get("/platform/companies").then((r) => r.data),
   platformCompanyMembers: (cid) => client.get(`/platform/companies/${cid}/members`).then((r) => r.data),
+  // ACCOUNTING A2 — Core GL
+  glPeriods: (cid) => client.get(`/companies/${cid}/gl/periods`).then((r) => r.data),
+  glCreatePeriod: (cid, body) => client.post(`/companies/${cid}/gl/periods`, body).then((r) => r.data),
+  glTransitionPeriod: (cid, pid, status) => client.post(`/companies/${cid}/gl/periods/${pid}/transition`, { status }).then((r) => r.data),
+  glEntries: (cid, params) => client.get(`/companies/${cid}/gl/entries`, { params }).then((r) => r.data),
+  glEntry: (cid, eid) => client.get(`/companies/${cid}/gl/entries/${eid}`).then((r) => r.data),
+  glCreateEntry: (cid, body) => client.post(`/companies/${cid}/gl/entries`, body).then((r) => r.data),
+  glSubmitEntry: (cid, eid) => client.post(`/companies/${cid}/gl/entries/${eid}/submit`).then((r) => r.data),
+  glApproveEntry: (cid, eid) => client.post(`/companies/${cid}/gl/entries/${eid}/approve`).then((r) => r.data),
+  glPostEntry: (cid, eid) => client.post(`/companies/${cid}/gl/entries/${eid}/post`).then((r) => r.data),
+  glReverseEntry: (cid, eid, body) => client.post(`/companies/${cid}/gl/entries/${eid}/reverse`, body || {}).then((r) => r.data),
 };

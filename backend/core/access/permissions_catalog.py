@@ -26,6 +26,7 @@ PERMISSIONS: dict[str, list[str]] = {
     BUDGETS: [],
     ACCOUNTING: [
         "accounting.entry_post",
+        "accounting.entry_approve",
         "accounting.customer_invoice_post",
         "accounting.supplier_invoice_post",
         "accounting.po_approve",
@@ -65,9 +66,18 @@ PERMISSIONS: dict[str, list[str]] = {
 ALL_PERMISSIONS = {p for lst in PERMISSIONS.values() for p in lst}
 PERMISSION_MODULE = {p: m for m, lst in PERMISSIONS.items() for p in lst}
 
+# A2 — permanently deprecated: period reopening (closed -> open) is forbidden for
+# EVERYONE. Corrections after close must be booked in a later period, never by
+# reopening. Kept in the catalog for historical grants but never enforced/grantable.
+DEPRECATED_PERMISSIONS = {"accounting.period_reopen"}
+
+
+def is_deprecated_permission(code: Optional[str]) -> bool:
+    return code in DEPRECATED_PERMISSIONS
+
 
 def is_valid_permission(code: Optional[str]) -> bool:
-    return code in ALL_PERMISSIONS
+    return code in ALL_PERMISSIONS and code not in DEPRECATED_PERMISSIONS
 
 
 def module_for_permission(code: Optional[str]) -> Optional[str]:
@@ -79,5 +89,7 @@ def list_permissions(module: Optional[str] = None) -> list[dict]:
     out: list[dict] = []
     for m in modules:
         for code in PERMISSIONS.get(m, []):
+            if code in DEPRECATED_PERMISSIONS:
+                continue
             out.append({"code": code, "module_code": m})
     return out

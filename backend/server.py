@@ -148,7 +148,8 @@ from core.access import platform_console as access_platform
 from core.access.platform_console import require_platform_staff
 from core.access import navigation as access_nav
 from core.access.effective_access import resolve_effective_access
-from core.access.sensitive import require_sensitive_permission
+from core.access.sensitive import require_sensitive_permission, require_module_level
+from core.accounting import gl as gl_service
 from core.access.indexes import ensure_indexes as _ensure_access_indexes
 
 
@@ -1476,7 +1477,11 @@ async def update_company_financial_period(company_id: str, period_id: str, paylo
             if target_status in ("closed", "locked"):
                 perm = "accounting.period_close"
             elif target_status == "open" and prev_status in ("closed", "locked"):
-                perm = "accounting.period_reopen"
+                # A2 — reopening a CLOSED period is permanently forbidden for everyone.
+                if prev_status == "closed":
+                    raise HTTPException(status_code=410,
+                                        detail="Réouverture de période définitivement dépréciée (A2). Corrigez via une écriture dans une période ultérieure.")
+                perm = "accounting.period_close"  # unlock (locked→open) uses close authority
             else:
                 perm = None
             if perm:
@@ -3018,6 +3023,158 @@ async def platform_company_members_route(company_id: str, user: dict = Depends(g
     bridge), with per-module access. No cross-company leak. Platform staff only."""
     require_platform_staff(user)
     return await access_platform.company_members(db, company_id)
+
+
+# ===================== ACCOUNTING A2 — Core GL & posting workflow =====================
+class GLPeriodIn(BaseModel):
+    code: str
+    label: Optional[str] = None
+
+
+class GLPeriodTransition(BaseModel):
+    status: str
+
+
+class GLLineIn(BaseModel):
+    account: str
+    description: Optional[str] = ""
+    debit: Optional[float] = 0
+    credit: Optional[float] = 0
+
+
+class GLEntryIn(BaseModel):
+    period_id: str
+    date: Optional[str] = None
+    memo: Optional[str] = ""
+    reference: Optional[str] = ""
+    source: Optional[str] = "manual"
+    lines: List[GLLineIn] = []
+
+
+class GLEntryUpdate(BaseModel):
+    period_id: Optional[str] = None
+    date: Optional[str] = None
+    memo: Optional[str] = None
+    reference: Optional[str] = None
+    source: Optional[str] = None
+    lines: Optional[List[GLLineIn]] = None
+
+
+class GLReverseIn(BaseModel):
+    target_period_id: Optional[str] = None
+    memo: Optional[str] = None
+
+
+async def _gl_scope(company_id: str, user: dict):
+    """Read access to the GL requires ACCOUNTING read (fail-closed scope/membership/active)."""
+    ws = require_tenant_context(user)
+    await require_module_level(db, user, company_id, "ACCOUNTING", "read", workspace_id=ws)
+    return ws
+
+
+@api.get("/companies/{company_id}/gl/periods")
+async def gl_list_periods(company_id: str, user: dict = Depends(get_current_user)):
+    ws = await _gl_scope(company_id, user)
+    return {"periods": await gl_service.list_periods(db, ws, company_id)}
+
+
+@api.post("/companies/{company_id}/gl/periods")
+async def gl_create_period(company_id: str, payload: GLPeriodIn, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_module_level(db, user, company_id, "ACCOUNTING", "manage", workspace_id=ws)
+    p = await gl_service.create_period(db, ws, company_id, user, code=payload.code, label=payload.label)
+    await log_action(user, "create", "gl_period", p["code"], details=f"Période GL créée: {p['code']}",
+                     company_id=company_id, entity_id=p["id"], event_type="gl.period.created")
+    return p
+
+
+@api.post("/companies/{company_id}/gl/periods/{period_id}/transition")
+async def gl_transition_period(company_id: str, period_id: str, payload: GLPeriodTransition, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    # Reopening a closed period is permanently forbidden — the deprecated
+    # period_reopen permission is never honored (410 at the legacy route too).
+    if payload.status in ("locked", "closed"):
+        await require_sensitive_permission(db, user, company_id, "accounting.period_close", workspace_id=ws)
+    elif payload.status == "open":
+        # unlock (locked -> open); still requires close authority, never reopen.
+        await require_sensitive_permission(db, user, company_id, "accounting.period_close", workspace_id=ws)
+    p = await gl_service.transition_period(db, ws, company_id, user, period_id, payload.status)
+    await log_action(user, "update", "gl_period", p["code"], details=f"Période GL → {payload.status}",
+                     changes=[{"field": "status", "after": payload.status}],
+                     company_id=company_id, entity_id=period_id, event_type="gl.period.transition")
+    return p
+
+
+@api.get("/companies/{company_id}/gl/entries")
+async def gl_list_entries(company_id: str, status: Optional[str] = None, period_id: Optional[str] = None,
+                          user: dict = Depends(get_current_user)):
+    ws = await _gl_scope(company_id, user)
+    return {"entries": await gl_service.list_entries(db, ws, company_id, status=status, period_id=period_id)}
+
+
+@api.get("/companies/{company_id}/gl/entries/{entry_id}")
+async def gl_get_entry(company_id: str, entry_id: str, user: dict = Depends(get_current_user)):
+    ws = await _gl_scope(company_id, user)
+    return gl_service.public_entry(await gl_service.get_entry(db, ws, company_id, entry_id))
+
+
+@api.post("/companies/{company_id}/gl/entries")
+async def gl_create_entry(company_id: str, payload: GLEntryIn, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_module_level(db, user, company_id, "ACCOUNTING", "contribute", workspace_id=ws)
+    e = await gl_service.create_entry(db, ws, company_id, user, payload.model_dump())
+    await log_action(user, "create", "gl_entry", e["reference"] or e["id"], details="Écriture GL (brouillon)",
+                     company_id=company_id, entity_id=e["id"], event_type="gl.entry.created")
+    return e
+
+
+@api.patch("/companies/{company_id}/gl/entries/{entry_id}")
+async def gl_update_entry(company_id: str, entry_id: str, payload: GLEntryUpdate, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_module_level(db, user, company_id, "ACCOUNTING", "contribute", workspace_id=ws)
+    return await gl_service.update_draft(db, ws, company_id, user, entry_id, payload.model_dump(exclude_unset=True))
+
+
+@api.post("/companies/{company_id}/gl/entries/{entry_id}/submit")
+async def gl_submit_entry(company_id: str, entry_id: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_module_level(db, user, company_id, "ACCOUNTING", "contribute", workspace_id=ws)
+    e = await gl_service.submit_entry(db, ws, company_id, user, entry_id)
+    await log_action(user, "submit", "gl_entry", e["reference"] or e["id"], details="Écriture soumise",
+                     company_id=company_id, entity_id=e["id"], event_type="gl.entry.submitted")
+    return e
+
+
+@api.post("/companies/{company_id}/gl/entries/{entry_id}/approve")
+async def gl_approve_entry(company_id: str, entry_id: str, user: dict = Depends(get_current_user)):
+    # A2 — dedicated sensitive permission + maker-checker (enforced in service).
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.entry_approve", workspace_id=ws)
+    e = await gl_service.approve_entry(db, ws, company_id, user, entry_id)
+    await log_action(user, "approve", "gl_entry", e["reference"] or e["id"], details="Écriture approuvée",
+                     company_id=company_id, entity_id=e["id"], event_type="gl.entry.approved")
+    return e
+
+
+@api.post("/companies/{company_id}/gl/entries/{entry_id}/post")
+async def gl_post_entry(company_id: str, entry_id: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.entry_post", workspace_id=ws)
+    e = await gl_service.post_entry(db, ws, company_id, user, entry_id)
+    await log_action(user, "post", "gl_entry", e["reference"] or e["id"], details="Écriture comptabilisée",
+                     company_id=company_id, entity_id=e["id"], event_type="gl.entry.posted")
+    return e
+
+
+@api.post("/companies/{company_id}/gl/entries/{entry_id}/reverse")
+async def gl_reverse_entry(company_id: str, entry_id: str, payload: GLReverseIn, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.entry_reverse", workspace_id=ws)
+    e = await gl_service.reverse_entry(db, ws, company_id, user, entry_id,
+                                       target_period_id=payload.target_period_id, memo=payload.memo)
+    await log_action(user, "reverse", "gl_entry", e["reference"] or e["id"], details=f"Extourne de {entry_id}",
+                     company_id=company_id, entity_id=e["id"], event_type="gl.entry.reversed")
+    return e
 
 
 @api.get("/platform/logs")

@@ -52,6 +52,21 @@ async def _record_sensitive_denial(db, user: dict, company_id: str, permission: 
         pass
 
 
+async def require_module_level(db, user: dict, company_id: str, module: str,
+                               required_level: str = "contribute", *, workspace_id: str = None) -> dict:
+    """Non-sensitive module access gate (e.g. draft/submit require ACCOUNTING
+    write). Same fail-closed scope/membership/active checks; no permission needed."""
+    ws = workspace_id or user.get("workspace_id")
+    res = await resolve_effective_access(
+        db, user, workspace_id=ws, company_id=company_id, module=module, required_level=required_level)
+    if not res.get("allowed"):
+        reason = res.get("reason")
+        if reason in _NOT_FOUND_REASONS:
+            raise HTTPException(status_code=404, detail="Ressource introuvable")
+        raise HTTPException(status_code=403, detail=f"Accès {module} insuffisant : {reason}")
+    return res
+
+
 async def require_sensitive_permission(db, user: dict, company_id: str, permission: str,
                                        *, workspace_id: str = None) -> dict:
     ws = workspace_id or user.get("workspace_id")

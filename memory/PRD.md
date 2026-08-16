@@ -1487,3 +1487,17 @@ Rapport : `/app/RAPPORT_P1_13E.md` (§5 + tableau 7 grants). `--commit` NON exé
 - **Événement de sécurité sur refus** : `security.sensitive_denied` dans `security_events` — structuré (actor, company, permission, reason), **coalescé sur fenêtre 60s** (anti-bruit : 3 refus → 1 doc count=3), **aucune donnée financière**. Émis par `require_sensitive_permission`, fail-safe (n'interrompt jamais la requête).
 - **Routes futures non créées artificiellement** : réconciliation (reconciliation_manage/approve), po_approve, supplier_invoice_post devront utiliser le même garde lors de leur implémentation réelle.
 - Tests rejoués : backend matrice 18/18 PASS + **E2E 42/42 verte**. Aucune logique/formule financière modifiée.
+
+## ACCOUNTING A1 + A2 (2026-06)
+### A1 — Accounting Shell & Navigation
+- Sidebar société : Comptabilité rendue en **accordéon** (NavParent) avec 15 sous-menus : Aperçu, Ventes & Clients, Achats & Fournisseurs, Bons de commande, Banque & Trésorerie, Écritures comptables, Grand livre, Balance de vérification, Plan comptable, Analytique & Projets, Taxes, Actifs & amortissements, Clôture & Réconciliation, Imports & Migration, Rapports & Analyses. Écrans non développés = placeholders propres (`AcctPlaceholder`). Visibilité pilotée par le manifest P1.13 (gating module).
+- Menu avatar : Profil / Administration (admin) / Sécurité / Langue (bascule FR/EN).
+- Fichiers : `pages/AccountingA1.js`, `components/Layout.js` (MODULE_NAV.ACCOUNTING type "accordion", NAV_ACCT_A1, PAGES/MODULE_PAGES).
+### A2 — Core GL & Posting Workflow (module ISOLÉ)
+- Collections dédiées `gl_periods` / `gl_entries` — zéro impact legacy (acct_*/qc9434_* inchangés).
+- Écriture : draft → submitted → approved → posted → reversed. Écritures équilibrées (débits=crédits), source traçable, pièces jointes, audit complet par transition.
+- Permissions : draft/submitted = ACCOUNTING contribute ; approved = **accounting.entry_approve** (NOUVELLE permission sensible) + **maker-checker** (créateur ≠ approbateur, jamais contourné par manage/admin/platform_admin) ; posted = accounting.entry_post ; reversed = accounting.entry_reverse. Tout via `require_sensitive_permission`.
+- Périodes : open → locked → closed (+ déverrouillage locked→open). `closed` TERMINAL : réouverture **définitivement interdite** pour tous. `accounting.period_reopen` **déprécié** (retiré du catalogue exposé + UI ; route legacy financial-periods renvoie 410 sur réouverture). Locked bloque la comptabilisation. Comptabilisation séquentielle : impossible de poster dans une période si une période antérieure n'est pas clôturée. Correction post-clôture = écriture dans une période ultérieure.
+- Routes : `/api/companies/{cid}/gl/periods` (+transition), `/gl/entries` (+submit/approve/post/reverse). Fichiers : `core/accounting/gl.py`, routes dans `server.py`, `core/access/sensitive.py::require_module_level`.
+- Architecture : module isolé, aucune dépendance obligatoire inter-module, pas de duplication ; AR/AP/PO/banque = placeholders (non fonctionnels dans cette tranche).
+- Tests : `backend/tests/test_a2_gl.py` (19/19 : lifecycle, équilibre, maker-checker, verrouillage, clôture terminale, séquentiel, extourne, audit) ; gating HTTP (contribute/approve/post/reverse + cross-workspace 404) ; `test_p1_13f_sensitive.py` MAJ (period_reopen retiré). E2E `accounting-a1.spec.js` (4) — **suite complète 46/46 verte**. Aucune régression P1.13. Aucun calcul financier legacy modifié.

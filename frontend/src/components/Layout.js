@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
 import { useLang } from "../context/LanguageContext";
 import {
-  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight, Minimize2, HelpCircle, Bell, Camera, Trash2, Pencil, AlertTriangle, Layers,
+  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight, Minimize2, HelpCircle, Bell, Camera, Trash2, Pencil, AlertTriangle, Layers, Globe, ShieldAlert,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
@@ -26,12 +26,13 @@ import CompaniesPage from "../pages/Companies";
 import Preferences from "../pages/Preferences";
 import { applyTheme } from "../lib/theme";
 import { AcctDashboard, AcctBV, AcctBilan, AcctPnl, AcctCashflow, AcctReports } from "../pages/Comptabilite";
+import { AcctEntries, AcctPeriods, makePlaceholder } from "../pages/AccountingA1";
 import QcEntity from "../pages/QcEntity";
 import { PlatformHome, PlatformClients, PlatformLogs, PlatformMeeloraManage } from "../pages/Platform";
 import { ReportingHome, FixedAssetsHome, ConsolidationHome } from "../pages/ModulePlaceholder";
 import MandatsList from "../pages/MandatsList";
 import { NavContext } from "../context/NavContext";
-import { Calculator, Landmark, ClipboardList, Wallet, FileBarChart, Building, Server } from "lucide-react";
+import { Calculator, Landmark, FileBarChart, Server, BookOpen, Receipt, ShoppingCart, ClipboardCheck, Banknote, BookText, Scale, ListTree, PieChart, Percent, Boxes, Lock } from "lucide-react";
 
 const PAGES = {
   dashboard: { title: "Tableau de bord", sub: "Vue globale", comp: Dashboard },
@@ -52,6 +53,23 @@ const PAGES = {
   acct_cashflow: { title: "Flux de trésorerie", sub: "Méthode indirecte", comp: AcctCashflow },
   acct_audit: { title: "Rapports", sub: "Génération centralisée", comp: AcctReports },
   acct_qc9434: { title: "9434-3977 QC inc.", sub: "Commandité", comp: QcEntity },
+  // ACCOUNTING A1 — shell (Comptabilité en accordéon, 15 sous-menus).
+  acct_overview: { title: "Aperçu", sub: "Comptabilité", comp: makePlaceholder("Aperçu comptable", "Vue d'ensemble du module Comptabilité (à venir).") },
+  acct_apercu: { title: "Aperçu", sub: "Comptabilité", comp: makePlaceholder("Aperçu comptable", "Vue d'ensemble du module Comptabilité (à venir).") },
+  acct_sales: { title: "Ventes & Clients", sub: "Comptabilité", comp: makePlaceholder("Ventes & Clients") },
+  acct_purchases: { title: "Achats & Fournisseurs", sub: "Comptabilité", comp: makePlaceholder("Achats & Fournisseurs") },
+  acct_po: { title: "Bons de commande", sub: "Comptabilité", comp: makePlaceholder("Bons de commande") },
+  acct_bank: { title: "Banque & Trésorerie", sub: "Comptabilité", comp: makePlaceholder("Banque & Trésorerie") },
+  acct_entries: { title: "Écritures comptables", sub: "Grand livre", comp: AcctEntries },
+  acct_ledger: { title: "Grand livre", sub: "Comptabilité", comp: makePlaceholder("Grand livre") },
+  acct_tb: { title: "Balance de vérification", sub: "Comptabilité", comp: makePlaceholder("Balance de vérification") },
+  acct_coa: { title: "Plan comptable", sub: "Comptabilité", comp: makePlaceholder("Plan comptable") },
+  acct_analytics: { title: "Analytique & Projets", sub: "Comptabilité", comp: makePlaceholder("Analytique & Projets") },
+  acct_taxes: { title: "Taxes", sub: "Comptabilité", comp: makePlaceholder("Taxes") },
+  acct_assets: { title: "Actifs & amortissements", sub: "Comptabilité", comp: makePlaceholder("Actifs & amortissements") },
+  acct_close: { title: "Clôture & Réconciliation", sub: "Périodes GL", comp: AcctPeriods },
+  acct_imports: { title: "Imports & Migration", sub: "Comptabilité", comp: makePlaceholder("Imports & Migration") },
+  acct_reports2: { title: "Rapports & Analyses", sub: "Comptabilité", comp: makePlaceholder("Rapports & Analyses") },
   platform_home: { title: "Tableau de bord", sub: "Supervision Meelora", comp: PlatformHome },
   platform_clients: { title: "Sociétés / Clients", sub: "Registre des sociétés Meelora", comp: PlatformClients },
   platform_meelora_manage: { title: "Société Meelora — Gestion", sub: "Environnement opérationnel interne", comp: PlatformMeeloraManage },
@@ -67,7 +85,8 @@ const MODULE_NAV = {
   REPORTING: { type: "item", label: "Reporting", icon: FileBarChart, item: { key: "reporting_home", label: "Reporting", sub: "Module Reporting", icon: FileBarChart } },
   BUDGETS: { type: "parent", label: "Gestion des Budgets", icon: DollarSign,
              parent: { key: "budget", label: "Gestion des Budgets", sub: "Salaires & budget", icon: DollarSign }, children: null },
-  ACCOUNTING: { type: "group", label: "Comptabilité", icon: Calculator, items: null },
+  ACCOUNTING: { type: "accordion", label: "Comptabilité", icon: Calculator,
+                parent: { key: "acct_overview", label: "Comptabilité", sub: "Grand livre & opérations", icon: Calculator } },
   FIXED_ASSETS: { type: "item", label: "Immobilisations", icon: Landmark, item: { key: "fixed_assets_home", label: "Immobilisations", sub: "Module Immobilisations", icon: Landmark } },
   CONSOLIDATION: { type: "item", label: "Consolidation", icon: Layers, item: { key: "consolidation_home", label: "Consolidation", sub: "Module Consolidation", icon: Layers } },
 };
@@ -75,7 +94,7 @@ const MODULE_NAV = {
 const MODULE_PAGES = {
   REPORTING: ["reporting_home"],
   BUDGETS: ["dashboard", "budget", "employes", "hypotheses", "departements", "rapports"],
-  ACCOUNTING: ["acct_dashboard", "acct_bv", "acct_bilan", "acct_pnl", "acct_cashflow", "acct_audit", "acct_qc9434"],
+  ACCOUNTING: ["acct_overview", "acct_apercu", "acct_sales", "acct_purchases", "acct_po", "acct_bank", "acct_entries", "acct_ledger", "acct_tb", "acct_coa", "acct_analytics", "acct_taxes", "acct_assets", "acct_close", "acct_imports", "acct_reports2", "acct_dashboard", "acct_bv", "acct_bilan", "acct_pnl", "acct_cashflow", "acct_audit", "acct_qc9434"],
   FIXED_ASSETS: ["fixed_assets_home"],
   CONSOLIDATION: ["consolidation_home"],
 };
@@ -86,11 +105,22 @@ const NAV_PLATFORM = [
 ];
 const NAV_PLATFORM_LOGS = { key: "platform_logs", label: "Logs plateforme", sub: "Audit plateforme", icon: ScrollText };
 
-const NAV_ACCT = [
-  { key: "acct_dashboard", label: "Tableau de bord", sub: "Vue d'ensemble", icon: LayoutDashboard },
-  { key: "acct_bv", label: "Balance de vérification", sub: "Upload mensuel", icon: ClipboardList },
-  { key: "acct_audit", label: "Rapports", sub: "Génération centralisée", icon: FileText },
-  { key: "acct_qc9434", label: "9434-3977 QC inc.", sub: "Commandité", icon: Building },
+const NAV_ACCT_A1 = [
+  { key: "acct_apercu", label: "Aperçu", icon: LayoutDashboard },
+  { key: "acct_sales", label: "Ventes & Clients", icon: Receipt },
+  { key: "acct_purchases", label: "Achats & Fournisseurs", icon: ShoppingCart },
+  { key: "acct_po", label: "Bons de commande", icon: ClipboardCheck },
+  { key: "acct_bank", label: "Banque & Trésorerie", icon: Banknote },
+  { key: "acct_entries", label: "Écritures comptables", icon: BookOpen },
+  { key: "acct_ledger", label: "Grand livre", icon: BookText },
+  { key: "acct_tb", label: "Balance de vérification", icon: Scale },
+  { key: "acct_coa", label: "Plan comptable", icon: ListTree },
+  { key: "acct_analytics", label: "Analytique & Projets", icon: PieChart },
+  { key: "acct_taxes", label: "Taxes", icon: Percent },
+  { key: "acct_assets", label: "Actifs & amortissements", icon: Landmark },
+  { key: "acct_close", label: "Clôture & Réconciliation", icon: Lock },
+  { key: "acct_imports", label: "Imports & Migration", icon: Boxes },
+  { key: "acct_reports2", label: "Rapports & Analyses", icon: FileBarChart },
 ];
 
 const NAV_GROUP = [
@@ -174,6 +204,7 @@ function NotificationsBell({ go }) {
 }
 
 function UserMenu({ user, logout, go, t }) {
+  const { lang, setLang } = useLang();
   const [ts, setTs] = useState(0);
   const [hasAvatar, setHasAvatar] = useState(!!user?.has_avatar);
   const fileRef = useRef(null);
@@ -238,10 +269,16 @@ function UserMenu({ user, logout, go, t }) {
           <UserCog size={15} className="mr-2 text-slate-500" /> {t("Mon profil")}
         </DropdownMenuItem>
         {user?.role === "admin" && (
-          <DropdownMenuItem data-testid="menu-users" onSelect={() => go("utilisateurs")}>
-            <ShieldCheck size={15} className="mr-2 text-slate-500" /> {t("Utilisateurs")}
+          <DropdownMenuItem data-testid="menu-admin" onSelect={() => go("access")}>
+            <ShieldCheck size={15} className="mr-2 text-slate-500" /> {t("Administration")}
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem data-testid="menu-security" onSelect={() => go("preferences")}>
+          <ShieldAlert size={15} className="mr-2 text-slate-500" /> {t("Sécurité")}
+        </DropdownMenuItem>
+        <DropdownMenuItem data-testid="menu-language" onSelect={(e) => { e.preventDefault(); setLang(lang === "fr" ? "en" : "fr"); }}>
+          <Globe size={15} className="mr-2 text-slate-500" /> {t("Langue")} · <span className="ml-1 font-700 uppercase">{lang === "fr" ? "FR" : "EN"}</span>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem data-testid="logout-btn" onSelect={logout} className="text-red-600 focus:bg-red-50 focus:text-red-700">
           <LogOut size={15} className="mr-2" /> {t("Déconnexion")}
@@ -405,7 +442,10 @@ function ModulesNav({ modules, active, go }) {
             <NavParent item={cfg.parent} children={BUDGET_CHILDREN} active={active} onClick={go} />
           </>
         )}
-        {cfg.type === "group" && NAV_ACCT.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
+        {cfg.type === "group" && NAV_ACCT_A1.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
+        {cfg.type === "accordion" && (
+          <NavParent item={cfg.parent} children={NAV_ACCT_A1} active={active} onClick={go} />
+        )}
         {cfg.type === "item" && <NavItem item={cfg.item} active={active} onClick={go} />}
       </div>
     );
@@ -526,10 +566,10 @@ function LayoutInner() {
   // effective access). It NEVER adds financial modules to the platform sidebar
   // and grants no financial authority (platform_role ≠ authority).
   const enterMeelora = () => { setActive("platform_meelora_manage"); setMobileOpen(false); };
-  const LANDING = { REPORTING: "reporting_home", BUDGETS: "budget", ACCOUNTING: "acct_dashboard", FIXED_ASSETS: "fixed_assets_home", CONSOLIDATION: "consolidation_home" };
+  const LANDING = { REPORTING: "reporting_home", BUDGETS: "budget", ACCOUNTING: "acct_overview", FIXED_ASSETS: "fixed_assets_home", CONSOLIDATION: "consolidation_home" };
   const moduleEntry = (mods, adminView) => {
     if (adminView) return "dashboard";
-    if (mods.some((m) => m.module_code === "ACCOUNTING")) return "acct_dashboard"; // Comptabilité prioritaire
+    if (mods.some((m) => m.module_code === "ACCOUNTING")) return "acct_overview"; // Comptabilité prioritaire
     if (mods.some((m) => m.module_code === "BUDGETS")) return "dashboard";
     return mods.length ? (LANDING[mods[0].module_code] || "dashboard") : "dashboard";
   };

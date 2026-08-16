@@ -27,7 +27,7 @@ from core.access.module_access import set_user_permission, set_user_module_acces
 MEE = "965f0770-8cf2-4199-a99f-819ff270436a"   # Meelora (interne) — Julie: ACCOUNTING read
 QC = "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9"    # 9434 — Julie: aucune adhésion
 GHOST = "cmp_ghost_p1_13f_000"
-PERMS = ["accounting.period_close", "accounting.period_reopen", "accounting.entry_post",
+PERMS = ["accounting.period_close", "accounting.entry_post", "accounting.entry_approve",
          "accounting.customer_invoice_post", "accounting.entry_reverse"]
 
 _failures = []

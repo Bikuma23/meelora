@@ -17,7 +17,7 @@ const PERM_GROUPS = {
   ACCOUNTING: [
     { title: "Comptabilisation", perms: [["accounting.entry_post", "Comptabiliser les écritures"], ["accounting.entry_reverse", "Extourner une écriture"], ["accounting.customer_invoice_post", "Comptabiliser les factures clients"], ["accounting.supplier_invoice_post", "Comptabiliser les factures fournisseurs"]] },
     { title: "Validation", perms: [["accounting.po_approve", "Approuver les PO"], ["accounting.reconciliation_approve", "Valider les réconciliations"]] },
-    { title: "Administration comptable", perms: [["accounting.chart_manage", "Gérer le plan comptable"], ["accounting.period_close", "Clôturer une période"], ["accounting.period_reopen", "Rouvrir une période"]] },
+    { title: "Administration comptable", perms: [["accounting.chart_manage", "Gérer le plan comptable"], ["accounting.period_close", "Clôturer une période"], ["accounting.entry_approve", "Approuver les écritures"]] },
   ],
   REPORTING: [{ title: "Rapports", perms: [["reporting.report_finalize", "Finaliser les rapports"], ["reporting.external_send", "Envoyer des rapports externes"], ["reporting.template_manage", "Gérer les modèles"]] }],
   FIXED_ASSETS: [{ title: "Immobilisations", perms: [["fixed_assets.disposal_authorize", "Autoriser les cessions"], ["fixed_assets.depreciation_approve", "Approuver l'amortissement"]] }],
