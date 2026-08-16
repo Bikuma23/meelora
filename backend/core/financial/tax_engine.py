@@ -170,3 +170,40 @@ def compute_line_tax(tax_code_doc, base, on_date):
                       "payable_account_code": c.get("payable_account_code"), "amount": amt})
     return {"tax_code": tax_code_doc.get("code"), "tax_kind": kind,
             "effective_date": version.get("effective_date"), "components": comps, "tax_total": _money(total)}
+
+
+# --------------------------------------------------------------------------- #
+# Jurisdiction resolution (country + region -> jurisdiction code) so a client
+# fiche can PROPOSE the applicable default tax configuration from the central
+# engine. No rate is ever hardcoded in the frontend; the UI consumes this.
+# --------------------------------------------------------------------------- #
+def resolve_jurisdiction(country: str, region: str = None) -> str:
+    c = (country or "").strip().upper()
+    r = (region or "").strip().upper()
+    if c in ("CA", "CAN", "CANADA"):
+        return f"CA-{r}" if r else "CA"
+    if c in ("CH", "CHE", "SUISSE", "SWITZERLAND"):
+        return "CH"
+    return c or ""
+
+
+def jurisdiction_config(country: str, region: str = None, on_date: str = None) -> dict:
+    """Proposed default tax configuration for a jurisdiction, resolved to the
+    version effective at ``on_date``. Returned to the client fiche as a default;
+    an authorised user may still override per business rules."""
+    jur = resolve_jurisdiction(country, region)
+    on = on_date or _now()[:10]
+    codes = []
+    for tc in default_tax_codes(jur):
+        version = _pick_version(tc, on)
+        comps = [{"name": c.get("name"), "tax_type": c.get("tax_type"),
+                  "rate": float(c.get("rate") or 0), "payable_account_code": c.get("payable_account_code")}
+                 for c in version.get("components", [])]
+        codes.append({"code": tc["code"], "label": tc["label"], "tax_kind": tc["tax_kind"],
+                      "effective_date": version.get("effective_date"), "components": comps})
+    # A sensible default taxable code to preselect, when one exists.
+    default_code = next((c["code"] for c in codes if c["tax_kind"] == "taxable"), None)
+    supported = jur in ("CA-QC", "CA-ON", "CA-BC", "CH")
+    return {"country": (country or "").upper(), "region": (region or "").upper() or None,
+            "jurisdiction": jur, "supported": supported, "default_tax_code": default_code,
+            "tax_codes": codes, "as_of": on}

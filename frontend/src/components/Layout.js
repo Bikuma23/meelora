@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "./ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "./ui/dropdown-menu";
 import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
 import { Input } from "./ui/input";
@@ -29,6 +29,7 @@ import { applyTheme } from "../lib/theme";
 import { AcctDashboard, AcctBV, AcctBilan, AcctPnl, AcctCashflow, AcctReports } from "../pages/Comptabilite";
 import { AcctEntries, AcctPeriods, makePlaceholder } from "../pages/AccountingA1";
 import SalesAR from "../pages/SalesAR";
+import CompanyHome from "../pages/CompanyHome";
 import QcEntity from "../pages/QcEntity";
 import { PlatformHome, PlatformClients, PlatformLogs, PlatformMeeloraManage } from "../pages/Platform";
 import { ReportingHome, FixedAssetsHome, ConsolidationHome } from "../pages/ModulePlaceholder";
@@ -48,6 +49,7 @@ const PAGES = {
   access: { title: "Utilisateurs et accès", sub: "Invitations & permissions", comp: AccessManagement },
   logs: { title: "Logs", sub: "Historique des activités", comp: Logs },
   preferences: { title: "Mon profil", sub: "Préférences & apparence", comp: Preferences },
+  company_home: { title: "Accueil", sub: "Point d'entrée du mandat", comp: CompanyHome },
   acct_dashboard: { title: "Tableau de bord", sub: "Vue d'ensemble du mois", comp: AcctDashboard },
   acct_bv: { title: "Balance de vérification", sub: "Upload & gestion mensuelle", comp: AcctBV },
   acct_bilan: { title: "Bilan", sub: "État de situation financière", comp: AcctBilan },
@@ -173,6 +175,15 @@ export function MeeloraLogo({ compact = false, className = "" }) {
   );
 }
 
+// Langues disponibles (ordre alphabétique en français). DE/IT sélectionnables
+// une fois traduites — désactivées tant que les ressources n'existent pas.
+const LANGUAGES = [
+  { code: "de", label: "Allemand", enabled: false },
+  { code: "en", label: "Anglais", enabled: true },
+  { code: "fr", label: "Français", enabled: true },
+  { code: "it", label: "Italien", enabled: false },
+];
+
 const ROLE_META = {
   admin: { label: "Admin", c: "#0F172A" },
   editor: { label: "Utilisateur", c: "#64748B" },
@@ -295,17 +306,30 @@ function UserMenu({ user, logout, go, t, adminView }) {
               <ShieldCheck size={15} className="mr-2 text-slate-500" /> {t("Utilisateurs et accès")}
             </DropdownMenuItem>
             <DropdownMenuItem data-testid="menu-logs" onSelect={() => go("logs")}>
-              <ScrollText size={15} className="mr-2 text-slate-500" /> {t("Logs")}
+              <ScrollText size={15} className="mr-2 text-slate-500" /> {t("Logs société")}
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuItem data-testid="menu-security" onSelect={() => go("preferences")}>
-          <ShieldAlert size={15} className="mr-2 text-slate-500" /> {t("Sécurité")}
-        </DropdownMenuItem>
-        <DropdownMenuItem data-testid="menu-language" onSelect={(e) => { e.preventDefault(); setLang(lang === "fr" ? "en" : "fr"); }}>
-          <Globe size={15} className="mr-2 text-slate-500" /> {t("Langue")} · <span className="ml-1 font-700 uppercase">{lang === "fr" ? "FR" : "EN"}</span>
-        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger data-testid="menu-language">
+            <Globe size={15} className="mr-2 text-slate-500" /> {t("Langue")}
+            <span className="ml-auto text-xs font-700 text-slate-400">{(LANGUAGES.find((l) => l.code === lang) || {}).label ? t((LANGUAGES.find((l) => l.code === lang)).label) : lang.toUpperCase()}</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent data-testid="menu-language-list">
+            {LANGUAGES.map((l) => (
+              <DropdownMenuItem key={l.code} data-testid={`lang-option-${l.code}`}
+                disabled={!l.enabled}
+                onSelect={(e) => { if (!l.enabled) { e.preventDefault(); return; } setLang(l.code); }}
+                className={lang === l.code ? "font-700 text-[#063044]" : ""}>
+                <span className="mr-2 w-6 text-[10px] font-700 uppercase text-slate-400">{l.code}</span>
+                {t(l.label)}
+                {!l.enabled && <span className="ml-auto text-[10px] text-slate-300">{t("bientôt")}</span>}
+                {lang === l.code && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#22C55E]" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
         <DropdownMenuSeparator />
         <DropdownMenuItem data-testid="logout-btn" onSelect={logout} className="text-red-600 focus:bg-red-50 focus:text-red-700">
           <LogOut size={15} className="mr-2" /> {t("Déconnexion")}
@@ -522,28 +546,6 @@ function DynamicCompanyNav({ manifest, active, go, companies, activeCompanyId, e
   );
 }
 
-function CompanySelector({ active, onNavigate }) {
-  const [companies, setCompanies] = useState([]);
-  useEffect(() => { api.getCompanies().then(setCompanies).catch(() => setCompanies([])); }, []);
-  if (!companies.length) return null;
-  // Mandat actif déduit de la page : la page dédiée 9434 → qc9434 ; toutes les autres pages Compta → acct (Meelora).
-  const activePrefix = active === "acct_qc9434" ? "qc9434" : "acct";
-  const TARGET = { acct: "acct_dashboard", qc9434: "acct_qc9434" };
-  return (
-    <div className="flex items-center gap-2" data-testid="company-selector">
-      <Building2 size={15} className="text-[#0F172A]" />
-      <Select value={activePrefix} onValueChange={(v) => onNavigate(TARGET[v] || "acct_dashboard")}>
-        <SelectTrigger className="h-8 w-[190px]" data-testid="company-select"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {companies.map((c) => (
-            <SelectItem key={c.legacy_prefix} value={c.legacy_prefix} data-testid={`company-option-${c.legacy_prefix}`}>{c.name}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
-
 function LayoutInner() {
   const { user, logout } = useAuth();
   const { t } = useLang();
@@ -600,7 +602,7 @@ function LayoutInner() {
     setActiveCompanyId(cid);
     try { localStorage.setItem("meelora:activeCompany", cid); } catch (e) { /* ignore */ }
   };
-  const enterMandat = (cid) => { switchCompany(cid); setJustEntered(true); setActive("dashboard"); setMobileOpen(false); };
+  const enterMandat = (cid) => { switchCompany(cid); setJustEntered(true); setActive("company_home"); setMobileOpen(false); };
   // Platform staff: "Accéder" on Société Meelora opens its full operational
   // management console (users / invitations / module access / sensitive perms /
   // effective access). It NEVER adds financial modules to the platform sidebar
@@ -614,35 +616,33 @@ function LayoutInner() {
     return adminView ? "preferences" : "mandats_list";
   };
   const allowedBusinessPages = (mods, adminView) => {
-    const allowed = new Set(["preferences", "mandats_list"]);
+    const allowed = new Set(["preferences", "mandats_list", "company_home"]);
     // Admin functions moved to the avatar → Administration menu (Sociétés/Clients
     // is platform-only). Keep the pages reachable for company admins.
     if (adminView) ["access", "logs", "utilisateurs"].forEach((k) => allowed.add(k));
     mods.forEach((m) => (MODULE_PAGES[m.module_code] || []).forEach((k) => allowed.add(k)));
     return allowed;
   };
-  // Non-platform business users: multi-mandate users land on "Tous les mandats"
-  // (chooser); single-mandate users land on their module entry. No ghost pages.
+  // Non-platform business users: entering a mandate (via "Accéder") always lands
+  // on the company home; multi-mandate users otherwise see the chooser. No ghost pages.
   useEffect(() => {
     if (isPlatformStaff || !navManifest || active.startsWith("platform_")) return;
     const mods = navManifest.modules || [];
     const adminView = !!navManifest.admin_view;
     const multi = navCompanies.length > 1;
     const allowed = allowedBusinessPages(mods, adminView);
-    // Just entered a mandate from the chooser: land on the mandate's module entry
-    // (never bounce back to the chooser even for multi-mandate users).
+    // Just entered a mandate from the chooser: land on the company home (welcome
+    // + KPIs), before entering any module. Never bounce back to the chooser.
     if (justEntered) {
       setJustEntered(false);
-      setActive(moduleEntry(mods, adminView));
+      setActive("company_home");
       return;
     }
-    if (!allowed.has(active)) { setActive(multi ? "mandats_list" : moduleEntry(mods, adminView)); return; }
-    // "dashboard" is the app default landing: route multi users to the chooser and
-    // single users to their module entry (Budgets "Aperçu" stays on dashboard).
+    if (!allowed.has(active)) { setActive(multi ? "mandats_list" : "company_home"); return; }
+    // "dashboard" is the app default landing: multi users go to the chooser,
+    // single-mandate users land on their company home.
     if (active === "dashboard") {
-      if (multi) { setActive("mandats_list"); return; }
-      const entry = moduleEntry(mods, adminView);
-      if (entry !== "dashboard") setActive(entry);
+      setActive(multi ? "mandats_list" : "company_home");
     }
   }, [navManifest, navCompanies]); // eslint-disable-line react-hooks/exhaustive-deps
   // Platform staff stay within platform pages only. Business modules never
@@ -667,6 +667,7 @@ function LayoutInner() {
   const exitPresentation = () => { try { document.exitFullscreen?.(); } catch (e) { /* ignore */ } setPresentation(false); };
   const isPlaceholderPage = ["reporting_home", "fixed_assets_home", "consolidation_home", "mandats_list"].includes(active);
   const breadcrumbSection = isPlatformPage ? "Plateforme Meelora"
+    : active === "company_home" ? t("Mandat")
     : active === "mandats_list" ? "Tous les mandats"
     : active === "reporting_home" ? "Reporting"
     : active === "fixed_assets_home" ? "Immobilisations"
@@ -727,9 +728,8 @@ function LayoutInner() {
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            {!isPlatformPage && active.startsWith("acct_") && <CompanySelector active={active} onNavigate={go} />}
-            {!isPlatformPage && !isPlaceholderPage && !active.startsWith("acct_") && <span className="hidden rounded-full bg-[#22C55E]/10 px-3 py-1 text-xs font-600 text-[#22C55E] sm:inline-flex">{t("Budget actif")}</span>}
-            {!isPlatformPage && !isPlaceholderPage && !active.startsWith("acct_") && <YearControls />}
+            {!isPlatformPage && !isPlaceholderPage && !active.startsWith("acct_") && active !== "company_home" && <span className="hidden rounded-full bg-[#22C55E]/10 px-3 py-1 text-xs font-600 text-[#22C55E] sm:inline-flex">{t("Budget actif")}</span>}
+            {!isPlatformPage && !isPlaceholderPage && !active.startsWith("acct_") && active !== "company_home" && <YearControls />}
             <div className="ml-1 flex items-center gap-1 border-l border-slate-200 pl-2">
               <button data-testid="header-help-btn" title={t("Aide")} className="hidden rounded-full p-2 text-slate-500 transition-colors hover:bg-[#F3F4F6] hover:text-[#0F172A] sm:block"><HelpCircle size={18} /></button>
               <NotificationsBell go={go} />

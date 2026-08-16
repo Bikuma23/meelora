@@ -151,6 +151,8 @@ from core.access.effective_access import resolve_effective_access
 from core.access.sensitive import require_sensitive_permission, require_module_level
 from core.accounting import gl as gl_service
 from core.accounting import ar as ar_service
+from core.accounting import dunning as dunning_service
+from core.financial import documents as doc_service
 from core.financial import tax_engine as tax_engine
 from core.financial import fx as fx_service
 from core.access.indexes import ensure_indexes as _ensure_access_indexes
@@ -1129,6 +1131,55 @@ async def confirm_email_change(payload: EmailChangeConfirmPayload):
             logger.error(f"audit email_change: {e}")
     return {"success": True, "email": new_email,
             "message": "Adresse de connexion mise à jour. Utilisez la nouvelle adresse à la prochaine connexion."}
+
+
+# ---------------------------------------------------------------------------
+# Self-service password change (authenticated). The user proves knowledge of
+# their CURRENT password; an admin can never set or learn another user's
+# password. The acting session's token is rotated; the event is audited with
+# no secret value. Mirrors the existing bcrypt + JWT-cookie pattern.
+# ---------------------------------------------------------------------------
+class ChangePasswordPayload(BaseModel):
+    current_password: str
+    new_password: str
+
+
+def _validate_password_policy(pwd: str):
+    if len(pwd or "") < 8:
+        raise HTTPException(status_code=422, detail="Le mot de passe doit contenir au moins 8 caractères")
+    if not any(c.isalpha() for c in pwd) or not any(c.isdigit() for c in pwd):
+        raise HTTPException(status_code=422, detail="Le mot de passe doit contenir au moins une lettre et un chiffre")
+
+
+@api.post("/me/password-change")
+async def change_password(payload: ChangePasswordPayload, response: Response,
+                          user: dict = Depends(get_current_user)):
+    email = (user.get("email") or "").strip().lower()
+    account = await db.users.find_one({"email": email})
+    if not account or not account.get("password_hash"):
+        # Google-only accounts have no local password to change.
+        raise HTTPException(status_code=400, detail="Ce compte n'utilise pas de mot de passe local.")
+    if not verify_password(payload.current_password, account["password_hash"]):
+        raise HTTPException(status_code=401, detail="Mot de passe actuel incorrect")
+    _validate_password_policy(payload.new_password)
+    if verify_password(payload.new_password, account["password_hash"]):
+        raise HTTPException(status_code=400, detail="Le nouveau mot de passe doit être différent de l'actuel")
+    await db.users.update_one({"_id": account["_id"]}, {
+        "$set": {"password_hash": hash_password(payload.new_password),
+                 "password_changed_at": datetime.now(timezone.utc).isoformat()},
+        "$unset": {"reset_token_jti": ""}})
+    # Rotate the acting session's token so the current client stays authenticated.
+    new_token = create_token(str(account["_id"]), email)
+    response.set_cookie("access_token", new_token, httponly=True, secure=False, samesite="lax", path="/")
+    try:
+        await log_action(user, "update", "user", email, details="Mot de passe modifié (self-service)",
+                         entity_id=str(account["_id"]), event_type="auth.password_changed",
+                         metadata={"category": "security", "result": "success"})
+    except Exception as e:
+        logger.error(f"audit password_change: {e}")
+    return {"success": True, "token": new_token,
+            "message": "Mot de passe mis à jour."}
+
 
 
 
@@ -2652,6 +2703,51 @@ async def get_company_navigation(company_id: str, user: dict = Depends(get_curre
     return await access_nav.build_company_navigation(db, user, ws, company_id)
 
 
+@api.get("/companies/{company_id}/home")
+async def get_company_home(company_id: str, user: dict = Depends(get_current_user)):
+    """Company welcome/home: identity card + a few KPIs conditioned on the modules
+    the caller can actually access. Never surfaces a KPI from a module the user has
+    no access to. Uses the same access checks as the navigation manifest."""
+    ws = user.get("workspace_id")
+    if not ws:
+        raise HTTPException(status_code=403, detail="Aucun contexte workspace")
+    company = await db.companies.find_one({"id": company_id})
+    if not company or company.get("workspace_id") != ws:
+        raise HTTPException(status_code=404, detail="Société introuvable")
+    if company.get("status") == "inactive" or company.get("active") is False:
+        raise HTTPException(status_code=403, detail="Société inactive")
+    if user.get("role") != "admin":
+        has = await db.company_memberships.find_one(
+            {"workspace_id": ws, "company_id": company_id, "user_id": user.get("id"), "status": "active"})
+        if not has:
+            has = await db.company_access.find_one(
+                {"workspace_id": ws, "company_id": company_id, "user_id": user.get("id"), "active": True})
+        if not has:
+            raise HTTPException(status_code=403, detail="Accès à cette société non autorisé")
+    manifest = await access_nav.build_company_navigation(db, user, ws, company_id)
+    module_codes = [m.get("module_code") for m in (manifest.get("modules") or [])]
+    identity = {
+        "name": company.get("name") or company.get("legal_name"),
+        "legal_name": company.get("legal_name"), "trade_name": company.get("trade_name"),
+        "address": " ".join([p for p in [company.get("address_line1"), company.get("address_line2")] if p]) or None,
+        "city": company.get("city"), "region": company.get("region"), "country": company.get("country"),
+        "postal_code": company.get("postal_code"), "phone": company.get("phone"),
+        "email": company.get("email"), "website": company.get("website"),
+        "currency": company.get("functional_currency") or company.get("currency"),
+        "industry": company.get("industry"),
+    }
+    kpis = None
+    if "ACCOUNTING" in module_codes:
+        try:
+            kpis = await ar_service.home_kpis(db, ws, company_id)
+        except Exception as e:
+            logger.error(f"home_kpis: {e}")
+            kpis = None
+    return {"company": identity, "modules": module_codes, "admin_view": bool(manifest.get("admin_view")),
+            "kpis": kpis}
+
+
+
 @api.get("/me/company-context")
 async def get_my_company_context(user: dict = Depends(get_current_user)):
     """Companies the current user may operate in (for the company switcher).
@@ -3186,12 +3282,37 @@ class ARCustomerIn(BaseModel):
     code: Optional[str] = ""
     name: str
     emails: Optional[List[str]] = None
+    billing_email: Optional[str] = None
+    phone: Optional[str] = None
     billing_address: Optional[str] = None
+    shipping_address: Optional[str] = None
+    contacts: Optional[List[dict]] = None
+    jurisdiction: Optional[str] = None
+    country: Optional[str] = None
+    region: Optional[str] = None
+    language: Optional[str] = None
+    payment_terms: Optional[str] = None
+    due_days: Optional[int] = None
+    tax_regime: Optional[str] = None
+    customer_po: Optional[str] = None
+    credit_limit: Optional[float] = None
     tax_ids: Optional[dict] = None
+    tax_exemptions: Optional[List[dict]] = None
+    dimensions: Optional[dict] = None
+    internal_notes: Optional[str] = None
+    attachments: Optional[List[dict]] = None
     default_tax_code: Optional[str] = None
     default_currency: Optional[str] = None
     default_revenue_account_code: Optional[str] = None
     status: Optional[str] = None
+
+
+class ARReminderIn(BaseModel):
+    invoice_id: str
+    level: Optional[int] = None
+    channel: Optional[str] = "email"
+    to_email: Optional[str] = None
+    message: Optional[str] = None
 
 
 class ARInvoiceLineIn(BaseModel):
@@ -3283,6 +3404,14 @@ async def _ar_write_scope(company_id: str, user: dict):
 async def ar_list_tax_codes(company_id: str, user: dict = Depends(get_current_user)):
     ws = await _ar_read_scope(company_id, user)
     return {"tax_codes": await tax_engine.list_tax_codes(db, ws, company_id)}
+
+
+@api.get("/tax/jurisdiction-config")
+async def tax_jurisdiction_config(country: str, region: Optional[str] = None, on_date: Optional[str] = None,
+                                  user: dict = Depends(get_current_user)):
+    """Proposed default tax configuration for a country + province/territory/canton,
+    resolved from the central versioned tax engine. Consumed by the client fiche."""
+    return tax_engine.jurisdiction_config(country, region, on_date)
 
 
 @api.post("/companies/{company_id}/ar/tax-codes/seed")
@@ -3476,6 +3605,58 @@ async def ar_post_credit_note(company_id: str, cn_id: str, user: dict = Depends(
 async def ar_aging(company_id: str, as_of: Optional[str] = None, user: dict = Depends(get_current_user)):
     ws = await _ar_read_scope(company_id, user)
     return await ar_service.aging(db, ws, company_id, as_of=as_of)
+
+
+# ---- AR overview -----------------------------------------------------------
+@api.get("/companies/{company_id}/ar/overview")
+async def ar_overview(company_id: str, as_of: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await ar_service.overview(db, ws, company_id, as_of=as_of)
+
+
+# ---- Source documents (immutable, private) ---------------------------------
+@api.get("/companies/{company_id}/ar/invoices/{invoice_id}/documents")
+async def ar_invoice_documents(company_id: str, invoice_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"documents": await doc_service.list_documents(db, ws, company_id, source_type="ar_invoice", source_id=invoice_id)}
+
+
+@api.get("/companies/{company_id}/documents/{doc_id}/download")
+async def ar_download_document(company_id: str, doc_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    data, mime, filename = await doc_service.download_document(db, ws, company_id, doc_id)
+    await log_action(user, "download", "source_document", doc_id, company_id=company_id, entity_id=doc_id,
+                     event_type="ar.document.downloaded")
+    return StreamingResponse(iter([data]), media_type=mime,
+                             headers={"Content-Disposition": f'inline; filename="{filename}"'})
+
+
+@api.get("/companies/{company_id}/journal-source/{journal_entry_id}")
+async def ar_journal_source(company_id: str, journal_entry_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await ar_service.resolve_journal_source(db, ws, company_id, journal_entry_id)
+
+
+# ---- Dunning / Relances ----------------------------------------------------
+@api.get("/companies/{company_id}/ar/overdue")
+async def ar_overdue(company_id: str, as_of: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"overdue": await dunning_service.overdue_invoices(db, ws, company_id, as_of=as_of)}
+
+
+@api.get("/companies/{company_id}/ar/reminders")
+async def ar_list_reminders(company_id: str, invoice_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"reminders": await dunning_service.list_reminders(db, ws, company_id, invoice_id=invoice_id)}
+
+
+@api.post("/companies/{company_id}/ar/reminders")
+async def ar_create_reminder(company_id: str, payload: ARReminderIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    r = await dunning_service.create_reminder(db, ws, company_id, user, payload.model_dump(exclude_unset=True))
+    await log_action(user, "send", "ar_reminder", r["id"], details=f"Relance facture {r['invoice_id']}",
+                     company_id=company_id, entity_id=r["id"], event_type="ar.reminder.sent")
+    return r
 
 
 
@@ -9640,6 +9821,10 @@ async def startup():
         _qc_init_storage()
     except Exception as e:
         logger.error(f"Init stockage objet échec : {e}")
+    try:
+        doc_service.init_storage()
+    except Exception as e:
+        logger.error(f"Init Document Service échec : {e}")
     admin_email = os.environ["ADMIN_EMAIL"].lower()
     existing = await db.users.find_one({"email": admin_email})
     if not existing:

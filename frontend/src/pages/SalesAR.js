@@ -4,7 +4,10 @@ import { api } from "../lib/api";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { Loader2, Plus, Users, FileText, Settings2, Trash2, Send, ThumbsUp, Stamp, RotateCcw, Banknote, FileMinus } from "lucide-react";
+import {
+  Loader2, Plus, Users, FileText, Settings2, Trash2, Send, ThumbsUp, Stamp, RotateCcw,
+  Banknote, FileMinus, LayoutDashboard, Clock, Bell, FileDown, Link2, ChevronDown, ChevronRight, RefreshCw,
+} from "lucide-react";
 
 const INV_STATUS = {
   draft: { label: "Brouillon", cls: "bg-slate-100 text-slate-600" },
@@ -15,23 +18,44 @@ const INV_STATUS = {
   paid: { label: "Payée", cls: "bg-emerald-100 text-emerald-800" },
   void: { label: "Extournée", cls: "bg-rose-100 text-rose-700" },
 };
-const money = (v, c) => `${Number(v || 0).toFixed(2)} ${c || ""}`.trim();
 const CN_STATUS = {
   draft: { label: "Brouillon", cls: "bg-slate-100 text-slate-600" },
   submitted: { label: "Soumise", cls: "bg-blue-100 text-blue-700" },
   approved: { label: "Approuvée", cls: "bg-amber-100 text-amber-700" },
   posted: { label: "Comptabilisée", cls: "bg-emerald-100 text-emerald-700" },
 };
+const money = (v, c) => `${Number(v || 0).toFixed(2)} ${c || ""}`.trim();
+const BUCKETS = [
+  { key: "current", label: "Courant" }, { key: "d1_30", label: "1–30 j" },
+  { key: "d31_60", label: "31–60 j" }, { key: "d61_90", label: "61–90 j" }, { key: "d90_plus", label: "90+ j" },
+];
 const TABS = [
+  { key: "overview", label: "Aperçu AR", icon: LayoutDashboard },
   { key: "invoices", label: "Factures", icon: FileText },
+  { key: "payments", label: "Paiements", icon: Banknote },
   { key: "credit_notes", label: "Notes de crédit", icon: FileMinus },
   { key: "customers", label: "Clients", icon: Users },
+  { key: "aging", label: "Aging", icon: Clock },
+  { key: "reminders", label: "Relances", icon: Bell },
   { key: "config", label: "Configuration", icon: Settings2 },
 ];
 
+async function openDocument(cid, docId) {
+  try {
+    const blob = await api.arDownloadDocument(cid, docId);
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, "_blank");
+    if (!win) {
+      const a = document.createElement("a");
+      a.href = url; a.download = "document.pdf"; document.body.appendChild(a); a.click(); a.remove();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) { toast.error("Document indisponible"); }
+}
+
 export default function SalesAR() {
   const { activeCompanyId: cid } = useNav();
-  const [tab, setTab] = useState("invoices");
+  const [tab, setTab] = useState("overview");
   const [customers, setCustomers] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [taxCodes, setTaxCodes] = useState([]);
@@ -53,29 +77,217 @@ export default function SalesAR() {
   }, [cid]);
   useEffect(() => { reload(); }, [reload]);
 
+  const custName = (id) => customers.find((x) => x.id === id)?.name || (id || "").slice(0, 8);
+
   if (!cid) return <div className="p-6 text-sm text-slate-400">Sélectionnez un mandat.</div>;
   if (loading) return <div className="flex items-center gap-2 p-6 text-slate-500"><Loader2 className="animate-spin" size={16}/> Chargement…</div>;
 
   return (
     <div className="space-y-5" data-testid="ar-page">
-      <div className="flex gap-1 border-b border-slate-200">
+      <div className="flex flex-wrap gap-1 border-b border-slate-200">
         {TABS.map((T) => (
           <button key={T.key} data-testid={`ar-tab-${T.key}`} onClick={() => setTab(T.key)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-600 transition-colors ${tab === T.key ? "border-b-2 border-[#22C55E] text-[#0F172A]" : "text-slate-500 hover:text-[#0F172A]"}`}>
+            className={`flex items-center gap-2 px-3.5 py-2.5 text-sm font-600 transition-colors ${tab === T.key ? "border-b-2 border-[#22C55E] text-[#0F172A]" : "text-slate-500 hover:text-[#0F172A]"}`}>
             <T.icon size={15} /> {T.label}
           </button>
         ))}
       </div>
-      {tab === "invoices" && <InvoicesTab cid={cid} customers={customers} taxCodes={taxCodes} periods={periods} invoices={invoices} reload={reload} />}
+      {tab === "overview" && <OverviewTab cid={cid} onGo={setTab} />}
+      {tab === "invoices" && <InvoicesTab cid={cid} customers={customers} taxCodes={taxCodes} periods={periods} invoices={invoices} reload={reload} custName={custName} />}
+      {tab === "payments" && <PaymentsTab cid={cid} invoices={invoices} custName={custName} />}
       {tab === "credit_notes" && <CreditNotesTab cid={cid} creditNotes={creditNotes} invoices={invoices} reload={reload} />}
       {tab === "customers" && <CustomersTab cid={cid} customers={customers} taxCodes={taxCodes} reload={reload} />}
+      {tab === "aging" && <AgingTab cid={cid} custName={custName} />}
+      {tab === "reminders" && <RemindersTab cid={cid} custName={custName} />}
       {tab === "config" && <ConfigTab cid={cid} reload={reload} />}
     </div>
   );
 }
 
+function Kpi({ label, value, sub, testid }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid={testid}>
+      <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-2xl font-700 text-[#063044]">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-slate-400">{sub}</p>}
+    </div>
+  );
+}
+
+function OverviewTab({ cid, onGo }) {
+  const [ov, setOv] = useState(null);
+  useEffect(() => { api.arOverview(cid).then(setOv).catch(() => setOv(null)); }, [cid]);
+  if (!ov) return <p className="text-sm text-slate-400" data-testid="ar-overview-empty">Aucune donnée.</p>;
+  const cur = ov.functional_currency;
+  return (
+    <div className="space-y-4" data-testid="ar-overview-tab">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi testid="ov-open-ar" label="Créances ouvertes" value={money(ov.open_ar_functional, cur)} sub="Solde clients (devise fonct.)" />
+        <Kpi testid="ov-overdue" label="Échu" value={money(ov.overdue_functional, cur)} sub="Factures en retard" />
+        <Kpi testid="ov-credit" label="Crédits clients dispo." value={money(ov.unapplied_customer_credit, cur)} />
+        <Kpi testid="ov-customers" label="Clients" value={ov.customer_count} />
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="font-600 text-[#063044]">Balance âgée</h3>
+          <Button size="sm" variant="outline" className="h-8" data-testid="ov-go-aging" onClick={() => onGo("aging")}>Détail Aging</Button>
+        </div>
+        <div className="grid grid-cols-5 gap-2">
+          {BUCKETS.map((b) => (
+            <div key={b.key} className="rounded-lg bg-slate-50 p-3 text-center" data-testid={`ov-bucket-${b.key}`}>
+              <p className="text-[11px] uppercase text-slate-500">{b.label}</p>
+              <p className="mt-1 text-sm font-600 text-[#0F172A]">{money(ov.buckets[b.key], cur)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <h3 className="mb-3 font-600 text-[#063044]">Factures par statut</h3>
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(ov.invoice_counts || {}).map(([k, v]) => (
+            <span key={k} className={`rounded-full px-3 py-1 text-xs font-600 ${(INV_STATUS[k] || INV_STATUS.draft).cls}`} data-testid={`ov-count-${k}`}>
+              {(INV_STATUS[k] || { label: k }).label} : {v}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaymentsTab({ cid, invoices, custName }) {
+  const [payments, setPayments] = useState([]);
+  const invNum = (id) => invoices.find((x) => x.id === id)?.number || (id || "").slice(0, 8);
+  useEffect(() => { api.arPayments(cid).then((r) => setPayments(r.payments || [])).catch(() => setPayments([])); }, [cid]);
+  return (
+    <div className="space-y-2" data-testid="ar-payments-tab">
+      {payments.length === 0 && <p className="text-sm text-slate-400" data-testid="ar-payments-empty">Aucun encaissement.</p>}
+      {payments.map((p) => (
+        <div key={p.id} data-testid={`pay-row-${p.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3">
+          <div className="flex items-center gap-3">
+            <span className="font-mono-data text-sm font-600 text-[#0F172A]">{money(p.amount, p.currency)}</span>
+            <span className="text-sm text-slate-500">Facture {invNum(p.invoice_id)} · {custName(p.customer_id)}</span>
+            <span className="text-xs text-slate-400">{p.date} · {p.method}</span>
+          </div>
+          {p.realized_fx ? <span className={`text-xs font-600 ${p.realized_fx > 0 ? "text-emerald-600" : "text-rose-600"}`}>FX {p.realized_fx > 0 ? "+" : ""}{p.realized_fx}</span> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AgingTab({ cid, custName }) {
+  const [ag, setAg] = useState(null);
+  useEffect(() => { api.arAging(cid).then(setAg).catch(() => setAg(null)); }, [cid]);
+  if (!ag) return <p className="text-sm text-slate-400" data-testid="ar-aging-empty">Aucune donnée.</p>;
+  const cur = ag.functional_currency;
+  return (
+    <div className="space-y-4" data-testid="ar-aging-tab">
+      <div className="grid grid-cols-5 gap-2">
+        {BUCKETS.map((b) => (
+          <div key={b.key} className="rounded-lg border border-slate-200 bg-white p-3 text-center" data-testid={`aging-bucket-${b.key}`}>
+            <p className="text-[11px] uppercase text-slate-500">{b.label}</p>
+            <p className="mt-1 text-sm font-600 text-[#0F172A]">{money(ag.buckets[b.key], cur)}</p>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <table className="w-full text-sm">
+          <thead><tr className="border-b border-slate-100 text-left text-[11px] uppercase text-slate-500">
+            <th className="p-3">Facture</th><th className="p-3">Client</th><th className="p-3">Échéance</th><th className="p-3">Tranche</th><th className="p-3 text-right">Solde</th>
+          </tr></thead>
+          <tbody>
+            {ag.rows.length === 0 && <tr><td colSpan={5} className="p-3 text-slate-400" data-testid="aging-rows-empty">Aucune facture ouverte.</td></tr>}
+            {ag.rows.map((r) => (
+              <tr key={r.invoice_id} className="border-b border-slate-50" data-testid={`aging-row-${r.invoice_id}`}>
+                <td className="p-3 font-mono-data">{r.number || r.invoice_id.slice(0, 8)}</td>
+                <td className="p-3">{custName(r.customer_id)}</td>
+                <td className="p-3">{r.due_date}</td>
+                <td className="p-3">{(BUCKETS.find((b) => b.key === r.bucket) || {}).label}</td>
+                <td className="p-3 text-right">{money(r.balance, r.currency)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function RemindersTab({ cid, custName }) {
+  const [overdue, setOverdue] = useState([]);
+  const [reminders, setReminders] = useState([]);
+  const [msg, setMsg] = useState("");
+  const [openFor, setOpenFor] = useState(null);
+  const load = useCallback(async () => {
+    try {
+      const [o, r] = await Promise.all([api.arOverdue(cid), api.arReminders(cid)]);
+      setOverdue(o.overdue || []); setReminders(r.reminders || []);
+    } catch (e) { /* gated */ }
+  }, [cid]);
+  useEffect(() => { load(); }, [load]);
+  const send = async (invoice_id) => {
+    try {
+      const r = await api.arCreateReminder(cid, { invoice_id, message: msg });
+      if (r.status === "sent") toast.success(`Relance envoyée à ${r.sent_to}`);
+      else if (r.status === "failed") toast.warning(`Relance générée mais envoi échoué : ${r.error || ""}`);
+      else toast.success("Relance générée");
+      setOpenFor(null); setMsg(""); load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+  };
+  return (
+    <div className="space-y-5" data-testid="ar-reminders-tab">
+      <div>
+        <h3 className="mb-2 font-600 text-[#063044]">Factures échues</h3>
+        {overdue.length === 0 && <p className="text-sm text-slate-400" data-testid="ar-overdue-empty">Aucune facture échue.</p>}
+        <div className="space-y-2">
+          {overdue.map((o) => (
+            <div key={o.invoice_id} data-testid={`overdue-row-${o.invoice_id}`} className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono-data text-sm font-600 text-[#0F172A]">{o.number || o.invoice_id.slice(0, 8)}</span>
+                  <span className="text-sm text-slate-500">{custName(o.customer_id)} · Solde {money(o.balance, o.currency)}</span>
+                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-600 text-rose-700">{o.days_overdue} j de retard</span>
+                  {o.reminders_sent > 0 && <span className="text-[11px] text-slate-400">{o.reminders_sent} relance(s)</span>}
+                </div>
+                <Button size="sm" className="h-8 gap-1 bg-[#063044] text-white" data-testid={`send-reminder-${o.invoice_id}`} onClick={() => setOpenFor(openFor === o.invoice_id ? null : o.invoice_id)}>
+                  <Send size={13}/> Relancer
+                </Button>
+              </div>
+              {openFor === o.invoice_id && (
+                <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-3" data-testid={`reminder-form-${o.invoice_id}`}>
+                  <div className="flex-1"><label className="text-[11px] uppercase text-slate-500">Message (optionnel)</label>
+                    <Input data-testid={`reminder-msg-${o.invoice_id}`} value={msg} onChange={(e) => setMsg(e.target.value)} className="mt-1 h-9" placeholder="Merci de régulariser le solde dû." /></div>
+                  <Button size="sm" className="h-9 bg-[#22C55E] text-white" data-testid={`reminder-confirm-${o.invoice_id}`} onClick={() => send(o.invoice_id)}>Générer & envoyer</Button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div>
+        <h3 className="mb-2 font-600 text-[#063044]">Historique des relances</h3>
+        {reminders.length === 0 && <p className="text-sm text-slate-400" data-testid="ar-reminders-empty">Aucune relance.</p>}
+        <div className="space-y-2">
+          {reminders.map((r) => (
+            <div key={r.id} data-testid={`reminder-row-${r.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3">
+              <div className="flex items-center gap-3">
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-600 text-slate-600">Niveau {r.level}</span>
+                <span className="text-sm text-slate-500">{custName(r.customer_id)} · {r.sent_to || r.channel}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-600 ${r.status === "sent" ? "bg-emerald-100 text-emerald-700" : r.status === "failed" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}>{r.status}</span>
+                <span className="text-xs text-slate-400">{(r.sent_at || "").slice(0, 16).replace("T", " ")}</span>
+              </div>
+              {r.document_id && <Button size="sm" variant="ghost" className="h-8 gap-1" data-testid={`reminder-pdf-${r.id}`} onClick={() => openDocument(cid, r.document_id)}><FileDown size={13}/>PDF</Button>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CreditNotesTab({ cid, creditNotes, invoices, reload }) {
-  const invNum = (id) => { const i = invoices.find((x) => x.id === id); return i ? (i.number || i.id.slice(0, 8)) : id.slice(0, 8); };
+  const invNum = (id) => { const i = invoices.find((x) => x.id === id); return i ? (i.number || i.id.slice(0, 8)) : (id || "").slice(0, 8); };
   const act = async (fn, msg) => { try { await fn(); toast.success(msg); reload(); } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); } };
   return (
     <div className="space-y-2" data-testid="ar-credit-notes-tab">
@@ -103,31 +315,132 @@ function CreditNotesTab({ cid, creditNotes, invoices, reload }) {
   );
 }
 
+const EMPTY_CUST = {
+  name: "", code: "", default_currency: "CAD", default_tax_code: "", billing_email: "", phone: "",
+  billing_address: "", shipping_address: "", country: "", region: "", jurisdiction: "", language: "fr",
+  payment_terms: "", due_days: "", tax_regime: "", customer_po: "", credit_limit: "", tax_ids: "", internal_notes: "",
+};
+const COUNTRIES = [{ v: "CA", l: "Canada" }, { v: "CH", l: "Suisse" }, { v: "", l: "Autre / International" }];
+const REGIONS = {
+  CA: [["QC", "Québec"], ["ON", "Ontario"], ["BC", "Colombie-Britannique"], ["AB", "Alberta"], ["MB", "Manitoba"],
+       ["SK", "Saskatchewan"], ["NS", "Nouvelle-Écosse"], ["NB", "Nouveau-Brunswick"], ["NL", "Terre-Neuve-et-Labrador"],
+       ["PE", "Île-du-Prince-Édouard"], ["NT", "Territoires du Nord-Ouest"], ["YT", "Yukon"], ["NU", "Nunavut"]],
+  CH: [["GE", "Genève"], ["VD", "Vaud"], ["ZH", "Zurich"], ["BE", "Berne"], ["VS", "Valais"], ["FR", "Fribourg"],
+       ["TI", "Tessin"], ["BS", "Bâle-Ville"], ["LU", "Lucerne"], ["SG", "Saint-Gall"]],
+};
 function CustomersTab({ cid, customers, taxCodes, reload }) {
-  const [form, setForm] = useState({ name: "", default_currency: "CAD", default_tax_code: "" });
+  const [form, setForm] = useState({ ...EMPTY_CUST });
+  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(null);
+  const [taxProposal, setTaxProposal] = useState(null);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Country + region → propose the applicable tax configuration from the central
+  // engine (no rate hardcoded here).
+  useEffect(() => {
+    if (!form.country) { setTaxProposal(null); return; }
+    api.getTaxJurisdictionConfig({ country: form.country, region: form.region || undefined })
+      .then((cfg) => {
+        setTaxProposal(cfg);
+        setForm((f) => ({ ...f, jurisdiction: cfg.jurisdiction, default_tax_code: cfg.default_tax_code || f.default_tax_code }));
+      }).catch(() => setTaxProposal(null));
+  }, [form.country, form.region]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const create = async () => {
-    try { await api.arCreateCustomer(cid, form); toast.success("Client créé"); setForm({ name: "", default_currency: "CAD", default_tax_code: "" }); reload(); }
-    catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+    try {
+      const body = { ...form, credit_limit: form.credit_limit ? Number(form.credit_limit) : undefined,
+        due_days: form.due_days ? Number(form.due_days) : undefined };
+      if (form.tax_ids) { const tt = {}; form.tax_ids.split(",").forEach((p) => { const [k, v] = p.split(":"); if (k && v) tt[k.trim()] = v.trim(); }); body.tax_ids = tt; }
+      else delete body.tax_ids;
+      await api.arCreateCustomer(cid, body); toast.success("Client créé"); setForm({ ...EMPTY_CUST }); setTaxProposal(null); setOpen(false); reload();
+    } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
   };
+  const F = (k, label, props = {}) => (
+    <div><label className="text-[11px] uppercase text-slate-500">{label}</label>
+      <Input data-testid={`cust-${k}`} value={form[k]} onChange={(e) => set(k, props.upper ? e.target.value.toUpperCase() : e.target.value)} className="mt-1 h-9 w-full" placeholder={props.ph || ""} /></div>
+  );
   return (
     <div className="space-y-4" data-testid="ar-customers-tab">
-      <div className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white p-3">
-        <div><label className="text-[11px] uppercase text-slate-500">Nom</label>
-          <Input data-testid="cust-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1 h-9 w-52" /></div>
-        <div><label className="text-[11px] uppercase text-slate-500">Devise</label>
-          <Input data-testid="cust-currency" value={form.default_currency} onChange={(e) => setForm({ ...form, default_currency: e.target.value.toUpperCase() })} className="mt-1 h-9 w-24" /></div>
-        <div><label className="text-[11px] uppercase text-slate-500">Code taxe défaut</label>
-          <select data-testid="cust-tax" value={form.default_tax_code} onChange={(e) => setForm({ ...form, default_tax_code: e.target.value })} className="mt-1 h-9 w-40 rounded-md border border-slate-200 px-2 text-sm">
-            <option value="">—</option>{taxCodes.map((t) => <option key={t.code} value={t.code}>{t.code}</option>)}
-          </select></div>
-        <Button data-testid="cust-create" onClick={create} disabled={!form.name.trim()} className="h-9 gap-1 bg-[#063044] text-white"><Plus size={14}/> Créer</Button>
-      </div>
+      <Button data-testid="cust-toggle" onClick={() => setOpen((v) => !v)} className="h-9 gap-1 bg-[#063044] text-white"><Plus size={14}/> Nouveau client</Button>
+      {open && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="cust-form">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+            {F("name", "Nom / Raison sociale")}
+            {F("code", "N° client")}
+            {F("billing_email", "Courriel facturation")}
+            {F("phone", "Téléphone")}
+            {F("billing_address", "Adresse facturation")}
+            {F("shipping_address", "Adresse livraison")}
+            <div><label className="text-[11px] uppercase text-slate-500">Pays</label>
+              <select data-testid="cust-country" value={form.country} onChange={(e) => set("country", e.target.value) || set("region", "")} className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-sm">
+                {COUNTRIES.map((c) => <option key={c.v} value={c.v}>{c.l}</option>)}</select></div>
+            <div><label className="text-[11px] uppercase text-slate-500">{form.country === "CH" ? "Canton" : "Province / Territoire"}</label>
+              <select data-testid="cust-region" value={form.region} onChange={(e) => set("region", e.target.value)} disabled={!REGIONS[form.country]} className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-sm disabled:bg-slate-50">
+                <option value="">—</option>{(REGIONS[form.country] || []).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
+            {F("language", "Langue")}
+            <div><label className="text-[11px] uppercase text-slate-500">Devise facturation</label>
+              <Input data-testid="cust-currency" value={form.default_currency} onChange={(e) => set("default_currency", e.target.value.toUpperCase())} className="mt-1 h-9 w-full" /></div>
+            {F("payment_terms", "Conditions paiement", { ph: "Net 30" })}
+            {F("due_days", "Échéance (jours)", { ph: "30" })}
+            {F("tax_regime", "Régime fiscal", { ph: "Standard / Exempté…" })}
+            {F("customer_po", "Référence / PO client")}
+            {F("credit_limit", "Limite de crédit")}
+            {F("tax_ids", "Identifiants fiscaux", { ph: "TVA:CHE-123, GST:456" })}
+            {F("internal_notes", "Notes internes")}
+          </div>
+          {/* Proposition fiscale automatique (moteur central) */}
+          {form.country && (
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3" data-testid="cust-tax-proposal">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[11px] font-700 uppercase text-slate-500">Configuration fiscale proposée {taxProposal?.jurisdiction ? `· ${taxProposal.jurisdiction}` : ""}</span>
+                {taxProposal && !taxProposal.supported && <span className="text-[11px] text-amber-600">Juridiction à configurer manuellement</span>}
+              </div>
+              {taxProposal ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5" data-testid="cust-tax-codes">
+                    {taxProposal.tax_codes.filter((c) => c.tax_kind === "taxable").map((c) => (
+                      <button key={c.code} type="button" data-testid={`cust-tax-pick-${c.code}`} onClick={() => set("default_tax_code", c.code)}
+                        className={`rounded-full border px-3 py-1 text-xs font-600 transition ${form.default_tax_code === c.code ? "border-[#22C55E] bg-[#22C55E]/10 text-[#063044]" : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"}`}>
+                        {c.label} · {c.components.map((k) => `${(k.rate * 100).toFixed(k.rate * 100 % 1 ? 3 : 0)}%`).join(" + ") || "0%"}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-slate-400">Défaut du client — modifiable par un utilisateur autorisé. Les taux sont versionnés : une facture historique n'est jamais recalculée.</p>
+                </div>
+              ) : <p className="text-xs text-slate-400">Sélectionnez un pays (et une province/canton) pour proposer la configuration.</p>}
+            </div>
+          )}
+          <div className="mt-3"><Button data-testid="cust-create" onClick={create} disabled={!form.name.trim()} className="h-9 gap-1 bg-[#22C55E] text-white"><Plus size={14}/> Créer le client</Button></div>
+        </div>
+      )}
       <div className="space-y-2">
         {customers.length === 0 && <p className="text-sm text-slate-400" data-testid="ar-customers-empty">Aucun client.</p>}
         {customers.map((c) => (
-          <div key={c.id} data-testid={`cust-row-${c.id}`} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
-            <div><span className="font-600 text-[#0F172A]">{c.name}</span> <span className="ml-2 text-xs text-slate-400">{c.default_currency} · {c.default_tax_code || "—"}</span></div>
-            {c.credit_balance > 0 && <span className="text-xs font-600 text-teal-600" data-testid={`cust-credit-${c.id}`}>Crédit dispo : {money(c.credit_balance, c.default_currency)}</span>}
+          <div key={c.id} data-testid={`cust-row-${c.id}`} className="rounded-xl border border-slate-200 bg-white p-3">
+            <div className="flex cursor-pointer items-center justify-between" onClick={() => setExpanded(expanded === c.id ? null : c.id)}>
+              <div className="flex items-center gap-2">
+                {expanded === c.id ? <ChevronDown size={15} className="text-slate-400"/> : <ChevronRight size={15} className="text-slate-400"/>}
+                <span className="font-600 text-[#0F172A]">{c.name}</span>
+                <span className="text-xs text-slate-400">{c.code ? `#${c.code} · ` : ""}{c.default_currency} · {c.default_tax_code || "—"}</span>
+              </div>
+              {c.credit_balance > 0 && <span className="text-xs font-600 text-teal-600" data-testid={`cust-credit-${c.id}`}>Crédit dispo : {money(c.credit_balance, c.default_currency)}</span>}
+            </div>
+            {expanded === c.id && (
+              <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-600 lg:grid-cols-3" data-testid={`cust-detail-${c.id}`}>
+                <div><span className="text-slate-400">Courriel : </span>{c.billing_email || "—"}</div>
+                <div><span className="text-slate-400">Tél : </span>{c.phone || "—"}</div>
+                <div><span className="text-slate-400">Conditions : </span>{c.payment_terms || "—"}{c.due_days ? ` (${c.due_days} j)` : ""}</div>
+                <div><span className="text-slate-400">Facturation : </span>{c.billing_address || "—"}</div>
+                <div><span className="text-slate-400">Livraison : </span>{c.shipping_address || "—"}</div>
+                <div><span className="text-slate-400">Juridiction : </span>{c.jurisdiction || c.country || "—"}{c.region ? ` / ${c.region}` : ""}</div>
+                <div><span className="text-slate-400">Régime fiscal : </span>{c.tax_regime || "—"}</div>
+                <div><span className="text-slate-400">Taxe défaut : </span>{c.default_tax_code || "—"}</div>
+                <div><span className="text-slate-400">Réf/PO : </span>{c.customer_po || "—"}</div>
+                <div><span className="text-slate-400">Limite crédit : </span>{c.credit_limit != null ? money(c.credit_limit, c.default_currency) : "—"}</div>
+                <div><span className="text-slate-400">N° fiscaux : </span>{Object.entries(c.tax_ids || {}).map(([k, v]) => `${k}:${v}`).join(", ") || "—"}</div>
+                <div className="col-span-2 lg:col-span-3"><span className="text-slate-400">Notes : </span>{c.internal_notes || "—"}</div>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -171,10 +484,10 @@ function ConfigTab({ cid, reload }) {
   );
 }
 
-function InvoicesTab({ cid, customers, taxCodes, periods, invoices, reload }) {
+function InvoicesTab({ cid, customers, taxCodes, periods, invoices, reload, custName }) {
   const [creating, setCreating] = useState(false);
   const emptyLine = { description: "", qty: 1, unit_price: "", tax_code: taxCodes[0]?.code || "EXEMPT" };
-  const [form, setForm] = useState({ customer_id: "", period_id: "", currency: "", fx_rate: "", issue_date: "", lines: [{ ...emptyLine }] });
+  const [form, setForm] = useState({ customer_id: "", period_id: "", currency: "", fx_rate: "", issue_date: "", due_date: "", lines: [{ ...emptyLine }] });
 
   const create = async () => {
     try {
@@ -182,7 +495,7 @@ function InvoicesTab({ cid, customers, taxCodes, periods, invoices, reload }) {
         lines: form.lines.map((l) => ({ ...l, qty: Number(l.qty || 1), unit_price: Number(l.unit_price || 0) })) };
       await api.arCreateInvoice(cid, body);
       toast.success("Facture créée"); setCreating(false);
-      setForm({ customer_id: "", period_id: "", currency: "", fx_rate: "", issue_date: "", lines: [{ ...emptyLine }] });
+      setForm({ customer_id: "", period_id: "", currency: "", fx_rate: "", issue_date: "", due_date: "", lines: [{ ...emptyLine }] });
       reload();
     } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
   };
@@ -200,7 +513,10 @@ function InvoicesTab({ cid, customers, taxCodes, periods, invoices, reload }) {
                 <option value="">—</option>{periods.map((p) => <option key={p.id} value={p.id}>{p.code} ({p.status})</option>)}</select></div>
             <div><label className="text-[11px] uppercase text-slate-500">Devise</label><Input data-testid="inv-currency" value={form.currency} placeholder="défaut client" onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} className="mt-1 h-9 w-28"/></div>
             <div><label className="text-[11px] uppercase text-slate-500">Taux FX</label><Input data-testid="inv-fx" value={form.fx_rate} placeholder="auto" onChange={(e) => setForm({ ...form, fx_rate: e.target.value })} className="mt-1 h-9 w-24"/></div>
+            <div><label className="text-[11px] uppercase text-slate-500">&nbsp;</label>
+              <Button type="button" variant="outline" size="sm" disabled title="Intégration OANDA à venir (taux à la date de transaction)" data-testid="inv-fetch-rate" className="mt-1 h-9 gap-1 text-slate-400"><RefreshCw size={13}/> Récupérer le taux</Button></div>
             <div><label className="text-[11px] uppercase text-slate-500">Date</label><Input data-testid="inv-date" type="date" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} className="mt-1 h-9 w-40"/></div>
+            <div><label className="text-[11px] uppercase text-slate-500">Échéance</label><Input data-testid="inv-due" type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className="mt-1 h-9 w-40"/></div>
           </div>
           {form.lines.map((l, i) => (
             <div key={i} className="flex flex-wrap items-end gap-2" data-testid={`inv-line-${i}`}>
@@ -221,38 +537,55 @@ function InvoicesTab({ cid, customers, taxCodes, periods, invoices, reload }) {
       )}
       <div className="space-y-2">
         {invoices.length === 0 && <p className="text-sm text-slate-400" data-testid="ar-invoices-empty">Aucune facture.</p>}
-        {invoices.map((inv) => <InvoiceRow key={inv.id} cid={cid} inv={inv} reload={reload} />)}
+        {invoices.map((inv) => <InvoiceRow key={inv.id} cid={cid} inv={inv} reload={reload} custName={custName} />)}
       </div>
     </div>
   );
 }
 
-function InvoiceRow({ cid, inv, reload }) {
+function InvoiceRow({ cid, inv, reload, custName }) {
   const [payOpen, setPayOpen] = useState(false);
   const [cnOpen, setCnOpen] = useState(false);
+  const [drillOpen, setDrillOpen] = useState(false);
+  const [source, setSource] = useState(null);
   const [pay, setPay] = useState({ amount: "", fx_rate: "" });
   const [cn, setCn] = useState({ invoice_line_index: 0, net_credit: "" });
   const M = INV_STATUS[inv.status] || INV_STATUS.draft;
   const act = async (fn, msg) => { try { await fn(); toast.success(msg); reload(); } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); } };
   const doPay = async () => { try { await api.arCreatePayment(cid, { invoice_id: inv.id, amount: Number(pay.amount), fx_rate: pay.fx_rate ? Number(pay.fx_rate) : undefined }); toast.success("Encaissement enregistré"); setPayOpen(false); setPay({ amount: "", fx_rate: "" }); reload(); } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); } };
   const doCn = async () => { try { const c = await api.arCreateCreditNote(cid, { invoice_id: inv.id, lines: [{ invoice_line_index: Number(cn.invoice_line_index), net_credit: Number(cn.net_credit) }] }); await api.arSubmitCreditNote(cid, c.id); toast.success("Note de crédit créée & soumise (à approuver)"); setCnOpen(false); setCn({ invoice_line_index: 0, net_credit: "" }); reload(); } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); } };
+  const loadSource = async () => {
+    const next = !drillOpen; setDrillOpen(next);
+    if (next && inv.journal_entry_id && !source) {
+      try { setSource(await api.arJournalSource(cid, inv.journal_entry_id)); } catch (e) { /* ignore */ }
+    }
+  };
   return (
     <div data-testid={`inv-row-${inv.id}`} className="rounded-xl border border-slate-200 bg-white p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <span className="font-mono-data text-sm font-600 text-[#0F172A]">{inv.number || inv.id.slice(0, 10)}</span>
           <span className={`rounded-full px-2 py-0.5 text-[11px] font-600 ${M.cls}`} data-testid={`inv-status-${inv.id}`}>{M.label}</span>
-          <span className="text-sm text-slate-500">Total {money(inv.total, inv.currency)} · Solde {money(inv.balance, inv.currency)}</span>
+          <span className="text-sm text-slate-500">{custName(inv.customer_id)} · Total {money(inv.total, inv.currency)} · Solde {money(inv.balance, inv.currency)}</span>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {inv.status === "draft" && <Button size="sm" variant="outline" className="h-8 gap-1" data-testid={`inv-submit-${inv.id}`} onClick={() => act(() => api.arSubmitInvoice(cid, inv.id), "Soumise")}><Send size={13}/>Soumettre</Button>}
-          {inv.status === "submitted" && <Button size="sm" variant="outline" className="h-8 gap-1" data-testid={`inv-approve-${inv.id}`} onClick={() => act(() => api.arApproveInvoice(cid, inv.id), "Approuvée")}><ThumbsUp size={13}/>Approuver</Button>}
+          {inv.status === "submitted" && <Button size="sm" variant="outline" className="h-8 gap-1" data-testid={`inv-approve-${inv.id}`} onClick={() => act(() => api.arApproveInvoice(cid, inv.id), "Approuvée (PDF figé)")}><ThumbsUp size={13}/>Approuver</Button>}
           {inv.status === "approved" && <Button size="sm" className="h-8 gap-1 bg-emerald-600 text-white" data-testid={`inv-post-${inv.id}`} onClick={() => act(() => api.arPostInvoice(cid, inv.id), "Comptabilisée")}><Stamp size={13}/>Comptabiliser</Button>}
+          {inv.source_document_id && <Button size="sm" variant="outline" className="h-8 gap-1" data-testid={`inv-pdf-${inv.id}`} onClick={() => openDocument(cid, inv.source_document_id)}><FileDown size={13}/>PDF</Button>}
+          {inv.journal_entry_id && <Button size="sm" variant="ghost" className="h-8 gap-1" data-testid={`inv-drill-${inv.id}`} onClick={loadSource}><Link2 size={13}/>Traçabilité</Button>}
           {inv.status === "posted" && inv.amount_paid === 0 && <Button size="sm" variant="outline" className="h-8 gap-1 text-rose-600" data-testid={`inv-void-${inv.id}`} onClick={() => act(() => api.arVoidInvoice(cid, inv.id), "Extournée")}><RotateCcw size={13}/>Extourner</Button>}
           {["posted", "partially_paid"].includes(inv.status) && <Button size="sm" variant="outline" className="h-8 gap-1" data-testid={`inv-pay-${inv.id}`} onClick={() => setPayOpen((v) => !v)}><Banknote size={13}/>Encaisser</Button>}
           {["posted", "partially_paid", "paid"].includes(inv.status) && <Button size="sm" variant="outline" className="h-8 gap-1" data-testid={`inv-credit-${inv.id}`} onClick={() => setCnOpen((v) => !v)}><FileMinus size={13}/>Note de crédit</Button>}
         </div>
       </div>
+      {drillOpen && (
+        <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-600" data-testid={`inv-drill-panel-${inv.id}`}>
+          <p className="font-600 text-[#063044]">Chaîne de traçabilité</p>
+          <p className="mt-1">Facture {inv.number} → Document source {inv.source_document_id ? <button className="text-teal-600 underline" data-testid={`drill-doc-${inv.id}`} onClick={() => openDocument(cid, inv.source_document_id)}>PDF v{inv.source_document_version}</button> : "—"} → Écriture <span className="font-mono-data">{inv.journal_entry_id}</span></p>
+          {source && <p className="mt-1 text-slate-500">Retour depuis journal : source = {source.source_type} · {source.external_id} · doc {source.source_document_id || "—"}</p>}
+        </div>
+      )}
       {payOpen && (
         <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-3" data-testid={`inv-pay-form-${inv.id}`}>
           <div><label className="text-[11px] uppercase text-slate-500">Montant ({inv.currency})</label><Input data-testid={`pay-amount-${inv.id}`} value={pay.amount} onChange={(e) => setPay({ ...pay, amount: e.target.value })} className="mt-1 h-9 w-28"/></div>

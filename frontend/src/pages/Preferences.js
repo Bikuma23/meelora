@@ -6,8 +6,16 @@ import { useLang } from "../context/LanguageContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Sun, Moon, RotateCcw, SlidersHorizontal, Languages } from "lucide-react";
+import { Sun, Moon, RotateCcw, SlidersHorizontal, Languages, Lock } from "lucide-react";
 import { toast } from "sonner";
+import { setToken } from "../lib/token";
+
+const LANGS = [
+  { code: "de", label: "Allemand", enabled: false },
+  { code: "en", label: "Anglais", enabled: true },
+  { code: "fr", label: "Français", enabled: true },
+  { code: "it", label: "Italien", enabled: false },
+];
 
 const SCEN = { actuel: "Salaires actuels", ca: "Budget CA", revue1: "Revue Budgétaire 1", revue2: "Revue Budgétaire 2" };
 const EMP_SORT = { employee_number: "#", title: "Titre", name: "Nom", department: "Département", employment_type: "Type", security_class: "Classe de sécurité", current_annual_salary: "Salaire", age: "Âge", seniority: "Ancienneté" };
@@ -73,6 +81,57 @@ function EmailChangeCard() {
   );
 }
 
+function PasswordChangeCard() {
+  const { t } = useLang();
+  const [open, setOpen] = useState(false);
+  const [cur, setCur] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (next !== confirm) return toast.error(t("Les mots de passe ne correspondent pas"));
+    if (next.length < 8 || !/[a-zA-Z]/.test(next) || !/[0-9]/.test(next))
+      return toast.error(t("Au moins 8 caractères, avec une lettre et un chiffre"));
+    setBusy(true);
+    try {
+      const r = await api.changePassword(cur, next);
+      if (r.token) setToken(r.token);
+      toast.success(t("Mot de passe mis à jour"));
+      setOpen(false); setCur(""); setNext(""); setConfirm("");
+    } catch (e) { toast.error(e.response?.data?.detail || t("Modification impossible")); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="card p-5" data-testid="password-card">
+      <h3 className="mb-1 flex items-center gap-2 text-sm font-700"><Lock size={16} className="text-[#22C55E]" /> {t("Mot de passe")}</h3>
+      <p className="mb-3 text-xs text-slate-500">{t("Opération sensible : votre mot de passe actuel est requis. Personne, y compris un administrateur, ne peut connaître ou fixer votre mot de passe.")}</p>
+      {!open ? (
+        <Button variant="outline" size="sm" data-testid="password-change-open" onClick={() => setOpen(true)}>{t("Modifier le mot de passe")}</Button>
+      ) : (
+        <div className="space-y-3 rounded-xl border border-slate-200 p-4" data-testid="password-change-panel">
+          <div>
+            <Label className="text-[11px] uppercase text-slate-500">{t("Mot de passe actuel")}</Label>
+            <Input type="password" value={cur} onChange={(e) => setCur(e.target.value)} data-testid="password-current" autoComplete="current-password" />
+          </div>
+          <div>
+            <Label className="text-[11px] uppercase text-slate-500">{t("Nouveau mot de passe")}</Label>
+            <Input type="password" value={next} onChange={(e) => setNext(e.target.value)} data-testid="password-new" autoComplete="new-password" />
+            <p className="mt-1 text-[11px] text-slate-400">{t("Au moins 8 caractères, avec une lettre et un chiffre.")}</p>
+          </div>
+          <div>
+            <Label className="text-[11px] uppercase text-slate-500">{t("Confirmer le nouveau mot de passe")}</Label>
+            <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} data-testid="password-confirm" autoComplete="new-password" />
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" disabled={busy || !cur || !next} onClick={submit} data-testid="password-change-submit">{t("Enregistrer")}</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setOpen(false); setCur(""); setNext(""); setConfirm(""); }}>{t("Annuler")}</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Preferences() {
   const { user } = useAuth();
   const { t, lang, setLang } = useLang();
@@ -122,6 +181,8 @@ export default function Preferences() {
 
       <EmailChangeCard />
 
+      <PasswordChangeCard />
+
       <div className="card p-5" data-testid="avatar-card">
         <h3 className="mb-1 text-sm font-700">{t("Avatar")}</h3>
         <p className="mb-3 text-xs text-slate-500">{t("Choisissez la couleur de votre avatar (initiale de votre nom).")}</p>
@@ -138,15 +199,14 @@ export default function Preferences() {
       <div className="card p-5" data-testid="lang-card">
         <h3 className="mb-1 flex items-center gap-2 text-sm font-700"><Languages size={16} className="text-[#22C55E]" /> {t("Langue")}</h3>
         <p className="mb-3 text-xs text-slate-500">{t("Choisissez la langue de l'interface. Ce réglage est propre à votre compte.")}</p>
-        <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
-          <button data-testid="lang-fr-btn" onClick={() => changeLang("fr")}
-            className={`rounded-lg px-4 py-2 text-sm font-600 transition-colors ${lang === "fr" ? "bg-[#0F172A] text-white shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
-            {t("Français")}
-          </button>
-          <button data-testid="lang-en-btn" onClick={() => changeLang("en")}
-            className={`rounded-lg px-4 py-2 text-sm font-600 transition-colors ${lang === "en" ? "bg-[#0F172A] text-white shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
-            {t("Anglais (US)")}
-          </button>
+        <div className="inline-flex flex-wrap rounded-xl border border-slate-200 bg-slate-50 p-1">
+          {LANGS.map((l) => (
+            <button key={l.code} data-testid={`lang-${l.code}-btn`} disabled={!l.enabled}
+              onClick={() => l.enabled && changeLang(l.code)}
+              className={`rounded-lg px-4 py-2 text-sm font-600 transition-colors ${lang === l.code ? "bg-[#0F172A] text-white shadow-sm" : l.enabled ? "text-slate-500 hover:text-slate-700" : "cursor-not-allowed text-slate-300"}`}>
+              {t(l.label)}{!l.enabled && <span className="ml-1 text-[10px] text-slate-300">· {t("bientôt")}</span>}
+            </button>
+          ))}
         </div>
       </div>
 

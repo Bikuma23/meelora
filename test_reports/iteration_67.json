@@ -1,0 +1,39 @@
+{
+  "summary": "Frontend testing of Meelora V2 cross-cutting UX slice (Company Home, header cleanup, avatar menu reorg, password self-service change, 4-language DE/IT-disabled card, Client fiche country→region→tax proposal, invoice OANDA disabled placeholder). All 9 request checkpoints pass on persona_finance@accslegro.com. Password credentials were reverted back to 'persona123' in the same session.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "SalesAR Factures form (inv-period select)", "issues": ["React hydration warning: <span> cannot be a child of <option>. The visual editor injects a <span> inside <option> elements produced by the periods.map(). Not user-visible but pollutes console. Consider stripping x-source annotations from <option> children or rendering plain text."]}
+    ]
+  },
+  "detailed_results": {
+    "1_login_landing": "PASS — persona_finance lands directly on data-testid=company-home. Header shows breadcrumb 'MANDAT › ACCUEIL'. No data-testid=company-selector in header (correctly removed).",
+    "2_company_home_content": "PASS — 'Bienvenue chez meelora' + identity line (25 avenue Dumas · Genève, Genève · 1206 · CA) + KPIs (kpi-revenue-month 3 500,00 CHF, kpi-revenue-ytd 4 800,00 CHF, kpi-open-invoices 3 (2 918,70 CHF), kpi-collections-month 1 081,00 CHF).",
+    "3_sidebar_navigation": "PASS — Sidebar 'MANDAT ACTIF meelora' switcher visible. Comptabilité popover opens; clicking 'Ventes & Clients' navigates to data-testid=ar-page. No regression.",
+    "4_avatar_menu": "PASS — menu-profile, menu-language (with 4 lang-option-*, DE+IT disabled, EN+FR enabled), logout-btn all present. menu-security is NOT present (correctly removed).",
+    "5_mon_profil_cards": "PASS — preferences-page + password-card + lang-card visible. lang-de-btn & lang-it-btn are disabled; lang-en-btn & lang-fr-btn enabled.",
+    "6_password_change_flow": "PASS — Wrong current → toast 'Mot de passe actuel incorrect'. Mismatch → 'Les mots de passe ne correspondent pas'. Weak → 'Au moins 8 caractères, avec une lettre et un chiffre'. Successful change persona123 → persona999a → success toast 'Mot de passe mis à jour'. Immediately reverted persona999a → persona123 → success toast. Fresh login with persona123 works (confirmed on next session). Session stayed logged in throughout, no crash.",
+    "7_tax_proposal": "PASS — cust-country=CA + cust-region=QC → cust-tax-proposal panel with cust-tax-pick-GST_QST. Switching to CH → panel refreshes with VAT codes (VAT taux normal 8.100%, VAT taux réduit 2.600%). Confirms central tax engine consumption.",
+    "8_customer_creation": "PASS — Created TEST customer with CA+QC. Row appears with data-testid=cust-row-<id> (note: request spec says 'cust-row' but actual pattern is 'cust-row-{id}'). Expanded row shows Juridiction: CA-QC/QC, Conditions: NET30 (30 j), Taxe défaut: GST_QST, Réf/PO row present.",
+    "9_invoice_oanda_placeholder": "PASS — Factures → 'Nouvelle facture' → data-testid=inv-fetch-rate present, disabled, labeled 'Récupérer le taux'.",
+    "10_console": "9-13 console errors (mostly 403/404 on unrelated resource endpoints for features not accessible to persona_finance, plus one React hydration warning about <span> inside <option>). None block functionality."
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional/low priority: fix React hydration warning caused by visual-editor <span> being injected inside <option> in SalesAR InvoicesTab period select (line ~513). Rendering `{p.code}` without wrapping annotation would silence the console noise.",
+    "Documentation nit: the review request references data-testid=cust-row but the actual attribute is cust-row-{id}. Adjust either the docs or add a parent cust-row wrapper — no code change strictly needed."
+  ],
+  "critical_code_review_comments": [
+    "Layout.js is heavy (>700 lines suspected based on Layout line 749 references). Consider splitting header/sidebar/main scaffolding into subcomponents.",
+    "Multiple 403/404 network errors on Company Home suggest the frontend fetches endpoints not scoped to the user role. Consider gating requests by capability to avoid noisy consoles."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (skipped per request)", "frontend": "100%" },
+  "test_credentials": "persona_finance@accslegro.com / persona123 (verified working at end of test — successfully reverted).",
+  "seed_data_creation": "Created two TEST customers ('TEST Client <timestamp>') on Meelora (CA-QC, GST_QST). Safe test data; can be pruned by main agent if desired.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All A3 UX slice front-end pieces verified end-to-end on persona_finance. Password credentials are stable at persona123. Two TEST customers were left in the Meelora Clients list. Console hydration warning on <option><span> is the only non-blocking issue worth revisiting."
+}

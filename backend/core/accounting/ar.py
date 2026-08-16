@@ -26,7 +26,16 @@ from fastapi import HTTPException
 from ..financial import journal as journal_service
 from ..financial import fx as fx_service
 from ..financial import tax_engine
+from ..financial import documents as doc_service
+from . import ar_pdf
 from .gl import _assert_postable_period, _get_period
+
+# Full customer referential (Section 2) — extensible, jurisdiction-agnostic.
+_CUSTOMER_FIELDS = (
+    "code", "name", "emails", "billing_email", "phone", "billing_address", "shipping_address",
+    "contacts", "jurisdiction", "country", "region", "language", "default_currency", "payment_terms",
+    "due_days", "tax_regime", "customer_po", "credit_limit", "tax_ids", "tax_exemptions", "default_tax_code",
+    "default_revenue_account_code", "dimensions", "internal_notes", "attachments", "status")
 
 INVOICE_STATUSES = ("draft", "submitted", "approved", "posted", "partially_paid", "paid", "void")
 CREDIT_STATUSES = ("draft", "submitted", "approved", "posted")
@@ -84,10 +93,18 @@ async def set_mapping(db, workspace_id, company_id, payload):
 def public_customer(d):
     return {"id": d.get("_id"), "workspace_id": d.get("workspace_id"), "company_id": d.get("company_id"),
             "code": d.get("code"), "name": d.get("name"), "emails": d.get("emails", []),
-            "billing_address": d.get("billing_address"), "tax_ids": d.get("tax_ids", {}),
+            "billing_email": d.get("billing_email"), "phone": d.get("phone"),
+            "billing_address": d.get("billing_address"), "shipping_address": d.get("shipping_address"),
+            "contacts": d.get("contacts", []), "jurisdiction": d.get("jurisdiction"), "country": d.get("country"),
+            "region": d.get("region"), "language": d.get("language"), "payment_terms": d.get("payment_terms"),
+            "due_days": d.get("due_days"), "tax_regime": d.get("tax_regime"), "customer_po": d.get("customer_po"),
+            "credit_limit": d.get("credit_limit"), "tax_ids": d.get("tax_ids", {}),
+            "tax_exemptions": d.get("tax_exemptions", []), "dimensions": d.get("dimensions", {}),
+            "internal_notes": d.get("internal_notes"), "attachments": d.get("attachments", []),
             "default_tax_code": d.get("default_tax_code"), "default_currency": d.get("default_currency"),
             "default_revenue_account_code": d.get("default_revenue_account_code"),
-            "status": d.get("status", "active"), "credit_balance": d.get("credit_balance", 0.0)}
+            "status": d.get("status", "active"), "credit_balance": d.get("credit_balance", 0.0),
+            "audit": d.get("audit", [])}
 
 
 async def list_customers(db, workspace_id, company_id):
@@ -105,26 +122,29 @@ async def get_customer(db, workspace_id, company_id, customer_id):
 async def create_customer(db, workspace_id, company_id, user, payload):
     if not payload.get("name"):
         raise HTTPException(status_code=422, detail="Nom du client requis")
+    functional = await _functional_currency(db, workspace_id, company_id)
     doc = {"_id": f"cust_{uuid.uuid4().hex}", "workspace_id": workspace_id, "company_id": company_id,
-           "code": payload.get("code") or "", "name": payload["name"].strip(),
-           "emails": payload.get("emails") or [], "billing_address": payload.get("billing_address"),
-           "tax_ids": payload.get("tax_ids") or {}, "default_tax_code": payload.get("default_tax_code"),
-           "default_currency": (payload.get("default_currency") or await _functional_currency(db, workspace_id, company_id)).upper(),
-           "default_revenue_account_code": payload.get("default_revenue_account_code"),
-           "status": "active", "credit_balance": 0.0, "created_at": _now(), "created_by": user.get("id")}
+           "status": "active", "credit_balance": 0.0, "created_at": _now(), "created_by": user.get("id"),
+           "audit": [_audit("create", user, None, "active")]}
+    for f in _CUSTOMER_FIELDS:
+        if payload.get(f) is not None:
+            doc[f] = payload[f]
+    doc["name"] = payload["name"].strip()
+    doc.setdefault("emails", [])
+    doc["default_currency"] = (payload.get("default_currency") or functional).upper()
     await db.sales_customers.insert_one(doc)
     return public_customer(doc)
 
 
 async def update_customer(db, workspace_id, company_id, user, customer_id, payload):
     await get_customer(db, workspace_id, company_id, customer_id)
-    changes = {k: v for k, v in payload.items() if k in (
-        "code", "name", "emails", "billing_address", "tax_ids", "default_tax_code",
-        "default_currency", "default_revenue_account_code", "status") and v is not None}
+    changes = {k: v for k, v in payload.items() if k in _CUSTOMER_FIELDS and v is not None}
     if "default_currency" in changes:
-        changes["default_currency"] = changes["default_currency"].upper()
+        changes["default_currency"] = str(changes["default_currency"]).upper()
     if changes:
-        await db.sales_customers.update_one({"_id": customer_id}, {"$set": {**changes, "updated_at": _now()}})
+        await db.sales_customers.update_one({"_id": customer_id}, {
+            "$set": {**changes, "updated_at": _now()},
+            "$push": {"audit": _audit("update", user, "active", "active")}})
     return public_customer(await get_customer(db, workspace_id, company_id, customer_id))
 
 
@@ -193,7 +213,9 @@ def public_invoice(d):
             "credited_total": d.get("credited_total", 0.0), "balance": d.get("balance"),
             "journal_entry_id": d.get("journal_entry_id"), "reversal_journal_entry_id": d.get("reversal_journal_entry_id"),
             "created_by": d.get("created_by"), "approved_by": d.get("approved_by"),
-            "posted_by": d.get("posted_by"), "audit": d.get("audit", [])}
+            "posted_by": d.get("posted_by"), "source_document_id": d.get("source_document_id"),
+            "source_document_version": d.get("source_document_version"),
+            "source_document_sha256": d.get("source_document_sha256"), "audit": d.get("audit", [])}
 
 
 async def get_invoice(db, workspace_id, company_id, invoice_id):
@@ -283,8 +305,20 @@ async def approve_invoice(db, ws, co, user, invoice_id):
     d = await _require_invoice_status(db, ws, co, invoice_id, "submitted")
     if d.get("created_by") == user.get("id"):
         raise HTTPException(status_code=403, detail="Séparation des tâches : le créateur ne peut pas approuver sa facture.")
+    # Freeze an immutable PDF source document at approval (versioned).
+    company = await db.companies.find_one({"workspace_id": ws, "$or": [{"id": co}, {"_id": co}]}) or {}
+    customer = await get_customer(db, ws, co, d["customer_id"])
+    number = d.get("number") or await _next_number(db, ws, co, "INV", (d.get("issue_date") or _now())[:4])
+    inv_for_pdf = {**d, "id": d["_id"], "number": number, "status": "approved"}
+    pdf = ar_pdf.build_invoice_pdf(company=company, customer=customer, invoice=inv_for_pdf)
+    stored = await doc_service.store_document(
+        db, ws, co, user, source_type="ar_invoice", source_id=invoice_id, data=pdf,
+        filename=f"facture_{number}.pdf", kind="invoice",
+        meta={"invoice_number": number, "total": d.get("total"), "currency": d.get("currency")})
     await db.sales_invoices.update_one({"_id": invoice_id}, {
-        "$set": {"status": "approved", "approved_by": user.get("id")},
+        "$set": {"status": "approved", "approved_by": user.get("id"), "number": number,
+                 "source_document_id": stored["id"], "source_document_version": stored["version"],
+                 "source_document_sha256": stored["sha256"]},
         "$push": {"audit": _audit("approve", user, "submitted", "approved")}})
     return public_invoice(await get_invoice(db, ws, co, invoice_id))
 
@@ -315,12 +349,14 @@ async def post_invoice(db, ws, co, user, invoice_id):
     ar_func = _money(credits_func)
     gl_lines.insert(0, {"account": mapping["ar_account_code"], "description": "Comptes clients",
                         "debit": ar_func, "credit": 0, "txn_debit": d["total"], "txn_currency": d["currency"]})
-    number = await _next_number(db, ws, co, "INV", (d["issue_date"] or _now())[:4])
+    number = d.get("number") or await _next_number(db, ws, co, "INV", (d["issue_date"] or _now())[:4])
     je = await journal_service.create_workflow_journal_entry(
         db, ws, co, user, financial_year_id=d.get("financial_year_id"), financial_period_id=d["period_id"],
         entry_date=d["issue_date"], reference=number, description=f"Facture {number}",
         lines=gl_lines, external_id=invoice_id, source_type="invoice", source_system="sales",
         transaction_currency=d["currency"], fx=d["fx"])
+    if d.get("source_document_id"):
+        await doc_service.link_journal(db, ws, co, d["source_document_id"], je["_id"])
     await db.sales_invoices.update_one({"_id": invoice_id}, {
         "$set": {"status": "posted", "number": number, "posted_by": user.get("id"), "posted_at": _now(),
                  "journal_entry_id": je["_id"]},
@@ -618,3 +654,80 @@ async def aging(db, ws, co, as_of=None):
                      "currency": inv["currency"], "balance": inv.get("balance"), "balance_functional": bal_func,
                      "due_date": due, "bucket": bkt})
     return {"as_of": as_of, "functional_currency": functional, "buckets": buckets, "rows": rows}
+
+
+# --------------------------------------------------------------------------- #
+# AR overview + bidirectional traceability (journal -> source AR document)
+# --------------------------------------------------------------------------- #
+async def overview(db, ws, co, as_of=None):
+    as_of = as_of or _now()[:10]
+    functional = await _functional_currency(db, ws, co)
+    ag = await aging(db, ws, co, as_of=as_of)
+    open_ar = _money(sum(ag["buckets"].values()))
+    overdue = _money(open_ar - ag["buckets"]["current"])
+    invs = await db.sales_invoices.find({"workspace_id": ws, "company_id": co}).to_list(None)
+    by_status = {}
+    for inv in invs:
+        by_status[inv.get("status")] = by_status.get(inv.get("status"), 0) + 1
+    credits = await db.sales_customer_credits.find(
+        {"workspace_id": ws, "company_id": co, "status": "available"}).to_list(None)
+    unapplied_credit = _money(sum(c.get("remaining", 0) for c in credits))
+    cust_count = await db.sales_customers.count_documents({"workspace_id": ws, "company_id": co})
+    return {"as_of": as_of, "functional_currency": functional, "open_ar_functional": open_ar,
+            "overdue_functional": overdue, "buckets": ag["buckets"], "invoice_counts": by_status,
+            "unapplied_customer_credit": unapplied_credit, "customer_count": cust_count}
+
+
+async def home_kpis(db, ws, co, as_of=None):
+    """Company-home KPIs (functional currency). AR-derived; the route only exposes
+    them when the caller has ACCOUNTING access."""
+    as_of = as_of or _now()[:10]
+    functional = await _functional_currency(db, ws, co)
+    month, year = as_of[:7], as_of[:4]
+
+    def _fx(d):
+        return float((d.get("fx") or {}).get("rate") or 1.0)
+
+    invs = await db.sales_invoices.find({"workspace_id": ws, "company_id": co,
+        "status": {"$in": ["posted", "partially_paid", "paid"]}}).to_list(None)
+    rev_month = rev_ytd = 0.0
+    for inv in invs:
+        net = float(inv.get("subtotal") or 0) * _fx(inv)
+        idate = inv.get("issue_date") or ""
+        if idate[:4] == year:
+            rev_ytd += net
+        if idate[:7] == month:
+            rev_month += net
+    open_invs = await db.sales_invoices.find({"workspace_id": ws, "company_id": co,
+        "status": {"$in": ["posted", "partially_paid"]}}).to_list(None)
+    open_count = sum(1 for i in open_invs if float(i.get("balance") or 0) > 0.001)
+    open_amount = sum(float(i.get("balance") or 0) * _fx(i) for i in open_invs)
+    pays = await db.sales_payments.find({"workspace_id": ws, "company_id": co}).to_list(None)
+    coll_month = sum(float(p.get("amount") or 0) * _fx(p) for p in pays if (p.get("date") or "")[:7] == month)
+    return {"functional_currency": functional, "revenue_month": _money(rev_month), "revenue_ytd": _money(rev_ytd),
+            "open_invoices_count": open_count, "open_invoices_amount": _money(open_amount),
+            "collections_month": _money(coll_month)}
+
+
+async def resolve_journal_source(db, ws, co, journal_entry_id):
+    """journal_entry -> source AR document (invoice / credit note / payment) -> PDF."""
+    je = await db.journal_entries.find_one({"_id": journal_entry_id, "workspace_id": ws, "company_id": co})
+    if not je:
+        raise HTTPException(status_code=404, detail="Écriture introuvable")
+    src = {"journal_entry_id": journal_entry_id, "source_system": je.get("source_system"),
+           "source_type": je.get("source_type"), "external_id": je.get("external_id"),
+           "source_document_id": je.get("source_document_id"), "invoice": None, "credit_note": None, "payment": None}
+    ext = je.get("external_id") or ""
+    if ext.startswith("inv_"):
+        d = await db.sales_invoices.find_one({"_id": ext, "workspace_id": ws, "company_id": co})
+        src["invoice"] = public_invoice(d) if d else None
+    elif ext.startswith("void_"):
+        d = await db.sales_invoices.find_one({"_id": ext[5:], "workspace_id": ws, "company_id": co})
+        src["invoice"] = public_invoice(d) if d else None
+    elif ext.startswith("cn_"):
+        d = await db.sales_credit_notes.find_one({"_id": ext, "workspace_id": ws, "company_id": co})
+        src["credit_note"] = public_credit_note(d) if d else None
+    elif ext.startswith("pay_"):
+        d = await db.sales_payments.find_one({"_id": ext, "workspace_id": ws, "company_id": co})
+        src["payment"] = public_payment(d) if d else None
+    return src
