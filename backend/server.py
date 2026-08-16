@@ -2967,6 +2967,22 @@ async def platform_clients_route(user: dict = Depends(get_current_user)):
     return {"clients": await access_platform.list_clients(db)}
 
 
+@api.get("/platform/companies")
+async def platform_companies_route(user: dict = Depends(get_current_user)):
+    """Full company portfolio for the platform (Meelora + all client companies),
+    independent of the caller's own company_memberships. Platform staff only."""
+    require_platform_staff(user)
+    return {"companies": await access_platform.list_platform_companies(db)}
+
+
+@api.get("/platform/companies/{company_id}/members")
+async def platform_company_members_route(company_id: str, user: dict = Depends(get_current_user)):
+    """Users attached to ONE company (company_memberships priority + legacy
+    bridge), with per-module access. No cross-company leak. Platform staff only."""
+    require_platform_staff(user)
+    return await access_platform.company_members(db, company_id)
+
+
 @api.get("/platform/logs")
 async def platform_logs_route(target_workspace_id: Optional[str] = None,
                               q: Optional[str] = None, event_type: Optional[str] = None,

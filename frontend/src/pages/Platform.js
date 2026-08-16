@@ -7,16 +7,14 @@ import { Input } from "../components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { toast } from "sonner";
 import {
-  Building2, Users, ShieldCheck, Boxes, ScrollText, LifeBuoy, ChevronLeft, ChevronRight,
-  Loader2, Server, Search, CheckCircle2, AlertTriangle, Layers, ArrowRight,
+  Building2, Users, ScrollText, ChevronLeft,
+  Loader2, Server, Search, Layers, ArrowRight, Pencil, Ban, CircleCheck,
 } from "lucide-react";
 import AccessManagement from "./AccessManagement";
 import { CompanyForm, createCompanyWithAdmin } from "./Companies";
 import { useLang } from "../context/LanguageContext";
 
 const MODULE_LABEL = { REPORTING: "Reporting", ACCOUNTING: "Comptabilité", FIXED_ASSETS: "Immobilisations", CONSOLIDATION: "Consolidation" };
-const ENT_LABEL = { active: "Actif", trial: "Essai", inactive: "Inactif", suspended: "Suspendu" };
-const ENT_COLOR = { active: "bg-emerald-100 text-emerald-700", trial: "bg-blue-100 text-blue-700", inactive: "bg-slate-100 text-slate-500", suspended: "bg-amber-100 text-amber-700" };
 
 const fmtDate = (iso) => { try { return new Date(iso).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" }); } catch { return iso || "—"; } };
 
@@ -74,42 +72,77 @@ export function PlatformClients() {
   const { user } = useAuth();
   const { enterMeelora } = useNav();
   const { t } = useLang();
-  const internalWsId = user?.workspace?.id;
   const isPlatformAdmin = user?.platform_role === "platform_admin";
-  const [clients, setClients] = useState(null);
+  const [companies, setCompanies] = useState(null);
   const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [selected, setSelected] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
-  const reload = useCallback(() => { api.platformClients().then((d) => setClients(d.clients || [])).catch(() => setClients([])); }, []);
+  const reload = useCallback(() => {
+    api.platformCompanies().then((d) => setCompanies(d.companies || [])).catch(() => setCompanies([]));
+  }, []);
   useEffect(() => { reload(); }, [reload]);
-  const submitCompany = async (payload) => {
+
+  const submitCreate = async (payload) => {
     setSaving(true);
     try { await createCompanyWithAdmin(payload, t); toast.success(t("Société / client créé")); setFormOpen(false); reload(); }
     catch (e) { toast.error(e.response?.data?.detail || t("Création impossible")); }
     finally { setSaving(false); }
   };
-  if (selected) return <ClientCard client={selected} onBack={() => setSelected(null)} />;
-  if (!clients) return <div className="flex items-center gap-2 text-slate-500"><Loader2 className="animate-spin" size={16} /> Chargement…</div>;
-  const filtered = clients.filter((c) => !q || (c.name || "").toLowerCase().includes(q.toLowerCase()));
-  // Internal Meelora card always first; external clients after.
-  const internal = filtered.filter((c) => c.id === internalWsId);
-  const externals = filtered.filter((c) => c.id !== internalWsId);
+  const submitEdit = async (payload) => {
+    setSaving(true);
+    const body = { ...payload }; delete body._admin_action;
+    try { await api.updateCompany(editing.id, body); toast.success(t("Société mise à jour")); setEditing(null); reload(); }
+    catch (e) { toast.error(e.response?.data?.detail || t("Modification impossible")); }
+    finally { setSaving(false); }
+  };
+
+  if (selected) return <CompanyFicheCard company={selected} isPlatformAdmin={isPlatformAdmin}
+    onBack={() => setSelected(null)} onEdit={(c) => setEditing(c)} />;
+  if (!companies) return <div className="flex items-center gap-2 text-slate-500"><Loader2 className="animate-spin" size={16} /> Chargement…</div>;
+
+  const isActive = (c) => c.status !== "inactive" && c.active !== false;
+  const filtered = companies.filter((c) =>
+    (!q || (c.name || "").toLowerCase().includes(q.toLowerCase()) || (c.company_code || "").toLowerCase().includes(q.toLowerCase()))
+    && (statusFilter === "all" || (statusFilter === "active" ? isActive(c) : !isActive(c))));
+  const internal = filtered.filter((c) => c.is_internal);
+  const externals = filtered.filter((c) => !c.is_internal);
+
+  const EditBtn = ({ c }) => isPlatformAdmin ? (
+    <Button variant="outline" size="sm" className="gap-1" data-testid={`platform-company-edit-${c.id}`} onClick={() => setEditing(c)}>
+      <Pencil size={14} /> Modifier
+    </Button>
+  ) : null;
+  const StatusBadge = ({ c }) => isActive(c)
+    ? <span className="inline-flex items-center gap-1 text-[11px] font-600 text-[#15803D]" data-testid={`platform-company-status-${c.id}`}><CircleCheck size={12}/>Active</span>
+    : <span className="inline-flex items-center gap-1 text-[11px] font-600 text-slate-500" data-testid={`platform-company-status-${c.id}`}><Ban size={12}/>Inactive</span>;
+
   return (
     <div className="space-y-4" data-testid="platform-clients">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-slate-500">Registre central des sociétés utilisant Meelora. La société interne apparaît en premier.</p>
+        <p className="text-sm text-slate-500">Portefeuille des sociétés gérées par Meelora. La société interne apparaît en premier.</p>
         {isPlatformAdmin && (
           <Button className="gap-1.5 bg-[#22C55E] text-[#0F172A] hover:bg-[#22C55E]/90 font-600" data-testid="platform-new-company-btn" onClick={() => setFormOpen(true)}>
             + Nouvelle société / client
           </Button>
         )}
       </div>
-      <div className="relative max-w-sm">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un client…" className="h-11 pl-9" data-testid="platform-clients-search" />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative max-w-sm flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher une société…" className="h-11 pl-9" data-testid="platform-clients-search" />
+        </div>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-11 rounded-lg border border-slate-200 px-3 text-sm" data-testid="platform-company-status-filter">
+          <option value="all">Toutes</option>
+          <option value="active">Actives</option>
+          <option value="inactive">Inactives</option>
+        </select>
       </div>
-      <CompanyForm open={formOpen} onOpenChange={setFormOpen} initial={null} onSubmit={submitCompany} saving={saving} />
+      <CompanyForm open={formOpen} onOpenChange={setFormOpen} initial={null} onSubmit={submitCreate} saving={saving} />
+      {editing && <CompanyForm open={!!editing} onOpenChange={(v) => !v && setEditing(null)} initial={editing} onSubmit={submitEdit} saving={saving} />}
+
       {internal.map((c) => (
         <div key={c.id} data-testid="platform-internal-card"
           className="flex flex-col gap-3 rounded-xl border border-[#15AF97]/40 bg-[#15AF97]/8 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -118,33 +151,159 @@ export function PlatformClients() {
             <div>
               <div className="flex items-center gap-2 font-medium text-[#063044]">{c.name}
                 <span className="rounded-full bg-[#15AF97] px-2 py-0.5 text-[10px] font-semibold uppercase text-white">Société interne</span>
+                <StatusBadge c={c} />
               </div>
-              <div className="text-xs text-slate-500">{c.jurisdiction} · {c.companies_count} société(s) · {c.active_users_count} utilisateur(s)</div>
+              <div className="text-xs text-slate-500">{[c.jurisdiction, c.functional_currency, c.company_code].filter(Boolean).join(" · ")}</div>
             </div>
           </div>
-          <Button className="gap-1.5 bg-[#063044] text-white hover:bg-[#0a4a68]" data-testid="platform-internal-access" onClick={enterMeelora}>
-            Accéder <ArrowRight size={14} />
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <EditBtn c={c} />
+            <Button variant="outline" size="sm" className="gap-1" data-testid={`platform-company-access-${c.id}`} onClick={() => setSelected(c)}>Fiche</Button>
+            <Button className="gap-1.5 bg-[#063044] text-white hover:bg-[#0a4a68]" size="sm" data-testid="platform-internal-access" onClick={enterMeelora}>
+              Accéder <ArrowRight size={14} />
+            </Button>
+          </div>
         </div>
       ))}
       {externals.length === 0 && internal.length > 0 && (
-        <p className="pt-2 text-xs text-slate-400" data-testid="platform-no-clients">Aucun client externe pour le moment.</p>
+        <p className="pt-2 text-xs text-slate-400" data-testid="platform-no-clients">Aucune autre société pour le moment.</p>
       )}
       {externals.map((c) => (
-        <div key={c.id} data-testid={`platform-client-row-${c.id}`}
-          className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-[#15AF97]">
+        <div key={c.id} data-testid={`platform-company-row-${c.id}`}
+          className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-[#15AF97] sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#063044]/8 text-[#063044]"><Building2 size={18} /></span>
             <div>
-              <div className="font-medium text-[#0F172A]">{c.name}</div>
-              <div className="text-xs text-slate-400">{c.jurisdiction} · {c.organization_type} · {c.companies_count} société(s)</div>
+              <div className="flex items-center gap-2 font-medium text-[#0F172A]">{c.name} <StatusBadge c={c} /></div>
+              <div className="text-xs text-slate-400">{[c.jurisdiction, c.functional_currency, c.company_code].filter(Boolean).join(" · ")}</div>
             </div>
           </div>
-          <Button variant="outline" size="sm" data-testid={`platform-client-access-${c.id}`} onClick={() => setSelected(c)}>
-            Accéder <ArrowRight size={14} className="ml-1" />
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <EditBtn c={c} />
+            <Button variant="outline" size="sm" data-testid={`platform-company-access-${c.id}`} onClick={() => setSelected(c)}>
+              Accéder <ArrowRight size={14} className="ml-1" />
+            </Button>
+          </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Fiche détaillée d'une SOCIÉTÉ (portefeuille plateforme) : Aperçu · Utilisateurs
+// · Modules. Action « Modifier » (platform_admin). Les utilisateurs proviennent
+// des company_memberships de CETTE société (aucune fuite inter-sociétés).
+// ---------------------------------------------------------------------------
+const COMPANY_TABS = [
+  { key: "overview", label: "Aperçu", icon: Building2 },
+  { key: "users", label: "Utilisateurs", icon: Users },
+];
+const MEMBERSHIP_ACTIVE = new Set(["active"]);
+
+function CompanyFicheCard({ company, isPlatformAdmin, onBack, onEdit }) {
+  const [tab, setTab] = useState("overview");
+  const isActive = company.status !== "inactive" && company.active !== false;
+  return (
+    <div className="space-y-5" data-testid="company-fiche-card">
+      <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-[#063044]" data-testid="company-fiche-back">
+        <ChevronLeft size={16} /> Sociétés / Clients
+      </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#063044] text-white"><Building2 size={22} /></span>
+          <div>
+            <h3 className="text-lg font-semibold text-[#063044]" data-testid="company-fiche-name">{company.name}
+              {company.is_internal && <span className="ml-2 rounded-full bg-[#15AF97] px-2 py-0.5 text-[10px] font-semibold uppercase text-white">Interne</span>}</h3>
+            <p className="text-xs text-slate-400">{[company.jurisdiction, company.functional_currency, company.company_code, company.id].filter(Boolean).join(" · ")}</p>
+            <p className="mt-1 text-xs">{isActive
+              ? <span className="inline-flex items-center gap-1 font-600 text-[#15803D]"><CircleCheck size={12}/>Active</span>
+              : <span className="inline-flex items-center gap-1 font-600 text-slate-500"><Ban size={12}/>Inactive</span>}</p>
+          </div>
+        </div>
+        {isPlatformAdmin && (
+          <Button variant="outline" className="gap-1.5" data-testid="company-fiche-edit" onClick={() => onEdit(company)}>
+            <Pencil size={15} /> Modifier
+          </Button>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2" data-testid="company-fiche-tabs">
+        {COMPANY_TABS.map((tt) => {
+          const Icon = tt.icon; const on = tab === tt.key;
+          return (
+            <button key={tt.key} onClick={() => setTab(tt.key)} data-testid={`company-tab-${tt.key}`}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${on ? "bg-[#063044] text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+              <Icon size={15} /> {tt.label}
+            </button>
+          );
+        })}
+      </div>
+      <div data-testid={`company-panel-${tab}`}>
+        {tab === "overview" && <CompanyOverviewPanel company={company} />}
+        {tab === "users" && <CompanyUsersPanel companyId={company.id} />}
+      </div>
+    </div>
+  );
+}
+
+function CompanyOverviewPanel({ company }) {
+  const [data] = useTabData(api.platformCompanyMembers, company.id);
+  const count = data && data !== false ? (data.users || []).length : "…";
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <StatCard label="Utilisateurs rattachés" value={count} icon={Users} testid="company-stat-users" />
+      <StatCard label="Devise" value={company.functional_currency || "—"} icon={Layers} testid="company-stat-currency" />
+      <StatCard label="Juridiction" value={company.jurisdiction || "—"} icon={Building2} testid="company-stat-jurisdiction" />
+    </div>
+  );
+}
+
+function CompanyUsersPanel({ companyId }) {
+  const [data] = useTabData(api.platformCompanyMembers, companyId);
+  if (data === null) return <Loading />;
+  if (data === false) return <p className="text-sm text-red-500">Erreur de chargement.</p>;
+  const users = data.users || [];
+  const admins = users.filter((u) => u.role === "admin");
+  const active = users.filter((u) => u.role !== "admin" && MEMBERSHIP_ACTIVE.has(u.membership_status));
+  const suspended = users.filter((u) => u.role !== "admin" && !MEMBERSHIP_ACTIVE.has(u.membership_status));
+
+  const Row = (u) => (
+    <div key={u.identity.id} className="rounded-xl border border-slate-200 bg-white p-4" data-testid={`company-user-${u.identity.id}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 font-medium text-[#0F172A]">
+            {u.identity.name || u.identity.email}
+            {u.identity.platform_role && <span className="rounded-full bg-[#063044] px-2 py-0.5 text-[10px] uppercase text-white">{u.identity.platform_role}</span>}
+          </div>
+          <div className="text-sm text-slate-500" data-testid={`company-user-email-${u.identity.id}`}>{u.identity.email}</div>
+          <div className="mt-1 flex flex-wrap gap-1.5 text-[11px]">
+            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">membership: {u.membership_type} · {u.role || "—"}</span>
+            <span className={`rounded px-1.5 py-0.5 ${MEMBERSHIP_ACTIVE.has(u.membership_status) ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{u.membership_status}</span>
+            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">identité: {u.identity.status}</span>
+          </div>
+        </div>
+        <div className="shrink-0 text-right text-[11px] text-slate-500" data-testid={`company-user-modules-${u.identity.id}`}>
+          {(u.modules || []).length === 0 ? <span className="text-slate-400">Aucun module</span>
+            : (u.modules || []).map((m) => <div key={m.module_code}>{MODULE_LABEL[m.module_code] || m.module_code} · <b>{m.level}</b></div>)}
+        </div>
+      </div>
+    </div>
+  );
+
+  const Section = ({ title, list, testid }) => (
+    <div className="space-y-2" data-testid={testid}>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{title} ({list.length})</p>
+      {list.length === 0 ? <p className="text-sm text-slate-400">—</p> : list.map(Row)}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4" data-testid="company-users-panel">
+      {users.length === 0 && <p className="text-sm text-slate-500" data-testid="company-users-empty">Aucun utilisateur rattaché à cette société.</p>}
+      <Section title="Administrateurs" list={admins} testid="company-users-admins" />
+      <Section title="Utilisateurs actifs" list={active} testid="company-users-active" />
+      <Section title="Suspendus / inactifs" list={suspended} testid="company-users-suspended" />
+      <p className="pt-1 text-[11px] text-slate-400">Vue lecture seule. Le personnel plateforme n'obtient aucun accès financier implicite.</p>
     </div>
   );
 }
@@ -172,54 +331,6 @@ export function PlatformMeeloraManage() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Fiche client Meelora
-// ---------------------------------------------------------------------------
-const TABS = [
-  { key: "overview", label: "Aperçu", icon: Building2 },
-  { key: "admins", label: "Administrateurs", icon: ShieldCheck },
-  { key: "users", label: "Utilisateurs", icon: Users },
-  { key: "modules", label: "Modules", icon: Boxes },
-  { key: "logs", label: "Logs", icon: ScrollText },
-  { key: "support", label: "Support", icon: LifeBuoy },
-];
-
-function ClientCard({ client, onBack }) {
-  const [tab, setTab] = useState("overview");
-  return (
-    <div className="space-y-5" data-testid="client-card">
-      <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-[#063044]" data-testid="client-card-back">
-        <ChevronLeft size={16} /> Tous les clients
-      </button>
-      <div className="flex items-center gap-3">
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#063044] text-white"><Building2 size={22} /></span>
-        <div>
-          <h3 className="text-lg font-semibold text-[#063044]" data-testid="client-card-name">{client.name}</h3>
-          <p className="text-xs text-slate-400">{client.jurisdiction} · {client.organization_type} · {client.id}</p>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2" data-testid="client-card-tabs">
-        {TABS.map((tt) => {
-          const Icon = tt.icon; const on = tab === tt.key;
-          return (
-            <button key={tt.key} onClick={() => setTab(tt.key)} data-testid={`client-tab-${tt.key}`}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${on ? "bg-[#063044] text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
-              <Icon size={15} /> {tt.label}
-            </button>
-          );
-        })}
-      </div>
-      <div data-testid={`client-panel-${tab}`}>
-        {tab === "overview" && <OverviewTab wsId={client.id} />}
-        {tab === "admins" && <AdminsTab wsId={client.id} />}
-        {tab === "users" && <UsersTab wsId={client.id} />}
-        {tab === "modules" && <ModulesTab wsId={client.id} />}
-        {tab === "logs" && <LogsTab wsId={client.id} />}
-        {tab === "support" && <SupportTab wsId={client.id} />}
-      </div>
-    </div>
-  );
-}
 
 function useTabData(fn, wsId) {
   const [data, setData] = useState(null);
@@ -229,244 +340,6 @@ function useTabData(fn, wsId) {
 }
 const Loading = () => <div className="flex items-center gap-2 text-slate-500"><Loader2 className="animate-spin" size={16} /> Chargement…</div>;
 
-function OverviewTab({ wsId }) {
-  const [data] = useTabData(api.platformClient, wsId);
-  if (data === null) return <Loading />;
-  if (data === false) return <p className="text-sm text-red-500">Erreur de chargement.</p>;
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Sociétés" value={data.companies.length} icon={Layers} testid="overview-stat-companies" />
-        <StatCard label="Utilisateurs" value={data.users_count} icon={Users} testid="overview-stat-users" />
-        <StatCard label="Administrateurs clients" value={data.client_admins_count} icon={ShieldCheck} testid="overview-stat-admins" />
-      </div>
-      <div className="card p-5">
-        <h4 className="mb-3 text-sm font-semibold text-[#063044]">Sociétés du mandat</h4>
-        <div className="space-y-2">
-          {data.companies.map((c) => (
-            <div key={c.id} className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-2.5 text-sm" data-testid={`overview-company-${c.id}`}>
-              <span className="font-medium text-[#0F172A]">{c.name}</span>
-              <span className="text-xs text-slate-400">{c.legacy_prefix} · {c.status}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="card p-5">
-        <h4 className="mb-3 text-sm font-semibold text-[#063044]">Modules souscrits (entitlements)</h4>
-        <div className="flex flex-wrap gap-2">
-          {data.entitlements.map((e) => (
-            <span key={e.module_code} className={`rounded-full px-3 py-1 text-xs font-medium ${ENT_COLOR[e.status] || "bg-slate-100 text-slate-500"}`} data-testid={`overview-ent-${e.module_code}`}>
-              {MODULE_LABEL[e.module_code] || e.module_code} — {ENT_LABEL[e.status] || e.status}
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AdminsTab({ wsId }) {
-  const [data, reload] = useTabData(api.platformClientAdmins, wsId);
-  const [replace, setReplace] = useState(null);
-  if (data === null) return <Loading />;
-  if (data === false) return <p className="text-sm text-red-500">Erreur de chargement.</p>;
-  return (
-    <div className="space-y-3" data-testid="admins-tab">
-      {data.companies.map((c) => {
-        const current = (c.current_admins || []).filter((a) => a && a.membership_id);
-        return (
-          <div key={c.company_id} className="card p-4" data-testid={`admin-company-${c.company_id}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium text-[#0F172A]">{c.company_name}</div>
-                <div className="text-xs text-slate-500">{current.map((a) => a.email).join(", ") || "Aucun administrateur"}</div>
-              </div>
-              <Button variant="outline" size="sm" className="text-red-600" data-testid={`replace-admin-${c.company_id}`}
-                disabled={!current.length} onClick={() => setReplace({ companyId: c.company_id, companyName: c.company_name, current: current[0] })}
-                title={!current.length ? "Aucun administrateur actuel à remplacer" : undefined}>
-                Remplacer l'administrateur
-              </Button>
-            </div>
-            {!current.length && <p className="mt-1 text-[11px] text-slate-400" data-testid={`replace-admin-hint-${c.company_id}`}>Aucun administrateur actuel à remplacer pour cette société.</p>}
-            {(c.replacements || []).length > 0 && (
-              <div className="mt-3 border-t border-slate-100 pt-3">
-                <p className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">Historique des remplacements</p>
-                {c.replacements.map((r, i) => (
-                  <div key={i} className="text-xs text-slate-500" data-testid={`admin-repl-${c.company_id}-${i}`}>{fmtDate(r.date)} → {r.new_email}</div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
-      <ReplaceAdminDialog info={replace} onClose={() => setReplace(null)} onDone={() => { setReplace(null); reload(); }} />
-    </div>
-  );
-}
-
-function ReplaceAdminDialog({ info, onClose, onDone }) {
-  const [step, setStep] = useState(1); const [email, setEmail] = useState(""); const [busy, setBusy] = useState(false);
-  useEffect(() => { if (info) { setStep(1); setEmail(""); } }, [info]);
-  const submit = async () => {
-    if (!info?.current) { toast.error("Aucun administrateur actif à remplacer."); return; }
-    setBusy(true);
-    try {
-      await api.replaceCompanyAdmin(info.companyId, { old_membership_id: info.current.membership_id, new_email: email });
-      setStep(3);
-      toast.success("Administrateur remplacé. Le nouvel administrateur a reçu son lien d'activation.");
-    } catch (e) { toast.error(e.response?.data?.detail || "Erreur."); }
-    finally { setBusy(false); }
-  };
-  return (
-    <Dialog open={!!info} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md" data-testid="replace-admin-dialog">
-        <DialogHeader>
-          <DialogTitle>Remplacer l'administrateur — {info?.companyName}</DialogTitle>
-          <DialogDescription className="text-xs">Action d'autorité plateforme. Meelora ne définit jamais de mot de passe.</DialogDescription>
-        </DialogHeader>
-        {step === 1 && (
-          <div className="space-y-3 text-sm">
-            <p className="rounded-lg bg-amber-50 p-3 text-amber-800">⚠️ L'ancien administrateur perdra <b>immédiatement</b> son accès et ses sessions seront révoquées.</p>
-            <p className="text-slate-600">Administrateur actuel : <b>{info?.current?.email || "aucun"}</b></p>
-            <DialogFooter><Button onClick={() => setStep(2)} disabled={!info?.current} data-testid="replace-continue" className="bg-[#063044] text-white">Continuer</Button></DialogFooter>
-          </div>
-        )}
-        {step === 2 && (
-          <div className="space-y-3">
-            <label className="overline text-slate-500">Courriel du nouvel administrateur</label>
-            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nouvel.admin@societe.com" className="h-11" data-testid="replace-email" />
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setStep(1)}>Retour</Button>
-              <Button onClick={submit} disabled={busy || !email} data-testid="replace-confirm" className="gap-2 bg-red-600 text-white">{busy ? <Loader2 className="animate-spin" size={16} /> : null} Confirmer</Button>
-            </DialogFooter>
-          </div>
-        )}
-        {step === 3 && (
-          <div className="space-y-3 text-sm" data-testid="replace-done">
-            <div className="flex items-center gap-2 text-emerald-600"><CheckCircle2 size={18} /> Remplacement effectué</div>
-            <DialogFooter><Button onClick={onDone} className="bg-[#063044] text-white">Terminer</Button></DialogFooter>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function UsersTab({ wsId }) {
-  const [data] = useTabData(api.platformClientUsers, wsId);
-  if (data === null) return <Loading />;
-  if (data === false) return <p className="text-sm text-red-500">Erreur de chargement.</p>;
-  return (
-    <div className="space-y-2" data-testid="users-tab">
-      {(data.users || []).length === 0 && <p className="text-sm text-slate-500">Aucun utilisateur.</p>}
-      {(data.users || []).map((u) => (
-        <div key={u.identity.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4" data-testid={`platform-user-${u.identity.id}`}>
-          <div>
-            <div className="flex items-center gap-2 font-medium text-[#0F172A]">
-              {u.identity.name || u.identity.email}
-              {u.identity.platform_role && <span className="rounded-full bg-[#063044] px-2 py-0.5 text-[10px] uppercase text-white">{u.identity.platform_role}</span>}
-            </div>
-            <div className="text-sm text-slate-500">{u.identity.email}</div>
-          </div>
-          <div className="text-right text-xs text-slate-400">
-            <div>{u.workspace_membership ? `workspace: ${u.workspace_membership.role}` : "—"}</div>
-            <div>{(u.company_memberships || []).length} société(s)</div>
-          </div>
-        </div>
-      ))}
-      <p className="pt-1 text-[11px] text-slate-400">Vue en lecture seule. L'administration des accès financiers reste dans le contexte société.</p>
-    </div>
-  );
-}
-
-function ModulesTab({ wsId }) {
-  const [data] = useTabData(api.platformClientModules, wsId);
-  if (data === null) return <Loading />;
-  if (data === false) return <p className="text-sm text-red-500">Erreur de chargement.</p>;
-  return (
-    <div className="space-y-4" data-testid="modules-tab">
-      <div className="card p-5">
-        <h4 className="mb-3 text-sm font-semibold text-[#063044]">Entitlements workspace</h4>
-        <div className="flex flex-wrap gap-2">
-          {data.entitlements.map((e) => (
-            <span key={e.module_code} className={`rounded-full px-3 py-1 text-xs font-medium ${ENT_COLOR[e.status] || "bg-slate-100 text-slate-500"}`} data-testid={`mod-ent-${e.module_code}`}>
-              {MODULE_LABEL[e.module_code] || e.module_code} — {ENT_LABEL[e.status] || e.status}
-            </span>
-          ))}
-        </div>
-      </div>
-      {data.companies.map((c) => (
-        <div key={c.company_id} className="card p-5" data-testid={`mod-company-${c.company_id}`}>
-          <h4 className="mb-3 text-sm font-semibold text-[#063044]">{c.company_name} — activation par société</h4>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {c.enablement.map((m) => (
-              <div key={m.module_code} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm" data-testid={`mod-enable-${c.company_id}-${m.module_code}`}>
-                <span className="text-[#0F172A]">{MODULE_LABEL[m.module_code] || m.module_code}</span>
-                <span className={`text-xs font-medium ${m.enabled ? "text-emerald-600" : "text-red-500"}`}>{m.enabled ? "Activé" : "Désactivé"}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function LogsTab({ wsId }) {
-  const [data] = useTabData(api.platformClientLogs, wsId);
-  if (data === null) return <Loading />;
-  if (data === false) return <p className="text-sm text-red-500">Erreur de chargement.</p>;
-  return (
-    <div className="space-y-2" data-testid="logs-tab">
-      <p className="text-xs text-slate-400">Logs opérationnels (tenant) de ce client. Les évènements plateforme n'apparaissent jamais ici.</p>
-      {(data || []).length === 0 && <p className="text-sm text-slate-500">Aucune activité.</p>}
-      <div className="card divide-y divide-slate-100">
-        {(data || []).slice(0, 200).map((e) => (
-          <div key={e.id} className="flex items-start justify-between gap-4 px-4 py-2.5" data-testid="client-log-entry">
-            <div className="min-w-0">
-              <p className="text-sm"><span className="font-semibold text-[#063044]">{e.action || e.event_type}</span> <span className="text-slate-400">· {e.entity || ""}</span> <span className="text-slate-600">{e.label}</span></p>
-              <p className="text-[11px] text-slate-400">{e.user_name || e.user_email}</p>
-            </div>
-            <span className="shrink-0 font-mono-data text-xs text-slate-400">{fmtDate(e.timestamp)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SupportTab({ wsId }) {
-  const [data] = useTabData(api.platformClientSupport, wsId);
-  if (data === null) return <Loading />;
-  if (data === false) return <p className="text-sm text-red-500">Erreur de chargement.</p>;
-  return (
-    <div className="space-y-4" data-testid="support-tab">
-      <div className="card p-5">
-        <h4 className="mb-3 text-sm font-semibold text-[#063044]">Contacts administrateurs</h4>
-        {(data.contacts || []).length === 0 ? <p className="text-sm text-slate-500">Aucun contact.</p> :
-          (data.contacts || []).map((c, i) => (
-            <div key={i} className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-2.5 text-sm" data-testid={`support-contact-${i}`}>
-              <span className="font-medium text-[#0F172A]">{c.name || c.email}</span>
-              <span className="text-xs text-slate-400">{c.email}</span>
-            </div>
-          ))}
-      </div>
-      <div className="card p-5">
-        <h4 className="mb-3 text-sm font-semibold text-[#063044]">Journal des actions plateforme (ce client)</h4>
-        {(data.activity || []).length === 0 ? <p className="text-sm text-slate-500">Aucune action plateforme enregistrée.</p> :
-          (data.activity || []).map((a) => (
-            <div key={a.id} className="flex items-start justify-between gap-4 border-b border-slate-100 py-2.5 last:border-0" data-testid="support-activity">
-              <div className="flex items-start gap-2">
-                <AlertTriangle size={14} className="mt-0.5 text-amber-500" />
-                <div><p className="text-sm text-[#063044]">{a.label || a.event_type}</p><p className="text-[11px] text-slate-400">{a.actor_email}</p></div>
-              </div>
-              <span className="shrink-0 font-mono-data text-xs text-slate-400">{fmtDate(a.timestamp)}</span>
-            </div>
-          ))}
-      </div>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Logs plateforme (scope plateforme uniquement) — outil d'audit : recherche +

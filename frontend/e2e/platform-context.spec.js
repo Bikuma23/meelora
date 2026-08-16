@@ -55,16 +55,15 @@ test.describe("Interface plateforme Meelora (P1.13E final)", () => {
     await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
   });
 
-  test("client externe → Accéder → fiche client (aucun accès financier implicite)", async ({ page }) => {
+  test("société cliente → Accéder → fiche société (aucun accès financier implicite)", async ({ page }) => {
     await login(page, "platformAdmin");
     await page.getByTestId("nav-platform_clients").click();
     await expect(page.getByTestId("platform-clients")).toBeVisible();
-    // Attendre le rendu de la liste (la carte interne existe toujours).
     await expect(page.getByTestId("platform-internal-card")).toBeVisible();
-    const access = page.locator('[data-testid^="platform-client-access-"]').first();
+    const access = page.locator('[data-testid^="platform-company-access-"]').first();
     await expect(access).toBeVisible();
     await access.click();
-    await expect(page.getByTestId("client-card")).toBeVisible();
+    await expect(page.getByTestId("company-fiche-card")).toBeVisible();
     // Vue d'administration : aucun module financier dans la sidebar plateforme.
     await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
     await expect(page.locator('[data-testid^="nav-platform_"]')).toHaveCount(3);

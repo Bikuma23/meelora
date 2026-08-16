@@ -269,4 +269,6 @@ export const api = {
   platformClientModules: (wsId) => client.get(`/platform/clients/${wsId}/modules`).then((r) => r.data),
   platformClientLogs: (wsId, params) => client.get(`/platform/clients/${wsId}/logs`, { params: params || {} }).then((r) => r.data),
   platformClientSupport: (wsId) => client.get(`/platform/clients/${wsId}/support`).then((r) => r.data),
+  platformCompanies: () => client.get("/platform/companies").then((r) => r.data),
+  platformCompanyMembers: (cid) => client.get(`/platform/companies/${cid}/members`).then((r) => r.data),
 };
