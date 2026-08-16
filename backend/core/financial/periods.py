@@ -193,7 +193,8 @@ async def create_financial_period(db, company_id: str, financial_year_id: str, u
 
 async def update_financial_period(db, company_id: str, period_id: str, user: dict, payload: FinancialPeriodUpdate) -> Tuple[dict, Optional[str]]:
     """Return (public_period, previous_status) — previous_status only when status changed."""
-    await require_company_admin(db, company_id, user)
+    # Authorization is enforced at the route (P1.13F sensitive-permission guard for
+    # status transitions; admin for metadata). Here we only scope to the tenant.
     workspace_id = require_tenant_context(user)
     current = await db.financial_periods.find_one({
         "_id": period_id, "workspace_id": workspace_id, "company_id": company_id,

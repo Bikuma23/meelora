@@ -148,6 +148,7 @@ from core.access import platform_console as access_platform
 from core.access.platform_console import require_platform_staff
 from core.access import navigation as access_nav
 from core.access.effective_access import resolve_effective_access
+from core.access.sensitive import require_sensitive_permission
 from core.access.indexes import ensure_indexes as _ensure_access_indexes
 
 
@@ -1457,7 +1458,32 @@ async def get_company_financial_period(company_id: str, period_id: str, user: di
 
 
 @api.patch("/companies/{company_id}/financial-periods/{period_id}")
-async def update_company_financial_period(company_id: str, period_id: str, payload: FinancialPeriodUpdate, user: dict = Depends(require_admin)):
+async def update_company_financial_period(company_id: str, period_id: str, payload: FinancialPeriodUpdate, user: dict = Depends(get_current_user)):
+    # P1.13F — sensitive financial actions gated on resolve_effective_access.
+    # Period close/lock and reopen/unlock require an EXPLICIT sensitive permission
+    # (module access + permission + scope + membership + active company). Admin /
+    # module "manage" alone never suffices. Non-status metadata edits keep the
+    # existing admin control.
+    workspace_id = require_tenant_context(user)
+    target_status = payload.model_dump(exclude_unset=True).get("status")
+    if target_status is not None:
+        current = await db.financial_periods.find_one(
+            {"_id": period_id, "workspace_id": workspace_id, "company_id": company_id})
+        if not current:
+            raise HTTPException(status_code=404, detail="Période introuvable")
+        prev_status = current.get("status", "open")
+        if target_status != prev_status:
+            if target_status in ("closed", "locked"):
+                perm = "accounting.period_close"
+            elif target_status == "open" and prev_status in ("closed", "locked"):
+                perm = "accounting.period_reopen"
+            else:
+                perm = None
+            if perm:
+                await require_sensitive_permission(db, user, company_id, perm, workspace_id=workspace_id)
+    elif user.get("role") != "admin":
+        # Pure metadata edit — preserve the legacy admin control.
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
     p, prev_status = await update_financial_period(db, company_id, period_id, user, payload)
     fy_id = p.get("financial_year_id")
     await log_action(user, "update", "financial_period", p.get("period_code", ""),
@@ -1679,7 +1705,9 @@ async def preview_company_journal_import(company_id: str, financial_year_id: str
 
 @api.post("/companies/{company_id}/imports/journal/commit")
 async def commit_company_journal_import(company_id: str, payload: JournalCommitRequest,
-                                        user: dict = Depends(require_admin)):
+                                        user: dict = Depends(get_current_user)):
+    # P1.13F — posting journal entries is a sensitive financial action.
+    await require_sensitive_permission(db, user, company_id, "accounting.entry_post")
     result = await commit_journal_import(db, company_id, user, payload.import_id)
     ev = {"completed": "journal.completed", "completed_with_warnings": "journal.completed",
           "failed": "journal.failed"}.get(result.get("status"), "journal.completed")
@@ -7905,6 +7933,8 @@ async def qc_invoices(year: int, user: dict = Depends(get_current_user)):
 
 @api.post("/qc9434/invoices")
 async def qc_create_invoice(payload: QcInvoiceIn, year: int, user: dict = Depends(get_current_user)):
+    # P1.13F — posting a customer invoice is a sensitive financial action.
+    await require_sensitive_permission(db, user, await _company_id("qc9434"), "accounting.customer_invoice_post")
     y = await _qc_year_doc(year)
     if not y:
         raise HTTPException(status_code=404, detail="Année introuvable — créez d'abord l'exercice.")
@@ -8177,6 +8207,8 @@ async def qc_create_credit_note(payload: QcCreditNoteIn, year: int, user: dict =
 
 @api.post("/qc9434/invoices/{iid}/reverse")
 async def qc_reverse_invoice(iid: str, date: str = "", user: dict = Depends(get_current_user)):
+    # P1.13F — reversing a posted entry (extourne) is a sensitive financial action.
+    await require_sensitive_permission(db, user, await _company_id("qc9434"), "accounting.entry_reverse")
     inv = await db.qc9434_invoices.find_one({"_id": _oid(iid)})
     if not inv:
         raise HTTPException(status_code=404, detail="Facture introuvable")

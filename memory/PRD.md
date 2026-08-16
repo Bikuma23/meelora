@@ -1467,3 +1467,15 @@ Rapport : `/app/RAPPORT_P1_13E.md` (§5 + tableau 7 grants). `--commit` NON exé
 - **#3 Utilisateurs de la fiche** : nouvel onglet Utilisateurs de la fiche société via `GET /api/platform/companies/{cid}/members` : source = `company_memberships` de CETTE société (priorité) + pont legacy `company_access` en transition ; identité depuis `users` global. Affiche nom, email, statut identité, type/rôle de membership, statut de membership, modules attribués + niveau. Sections Administrateurs / Actifs / Suspendus. Scoping strict company_id → aucun utilisateur d'une autre société ne fuit. Cross-workspace/no-leak inchangé.
 - Backend : `platform_console.list_platform_companies` + `company_members` (réutilisent `_user_by_id`/`_identity_view`). Routes `/api/platform/companies` et `/api/platform/companies/{cid}/members` (require_platform_staff). Code mort workspace (`ClientCard` + onglets) retiré de Platform.js.
 - Tests : nouveau `e2e/platform-companies.spec.js` (5) + `platform-context.spec.js` adapté. **Suite E2E complète 42/42 verte.** Vérifié curl : portefeuille = Meelora+9434, membres 9434=17 (dont modules), Meelora=11 sans fuite, PATCH platform_admin 200 / support 403.
+
+## P1.13F — Sensitive Financial Permissions Hardening (2026-06)
+- **Objectif** : câbler les actions financières sensibles RÉELLES sur `resolve_effective_access` + permissions explicites, sans toucher aux calculs. Chaque action vérifie : module access + permission sensible explicite + company scope + membership + société active. `manage`/admin seul ne suffit JAMAIS.
+- **Garde réutilisable** : `core/access/sensitive.py::require_sensitive_permission` (fail-closed ; cross_workspace/inconnu → 404 no-leak ; autres refus → 403).
+- **Routes câblées (réelles)** :
+  - `PATCH /companies/{cid}/financial-periods/{id}` : statut→closed/locked ⇒ `accounting.period_close` ; réouverture/déverrouillage ⇒ `accounting.period_reopen` ; édition métadonnées (sans statut) conserve le contrôle admin. `require_company_admin` interne retiré de `update_financial_period` (autorité déplacée au garde route).
+  - `POST /companies/{cid}/imports/journal/commit` ⇒ `accounting.entry_post`.
+  - `POST /qc9434/invoices` ⇒ `accounting.customer_invoice_post`.
+  - `POST /qc9434/invoices/{iid}/reverse` (extourne) ⇒ `accounting.entry_reverse`.
+- **Non câblé (routes pas encore réelles)** : réconciliation (routes GET diagnostiques en lecture seule uniquement), `accounting.po_approve` (aucune route PO), `accounting.supplier_invoice_post` (aucune route fournisseur générique). Documenté, non fabriqué.
+- **Tests** : `backend/tests/test_p1_13f_sensitive.py` — matrice positive/négative pour les 5 permissions + manage-insuffisant + cross-workspace + no-membership + société inactive (18/18 PASS). Curls HTTP réels : julie (read, sans perm) journal commit → 403 (permission_not_granted) ; société inconnue → 404 ; création facture 9434 → 403. **Suite E2E complète 42/42 verte.** Aucune formule financière modifiée.
+- STOP après rapport. P3.x non repris.
