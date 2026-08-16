@@ -23,15 +23,14 @@ test.describe("Platform/company separation & security (P1.13D.2)", () => {
 
   test("platform staff has a workspace membership but NO automatic financial authority path", async ({ page }) => {
     await login(page, "platformAdmin");
-    // Platform sidebar shows no business module until "Société Meelora" is accessed.
+    // Platform sidebar shows no business module (3 platform menus only).
     await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
-    await expect(page.getByTestId("nav-platform_home")).toBeVisible();
-    // Accessing Société Meelora is an explicit action; platform_role grants NO
-    // financial module -> the extension is empty (fail-closed).
-    await page.getByTestId("nav-platform_meelora").click();
-    await page.getByTestId("platform-meelora-access").click();
-    await page.waitForTimeout(1000);
-    await expect(page.getByTestId("platform-ext-empty")).toBeVisible();
+    await expect(page.locator('[data-testid^="nav-platform_"]')).toHaveCount(3);
+    // Managing Société Meelora opens the access console; it grants NO financial
+    // module to the platform admin (fail-closed): still zero modules in sidebar.
+    await page.getByTestId("nav-platform_clients").click();
+    await page.getByTestId("platform-internal-access").click();
+    await expect(page.getByTestId("platform-meelora-manage")).toBeVisible();
     await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
   });
 

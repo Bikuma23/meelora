@@ -11,22 +11,21 @@ const CA = "965f0770-8cf2-4199-a99f-819ff270436a"; // Meelora  -> BUDGETS + ACCO
 const CB = "58a59a28-4701-4ba5-8e2f-61ff76e0f2e9"; // 9434     -> ACCOUNTING + CONSOLIDATION
 
 test.describe("Navigation hiérarchique (sign-off P1.13E)", () => {
-  test("Meelora → Sociétés / Clients → Meelora → Accéder → EXTENSION (menus plateforme conservés)", async ({ page }) => {
+  test("Meelora → Sociétés / Clients → Société Meelora → Accéder → gestion (aucun module en sidebar)", async ({ page }) => {
     await login(page, "platformAdmin");
-    // Sidebar plateforme = 4 entrées.
+    // Sidebar plateforme = exactement 3 menus (pas d'entrée Société Meelora).
     await expect(page.getByTestId("nav-platform_home")).toBeVisible();
     await expect(page.getByTestId("nav-platform_clients")).toBeVisible();
-    await expect(page.getByTestId("nav-platform_meelora")).toBeVisible();
     await expect(page.getByTestId("nav-platform_logs")).toBeVisible();
-    // Page Sociétés / Clients : carte Meelora (fond vert) + Accéder.
+    await expect(page.getByTestId("nav-platform_meelora")).toHaveCount(0);
+    // Sociétés / Clients : carte Meelora (fond vert) + Accéder.
     await page.getByTestId("nav-platform_clients").click();
     await expect(page.getByTestId("platform-internal-card")).toBeVisible();
     await page.getByTestId("platform-internal-access").click();
-    await page.waitForTimeout(1000);
-    // EXTENSION : les menus plateforme restent + section « Société Meelora » ajoutée.
-    await expect(page.getByTestId("platform-business-ext")).toBeVisible();
-    await expect(page.getByTestId("nav-platform_home")).toBeVisible();
-    await expect(page.getByTestId("nav-platform_meelora")).toBeVisible();
+    // Ouvre la gestion complète de Société Meelora (console d'accès).
+    await expect(page.getByTestId("platform-meelora-manage")).toBeVisible();
+    await expect(page.getByTestId("access-management")).toBeVisible();
+    await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
   });
 
   test("Client → Tous les mandats → A → Accéder → modules A ; puis B → modules B (isolation A↛B)", async ({ page }) => {

@@ -69,18 +69,16 @@ test.describe("Persona sidebar = effective access (P1.13E)", () => {
     await expect(page.getByTestId("module-placeholder-REPORTING")).toBeVisible();
   });
 
-  test("platform_admin: extension keeps platform nav; platform_role adds no financial module", async ({ page }) => {
+  test("platform_admin: sidebar 3 menus, aucun module; Accéder Meelora ouvre la gestion (pas d'autorité financière)", async ({ page }) => {
     await login(page, { email: "platform@meelora.com", password: "platform123" });
-    // No business modules appear before accessing Société Meelora.
     await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
     await expect(page.getByTestId("platform-home")).toBeVisible();
-    // Access Société Meelora -> extension appended, platform menus RETAINED.
-    await page.getByTestId("nav-platform_meelora").click();
-    await page.getByTestId("platform-meelora-access").click();
-    await page.waitForTimeout(1000);
-    await expect(page.getByTestId("platform-business-ext")).toBeVisible();
-    await expect(page.getByTestId("platform-ext-empty")).toBeVisible(); // platform_role => no module
-    await expect(page.getByTestId("nav-platform_home")).toBeVisible();
-    await expect(page.getByTestId("nav-platform_meelora")).toBeVisible();
+    await expect(page.locator('[data-testid^="nav-platform_"]')).toHaveCount(3);
+    // Accéder à Société Meelora -> console de gestion, aucun module ajouté à la sidebar.
+    await page.getByTestId("nav-platform_clients").click();
+    await page.getByTestId("platform-internal-access").click();
+    await expect(page.getByTestId("platform-meelora-manage")).toBeVisible();
+    await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="nav-platform_"]')).toHaveCount(3);
   });
 });

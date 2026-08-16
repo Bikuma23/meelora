@@ -224,3 +224,33 @@ Preuves : `company-form.spec.js` (absent→invite, vérifié→associate) + curl
 ### 6.3 Migration — 7 lignes reproduites inline (voir §3), invariants conservés
 `--commit` NON exécuté. Invariants : 0 manage auto · 0 permission sensible auto · 0 grant via
 platform_role · 0 cross-workspace · 0 BUDGETS implicite. STOP.
+
+---
+
+## 7. Interface plateforme Meelora — version finale (11 points) · 33/33 E2E verts
+
+**Sidebar plateforme = EXACTEMENT 3 menus** (`Layout.js`) :
+```
+PLATEFORME MEELORA
+  Tableau de bord
+  Sociétés / Clients
+  ───────────────── (mt-auto, séparateur)
+  Logs plateforme          (ancré tout en bas)
+```
+- **Société Meelora n'est plus un menu indépendant** ; elle est gérée depuis Sociétés / Clients (carte 1re position, fond vert, badge « Société interne », bouton Accéder).
+- **Aucun module financier** dans la sidebar plateforme.
+- **Tableau de bord** = pilotage plateforme uniquement (KPI portefeuille, jamais de données financières client agrégées).
+- **Sociétés / Clients** = registre central (Meelora + clients + recherche + création via le formulaire société complet).
+- **Société Meelora → Accéder** → `platform_meelora_manage` : console de gestion opérationnelle (réutilise `AccessManagement` P1.13 : utilisateurs, invitations, accès par module none/read/contribute/manage, permissions sensibles, accès effectifs). **N'ajoute aucun module à la sidebar et n'accorde aucune autorité financière** (platform_role ≠ autorité).
+- **Client externe → Accéder** → fiche client (ClientCard : Aperçu, admins, utilisateurs, modules, logs, support) — vue d'administration, aucun accès financier implicite, aucune impersonation.
+
+**Logs plateforme = outil d'audit** (`log_scope.py`, `/platform/logs`, `PlatformLogs`) :
+- **Recherche texte libre** (utilisateur, email, société, évènement, ressource, IP, métadonnées).
+- **Filtres** : type d'évènement, résultat (succès/échec), acteur, période (date_from/date_to), catégorie.
+- **Contenu enrichi par évènement** : horodatage, type, catégorie, acteur + rôle plateforme, société/utilisateur concerné, ressource, action, résultat, before/after, IP, user-agent, request_id, motif, métadonnées.
+- **Redaction serveur** : `password`, `password_hash`, `jwt`, `token`, `activation_token`, `secret`, `api_key`, `credentials`… → `[redacted]`. Jamais de secret exposé (testé).
+- **Isolation préservée** : `/platform/logs` ne renvoie que des évènements de scope plateforme (collection `platform_logs`). Les logs d'un client restent dans sa fiche (onglet Logs). Aucun flux financier agrégé.
+
+**Tests (33/33 verts)** : `platform-context.spec.js` (3 menus, Meelora absente comme menu, carte 1re + badge, Logs ancré bas via boundingBox, Meelora Accéder → console, client externe → fiche), `platform-logs.spec.js` (recherche, filtres, redaction, isolation), `persona-ux.spec.js`, `security.spec.js`, `nav-hierarchy.spec.js`, `company-form.spec.js`. Seed `seed_p1_13e_personas.py` : 4 évènements plateforme d'audit + 1 client externe démo.
+
+**STOP** — `--commit` P1.13A non exécuté ; aucun calcul financier modifié ; P3.x non repris.

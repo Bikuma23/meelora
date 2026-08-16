@@ -2828,11 +2828,17 @@ async def platform_clients_route(user: dict = Depends(get_current_user)):
 
 @api.get("/platform/logs")
 async def platform_logs_route(target_workspace_id: Optional[str] = None,
+                              q: Optional[str] = None, event_type: Optional[str] = None,
+                              actor: Optional[str] = None, category: Optional[str] = None,
+                              result: Optional[str] = None, date_from: Optional[str] = None,
+                              date_to: Optional[str] = None,
                               limit: int = Query(300, ge=1, le=1000),
                               user: dict = Depends(get_current_user)):
     # list_platform_logs enforces the platform role itself (fail-closed).
     return await access_log_scope.list_platform_logs(
-        db, user, target_workspace_id=target_workspace_id, limit=limit)
+        db, user, target_workspace_id=target_workspace_id, q=q, event_type=event_type,
+        actor=actor, category=category, result=result, date_from=date_from,
+        date_to=date_to, limit=limit)
 
 
 @api.get("/platform/clients/{ws_id}")

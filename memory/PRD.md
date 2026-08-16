@@ -1421,3 +1421,10 @@ Rapport : `/app/RAPPORT_P1_13E.md` (§5 + tableau 7 grants). `--commit` NON exé
 - **Sidebar plateforme** : « Sociétés / Clients » renommé **« Tous les mandats »** (vue des sociétés clientes). Sidebar plateforme = Tableau de bord · Tous les mandats · Société Meelora · Logs plateforme.
 - **Admin création société** : endpoint `GET /api/access/admin-candidate?email=` (classe verified/absent/unverified via `admin_governance.identity_is_verified`). Formulaire propose Associer (vérifié) / Inviter (absent) / Activation requise (non vérifié). L'action réutilise `POST /workspace/invitations` ou `POST /companies/{id}/members` — jamais d'accès auto sur simple email. Aucun 2e mécanisme d'identité.
 - Tests : `company-form.spec.js` étendu (lookup identité). Suite 28/28 verte. `--commit` P1.13A toujours NON exécuté.
+
+## P1.13E — Interface plateforme finale (3 menus + audit logs) (2026-06)
+- Sidebar plateforme = EXACTEMENT 3 menus : Tableau de bord · Sociétés / Clients · Logs plateforme (ancré en bas via mt-auto + séparateur). Société Meelora RETIRÉE comme menu ; gérée depuis Sociétés/Clients (carte 1re, verte, badge Société interne, Accéder). Aucun module financier en sidebar plateforme. (`Layout.js` NAV_PLATFORM 2 + NAV_PLATFORM_LOGS)
+- Société Meelora → Accéder → page `platform_meelora_manage` = console `AccessManagement` (users/invitations/module levels/sensitive/effective). N'ajoute aucun module, aucune autorité financière. Client externe → Accéder → ClientCard (fiche admin). (`Platform.js` PlatformMeeloraManage)
+- Logs plateforme = outil d'audit : recherche texte + filtres (type/résultat/acteur/dates/catégorie) + contenu enrichi (acteur+rôle, ressource, résultat, before/after, IP, user-agent, request_id, motif) + REDACTION serveur des secrets. Isolation plateforme/client préservée. (`core/access/log_scope.py`, `/platform/logs`, `PlatformLogs`)
+- Tests : `platform-context.spec.js` (réécrit), `platform-logs.spec.js` (nouveau). Suite 33/33 verte. Seed : 4 logs plateforme + client externe démo (`ws_demo_clientabc`).
+- P1.13A `--commit` toujours NON exécuté. Aucun calcul financier modifié.

@@ -10,6 +10,7 @@ import {
   Building2, Users, ShieldCheck, Boxes, ScrollText, LifeBuoy, ChevronLeft, ChevronRight,
   Loader2, Server, Search, CheckCircle2, AlertTriangle, Layers, ArrowRight,
 } from "lucide-react";
+import AccessManagement from "./AccessManagement";
 
 const MODULE_LABEL = { REPORTING: "Reporting", ACCOUNTING: "Comptabilité", FIXED_ASSETS: "Immobilisations", CONSOLIDATION: "Consolidation" };
 const ENT_LABEL = { active: "Actif", trial: "Essai", inactive: "Inactif", suspended: "Suspendu" };
@@ -128,40 +129,24 @@ export function PlatformClients() {
 }
 
 // ---------------------------------------------------------------------------
-// Société Meelora (entrée plateforme dédiée) — bouton Accéder = EXTENSION :
-// ajoute les modules métier réellement autorisés à la sidebar SANS retirer les
-// menus plateforme. platform_role n'accorde aucune autorité financière.
+// Société Meelora — gestion opérationnelle interne (ouverte via Sociétés/Clients
+// -> carte Meelora -> Accéder). Réutilise la console d'accès P1.13. Administrer
+// ces accès n'accorde AUCUNE autorité financière au personnel plateforme.
 // ---------------------------------------------------------------------------
-export function PlatformMeelora() {
-  const { enterMeelora, meeloraAccessed } = useNav();
-  const [company, setCompany] = useState(null);
-  useEffect(() => {
-    api.getCompanyContext().then((d) => {
-      const cs = d.companies || [];
-      setCompany(cs.find((c) => c.legacy_prefix === "acct") || cs[0] || false);
-    }).catch(() => setCompany(false));
-  }, []);
-  if (company === null) return <div className="flex items-center gap-2 text-slate-500"><Loader2 className="animate-spin" size={16} /> Chargement…</div>;
+export function PlatformMeeloraManage() {
+  const { user } = useAuth();
+  const { go } = useNav();
   return (
-    <div className="space-y-4" data-testid="platform-meelora">
-      <p className="text-sm text-slate-500">Société interne de Meelora. « Accéder » ajoute vos modules métier réellement autorisés à la barre latérale, sans quitter le contexte plateforme.</p>
-      <div className="flex flex-col gap-3 rounded-xl border border-[#15AF97]/40 bg-[#15AF97]/8 p-5 sm:flex-row sm:items-center sm:justify-between" data-testid="platform-meelora-card">
-        <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#15AF97]/20 text-[#0f8f7c]"><Building2 size={20} /></span>
-          <div>
-            <div className="flex items-center gap-2 font-medium text-[#063044]">{company ? company.name : "Société Meelora"}
-              <span className="rounded-full bg-[#15AF97] px-2 py-0.5 text-[10px] font-semibold uppercase text-white">Société interne</span>
-            </div>
-            <div className="text-xs text-slate-500">Le rôle plateforme n'accorde aucune permission financière. Seuls vos modules réellement attribués apparaîtront.</div>
-          </div>
-        </div>
-        <Button className="gap-1.5 bg-[#063044] text-white hover:bg-[#0a4a68]" data-testid="platform-meelora-access" onClick={enterMeelora} disabled={!company}>
-          {meeloraAccessed ? "Accédé" : "Accéder"} <ArrowRight size={14} />
-        </Button>
+    <div className="space-y-5" data-testid="platform-meelora-manage">
+      <button onClick={() => go("platform_clients")} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-[#063044]" data-testid="meelora-manage-back">
+        <ChevronLeft size={16} /> Sociétés / Clients
+      </button>
+      <div className="rounded-2xl border border-[#15AF97]/40 bg-[#15AF97]/8 p-5" data-testid="meelora-manage-header">
+        <div className="flex items-center gap-2 text-[#0f8f7c]"><Building2 size={16} /><span className="text-xs font-semibold uppercase tracking-wider">Société interne</span></div>
+        <h3 className="mt-1 text-lg font-light text-[#063044]">{user?.workspace?.name || "Société Meelora"} — gestion opérationnelle</h3>
+        <p className="mt-1 max-w-3xl text-sm text-slate-500">Administrateurs, utilisateurs, invitations, accès par module (none / read / contribute / manage), permissions sensibles et accès effectifs. Administrer ces accès <b>n'accorde aucune autorité financière</b> à l'administrateur plateforme (platform_role ≠ autorité).</p>
       </div>
-      {meeloraAccessed && (
-        <p className="text-xs text-[#0f8f7c]" data-testid="platform-meelora-accessed-note">Vos modules métier autorisés ont été ajoutés à la barre latérale (section « Société Meelora »).</p>
-      )}
+      <AccessManagement />
     </div>
   );
 }
@@ -463,30 +448,109 @@ function SupportTab({ wsId }) {
 }
 
 // ---------------------------------------------------------------------------
-// Logs plateforme (scope plateforme uniquement)
+// Logs plateforme (scope plateforme uniquement) — outil d'audit : recherche +
+// filtres + détail. Aucun flux client agrégé ; aucun secret exposé (redaction
+// côté serveur). Les logs propres à un client restent dans sa fiche (onglet Logs).
 // ---------------------------------------------------------------------------
+const PLATFORM_EVENT_TYPES = [
+  "client.created", "client.activated", "client.deactivated",
+  "client_admin.linked", "client_admin.replaced", "client_admin.deactivated",
+  "platform.login", "platform.config", "support.action",
+];
+const RESULT_COLOR = { success: "bg-emerald-100 text-emerald-700", failure: "bg-rose-100 text-rose-700" };
+
 export function PlatformLogs() {
   const [logs, setLogs] = useState(null);
-  useEffect(() => { api.platformLogs().then(setLogs).catch(() => setLogs([])); }, []);
-  if (!logs) return <Loading />;
+  const [q, setQ] = useState("");
+  const [eventType, setEventType] = useState("");
+  const [result, setResult] = useState("");
+  const [actor, setActor] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [expanded, setExpanded] = useState(null);
+  const load = useCallback(() => {
+    const params = {};
+    if (q) params.q = q;
+    if (eventType) params.event_type = eventType;
+    if (result) params.result = result;
+    if (actor) params.actor = actor;
+    if (from) params.date_from = from;
+    if (to) params.date_to = to;
+    api.platformLogs(params).then(setLogs).catch(() => setLogs([]));
+  }, [q, eventType, result, actor, from, to]);
+  useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
+  const reset = () => { setQ(""); setEventType(""); setResult(""); setActor(""); setFrom(""); setTo(""); };
   return (
-    <div className="space-y-3" data-testid="platform-logs">
-      <p className="text-xs text-slate-400">Évènements de scope <b>plateforme</b> uniquement (création client, remplacement d'administrateur, actions support…). Aucun flux agrégé des opérations clients.</p>
-      {logs.length === 0 ? <p className="text-sm text-slate-500" data-testid="platform-logs-empty">Aucun évènement plateforme pour le moment.</p> :
-        <div className="card divide-y divide-slate-100">
+    <div className="space-y-4" data-testid="platform-logs">
+      <p className="text-xs text-slate-400">Évènements de scope <b>plateforme</b> uniquement (création client, remplacement d'administrateur, actions support, configuration…). Aucun flux agrégé des opérations clients ; aucun secret n'est journalisé.</p>
+
+      <div className="card space-y-3 p-4" data-testid="platform-logs-filters">
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (utilisateur, email, société, évènement, ressource, IP, métadonnées…)" className="h-11 pl-9" data-testid="platform-logs-search" />
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <select value={eventType} onChange={(e) => setEventType(e.target.value)} className="h-9 rounded-lg border border-slate-200 px-2 text-sm" data-testid="platform-logs-filter-event">
+            <option value="">Tous les types</option>
+            {PLATFORM_EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={result} onChange={(e) => setResult(e.target.value)} className="h-9 rounded-lg border border-slate-200 px-2 text-sm" data-testid="platform-logs-filter-result">
+            <option value="">Tout résultat</option>
+            <option value="success">Succès</option>
+            <option value="failure">Échec</option>
+          </select>
+          <Input value={actor} onChange={(e) => setActor(e.target.value)} placeholder="Acteur / email" className="h-9" data-testid="platform-logs-filter-actor" />
+          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9" data-testid="platform-logs-from" />
+          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9" data-testid="platform-logs-to" />
+          <Button variant="outline" size="sm" onClick={reset} data-testid="platform-logs-reset">Réinitialiser</Button>
+        </div>
+      </div>
+
+      {!logs ? <Loading /> : logs.length === 0 ? (
+        <p className="text-sm text-slate-500" data-testid="platform-logs-empty">Aucun évènement plateforme ne correspond aux critères.</p>
+      ) : (
+        <div className="card divide-y divide-slate-100" data-testid="platform-logs-list">
           {logs.map((e) => (
-            <div key={e.id} className="flex items-start justify-between gap-4 px-4 py-3" data-testid="platform-log-entry">
-              <div className="flex items-start gap-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#063044]/8 text-[#063044]"><ScrollText size={15} /></span>
-                <div>
-                  <p className="text-sm"><span className="font-semibold text-[#063044]">{e.event_type}</span> <span className="text-slate-600">— {e.label}</span></p>
-                  <p className="text-[11px] text-slate-400">{e.actor_email}{e.target_workspace_id ? ` · client ${e.target_workspace_id}` : ""}</p>
+            <div key={e.id} className="px-4 py-3" data-testid="platform-log-entry" data-event={e.event_type} data-result={e.result}>
+              <div className="flex items-start justify-between gap-4 cursor-pointer" onClick={() => setExpanded(expanded === e.id ? null : e.id)} data-testid={`platform-log-toggle-${e.id}`}>
+                <div className="flex items-start gap-3">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#063044]/8 text-[#063044]"><ScrollText size={15} /></span>
+                  <div>
+                    <p className="text-sm">
+                      <span className="font-semibold text-[#063044]">{e.event_type}</span>
+                      <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] uppercase text-slate-500">{e.category}</span>
+                      {e.result && <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] uppercase ${RESULT_COLOR[e.result] || "bg-slate-100 text-slate-500"}`}>{e.result}</span>}
+                    </p>
+                    <p className="text-slate-600 text-sm">{e.label}</p>
+                    <p className="text-[11px] text-slate-400">
+                      {e.actor_email}{e.actor_platform_role ? ` (${e.actor_platform_role})` : ""}
+                      {e.resource ? ` · ${e.resource}` : ""}
+                      {e.target_workspace_id ? ` · client ${e.target_workspace_id}` : ""}
+                      {e.ip ? ` · IP ${e.ip}` : ""}
+                    </p>
+                  </div>
                 </div>
+                <span className="shrink-0 font-mono-data text-xs text-slate-400">{fmtDate(e.timestamp)}</span>
               </div>
-              <span className="shrink-0 font-mono-data text-xs text-slate-400">{fmtDate(e.timestamp)}</span>
+              {expanded === e.id && (
+                <div className="mt-3 ml-11 rounded-lg bg-slate-50 p-3 text-[11px] text-slate-600" data-testid={`platform-log-detail-${e.id}`}>
+                  <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                    {e.request_id && <div><b>Request ID :</b> {e.request_id}</div>}
+                    {e.user_agent && <div><b>User-Agent :</b> {e.user_agent}</div>}
+                    {e.reason && <div><b>Motif :</b> {e.reason}</div>}
+                    {e.action && <div><b>Action :</b> {e.action}</div>}
+                    {e.target_user_id && <div><b>Utilisateur concerné :</b> {e.target_user_id}</div>}
+                  </div>
+                  {(e.before || e.after) && (
+                    <pre className="mt-2 overflow-x-auto rounded bg-white p-2 font-mono-data" data-testid={`platform-log-diff-${e.id}`}>{JSON.stringify({ before: e.before, after: e.after }, null, 2)}</pre>
+                  )}
+                  <pre className="mt-2 overflow-x-auto rounded bg-white p-2 font-mono-data">{JSON.stringify(e.metadata || {}, null, 2)}</pre>
+                </div>
+              )}
             </div>
           ))}
-        </div>}
+        </div>
+      )}
     </div>
   );
 }

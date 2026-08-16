@@ -27,7 +27,7 @@ import Preferences from "../pages/Preferences";
 import { applyTheme } from "../lib/theme";
 import { AcctDashboard, AcctBV, AcctBilan, AcctPnl, AcctCashflow, AcctReports } from "../pages/Comptabilite";
 import QcEntity from "../pages/QcEntity";
-import { PlatformHome, PlatformClients, PlatformLogs, PlatformMeelora } from "../pages/Platform";
+import { PlatformHome, PlatformClients, PlatformLogs, PlatformMeeloraManage } from "../pages/Platform";
 import { ReportingHome, FixedAssetsHome, ConsolidationHome } from "../pages/ModulePlaceholder";
 import MandatsList from "../pages/MandatsList";
 import { NavContext } from "../context/NavContext";
@@ -53,9 +53,9 @@ const PAGES = {
   acct_audit: { title: "Rapports", sub: "Génération centralisée", comp: AcctReports },
   acct_qc9434: { title: "9434-3977 QC inc.", sub: "Commandité", comp: QcEntity },
   platform_home: { title: "Tableau de bord", sub: "Supervision Meelora", comp: PlatformHome },
-  platform_clients: { title: "Tous les mandats", sub: "Sociétés clientes de Meelora", comp: PlatformClients },
-  platform_meelora: { title: "Société Meelora", sub: "Société interne", comp: PlatformMeelora },
-  platform_logs: { title: "Logs plateforme", sub: "Évènements plateforme", comp: PlatformLogs },
+  platform_clients: { title: "Sociétés / Clients", sub: "Registre des sociétés Meelora", comp: PlatformClients },
+  platform_meelora_manage: { title: "Société Meelora — Gestion", sub: "Environnement opérationnel interne", comp: PlatformMeeloraManage },
+  platform_logs: { title: "Logs plateforme", sub: "Audit des évènements plateforme", comp: PlatformLogs },
   mandats_list: { title: "Tous les mandats", sub: "Vos sociétés accessibles", comp: MandatsList },
   reporting_home: { title: "Reporting", sub: "Module Reporting", comp: ReportingHome },
   fixed_assets_home: { title: "Immobilisations", sub: "Module Immobilisations", comp: FixedAssetsHome },
@@ -81,11 +81,10 @@ const MODULE_PAGES = {
 };
 
 const NAV_PLATFORM = [
-  { key: "platform_home", label: "Tableau de bord", sub: "Supervision Meelora", icon: LayoutDashboard },
-  { key: "platform_clients", label: "Tous les mandats", sub: "Sociétés clientes", icon: Building2 },
-  { key: "platform_meelora", label: "Société Meelora", sub: "Société interne", icon: Briefcase },
-  { key: "platform_logs", label: "Logs plateforme", sub: "Évènements plateforme", icon: ScrollText },
+  { key: "platform_home", label: "Tableau de bord", sub: "Pilotage plateforme", icon: LayoutDashboard },
+  { key: "platform_clients", label: "Sociétés / Clients", sub: "Registre des sociétés", icon: Building2 },
 ];
+const NAV_PLATFORM_LOGS = { key: "platform_logs", label: "Logs plateforme", sub: "Audit plateforme", icon: ScrollText };
 
 const NAV_ACCT = [
   { key: "acct_dashboard", label: "Tableau de bord", sub: "Vue d'ensemble", icon: LayoutDashboard },
@@ -496,10 +495,6 @@ function LayoutInner() {
     try { return localStorage.getItem("meelora:activeCompany") || null; } catch (e) { return null; }
   });
   const [navManifest, setNavManifest] = useState(null);
-  // P1.13E — platform staff extension: whether "Société Meelora" was accessed.
-  const [meeloraAccessed, setMeeloraAccessed] = useState(() => {
-    try { return localStorage.getItem("meelora:accessed") === "1"; } catch (e) { return false; }
-  });
   const isPlatformPage = active.startsWith("platform_");
   const page = PAGES[active] || PAGES.dashboard;
   const Active = page.comp;
@@ -526,17 +521,11 @@ function LayoutInner() {
     try { localStorage.setItem("meelora:activeCompany", cid); } catch (e) { /* ignore */ }
   };
   const enterMandat = (cid) => { switchCompany(cid); setActive("dashboard"); setMobileOpen(false); };
-  // Platform staff: "Accéder" on Société Meelora EXTENDS the sidebar with the
-  // business modules the user really has (platform_role grants none by itself).
-  const enterMeelora = () => {
-    const meelora = navCompanies.find((c) => c.legacy_prefix === "acct") || navCompanies[0];
-    if (!meelora) { toast.error("Société Meelora introuvable"); return; }
-    switchCompany(meelora.id);
-    setMeeloraAccessed(true);
-    try { localStorage.setItem("meelora:accessed", "1"); } catch (e) { /* ignore */ }
-    setActive("platform_meelora");
-    setMobileOpen(false);
-  };
+  // Platform staff: "Accéder" on Société Meelora opens its full operational
+  // management console (users / invitations / module access / sensitive perms /
+  // effective access). It NEVER adds financial modules to the platform sidebar
+  // and grants no financial authority (platform_role ≠ authority).
+  const enterMeelora = () => { setActive("platform_meelora_manage"); setMobileOpen(false); };
   const LANDING = { REPORTING: "reporting_home", BUDGETS: "budget", ACCOUNTING: "acct_dashboard", FIXED_ASSETS: "fixed_assets_home", CONSOLIDATION: "consolidation_home" };
   const moduleEntry = (mods, adminView) => {
     if (adminView) return "dashboard";
@@ -565,24 +554,13 @@ function LayoutInner() {
       if (entry !== "dashboard") setActive(entry);
     }
   }, [navManifest, navCompanies]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Platform staff: stay on a platform page unless Meelora was accessed and the
-  // business page is within the accessed modules.
+  // Platform staff stay within platform pages only. Business modules never
+  // appear in the platform sidebar; Société Meelora modules are managed from its
+  // console (platform_meelora_manage), never granted to the platform admin.
   useEffect(() => {
     if (!isPlatformStaff) return;
-    if (active.startsWith("platform_")) return;
-    if (!meeloraAccessed || !navManifest) { setActive("platform_home"); return; }
-    const allowed = allowedBusinessPages(navManifest.modules || [], !!navManifest.admin_view);
-    if (!allowed.has(active)) setActive("platform_home");
-  }, [isPlatformStaff, active, meeloraAccessed, navManifest]); // eslint-disable-line react-hooks/exhaustive-deps
-  // After Accéder (platform), jump into the first authorized module (Comptabilité
-  // first). If none, stay on the Société Meelora page (empty extension state).
-  useEffect(() => {
-    if (!isPlatformStaff || !meeloraAccessed || !navManifest) return;
-    if (active !== "platform_meelora") return;
-    const mods = navManifest.modules || [];
-    if (mods.length === 0) return;
-    setActive(moduleEntry(mods, !!navManifest.admin_view));
-  }, [meeloraAccessed, navManifest]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!active.startsWith("platform_")) setActive("platform_home");
+  }, [isPlatformStaff, active]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const handler = (e) => { if (e.detail) { setActive(e.detail); setMobileOpen(false); } };
     window.addEventListener("acct-navigate", handler);
@@ -621,23 +599,16 @@ function LayoutInner() {
 
         <nav className="flex-1 space-y-1 overflow-y-auto">
           {isPlatformStaff ? (
-            <>
+            <div className="flex h-full flex-col" data-testid="platform-nav">
               <div className="flex items-center gap-2 px-3 pb-1 pt-1">
                 <Server size={13} className="text-[#15AF97]" />
                 <span className="overline" style={{ color: "#94A3B8" }}>Plateforme Meelora</span>
               </div>
               {NAV_PLATFORM.map((i) => <NavItem key={i.key} item={i} active={active} onClick={go} />)}
-              {meeloraAccessed && navManifest && (
-                <div className="pt-4" data-testid="platform-business-ext">
-                  <SectionHeader icon={Briefcase} label="Société Meelora" />
-                  {(navManifest.modules || []).length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-slate-400" data-testid="platform-ext-empty">Aucun module financier ne vous est attribué (le rôle plateforme n'accorde aucune autorité financière).</p>
-                  ) : (
-                    <ModulesNav modules={navManifest.modules} active={active} go={go} />
-                  )}
-                </div>
-              )}
-            </>
+              <div className="mt-auto border-t border-slate-200 pt-3" data-testid="platform-logs-anchor">
+                <NavItem item={NAV_PLATFORM_LOGS} active={active} onClick={go} />
+              </div>
+            </div>
           ) : (
           <DynamicCompanyNav
             manifest={navManifest}
@@ -680,7 +651,7 @@ function LayoutInner() {
           </button>
         )}
         <main className={presentation ? "p-3" : "p-4 sm:p-6 lg:p-8"}>
-          <NavContext.Provider value={{ go, enterMandat, enterMeelora, activeCompanyId, meeloraAccessed, companies: navCompanies }}>
+          <NavContext.Provider value={{ go, enterMandat, enterMeelora, activeCompanyId, companies: navCompanies }}>
             <Active />
           </NavContext.Provider>
         </main>

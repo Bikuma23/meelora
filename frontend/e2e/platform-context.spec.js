@@ -1,61 +1,78 @@
 const { test, expect } = require("@playwright/test");
 const { login } = require("./helpers");
 
-// P1.13E — Contexte plateforme (modèle EXTENSION, pas bascule de contexte).
-// Employé Meelora AVEC rôle plateforme : menus plateforme conservés
-// (Tableau de bord / Sociétés-Clients / Société Meelora / Logs) ; depuis
-// « Société Meelora → Accéder », les modules métier réellement autorisés sont
-// AJOUTÉS à la sidebar. platform_role n'accorde aucune autorité financière.
-test.describe("Platform context — extension (P1.13E)", () => {
-  test("platform sidebar : Tableau de bord + Sociétés/Clients + Société Meelora + Logs", async ({ page }) => {
+// P1.13E — Interface plateforme Meelora (version finale) :
+// sidebar = EXACTEMENT 3 menus (Tableau de bord · Sociétés/Clients · Logs plateforme).
+// « Société Meelora » n'est PAS un menu ; elle est gérée depuis Sociétés/Clients.
+test.describe("Interface plateforme Meelora (P1.13E final)", () => {
+  test("sidebar = exactement 3 menus, aucun module, Société Meelora absente comme menu", async ({ page }) => {
     await login(page, "platformAdmin");
+    await expect(page.getByTestId("platform-nav")).toBeVisible();
     await expect(page.getByTestId("nav-platform_home")).toBeVisible();
     await expect(page.getByTestId("nav-platform_clients")).toBeVisible();
-    await expect(page.getByTestId("nav-platform_meelora")).toBeVisible();
     await expect(page.getByTestId("nav-platform_logs")).toBeVisible();
-    // Aucun des 5 modules métier n'apparaît tant que « Société Meelora » n'est pas accédée.
-    await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
-    await expect(page.getByTestId("platform-home")).toBeVisible();
-  });
-
-  test("Société Meelora → Accéder : EXTENSION (menus plateforme conservés)", async ({ page }) => {
-    await login(page, "platformAdmin");
-    await page.getByTestId("nav-platform_meelora").click();
-    await expect(page.getByTestId("platform-meelora-card")).toBeVisible();
-    await page.getByTestId("platform-meelora-access").click();
-    await page.waitForTimeout(1000);
-    // Les 4 menus plateforme restent présents (extension, pas remplacement).
-    await expect(page.getByTestId("nav-platform_home")).toBeVisible();
-    await expect(page.getByTestId("nav-platform_clients")).toBeVisible();
-    await expect(page.getByTestId("nav-platform_meelora")).toBeVisible();
-    await expect(page.getByTestId("nav-platform_logs")).toBeVisible();
-    // La section d'extension « Société Meelora » apparaît. platform@ n'a AUCUN
-    // module financier -> l'extension est vide (preuve : platform_role ≠ autorité).
-    await expect(page.getByTestId("platform-business-ext")).toBeVisible();
-    await expect(page.getByTestId("platform-ext-empty")).toBeVisible();
+    // Exactement 3 entrées plateforme.
+    await expect(page.locator('[data-testid^="nav-platform_"]')).toHaveCount(3);
+    // Société Meelora n'est PAS une entrée indépendante.
+    await expect(page.getByTestId("nav-platform_meelora")).toHaveCount(0);
+    // Aucun module financier dans la sidebar plateforme.
     await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
   });
 
-  test("carte interne Meelora (Sociétés / Clients) : Accéder = même extension", async ({ page }) => {
+  test("Logs plateforme ancré tout en bas de la sidebar", async ({ page }) => {
+    await login(page, "platformAdmin");
+    const anchor = page.getByTestId("platform-logs-anchor");
+    await expect(anchor).toBeVisible();
+    await expect(anchor.getByTestId("nav-platform_logs")).toBeVisible();
+    // Le bloc logs est visuellement plus bas que les entrées principales.
+    const homeBox = await page.getByTestId("nav-platform_home").boundingBox();
+    const logsBox = await anchor.boundingBox();
+    expect(logsBox.y).toBeGreaterThan(homeBox.y);
+  });
+
+  test("Sociétés / Clients : Société Meelora en 1re position, distinction visuelle Société interne", async ({ page }) => {
     await login(page, "platformAdmin");
     await page.getByTestId("nav-platform_clients").click();
-    await expect(page.getByTestId("platform-internal-card")).toBeVisible();
-    await page.getByTestId("platform-internal-access").click();
-    await page.waitForTimeout(1000);
-    await expect(page.getByTestId("platform-business-ext")).toBeVisible();
-    // Menus plateforme conservés.
-    await expect(page.getByTestId("nav-platform_home")).toBeVisible();
+    await expect(page.getByTestId("platform-clients")).toBeVisible();
+    const internal = page.getByTestId("platform-internal-card");
+    await expect(internal).toBeVisible();
+    await expect(internal.getByText("Société interne")).toBeVisible();
+    await expect(page.getByTestId("platform-internal-access")).toBeVisible();
+    // Recherche présente + création d'une nouvelle société depuis cette page.
+    await expect(page.getByTestId("platform-clients-search")).toBeVisible();
   });
 
-  test("Logs plateforme = menu dédié scopé plateforme (aucun flux client agrégé)", async ({ page }) => {
+  test("Société Meelora → Accéder → gestion complète (console d'accès), aucun module ajouté à la sidebar", async ({ page }) => {
     await login(page, "platformAdmin");
-    await page.getByTestId("nav-platform_logs").click();
-    await expect(page.getByTestId("platform-logs")).toBeVisible();
+    await page.getByTestId("nav-platform_clients").click();
+    await page.getByTestId("platform-internal-access").click();
+    await expect(page.getByTestId("platform-meelora-manage")).toBeVisible();
+    await expect(page.getByTestId("meelora-manage-header")).toBeVisible();
+    // La console d'accès (utilisateurs / modules / niveaux / permissions / effectifs) est rendue.
+    await expect(page.getByTestId("access-management")).toBeVisible();
+    // La sidebar plateforme reste à 3 menus, aucun module financier ajouté.
+    await expect(page.locator('[data-testid^="nav-platform_"]')).toHaveCount(3);
+    await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
   });
 
-  test("support platform_role peut entrer dans le contexte plateforme (lecture seule)", async ({ page }) => {
+  test("client externe → Accéder → fiche client (aucun accès financier implicite)", async ({ page }) => {
+    await login(page, "platformAdmin");
+    await page.getByTestId("nav-platform_clients").click();
+    await expect(page.getByTestId("platform-clients")).toBeVisible();
+    // Attendre le rendu de la liste (la carte interne existe toujours).
+    await expect(page.getByTestId("platform-internal-card")).toBeVisible();
+    const access = page.locator('[data-testid^="platform-client-access-"]').first();
+    await expect(access).toBeVisible();
+    await access.click();
+    await expect(page.getByTestId("client-card")).toBeVisible();
+    // Vue d'administration : aucun module financier dans la sidebar plateforme.
+    await expect(page.locator('[data-testid^="nav-module-"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="nav-platform_"]')).toHaveCount(3);
+  });
+
+  test("support platform_role accède au contexte plateforme (lecture seule)", async ({ page }) => {
     await login(page, "support");
     await expect(page.getByTestId("platform-home")).toBeVisible();
-    await expect(page.getByTestId("nav-platform_meelora")).toBeVisible();
+    await expect(page.locator('[data-testid^="nav-platform_"]')).toHaveCount(3);
   });
 });

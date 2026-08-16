@@ -23,6 +23,7 @@ load_dotenv(ROOT / ".env")
 
 from core.access import module_access as ma
 from core.access import scopes as sc
+from core.access import log_scope as ls
 
 WS = "ws_56c492936ea64c4db53a2f14a0825ef5"
 CA = "965f0770-8cf2-4199-a99f-819ff270436a"   # Meelora (acct)
@@ -126,6 +127,48 @@ async def run():
         for gid in cfg.get("group_scopes", []):
             await sc.set_group_scope(db, WS, uid, gid, True, ACTOR)
         print(f"  seeded {email} -> uid {uid}")
+
+    # P1.13E — a few PLATFORM-scoped audit events (idempotent) so the Logs
+    # plateforme audit tool has searchable/filterable content. Secrets are never
+    # written; the write path redacts anyway.
+    samples = [
+        {"event_type": "client.created", "category": "client", "label": "Client ABC créé",
+         "result": "success", "resource": "workspace:ws_demo_abc",
+         "metadata": {"ip": "203.0.113.10", "user_agent": "Mozilla/5.0", "request_id": "req_abc001",
+                      "after": {"name": "Client ABC", "status": "active"}, "reason": "Onboarding"}},
+        {"event_type": "client_admin.replaced", "category": "client_admin", "label": "Admin Client ABC remplacé",
+         "result": "success", "resource": "user:usr_old -> usr_new",
+         "metadata": {"ip": "203.0.113.11", "user_agent": "Mozilla/5.0", "request_id": "req_abc002",
+                      "before": {"admin": "old@abc.test"}, "after": {"admin": "new@abc.test"},
+                      "password": "SHOULD_NOT_APPEAR", "activation_token": "tok_secret_xyz"}},
+        {"event_type": "support.action", "category": "support", "label": "Action support (réinitialisation invitation)",
+         "result": "failure", "resource": "invitation:inv_123",
+         "metadata": {"ip": "203.0.113.12", "user_agent": "curl/8.0", "request_id": "req_sup001",
+                      "reason": "Invitation expirée"}},
+        {"event_type": "platform.config", "category": "platform", "label": "Configuration plateforme modifiée",
+         "result": "success", "resource": "config:branding",
+         "metadata": {"ip": "203.0.113.13", "user_agent": "Mozilla/5.0", "request_id": "req_cfg001"}},
+    ]
+    actor = {"id": "platform_seed_actor", "email": "platform@meelora.com", "platform_role": "platform_admin"}
+    for s in samples:
+        if await db.platform_logs.find_one({"label": s["label"]}):
+            continue
+        md = dict(s["metadata"])
+        md.setdefault("result", s.get("result", "success"))
+        if s.get("resource"):
+            md.setdefault("resource", s["resource"])
+        await ls.write_platform_log(db, actor, event_type=s["event_type"], label=s["label"],
+                                    details=s.get("resource", ""), metadata=md)
+    print("  seeded platform audit logs (4 samples, secrets redacted)")
+
+    # P1.13E — a minimal EXTERNAL client workspace so the platform "Sociétés /
+    # Clients -> client -> Accéder -> fiche" flow is testable (idempotent).
+    if not await db.workspaces.find_one({"_id": "ws_demo_clientabc"}):
+        await db.workspaces.insert_one({
+            "_id": "ws_demo_clientabc", "name": "Client Démo ABC", "jurisdiction": "CA",
+            "organization_type": "company", "status": "active", "created_at": now})
+        print("  seeded external demo client workspace (ws_demo_clientabc)")
+
     print("\nP1.13E personas seeded (idempotent). Password:", PWD)
     client.close()
 

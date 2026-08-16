@@ -22,6 +22,28 @@ from fastapi import HTTPException
 
 _now = lambda: datetime.now(timezone.utc).isoformat()
 
+# Secrets that must NEVER be persisted/returned in an audit log (defense in depth).
+_REDACT_KEYS = {
+    "password", "password_hash", "pwd", "hash", "jwt", "token", "access_token",
+    "refresh_token", "activation_token", "invite_token", "secret", "api_key",
+    "apikey", "credentials", "authorization", "session", "cookie",
+}
+
+
+def _redact(md: Optional[dict]) -> dict:
+    """Strip secret-bearing keys from metadata (audit ≠ secret store)."""
+    if not isinstance(md, dict):
+        return {}
+    out = {}
+    for k, v in md.items():
+        if str(k).strip().lower() in _REDACT_KEYS:
+            out[str(k)] = "[redacted]"
+        elif isinstance(v, dict):
+            out[str(k)] = _redact(v)
+        else:
+            out[str(k)] = v
+    return out
+
 # Event types (and prefixes) that belong to the PLATFORM scope.
 PLATFORM_EVENT_TYPES = {
     "client.created", "client.activated", "client.deactivated",
@@ -39,16 +61,30 @@ def classify_scope(event_type: Optional[str], company_id: Optional[str] = None) 
 
 
 def public_platform_log(doc: dict) -> dict:
+    md = _redact(doc.get("metadata") or {})
+    et = doc.get("event_type") or ""
     return {
         "id": str(doc.get("_id", "")),
         "scope": "platform",
-        "event_type": doc.get("event_type"),
+        "event_type": et,
+        "category": doc.get("category") or md.get("category") or (et.split(".")[0] if et else "autre"),
         "actor_user_id": doc.get("actor_user_id"),
         "actor_email": doc.get("actor_email", ""),
+        "actor_platform_role": doc.get("actor_platform_role") or md.get("actor_platform_role"),
         "target_workspace_id": doc.get("target_workspace_id"),
+        "target_user_id": doc.get("target_user_id") or md.get("target_user_id"),
+        "resource": doc.get("resource") or md.get("resource"),
+        "action": doc.get("action") or md.get("action"),
+        "result": doc.get("result") or md.get("result"),
+        "reason": doc.get("reason") or md.get("reason"),
+        "ip": doc.get("ip") or md.get("ip"),
+        "user_agent": doc.get("user_agent") or md.get("user_agent"),
+        "request_id": doc.get("request_id") or md.get("request_id"),
+        "before": md.get("before"),
+        "after": md.get("after"),
         "label": doc.get("label", ""),
         "details": doc.get("details", ""),
-        "metadata": dict(doc.get("metadata") or {}),
+        "metadata": md,
         "timestamp": doc.get("timestamp"),
     }
 
@@ -62,19 +98,23 @@ async def write_platform_log(db, user: dict, *, event_type: str, label: str,
                              target_workspace_id: Optional[str] = None, details: str = "",
                              metadata: Optional[dict[str, Any]] = None) -> dict:
     """Append one platform-scoped event. Kept physically separate from tenant
-    logs. Writing is a server-internal action; READING is gated by platform role
-    (see list_platform_logs)."""
+    logs. Secrets are redacted before persistence. Writing is a server-internal
+    action; READING is gated by platform role (see list_platform_logs)."""
     if classify_scope(event_type) != "platform":
         raise HTTPException(status_code=422, detail=f"Type d'évènement non plateforme: {event_type}")
+    md = _redact(metadata or {})
     doc = {
         "_id": f"plog_{uuid.uuid4().hex}",
         "event_type": event_type,
+        "category": md.get("category") or (event_type.split(".")[0] if event_type else "autre"),
         "actor_user_id": user.get("id"),
         "actor_email": user.get("email", ""),
+        "actor_platform_role": user.get("platform_role"),
         "target_workspace_id": target_workspace_id,
         "label": label,
         "details": details,
-        "metadata": metadata or {},
+        "result": md.get("result", "success"),
+        "metadata": md,
         "timestamp": _now(),
     }
     await db.platform_logs.insert_one(doc)
@@ -82,14 +122,45 @@ async def write_platform_log(db, user: dict, *, event_type: str, label: str,
 
 
 async def list_platform_logs(db, user: dict, *, target_workspace_id: Optional[str] = None,
-                             limit: int = 300) -> list[dict]:
+                             q: Optional[str] = None, event_type: Optional[str] = None,
+                             actor: Optional[str] = None, category: Optional[str] = None,
+                             result: Optional[str] = None, date_from: Optional[str] = None,
+                             date_to: Optional[str] = None, limit: int = 300) -> list[dict]:
     _require_platform(user)
     limit = max(1, min(int(limit or 300), 1000))
     query: dict[str, Any] = {}
     if target_workspace_id:
         query["target_workspace_id"] = target_workspace_id
-    docs = await db.platform_logs.find(query).sort("timestamp", -1).limit(limit).to_list(limit)
-    return [public_platform_log(d) for d in docs]
+    if event_type:
+        query["event_type"] = event_type
+    if category:
+        query["category"] = category
+    # ISO-8601 strings sort lexicographically -> safe range filter on timestamp.
+    if date_from or date_to:
+        ts: dict[str, Any] = {}
+        if date_from:
+            ts["$gte"] = date_from
+        if date_to:
+            ts["$lte"] = date_to if len(date_to) > 10 else date_to + "T23:59:59.999999+00:00"
+        query["timestamp"] = ts
+    docs = await db.platform_logs.find(query).sort("timestamp", -1).limit(1000).to_list(1000)
+    out = [public_platform_log(d) for d in docs]
+    if result:
+        out = [e for e in out if (e.get("result") or "").lower() == result.lower()]
+    if actor:
+        a = actor.lower()
+        out = [e for e in out if a in (e.get("actor_email") or "").lower() or a in (e.get("actor_user_id") or "").lower()]
+    if q:
+        ql = q.lower()
+        def _hit(e):
+            hay = " ".join(str(e.get(k) or "") for k in (
+                "event_type", "category", "actor_email", "actor_user_id", "target_workspace_id",
+                "target_user_id", "resource", "action", "result", "reason", "ip", "user_agent",
+                "request_id", "label", "details"))
+            hay += " " + " ".join(f"{k}={v}" for k, v in (e.get("metadata") or {}).items())
+            return ql in hay.lower()
+        out = [e for e in out if _hit(e)]
+    return out[:limit]
 
 
 async def list_workspace_logs(db, user: dict, *, company_id: Optional[str] = None,
