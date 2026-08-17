@@ -56,7 +56,9 @@ const EMPTY_SUP = {
 
 export default function PurchasesAP() {
   const { activeCompanyId: cid } = useNav();
-  const [tab, setTab] = useState("suppliers");
+  const [tab, setTab] = useState("overview");
+  const [payView, setPayView] = useState("to_pay");
+  const go = (t, opts) => { if (opts?.payView) setPayView(opts.payView); setTab(t); };
   return (
     <div className="mx-auto max-w-6xl" data-testid="ap-page">
       <div className="mb-5 flex flex-wrap gap-1 border-b border-slate-200">
@@ -67,10 +69,11 @@ export default function PurchasesAP() {
           </button>
         ))}
       </div>
-      {tab === "suppliers" ? <SuppliersTab cid={cid} />
+      {tab === "overview" ? <OverviewTab cid={cid} onNavigate={go} />
+        : tab === "suppliers" ? <SuppliersTab cid={cid} />
         : tab === "invoices" ? <InvoicesTab cid={cid} toProcess={false} />
         : tab === "inbox" ? <InvoicesTab cid={cid} toProcess={true} />
-        : tab === "payments" ? <PaymentsTab cid={cid} />
+        : tab === "payments" ? <PaymentsTab cid={cid} initialView={payView} />
         : tab === "credits" ? <CreditsTab cid={cid} />
         : tab === "aging" ? <AgingTab cid={cid} />
         : <ComingSoon label={TABS.find((t) => t.key === tab)?.label} />}
@@ -83,6 +86,142 @@ function ComingSoon({ label }) {
     <div className="rounded-xl border border-dashed border-slate-300 bg-white/60 p-10 text-center" data-testid="ap-coming-soon">
       <p className="text-sm font-600 text-[#063044]">{label}</p>
       <p className="mt-1 text-sm text-slate-400">Module Achats & Fournisseurs — disponible dans une prochaine tranche (A4.2+).</p>
+    </div>
+  );
+}
+
+const _ovCache = {};
+const ccyLine = (byCcy) => {
+  const entries = Object.entries(byCcy || {}).filter(([, v]) => Math.abs(v) > 0.001);
+  if (entries.length === 0) return "—";
+  return entries.map(([c, v]) => `${v.toFixed(2)} ${c}`).join(" · ");
+};
+const PRIO_CLS = {
+  pay: "bg-rose-100 text-rose-700", approve: "bg-indigo-100 text-indigo-700",
+  po: "bg-amber-100 text-amber-700", review: "bg-orange-100 text-orange-700",
+  complete: "bg-slate-100 text-slate-600", authorized: "bg-blue-100 text-blue-700",
+  executed: "bg-emerald-100 text-emerald-700",
+};
+
+function OverviewTab({ cid, onNavigate }) {
+  const [data, setData] = useState(() => _ovCache[cid] || null);
+  const [loading, setLoading] = useState(!_ovCache[cid]);
+
+  const load = useCallback(async () => {
+    if (!cid) return;
+    if (!_ovCache[cid]) setLoading(true);
+    try {
+      const d = await api.apOverview(cid, {});
+      _ovCache[cid] = d; setData(d);
+    } catch (e) { /* gated */ }
+    setLoading(false);
+  }, [cid]);
+  useEffect(() => { load(); }, [load]);
+
+  const fc = data?.functional_currency || "";
+  const KPIS = data ? [
+    { key: "to_process", label: "À traiter", value: `${data.kpis.to_process}`, sub: "factures à actionner", accent: "text-indigo-600", tab: "inbox", testid: "ap-kpi-to_process" },
+    { key: "to_pay", label: "À payer", value: money(data.kpis.to_pay, fc), sub: "approuvé restant", accent: "text-[#063044]", tab: "payments", opts: { payView: "to_pay" }, testid: "ap-kpi-to_pay" },
+    { key: "overdue", label: "Échu", value: money(data.kpis.overdue, fc), sub: "en retard", accent: "text-rose-600", tab: "aging", testid: "ap-kpi-overdue" },
+    { key: "due_7", label: "Échéance 7 j", value: money(data.kpis.due_7, fc), sub: "à venir", accent: "text-amber-600", tab: "aging", testid: "ap-kpi-due_7" },
+    { key: "available_credits", label: "Crédits disponibles", value: money(data.kpis.available_credits, fc), sub: "non affectés", accent: "text-purple-600", tab: "credits", testid: "ap-kpi-credits" },
+  ] : [];
+
+  if (loading && !data) {
+    return (
+      <div className="space-y-4" data-testid="ap-overview-skeleton">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100" />)}
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="h-56 animate-pulse rounded-xl bg-slate-100" />
+          <div className="h-56 animate-pulse rounded-xl bg-slate-100" />
+        </div>
+      </div>
+    );
+  }
+  if (!data) return <p className="text-sm text-slate-400">Aucune donnée.</p>;
+  const cash = data.cash;
+
+  return (
+    <div className="space-y-5" data-testid="ap-overview-tab">
+      {/* KPI row */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {KPIS.map((k) => (
+          <button key={k.key} data-testid={k.testid} onClick={() => onNavigate(k.tab, k.opts)}
+            className="group rounded-xl border border-slate-200 bg-white p-3 text-left transition-all hover:-translate-y-0.5 hover:border-[#22C55E] hover:shadow-sm">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500">{k.label}</p>
+            <p className={`mt-1 text-lg font-700 ${k.accent}`}>{k.value}</p>
+            <p className="text-[11px] text-slate-400">{k.sub}</p>
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Priorities */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="ap-priorities">
+          <p className="mb-3 text-sm font-600 text-[#063044]">Priorités</p>
+          {data.priorities.length === 0 ? <p className="text-sm text-slate-400" data-testid="ap-priorities-empty">Rien à traiter — tout est à jour.</p>
+            : (
+              <div className="divide-y divide-slate-100">
+                {data.priorities.map((p) => (
+                  <button key={`${p.kind}-${p.id}`} data-testid={`ap-priority-${p.id}`}
+                    onClick={() => onNavigate(p.target, p.kind === "payment" ? { payView: "prepared" } : undefined)}
+                    className="flex w-full items-center justify-between gap-2 py-2 text-left transition-colors hover:bg-slate-50">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-600 text-[#0F172A]">{p.supplier}</p>
+                      <p className="truncate text-xs text-slate-400">{p.number || (p.kind === "payment" ? "Paiement" : p.id.slice(0, 10))}{p.due_date ? ` · éch. ${p.due_date}` : ""}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-sm font-600 text-slate-600">{money(p.amount, p.currency)}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-600 ${PRIO_CLS[p.action] || "bg-slate-100 text-slate-600"}`}>{p.issue}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+        </div>
+
+        {/* Cash projection */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="ap-cash">
+          <p className="mb-3 text-sm font-600 text-[#063044]">Trésorerie fournisseurs — à décaisser</p>
+          <div className="space-y-2">
+            {[["overdue", "Échu", "text-rose-600"], ["d7", "7 jours", "text-amber-600"], ["d30", "30 jours", "text-slate-700"], ["d30_plus", "> 30 jours", "text-slate-500"]].map(([k, l, cls]) => (
+              <div key={k} className="flex items-center justify-between gap-3 border-b border-slate-50 pb-2" data-testid={`ap-cash-${k}`}>
+                <span className={`text-sm font-600 ${cls}`}>{l}</span>
+                <div className="text-right">
+                  <p className="text-sm text-slate-700">{ccyLine(cash[k].by_currency)}</p>
+                  {Object.keys(cash[k].by_currency || {}).length > 1 && <p className="text-[11px] text-slate-400">≈ {money(cash[k].functional, fc)}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-slate-400">Montants par devise — jamais additionnés silencieusement. La contre-valeur {fc} est indicative.</p>
+        </div>
+      </div>
+
+      {/* Top suppliers */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="ap-top-suppliers">
+        <p className="mb-3 text-sm font-600 text-[#063044]">Top fournisseurs à payer</p>
+        {data.top_suppliers.length === 0 ? <p className="text-sm text-slate-400">Aucun solde ouvert.</p>
+          : (
+            <div className="divide-y divide-slate-100">
+              {data.top_suppliers.map((s) => (
+                <button key={s.supplier_id} data-testid={`ap-top-sup-${s.supplier_id}`} onClick={() => onNavigate("aging")}
+                  className="flex w-full items-center justify-between gap-2 py-2 text-left transition-colors hover:bg-slate-50">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-600 text-[#0F172A]">{s.name}</p>
+                    <p className="truncate text-xs text-slate-400">Prochaine échéance {s.next_due_date || "—"}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-600 text-[#063044]">{ccyLine(s.currencies)}</p>
+                    {Object.keys(s.currencies || {}).length > 1 && <p className="text-[11px] text-slate-400">≈ {money(s.open_balance, fc)}</p>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+      </div>
     </div>
   );
 }
@@ -486,8 +625,8 @@ const PAY_VIEWS = [
   { key: "paid", label: "Payés" },
 ];
 
-function PaymentsTab({ cid }) {
-  const [view, setView] = useState("to_pay");
+function PaymentsTab({ cid, initialView }) {
+  const [view, setView] = useState(initialView || "to_pay");
   const [payments, setPayments] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [openInvoices, setOpenInvoices] = useState([]);

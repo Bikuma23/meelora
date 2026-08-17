@@ -1670,3 +1670,12 @@ Module Achats & Fournisseurs (AP) uniquement. Aucun ledger parallèle : réutili
 - **A4.7 (P1)** — Boîte de réception courriel AP dédiée.
 - **Banque & Trésorerie (futur)** — exécution/rapprochement bancaire consommant `ap_payments` + `ap_payment_batches`.
 - OANDA_API_KEY (P2) et RESEND_API_KEY (P2) : en attente des clés utilisateur.
+
+### A4.3 finition — onglet Aperçu AP (LIVRÉ — 2026-06)
+Vue de pilotage compacte et actionnable dans Achats & Fournisseurs → **Aperçu** (onglet par défaut), dérivée exclusivement des données A4.1–A4.3 (aucun solde stocké, aucun ledger parallèle).
+- **5 KPI cliquables** : À traiter (nombre) · À payer · Échu · Échéance 7 j · Crédits disponibles → drill-down direct (inbox / payments to_pay / aging / aging / credits).
+- **Priorités** triées par urgence (factures : approbation requise/PO manquant/échue depuis X j ; paiements : à autoriser / exécuté à comptabiliser) — clic → vue concernée.
+- **Trésorerie fournisseurs** : Échu | 7 j | 30 j | >30 j, ventilation PAR DEVISE (jamais additionnées silencieusement ; contre-valeur fonctionnelle indicative).
+- **Top fournisseurs à payer** (max 5, solde ouvert + prochaine échéance) → clic vers Aging.
+- Skeleton loading + cache/revalidation (`_ovCache`), chargement parallèle. Respecte prepared/authorized ≠ payé, executed ≠ posted.
+- Backend : `ap.py::overview()` + `GET /api/companies/{cid}/ap/overview`. Frontend : `PurchasesAP.js::OverviewTab`, `api.js::apOverview`. Tests : `test_reports/iteration_77.json` (frontend 100%, 0 bug).

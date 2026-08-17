@@ -1,0 +1,44 @@
+{
+  "summary": "Frontend UX testing of A4.3 finition — Aperçu tab in Comptabilité → Achats & Fournisseurs. All acceptance criteria verified: default tab, 5 KPIs, 5 drill-downs, priorities (payment + invoice), cash per currency (no silent aggregation), top suppliers navigation. All flows work as specified.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Design nit: On the Aperçu view, empty cash buckets show '—' correctly but the top-level KPI 'À payer' shows 725.00 CHF while 'Échu/Échéance 7 j' show 0.00 CHF — this is consistent because remaining approved amount is entirely in d30 bucket. Consider surfacing bucket per KPI card too for consistency (optional)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100%"},
+  "test_credentials": "persona_finance@accslegro.com / persona123 — Meelora 965f0770-8cf2-4199-a99f-819ff270436a",
+  "seed_data_creation": "None (used existing test data).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Aperçu tab (ap-tab-overview) is default. 5 KPIs render values: À traiter=22 (int), À payer=725.00 CHF, Échu/Échéance 7 j/Crédits=0.00 CHF. All 5 KPI drill-downs navigate to correct target tabs (inbox, payments+ap-payview-to_pay visible, aging x2, credits). Priorities list has 8 items (6 payments 'pay_*' + 2 invoices 'sinv_*'); clicking pay_* -> Paiements, sinv_* -> Factures à traiter. Cash bucket d30 shows 725.00 CHF, others '—' (no silent CHF aggregation). Top suppliers has 1 supplier (Bureautique Plus 2, 725.00 CHF, next due 2026-09-16); click navigates to Aging. No console errors related to overview. No skeleton observed because cache was already warm; not blocking.",
+  "test_details": {
+    "default_tab_ok": true,
+    "kpi_values": {
+      "to_process": "22 factures à actionner",
+      "to_pay": "725.00 CHF",
+      "overdue": "0.00 CHF",
+      "due_7": "0.00 CHF",
+      "credits": "0.00 CHF"
+    },
+    "drill_downs": {
+      "to_process->inbox": "OK (ap-tab-inbox activated)",
+      "to_pay->payments+ap-payview-to_pay": "OK (payview visible count=1)",
+      "overdue->aging": "OK (ap-aging-tab rendered)",
+      "due_7->aging": "OK",
+      "credits->credits": "OK (ap-credits-tab rendered)"
+    },
+    "priority_clicks": {
+      "pay_type->payments": "OK",
+      "sinv_type->inbox": "OK"
+    },
+    "cash_per_currency": {"overdue":"—","d7":"—","d30":"725.00 CHF","d30_plus":"—", "no_silent_aggregation": true},
+    "top_supplier_click->aging": "OK"
+  }
+}

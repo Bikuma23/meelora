@@ -303,6 +303,7 @@ export const api = {
   apUploadInvoicePdf: (cid, id, file) => { const fd = new FormData(); fd.append("file", file); return client.post(`/companies/${cid}/ap/invoices/${id}/attachment`, fd, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data); },
   apInvoiceDocuments: (cid, id) => client.get(`/companies/${cid}/ap/invoices/${id}/documents`).then((r) => r.data),
   // A4.3 — payments · credit notes · aging · batches
+  apOverview: (cid, params) => client.get(`/companies/${cid}/ap/overview`, { params }).then((r) => r.data),
   apPayments: (cid, params) => client.get(`/companies/${cid}/ap/payments`, { params }).then((r) => r.data),
   apPayment: (cid, id) => client.get(`/companies/${cid}/ap/payments/${id}`).then((r) => r.data),
   apCreatePayment: (cid, body) => client.post(`/companies/${cid}/ap/payments`, body).then((r) => r.data),

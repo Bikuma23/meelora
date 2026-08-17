@@ -1151,3 +1151,124 @@ async def ensure_a43_indexes(db):
     await db.ap_credit_notes.create_index([("workspace_id", 1), ("company_id", 1), ("invoice_id", 1)])
     await db.ap_supplier_credits.create_index([("workspace_id", 1), ("company_id", 1), ("supplier_id", 1)])
     await db.ap_payment_batches.create_index([("workspace_id", 1), ("company_id", 1), ("state", 1)])
+
+
+
+# --------------------------------------------------------------------------- #
+# A4.3 finition — AP Overview (pilotage compact, dérivé des transactions A4)
+# No stored balance, no parallel ledger: every figure is computed on the fly.
+# --------------------------------------------------------------------------- #
+_TO_PROCESS_STATUSES = ("draft", "verified", "submitted", "po_missing", "discrepancy")
+
+
+def _days_between(as_of, due):
+    try:
+        return (datetime.fromisoformat(as_of) - datetime.fromisoformat(due)).days
+    except Exception:
+        return 0
+
+
+async def overview(db, ws, co, as_of=None):
+    as_of = as_of or _now()[:10]
+    functional = await _functional_currency(db, ws, co)
+
+    def add_ccy(bucket, ccy, amount):
+        bucket[ccy] = _money(bucket.get(ccy, 0.0) + amount)
+
+    suppliers = {s["_id"]: s for s in await db.ap_suppliers.find(
+        {"workspace_id": ws, "company_id": co}).to_list(None)}
+    sup_name = lambda sid: (suppliers.get(sid) or {}).get("name") or (sid or "")[:8]
+
+    to_process = 0
+    to_pay_func, overdue_func, due7_func = 0.0, 0.0, 0.0
+    cash = {"overdue": {}, "d7": {}, "d30": {}, "d30_plus": {}}
+    cash_func = {"overdue": 0.0, "d7": 0.0, "d30": 0.0, "d30_plus": 0.0}
+    per_supplier = {}
+    priorities = []
+
+    invoices = await db.ap_invoices.find({"workspace_id": ws, "company_id": co}).to_list(None)
+    for inv in invoices:
+        st = inv.get("document_status")
+        if st in _TO_PROCESS_STATUSES:
+            to_process += 1
+            if st == "submitted":
+                issue, action = "Approbation requise", "approve"
+            elif st == "po_missing":
+                issue, action = "PO manquant", "po"
+            elif st == "discrepancy":
+                issue, action = "Écart détecté", "review"
+            else:
+                issue, action = "À compléter", "complete"
+            priorities.append({"kind": "invoice", "id": inv["_id"], "supplier": sup_name(inv.get("supplier_id")),
+                               "supplier_id": inv.get("supplier_id"), "number": inv.get("supplier_invoice_number"),
+                               "amount": inv.get("total"), "currency": inv.get("currency"),
+                               "due_date": inv.get("due_date"), "issue": issue, "action": action,
+                               "urgency": 40, "target": "inbox"})
+            continue
+        if st != "approved":
+            continue
+        bal = float(inv.get("balance") or 0)
+        if bal <= 0.001:
+            continue
+        ccy = inv.get("currency") or functional
+        rate = (inv.get("fx") or {}).get("rate", 1.0)
+        bal_func = _fx.convert(bal, rate)
+        to_pay_func += bal_func
+        due = inv.get("due_date") or as_of
+        days = _days_between(as_of, due)
+        if days > 0:
+            overdue_func += bal_func
+            add_ccy(cash["overdue"], ccy, bal); cash_func["overdue"] += bal_func
+        elif days >= -7:
+            due7_func += bal_func
+            add_ccy(cash["d7"], ccy, bal); cash_func["d7"] += bal_func
+        elif days >= -30:
+            add_ccy(cash["d30"], ccy, bal); cash_func["d30"] += bal_func
+        else:
+            add_ccy(cash["d30_plus"], ccy, bal); cash_func["d30_plus"] += bal_func
+        s = per_supplier.setdefault(inv["supplier_id"], {"open_func": 0.0, "next_due": None, "ccys": {}})
+        s["open_func"] += bal_func
+        add_ccy(s["ccys"], ccy, bal)
+        if due and (s["next_due"] is None or due < s["next_due"]):
+            s["next_due"] = due
+        if days > 0:
+            priorities.append({"kind": "invoice", "id": inv["_id"], "supplier": sup_name(inv["supplier_id"]),
+                               "supplier_id": inv["supplier_id"], "number": inv.get("supplier_invoice_number"),
+                               "amount": bal, "currency": ccy, "due_date": due,
+                               "issue": f"Échue depuis {days} j", "action": "pay",
+                               "urgency": 100 + days, "target": "payments"})
+
+    # Payment lifecycle priorities (prepared/authorized ≠ paid; executed ≠ posted)
+    async for p in db.ap_payments.find({"workspace_id": ws, "company_id": co,
+                                        "payment_state": {"$in": ["authorized", "executed"]}}):
+        if p["payment_state"] == "authorized":
+            issue, urg = "Paiement à autoriser", 70
+        else:
+            issue, urg = "Paiement exécuté à comptabiliser", 60
+        priorities.append({"kind": "payment", "id": p["_id"], "supplier": sup_name(p.get("supplier_id")),
+                           "supplier_id": p.get("supplier_id"), "number": None, "amount": p.get("amount"),
+                           "currency": p.get("currency"), "due_date": p.get("payment_date"),
+                           "issue": issue, "action": p["payment_state"], "urgency": urg, "target": "payments"})
+
+    credits = await db.ap_supplier_credits.find({"workspace_id": ws, "company_id": co, "status": "available"}).to_list(None)
+    credits_func = _money(sum(_fx.convert(float(c.get("remaining") or 0), 1.0) for c in credits))
+
+    priorities.sort(key=lambda x: x["urgency"], reverse=True)
+
+    top = sorted(({"supplier_id": sid, "name": sup_name(sid), "open_balance": _money(v["open_func"]),
+                   "currencies": v["ccys"], "next_due_date": v["next_due"]}
+                  for sid, v in per_supplier.items()), key=lambda x: x["open_balance"], reverse=True)[:5]
+
+    return {
+        "as_of": as_of, "functional_currency": functional,
+        "kpis": {
+            "to_process": to_process,
+            "to_pay": _money(to_pay_func),
+            "overdue": _money(overdue_func),
+            "due_7": _money(due7_func),
+            "available_credits": credits_func,
+        },
+        "priorities": priorities[:8],
+        "cash": {k: {"by_currency": cash[k], "functional": _money(cash_func[k])} for k in cash},
+        "top_suppliers": top,
+    }

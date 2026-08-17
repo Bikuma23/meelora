@@ -3807,6 +3807,12 @@ async def ap_set_mapping(company_id: str, payload: APMappingIn, user: dict = Dep
 
 
 # ---- A4.3 Supplier payments · credit notes · aging · batches --------------
+@api.get("/companies/{company_id}/ap/overview")
+async def ap_overview(company_id: str, as_of: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await ap_service.overview(db, ws, company_id, as_of=as_of)
+
+
 class APAllocationIn(BaseModel):
     invoice_id: str
     amount: float
