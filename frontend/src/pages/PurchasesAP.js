@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNav } from "../context/NavContext";
+import { useNavBadges } from "../context/NavBadgeContext";
 import { api } from "../lib/api";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
@@ -104,6 +105,7 @@ const PRIO_CLS = {
 };
 
 function OverviewTab({ cid, onNavigate }) {
+  const { acknowledgeWith } = useNavBadges();
   const [data, setData] = useState(() => _ovCache[cid] || null);
   const [loading, setLoading] = useState(!_ovCache[cid]);
   const [newIds, setNewIds] = useState(() => new Set());
@@ -118,6 +120,9 @@ function OverviewTab({ cid, onNavigate }) {
     try {
       const d = await api.apOverview(cid, {});
       const ids = (d.priorities || []).map((p) => p.id);
+      // Opening / viewing the AP Overview clears the sidebar nav badge for AP
+      // (acknowledge the FULL actionable set, not just the top-8 priorities).
+      acknowledgeWith("acct_purchases", d.actionable_ids || ids);
       if (firstRef.current) {
         // Baseline on first paint: nothing is "new" yet (scoped to this company).
         ids.forEach((id) => seenRef.current.add(id));
@@ -133,7 +138,7 @@ function OverviewTab({ cid, onNavigate }) {
       _ovCache[cid] = d; setData(d);
     } catch (e) { /* gated / scoped by effective rights server-side */ }
     setLoading(false);
-  }, [cid]);
+  }, [cid, acknowledgeWith]);
 
   // Reset acknowledgment state per active company, then poll (server-confirmed only,
   // never optimistic for financial figures). ~25s + revalidate on tab focus.

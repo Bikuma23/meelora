@@ -1185,12 +1185,14 @@ async def overview(db, ws, co, as_of=None):
     cash_func = {"overdue": 0.0, "d7": 0.0, "d30": 0.0, "d30_plus": 0.0}
     per_supplier = {}
     priorities = []
+    actionable_ids = []  # ALL unseen-able ids for the nav badge (not capped)
 
     invoices = await db.ap_invoices.find({"workspace_id": ws, "company_id": co}).to_list(None)
     for inv in invoices:
         st = inv.get("document_status")
         if st in _TO_PROCESS_STATUSES:
             to_process += 1
+            actionable_ids.append(inv["_id"])
             if st == "submitted":
                 issue, action = "Approbation requise", "approve"
             elif st == "po_missing":
@@ -1252,9 +1254,11 @@ async def overview(db, ws, co, as_of=None):
                            "supplier_id": p.get("supplier_id"), "number": None, "amount": p.get("amount"),
                            "currency": p.get("currency"), "due_date": p.get("payment_date"),
                            "issue": issue, "action": p["payment_state"], "urgency": urg, "target": "payments"})
+        actionable_ids.append(p["_id"])
 
     credits = await db.ap_supplier_credits.find({"workspace_id": ws, "company_id": co, "status": "available"}).to_list(None)
     credits_func = _money(sum(_fx.convert(float(c.get("remaining") or 0), 1.0) for c in credits))
+    actionable_ids.extend(c["_id"] for c in credits)
 
     priorities.sort(key=lambda x: x["urgency"], reverse=True)
 
@@ -1272,6 +1276,7 @@ async def overview(db, ws, co, as_of=None):
             "available_credits": credits_func,
         },
         "priorities": priorities[:8],
+        "actionable_ids": actionable_ids,
         "cash": {k: {"by_currency": cash[k], "functional": _money(cash_func[k])} for k in cash},
         "top_suppliers": top,
     }

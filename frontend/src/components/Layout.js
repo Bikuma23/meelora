@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
 import { useLang } from "../context/LanguageContext";
+import { NavBadgeProvider, useNavBadges, NAV_BADGE_SOURCES } from "../context/NavBadgeContext";
 import {
   LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight, Minimize2, HelpCircle, Bell, Camera, Trash2, Pencil, AlertTriangle, Layers, Globe, ShieldAlert, Loader2, Home,
 } from "lucide-react";
@@ -465,16 +466,34 @@ export default function Layout() {
   return <YearProvider><LayoutInner /></YearProvider>;
 }
 
+// Discrete, non-intrusive nav notification badge (no blink, no sound, capped 9+).
+// prefers-reduced-motion is honoured globally (ap-fade-in is neutralised).
+function NavCount({ count, testid, dot }) {
+  if (!count) return null;
+  if (dot) return <span data-testid={testid} className="ap-fade-in h-2 w-2 shrink-0 rounded-full bg-[#22C55E]" aria-label={`${count} nouveaux éléments`} />;
+  return (
+    <span data-testid={testid} aria-label={`${count} nouveaux éléments`}
+      className="ap-fade-in inline-flex h-4 min-w-[16px] shrink-0 items-center justify-center rounded-full bg-[#22C55E] px-1 text-[9px] font-700 text-white">
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
+
+const moduleBadgeCount = (counts, code) =>
+  NAV_BADGE_SOURCES.filter((s) => s.module === code).reduce((n, s) => n + (counts[s.key] || 0), 0);
+
 // Reusable floating module navigation (popover) — same UX principle as the avatar
 // menu. The sidebar stays compact (root modules only); sub-menus live in the flyout
 // and never grant any authorization (P1.13 remains the sole authority).
 function ModuleFlyout({ code, active, go, openModule, setOpenModule }) {
   const { t } = useLang();
+  const { counts } = useNavBadges();
   const cfg = MODULE_FLYOUT[code];
   if (!cfg) return null;
   const Icon = cfg.icon;
   const moduleActive = (MODULE_PAGES[code] || []).includes(active);
   const open = openModule === code;
+  const modCount = moduleBadgeCount(counts, code);
   return (
     <Popover open={open} onOpenChange={(o) => { if (o) preloadModule(code); setOpenModule(o ? code : null); }}>
       <PopoverTrigger asChild>
@@ -484,6 +503,7 @@ function ModuleFlyout({ code, active, go, openModule, setOpenModule }) {
           {moduleActive && <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[#22C55E]" />}
           <span className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${moduleActive ? "bg-[#22C55E] text-white" : "bg-[#F3F4F6] text-slate-500 group-hover:bg-[#A7F3DD]/50 group-hover:text-[#22C55E]"}`}><Icon size={16} strokeWidth={2.2} /></span>
           <span className="min-w-0 flex-1"><span className={`block truncate text-sm ${moduleActive ? "font-700" : "font-600"}`}>{t(cfg.label)}</span></span>
+          {!open && <NavCount count={modCount} testid={`nav-module-badge-${code}`} />}
           <ChevronRight size={15} className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-90 text-[#22C55E]" : ""}`} />
         </button>
       </PopoverTrigger>
@@ -502,7 +522,8 @@ function ModuleFlyout({ code, active, go, openModule, setOpenModule }) {
                 <button key={it.key} data-testid={`nav-${it.key}`} onClick={() => { go(it.key); setOpenModule(null); }}
                   className={`group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors duration-150 ${on ? "bg-[#A7F3DD]/40 font-700 text-[#0F172A]" : "font-600 text-slate-600 hover:bg-[#F3F4F6] hover:text-[#0F172A]"}`}>
                   <I size={15} strokeWidth={2.2} className={on ? "text-[#22C55E]" : "text-slate-400 group-hover:text-[#22C55E]"} />
-                  <span className="truncate">{t(it.label)}</span>
+                  <span className="flex-1 truncate">{t(it.label)}</span>
+                  <NavCount count={counts[it.key]} testid={`nav-item-badge-${it.key}`} />
                 </button>
               );
             })}
@@ -768,6 +789,7 @@ function LayoutInner() {
   }
 
   return (
+    <NavBadgeProvider companyId={activeCompanyId} moduleCodes={(navManifest?.modules || []).map((m) => m.module_code)}>
     <div className="relative flex min-h-screen bg-[#F3F4F6]">
       {/* Global Meelora watermark — full page, extremely light; visible through the near-white content on every tool page. */}
       {!presentation && (
@@ -856,5 +878,6 @@ function LayoutInner() {
         )}
       </div>
     </div>
+    </NavBadgeProvider>
   );
 }

@@ -1687,3 +1687,12 @@ Rafraîchissement léger des KPI et Priorités de l'Aperçu AP, sans WebSocket/S
 - **Acquittement** : le badge disparaît au clic (KPI ou priorité) via `seenRef`/`acknowledge()` ; baseline établie au premier rendu (rien n'est « nouveau » à l'ouverture).
 - **Boost de récence backend** : les factures reçues/soumises ≤ 2 j (`urgency 40→70`) remontent dans le top-8 des priorités (jamais au-dessus d'une facture réellement échue).
 - Fichiers : `PurchasesAP.js::OverviewTab` (refs seenRef/baseRef/firstRef, états newIds/toProcessDelta), `index.css` (@keyframes apFadeIn), `ap.py::overview()`. Tests : `test_reports/iteration_78.json` (frontend 90% — KPI +N badge, fade-in, acquittement, revalidation focus vérifiés ; logique newIds confirmée par revue ; boost de récence ajouté ensuite pour surfacer les nouveautés).
+
+### A4.3 finition — Badge de navigation AP (registre extensible) (LIVRÉ — 2026-06)
+Indicateur discret « éléments non vus » sur l'entrée de nav Achats & Fournisseurs, sans infra temps réel dédiée.
+- **Registre extensible** `context/NavBadgeContext.js` (`NAV_BADGE_SOURCES` : par module, `fetchItems(cid)`) — pas de code AP en dur ; d'autres modules pourront s'y enregistrer. `NavBadgeProvider` : polling unique 30 s + revalidation `visibilitychange`, scopé société active + modules accessibles ; « vus » persistés en localStorage par (clé, société). Réutilise `GET /ap/overview` (champ `actionable_ids` = factures à traiter + paiements authorized/executed + crédits dispo).
+- **UI** (`Layout.js` `NavCount`) : badge compteur discret plafonné **« 9+ »** sur le module racine `Comptabilité` (`nav-module-badge-ACCOUNTING`) et la sous-entrée `Achats & Fournisseurs` (`nav-item-badge-acct_purchases`). Pas de clignotement, pas de son, `ap-fade-in` neutralisé sous `prefers-reduced-motion`. Aucune donnée financière dans le badge (nombre seul).
+- **Acquittement** : ouvrir l'Aperçu AP (`OverviewTab` → `acknowledgeWith`) efface le badge (persisté) ; réapparaît uniquement à l'arrivée d'un nouvel élément non vu. Scope société strict.
+- Tests : `test_reports/iteration_79.json` (frontend 100% — 7/7 : présence, sous-item, acquittement+persistance, réapparition, no-blink/no-son, scope société, contenu numérique plafonné).
+
+**PROCHAINE ÉTAPE : A4.4 — Analyse IA des factures** (OCR/extraction). ⚠️ Ne PAS activer réellement sans le GATE de gouvernance IA de `A4_PLAN.md` (abstraction DocumentAIProvider, zéro entraînement, minimisation, zéro-rétention, isolation, audit) — validation utilisateur requise avant activation réelle.

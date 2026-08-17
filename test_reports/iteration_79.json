@@ -1,0 +1,40 @@
+{
+  "summary": "Frontend-only validation of the discreet nav badge for Achats & Fournisseurs (module ACCOUNTING, sub-item acct_purchases). All 7 scenarios from the review request passed: badge presence, sub-item badge, acknowledgment on Aperçu open with localStorage persistence, reappearance after new AP invoice + visibilitychange revalidation, no audio/looping animation, company-scoped storage key, and badge content is a bare number (capped '9+').",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "DELETE /api/companies/{cid}/ap/invoices/{id}", "issue": "Returns 405 Method Not Allowed for submitted invoices — no delete/void path available to clean up TEST invoices from within the app. Left a submitted TEST_ invoice in Meelora (sinv_38ed735dafb341a5b7bdbef84287d64f). Not related to badge feature."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "detailed_results": {
+    "TEST1_badge_present_module_ACCOUNTING": "PASS — data-testid=nav-module-badge-ACCOUNTING renders with text '9+' after login + localStorage navbadge:* cleared.",
+    "TEST2_sub_item_badge": "PASS — opening the ACCOUNTING flyout reveals data-testid=nav-item-badge-acct_purchases with text '9+'. Root badge stays visible in this build (not hidden) which is within the spec's tolerance ('peut être masqué' = optional).",
+    "TEST3_acknowledge_on_overview_open": "PASS — clicking nav-acct_purchases opens the AP page (ap-overview-tab present), and after acknowledge both nav-module-badge-ACCOUNTING and nav-item-badge-acct_purchases are absent (null). localStorage key 'navbadge:acct_purchases:965f0770-8cf2-4199-a99f-819ff270436a' persists (~1115 chars of seen ids).",
+    "TEST3b_persistence_after_reload": "PASS — after page.reload() the badges do NOT reappear (localStorage keeps them acknowledged).",
+    "TEST4_reappear_on_new_event": "PASS — Created a new AP invoice (POST /ap/invoices, then /verify, then /submit; overview actionable_ids grew from 28 → 29). After dispatching visibilitychange hidden→visible, badge nav-module-badge-ACCOUNTING reappeared with text '9+' and sub-badge nav-item-badge-acct_purchases also '9+'.",
+    "TEST5_no_blinking_no_sound": "PASS — 0 <audio> elements. Sub-badge has class 'ap-fade-in' with computed animation-name=apFadeIn and animation-iteration-count=1 (single fade-in, no looping/pulsing).",
+    "TEST6_company_scope": "PASS (by storage key) — Persisted key is scoped by companyId: 'navbadge:acct_purchases:965f0770-8cf2-4199-a99f-819ff270436a'. Provider scopes fetch to active companyId per code review of NavBadgeContext.js.",
+    "TEST7_no_financial_data": "PASS — Badge textContent is exactly '9+' (or a number). No amounts, currency, or details rendered inside the badge span."
+  },
+  "critical_code_review_comments": [
+    "NavBadgeContext.js correctly uses a single 30s polling + visibilitychange revalidation and a per-company localStorage key. Registry NAV_BADGE_SOURCES is extensible (no hardcoded AP-specific code in Layout.js — the NavCount component reads counts generically via useNavBadges()).",
+    "OverviewTab in PurchasesAP.js calls acknowledgeWith('acct_purchases', d.actionable_ids) on load — acknowledgment is idempotent and covers all currently-actionable ids, which correctly explains persistence across reloads.",
+    "Backend has no soft-delete/void endpoint for submitted AP invoices (DELETE → 405), which makes automated test cleanup awkward. Not in scope of this feature but worth tracking."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "Optional cleanup: void or hard-delete leftover TEST invoice sinv_38ed735dafb341a5b7bdbef84287d64f (Meelora, supplier sup_29e6f59905e643f1802d691d51ce52e6, period fp_meelora_2026_01, CHF 100). It does not affect the badge behavior (count already >>9)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% (7/7)"},
+  "test_credentials": "persona_finance@accslegro.com / persona123 (Meelora 965f0770-8cf2-4199-a99f-819ff270436a).",
+  "seed_data_creation": "Created 1 submitted AP invoice sinv_38ed735dafb341a5b7bdbef84287d64f (CHF 100, invoice_number TEST-BADGE-<timestamp>) to verify TEST4 reappearance. DELETE not permitted (405).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature is stable. To retest 'badge present' state from zero, clear navbadge:* keys via localStorage before nav (script in review). Badge cap is visual '9+'; underlying actionable_ids count for Meelora is now 29. If backend adds a void/cancel endpoint for AP invoices, use it to clean up the TEST invoice created here."
+}
