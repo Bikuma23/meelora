@@ -321,6 +321,11 @@ export const api = {
   apCreateBatch: (cid, body) => client.post(`/companies/${cid}/ap/batches`, body).then((r) => r.data),
   apBatchAction: (cid, id, action, body) => client.post(`/companies/${cid}/ap/batches/${id}/${action}`, body || {}).then((r) => r.data),
   apRevalidateBatch: (cid, id) => client.get(`/companies/${cid}/ap/batches/${id}/revalidate`).then((r) => r.data),
+  // A4.4 — Analyse automatique des documents (IA assistance)
+  apDocAiStatus: (cid) => client.get(`/companies/${cid}/ap/document-ai/status`).then((r) => r.data),
+  apDocAiAnalyze: (cid, body) => client.post(`/companies/${cid}/ap/document-ai/analyze`, body || {}).then((r) => r.data),
+  apExtraction: (cid, xid) => client.get(`/companies/${cid}/ap/extractions/${xid}`).then((r) => r.data),
+  apExtractionCorrections: (cid, xid, body) => client.post(`/companies/${cid}/ap/extractions/${xid}/corrections`, body).then((r) => r.data),
   arMapping: (cid) => client.get(`/companies/${cid}/ar/mapping`).then((r) => r.data),
   arSetMapping: (cid, body) => client.put(`/companies/${cid}/ar/mapping`, body).then((r) => r.data),
   arRecordFxRate: (cid, body) => client.post(`/companies/${cid}/ar/fx-rates`, body).then((r) => r.data),

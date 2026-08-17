@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { Loader2, Plus, Trash2, Building2, Inbox, FileText, Banknote, FileMinus, Clock, LayoutDashboard } from "lucide-react";
+import { Loader2, Plus, Trash2, Building2, Inbox, FileText, Banknote, FileMinus, Clock, LayoutDashboard, Sparkles } from "lucide-react";
 
 const money = (v, c) => `${Number(v || 0).toFixed(2)} ${c || ""}`.trim();
 const errMsg = (e) => {
@@ -92,6 +92,41 @@ function ComingSoon({ label }) {
 }
 
 const _ovCache = {};
+
+// A4.4 — "Analyse automatique des documents". IA = assistance uniquement. Le panneau
+// ne met jamais l'IA au centre : il annonce simplement la disponibilité de l'analyse,
+// sinon la saisie manuelle (fallback) reste la voie normale et complète.
+function DocumentAIPanel({ cid }) {
+  const [status, setStatus] = useState(null);
+  useEffect(() => {
+    let on = true;
+    if (cid) api.apDocAiStatus(cid).then((d) => { if (on) setStatus(d); }).catch(() => {});
+    return () => { on = false; };
+  }, [cid]);
+  if (!status) return null;
+  const available = status.available;
+  return (
+    <div data-testid="ap-docai-panel"
+      className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+      <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${available ? "bg-[#22C55E]/12 text-[#16a34a]" : "bg-slate-100 text-slate-400"}`}>
+        <Sparkles size={16} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-600 text-[#0F172A]">Analyse automatique des documents</p>
+        <p className="text-xs text-slate-500" data-testid="ap-docai-status">
+          {available
+            ? "Disponible — les documents importés sont pré-remplis, vous validez les exceptions."
+            : "Indisponible pour l'instant — saisie manuelle. Vos factures se traitent normalement."}
+        </p>
+      </div>
+      <span data-testid="ap-docai-badge"
+        className={`rounded-full px-2 py-0.5 text-[10px] font-600 ${available ? "bg-[#22C55E]/15 text-[#16a34a]" : "bg-slate-100 text-slate-500"}`}>
+        {available ? "Actif" : "Saisie manuelle"}
+      </span>
+    </div>
+  );
+}
+
 const ccyLine = (byCcy) => {
   const entries = Object.entries(byCcy || {}).filter(([, v]) => Math.abs(v) > 0.001);
   if (entries.length === 0) return "—";
@@ -362,6 +397,7 @@ function InvoicesTab({ cid, toProcess }) {
 
   return (
     <div className="space-y-4" data-testid={toProcess ? "ap-inbox-tab" : "ap-invoices-tab"}>
+      {toProcess && <DocumentAIPanel cid={cid} />}
       {!toProcess && (
         <Button data-testid="apinv-toggle" onClick={() => setOpen((v) => !v)} className="h-9 gap-1 bg-[#063044] text-white"><Plus size={14} /> Nouvelle facture</Button>
       )}

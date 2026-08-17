@@ -1706,3 +1706,17 @@ Indicateur discret « éléments non vus » sur l'entrée de nav Achats & Fourni
 - Tests : `test_reports/iteration_79.json` (frontend 100% — 7/7 : présence, sous-item, acquittement+persistance, réapparition, no-blink/no-son, scope société, contenu numérique plafonné).
 
 **PROCHAINE ÉTAPE : A4.4 — Analyse IA des factures** (OCR/extraction). ⚠️ Ne PAS activer réellement sans le GATE de gouvernance IA de `A4_PLAN.md` (abstraction DocumentAIProvider, zéro entraînement, minimisation, zéro-rétention, isolation, audit) — validation utilisateur requise avant activation réelle.
+
+### A4.4 — Analyse automatique des documents (architecture, DORMANT/fail-closed) (LIVRÉ — 2026-06)
+Extraction IA de factures fournisseurs comme couche d'ASSISTANCE (STRAT-01 §10). GATE approuvé sous conditions. **Aucun appel IA réel** : registre de providers VIDE → fail-closed → fallback manuel intégral.
+- **Abstraction `DocumentAIProvider`** (`core/accounting/ap_extraction.py`) : ABC + `ProviderAttestation` **versionnée** (`A4.4-2026-06`) + registre extensible ; scaffold `ByoVisionProvider` (clé lue depuis `os.environ[api_key_env]` — jamais DB/logs/audit/frontend ; `extract_invoice` lève `ProviderNotConfigured` = pas d'appel réel).
+- **Gate fail-closed** (`extraction_gate`) : rejette si version d'attestation ≠ politique, non-entraînement absent, **clé Emergent universelle interdite**, chiffrement insuffisant, région non autorisée, ou provider indisponible. Vérifié (6/6 règles) + isolation.
+- **Politique de juridiction** (`core/compliance/jurisdiction.py`) : `document_ai_policy` porte `region_required` (Meelora=CH → ['CH','EU']) + `allow_emergent_universal_key=false`. **Non hardcodé dans AP** (seed Jurisdiction Engine, STRAT-01 §11).
+- **`ap_extractions`** (schéma approuvé, `Field<T>` = value/confidence/provenance/needs_review) : confiance & provenance stockées mais **jamais exposées en UX normale** (réservées à « Pourquoi ? »). **Corrections humaines `excluded_from_training=true`**, journalisées, aucun chemin d'entraînement.
+- **Audit IA** (`ap_ai_audit`) sans secrets ni prompt brut ; status (unavailable/error/ok), attestation_snapshot.
+- **No-authority prouvé** (revue code) : le module n'appelle jamais posting/approve/pay ; toutes les actions sensibles restent derrière `require_sensitive_permission` (humain P1.13). Maker-checker intact.
+- **UX** : panneau `DocumentAIPanel` (« Analyse automatique des documents », jamais « IA »/« GPT » au centre) dans l'onglet Factures à traiter → « Indisponible — saisie manuelle » actuellement. **Fallback manuel A4.2 pleinement fonctionnel.**
+- Endpoints : `GET /ap/document-ai/status`, `POST /ap/document-ai/analyze` (fail-closed), `GET /ap/extractions(+/{xid})`, `POST /ap/extractions/{xid}/corrections`.
+- Doc de gouvernance : `memory/A4_4_GOVERNANCE_SCOPING.md`. Tests : `test_reports/iteration_80.json` (backend 5/5, frontend 100%, 0 bug).
+
+**Prérequis d'ACTIVATION réelle (non faits)** : provider BYO conforme configuré + **attestation écrite** (non-entraînement, rétention, DPA/sous-traitants, région UE/CH, chiffrement, suppression) → puis câblage du vrai appel vision dans une tranche ultérieure. **STOP après A4.4 — A4.5 non démarré.**

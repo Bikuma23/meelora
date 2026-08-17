@@ -152,6 +152,8 @@ from core.access.sensitive import require_sensitive_permission, require_module_l
 from core.accounting import gl as gl_service
 from core.accounting import ar as ar_service
 from core.accounting import ap as ap_service
+from core.accounting import ap_extraction as ap_ai
+from core.compliance import jurisdiction as jurisdiction_service
 from core.accounting import dunning as dunning_service
 from core.financial import documents as doc_service
 from core.home import registry as home_registry
@@ -4068,6 +4070,55 @@ async def ap_authorize_batch(company_id: str, bid: str, user: dict = Depends(get
 async def ap_cancel_batch(company_id: str, bid: str, user: dict = Depends(get_current_user)):
     ws = await _ar_write_scope(company_id, user)
     return await ap_service.cancel_batch(db, ws, company_id, user, bid)
+
+
+# ---- A4.4 Analyse automatique des documents (IA = assistance, jamais autorité) ----
+class APCorrectionIn(BaseModel):
+    field_path: str
+    value: Optional[object] = None
+
+
+class APCorrectionsIn(BaseModel):
+    corrections: List[APCorrectionIn] = []
+
+
+class APAnalyzeIn(BaseModel):
+    document_id: Optional[str] = None
+    invoice_id: Optional[str] = None
+    inbox_item_id: Optional[str] = None
+    storage_ref: Optional[str] = None
+
+
+@api.get("/companies/{company_id}/ap/document-ai/status")
+async def ap_document_ai_status(company_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    gate = await ap_ai.extraction_gate(db, ws, company_id)
+    return gate
+
+
+@api.post("/companies/{company_id}/ap/document-ai/analyze")
+async def ap_document_ai_analyze(company_id: str, payload: APAnalyzeIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ap_ai.analyze_document(db, ws, company_id, user, **payload.model_dump(exclude_unset=True))
+
+
+@api.get("/companies/{company_id}/ap/extractions/{xid}")
+async def ap_get_extraction(company_id: str, xid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return ap_ai.public_extraction(await ap_ai.get_extraction(db, ws, company_id, xid))
+
+
+@api.get("/companies/{company_id}/ap/extractions")
+async def ap_list_extractions(company_id: str, invoice_id: Optional[str] = None,
+                              inbox_item_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"extractions": await ap_ai.list_extractions(db, ws, company_id, invoice_id=invoice_id, inbox_item_id=inbox_item_id)}
+
+
+@api.post("/companies/{company_id}/ap/extractions/{xid}/corrections")
+async def ap_extraction_corrections(company_id: str, xid: str, payload: APCorrectionsIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ap_ai.apply_corrections(db, ws, company_id, user, xid, [c.model_dump() for c in payload.corrections])
 
 
 
@@ -10431,6 +10482,7 @@ async def startup():
         await _ensure_access_indexes(db)
         await ap_service.ensure_indexes(db)
         await ap_service.ensure_a43_indexes(db)
+        await ap_ai.ensure_a44_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     # P1.13A — seed Meelora workspace entitlements (availability only; grants no

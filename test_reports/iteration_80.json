@@ -1,0 +1,36 @@
+{
+  "summary": "A4.4 — Analyse automatique des documents (dormant, fail-closed). Verified backend fail-closed behaviour for Meelora (CH), no extraction/persistence on analyze call, isolation on unknown company, manual A4.2 fallback fully functional (create → verify → submit; approve correctly blocked by SoD which confirms P1.13 gates are intact), and the frontend UX panel in the 'Factures à traiter' tab. Code review confirms no-authority (module never calls posting/approve/pay), corrections excluded from training, and jurisdiction policy centralised (region_required comes from core/compliance/jurisdiction.py, not hardcoded in AP).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "detailed_results": {
+    "TEST_status_fail_closed": "PASS — GET /api/companies/{cid}/ap/document-ai/status for Meelora returns {available:false, reason:'no_compliant_provider', message contains 'saisie manuelle', region_required:['CH','EU']}.",
+    "TEST_analyze_fail_closed_no_persist": "PASS — POST /ap/document-ai/analyze with {document_id:'TEST_...'} returns available=false, no 'extraction' key, and GET /ap/extractions count is unchanged (no ap_extractions doc created).",
+    "TEST_isolation_unknown_company": "PASS — Both GET /status and POST /analyze on a fake company id return 403 (denied by _ar_read/write_scope).",
+    "TEST_manual_fallback_A4_2": "PASS — Create /ap/invoices → verify → submit succeed for Meelora. Approve by the creator correctly returns 403 with detail 'Séparation des tâches : le créateur ne peut pas approuver sa facture.' — confirms P1.13/SoD guardrail is intact and the AP flow is fully independent of A4.4.",
+    "TEST_ux_panel": "PASS — In Comptabilité › Achats & Fournisseurs › onglet 'Factures à traiter': data-testid ap-docai-panel visible with title 'Analyse automatique des documents', ap-docai-status text 'Indisponible pour l'instant — saisie manuelle. Vos factures se traitent normalement.', ap-docai-badge text 'Saisie manuelle'. No visible 'IA' or 'GPT' tokens in the panel.",
+    "CODE_REVIEW_no_authority": "PASS — grep of ap_extraction.py: 0 references to create_workflow_journal_entry / post_invoice / mark_executed / post_payment. analyze_document only writes to db.ap_extractions and db.ap_ai_audit; never mutates invoices, approvals, postings or payments.",
+    "CODE_REVIEW_corrections_no_training": "PASS — apply_corrections always sets excluded_from_training=True in the $set and journals {field_path, old_value, new_value, by_user_id, at}; no export path exists.",
+    "CODE_REVIEW_versioned_attestation": "PASS — AI_GOVERNANCE_POLICY_VERSION='A4.4-2026-06'; _provider_is_compliant rejects on version mismatch, emergent_universal_key not allowed (policy allow_emergent_universal_key=False), non_training false, encryption insufficient, region_not_allowed, provider_unavailable. Registry _PROVIDERS is empty by default ⇒ fail-closed.",
+    "CODE_REVIEW_byo_key_offdb": "PASS — ByoVisionProvider stores only the ENV VAR NAME (self._api_key_env); the value is read via os.environ.get and never persisted to DB/logs/audit/frontend. extract_invoice raises ProviderNotConfigured until a real BYO provider is wired.",
+    "CODE_REVIEW_jurisdiction_policy": "PASS — region constraint comes from core/compliance/jurisdiction.document_ai_policy → company_compliance_profiles.document_ai_regions or DEFAULT_PROFILES[country]. No 'if country ==' in ap.py or ap_extraction.py. Meelora (CH) seed yields region_required=['CH','EU'] as confirmed by the /status endpoint.",
+    "AI_AUDIT_write": "PASS (by code review) — analyze_document calls _ai_audit(...status='unavailable', provider=None, model=None) when the gate blocks, storing request_id, reason, by/by_email/at into db.ap_ai_audit without secrets or raw prompt."
+  },
+  "critical_code_review_comments": [
+    "Governance surface is clean: ap_extraction.py encapsulates the whole gate (attestation version, non-training, encryption, region, emergent-key ban, health) and returns a data-only DTO. No accounting side effects.",
+    "Frontend DocumentAIPanel copy is user-centric ('Analyse automatique des documents' / 'Saisie manuelle') and avoids putting AI at the centre, per STRAT-01 §21 (1 human decision, Exceptions First, Pourquoi ?).",
+    "Field name in AP invoice payload is 'supplier_invoice_number' (not 'invoice_number') — worth noting for future integration tests."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_a4_4_document_ai.py",
+    "/app/test_reports/pytest/a44_results.xml"
+  ],
+  "action_items": [],
+  "updated_files": ["/app/backend/tests/test_a4_4_document_ai.py"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (panel + copy + testids OK)"},
+  "test_credentials": "persona_finance@accslegro.com / persona123 (Meelora 965f0770-8cf2-4199-a99f-819ff270436a).",
+  "seed_data_creation": "Created 1 submitted AP invoice for Meelora (TEST-A44-<random>, CHF 42, supplier sup_29e6f59905e643f1802d691d51ce52e6, period fp_meelora_2026_01) to validate the manual fallback. No delete endpoint available (405) — same limitation reported in iteration_79. Left in submitted state (creator cannot self-approve).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "A4.4 is confirmed DORMANT + fail-closed. Do not register any real provider. To retest, run: REACT_APP_BACKEND_URL=<url> pytest /app/backend/tests/test_a4_4_document_ai.py -v. The /status endpoint should always return no_compliant_provider until a compliant, attested BYO provider is registered server-side. UI panel lives in Comptabilité → Achats & Fournisseurs → onglet 'Factures à traiter' (data-testid ap-tab-inbox).",
+  "rca of the issue": "N/A — no defects found."
+}
