@@ -4,25 +4,57 @@ import { useLang } from "../context/LanguageContext";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/api";
 import { CompanyLogo } from "../components/CompanyLogo";
-import { MapPin, Phone, Mail, Globe, Loader2, TrendingUp, FileText, Wallet, Receipt } from "lucide-react";
+import {
+  MapPin, Phone, Mail, Globe, Loader2, TrendingUp, ArrowUpRight, ArrowDownRight,
+  FilePlus, Wallet, Users, BarChart3, CheckCircle2, Info, Lightbulb,
+} from "lucide-react";
 
-function Kpi({ icon: Icon, label, value, sub, testid }) {
+const QA_ICONS = { "file-plus": FilePlus, wallet: Wallet, users: Users, "bar-chart": BarChart3 };
+const nf = (v, min = 2) => Number(v || 0).toLocaleString("fr-CA", { minimumFractionDigits: min, maximumFractionDigits: min });
+
+function fmtValue(k) {
+  if (k.format === "currency") return nf(k.value);
+  if (k.format === "percent") return `${nf(k.value, 1)}\u00A0%`;
+  return Number(k.value || 0).toLocaleString("fr-CA");
+}
+
+function Sparkline({ points }) {
+  if (!points || points.length < 2 || points.every((p) => p === 0)) return null;
+  const w = 120, h = 34, max = Math.max(...points), min = Math.min(...points);
+  const span = max - min || 1;
+  const d = points.map((p, i) => `${(i / (points.length - 1)) * w},${h - ((p - min) / span) * (h - 4) - 2}`).join(" ");
   return (
-    <div className="card p-5" data-testid={testid}>
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-[11px] font-600 uppercase tracking-wide text-slate-500">{label}</span>
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#22C55E]/10 text-[#22C55E]"><Icon size={16} /></span>
-      </div>
-      <p className="text-2xl font-800 text-[#063044]">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-slate-400">{sub}</p>}
-    </div>
+    <svg viewBox={`0 0 ${w} ${h}`} className="mt-3 h-8 w-full" preserveAspectRatio="none" data-testid="kpi-sparkline">
+      <polyline points={d} fill="none" stroke="#2563EB" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
   );
 }
 
-const money = (v, c) => `${Number(v || 0).toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${c || ""}`.trim();
+function KpiCard({ k, onClick }) {
+  const cmp = k.comparison;
+  const up = cmp && cmp.delta_pct >= 0;
+  return (
+    <button type="button" onClick={onClick} data-testid={`kpi-${k.code}`}
+      className="card flex flex-col p-5 text-left transition-shadow hover:shadow-md">
+      <span className="text-xs font-600 text-slate-500">{k.label}</span>
+      <p className="mt-1.5 text-2xl font-800 leading-tight text-[#063044]">
+        {fmtValue(k)}{k.format === "currency" && k.unit ? <span className="ml-1 text-sm font-600 text-slate-400">{k.unit}</span> : null}
+      </p>
+      {k.subvalue && <p className="mt-0.5 text-xs text-slate-400">{nf(k.subvalue.value)} {k.subvalue.unit}</p>}
+      {cmp && cmp.delta_pct != null && (
+        <p className={`mt-1 flex items-center gap-1 text-xs font-600 ${up ? "text-emerald-600" : "text-rose-600"}`}>
+          {up ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}{Math.abs(cmp.delta_pct)}% <span className="font-400 text-slate-400">{cmp.label}</span>
+        </p>
+      )}
+      <Sparkline points={k.trend} />
+    </button>
+  );
+}
+
+const money = (v, c) => `${nf(v)} ${c || ""}`.trim();
 
 export default function CompanyHome() {
-  const { activeCompanyId } = useNav();
+  const { activeCompanyId, go } = useNav();
   const { t } = useLang();
   const { user } = useAuth();
   const [data, setData] = useState(null);
@@ -38,16 +70,18 @@ export default function CompanyHome() {
   if (!data) return <div className="p-8 text-sm text-slate-400" data-testid="company-home-empty">{t("Sélectionnez un mandat.")}</div>;
 
   const c = data.company || {};
-  const cur = c.currency;
-  const kpis = data.kpis;
   const locality = [c.city, c.region].filter(Boolean).join(", ");
   const userName = (user && (user.name || user.email)) || "";
+  const kpis = data.home_kpis || [];
+  const quickActions = data.quick_actions || [];
+  const recent = data.recent_activity || [];
+  const info = data.informational_items || [];
+  const gridCols = kpis.length >= 5 ? "lg:grid-cols-5" : kpis.length === 4 ? "lg:grid-cols-4" : kpis.length === 3 ? "lg:grid-cols-3" : kpis.length === 2 ? "sm:grid-cols-2" : "sm:grid-cols-1";
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8" data-testid="company-home">
-      {/* Welcome header — the connected user is the primary element; the company/
-          mandate is identified below in a clearly smaller size. */}
-      <div className="flex flex-col items-center py-10 text-center" data-testid="company-home-header">
+    <div className="mx-auto max-w-6xl space-y-8" data-testid="company-home">
+      {/* Welcome header — the connected user is primary; the mandate is smaller. */}
+      <div className="flex flex-col items-center py-8 text-center" data-testid="company-home-header">
         <p className="text-sm font-500 tracking-wide text-slate-400">{t("Bonjour")}</p>
         <h1 className="font-display mt-1 text-4xl font-800 tracking-tight text-[#063044] sm:text-5xl" data-testid="company-home-user">{userName}</h1>
         <div className="mt-5 flex items-center gap-2.5 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm" data-testid="company-home-company">
@@ -68,15 +102,14 @@ export default function CompanyHome() {
         </div>
       </div>
 
-      {/* KPIs — only when the user has access to a module that provides them */}
-      {kpis ? (
+      {/* KPIs — dynamic, module- & permission-aware, capped at ~5, reflowing grid. */}
+      {kpis.length > 0 ? (
         <div>
-          <h2 className="mb-3 text-base font-700 text-[#0F172A]">{t("Aperçu du mandat")}</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="company-home-kpis">
-            <Kpi testid="kpi-revenue-month" icon={TrendingUp} label={t("CA du mois")} value={money(kpis.revenue_month, cur)} />
-            <Kpi testid="kpi-revenue-ytd" icon={Receipt} label={t("CA de l'exercice")} value={money(kpis.revenue_ytd, cur)} />
-            <Kpi testid="kpi-open-invoices" icon={FileText} label={t("Factures clients ouvertes")} value={kpis.open_invoices_count} sub={money(kpis.open_invoices_amount, cur)} />
-            <Kpi testid="kpi-collections-month" icon={Wallet} label={t("Encaissements du mois")} value={money(kpis.collections_month, cur)} />
+          <div className="mb-2 flex items-center justify-end">
+            <span className="flex items-center gap-1 text-[11px] text-slate-400" data-testid="company-home-kpi-hint"><Info size={12} /> {t("KPI affichés selon vos modules et permissions")}</span>
+          </div>
+          <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${gridCols}`} data-testid="company-home-kpis">
+            {kpis.map((k) => <KpiCard key={k.code} k={k} onClick={() => k.destination && go(k.destination)} />)}
           </div>
         </div>
       ) : (
@@ -87,7 +120,60 @@ export default function CompanyHome() {
         </div>
       )}
 
-      <p className="pb-4 text-center text-xs text-slate-400" data-testid="company-home-hint">{t("Choisissez un module dans le menu de gauche pour commencer.")}</p>
+      {/* Quick actions + Recent activity | Informational items */}
+      {(quickActions.length > 0 || recent.length > 0 || info.length > 0) && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="card p-5" data-testid="company-home-left">
+            {quickActions.length > 0 && (
+              <div data-testid="company-home-quick-actions">
+                <h3 className="mb-3 text-sm font-700 text-[#0F172A]">{t("Accès rapides")}</h3>
+                <div className="grid grid-cols-4 gap-2">
+                  {quickActions.map((q) => {
+                    const Icon = QA_ICONS[q.icon] || BarChart3;
+                    return (
+                      <button key={q.code} type="button" onClick={() => q.destination && go(q.destination)} data-testid={`quick-action-${q.code}`}
+                        className="flex flex-col items-center gap-1.5 rounded-xl border border-transparent p-3 text-center transition-colors hover:border-slate-200 hover:bg-slate-50">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-[#063044]"><Icon size={18} /></span>
+                        <span className="text-[11px] font-600 text-slate-600">{t(q.label)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {recent.length > 0 && (
+              <div className={quickActions.length > 0 ? "mt-5" : ""} data-testid="company-home-recent">
+                <h3 className="mb-2 text-sm font-700 text-[#0F172A]">{t("Activités récentes")}</h3>
+                <ul className="divide-y divide-slate-100">
+                  {recent.map((r, i) => (
+                    <li key={i} className="flex items-center justify-between gap-3 py-2.5 text-sm" data-testid={`recent-${i}`}>
+                      <span className="min-w-0 flex-1 truncate text-slate-600">{r.label}</span>
+                      <span className="shrink-0 text-xs text-slate-400">{r.date}</span>
+                      <span className={`shrink-0 text-sm font-600 ${r.tone === "positive" ? "text-emerald-600" : r.tone === "negative" ? "text-rose-600" : "text-[#0F172A]"}`}>
+                        {r.amount != null ? `${r.amount < 0 ? "-" : ""}${nf(Math.abs(r.amount))} ${r.currency || ""}`.trim() : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <div className="card p-5" data-testid="company-home-info">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-700 text-[#0F172A]"><Lightbulb size={16} className="text-[#22C55E]" /> {t("À savoir")}</h3>
+            {info.length > 0 ? (
+              <ul className="space-y-2.5">
+                {info.map((it, i) => (
+                  <li key={it.code || i} className="flex items-start gap-2 text-sm text-slate-600" data-testid={`info-${i}`}>
+                    <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-500" /> <span>{it.text}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="text-xs text-slate-400">{t("Aucune information pour le moment.")}</p>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

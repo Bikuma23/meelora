@@ -153,6 +153,7 @@ from core.accounting import gl as gl_service
 from core.accounting import ar as ar_service
 from core.accounting import dunning as dunning_service
 from core.financial import documents as doc_service
+from core.home import registry as home_registry
 from core.financial import tax_engine as tax_engine
 from core.financial import fx as fx_service
 from core.access.indexes import ensure_indexes as _ensure_access_indexes
@@ -2824,14 +2825,15 @@ async def get_company_home(company_id: str, user: dict = Depends(get_current_use
         "branding": {"has_logo": bool((company.get("branding") or {}).get("logo_document_id"))},
     }
     kpis = None
-    if "ACCOUNTING" in module_codes:
-        try:
-            kpis = await ar_service.home_kpis(db, ws, company_id)
-        except Exception as e:
-            logger.error(f"home_kpis: {e}")
-            kpis = None
+    home_ext = {"kpis": [], "quick_actions": [], "recent_activity": [], "informational_items": []}
+    try:
+        home_ext = await home_registry.build_home_payload(db, ws, company, user, module_codes)
+        kpis = await ar_service.home_kpis(db, ws, company_id) if "ACCOUNTING" in module_codes else None
+    except Exception as e:
+        logger.error(f"home aggregation: {e}")
     return {"company": identity, "modules": module_codes, "admin_view": bool(manifest.get("admin_view")),
-            "kpis": kpis}
+            "kpis": kpis, "home_kpis": home_ext["kpis"], "quick_actions": home_ext["quick_actions"],
+            "recent_activity": home_ext["recent_activity"], "informational_items": home_ext["informational_items"]}
 
 
 

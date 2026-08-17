@@ -1,0 +1,40 @@
+{
+  "summary": "Frontend-only testing of the new dynamic KPI Company Home (Accueil) registry. Verified layout, testids, gating, empty state, mandate switch, and console cleanliness on persona_finance@accslegro.com/Meelora and admin@accslegro.com/9434 + switch to meelora. Everything renders per spec EXCEPT that clicking a KPI card or a Quick Action does NOT navigate to Ventes & Clients (ar-page). Root cause: destination code mismatch between backend registry and frontend route table.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CompanyHome KpiCard / QuickAction", "issue": "Clicking kpi-acc.revenue_month (and all other ACCOUNTING KPI cards) as well as quick-action-acc.new_invoice / record_payment / customers / reports does NOT navigate; ar-page never appears. Confirmed: after click, still on company-home, ar-page visible=False.", "selector": "[data-testid=\"kpi-acc.revenue_month\"], [data-testid^=\"quick-action-acc.\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "KPI/QuickAction -> Ventes & Clients", "issue": "Backend /app/backend/core/home/registry.py sets destination=\"acct_sales_ar\" for KPIs (lines 146, 150, 154, 158, 160) and quick actions (168, 170, 172, 174) plus recent activity (188, 193, 198). However /app/frontend/src/components/Layout.js only registers route key \"acct_sales\" (line 63 -> SalesAR/ar-page). No \"acct_sales_ar\" route exists in the frontend, so useNav().go(\"acct_sales_ar\") silently no-ops. Fix: rename backend destination to \"acct_sales\" OR add an alias in Layout routes / NavContext.", "affected_selectors": ["[data-testid=\"kpi-acc.revenue_month\"]", "[data-testid=\"kpi-acc.revenue_ytd\"]", "[data-testid=\"kpi-acc.open_invoices\"]", "[data-testid=\"kpi-acc.collections_month\"]", "[data-testid=\"kpi-acc.active_customers\"]", "[data-testid=\"quick-action-acc.new_invoice\"]", "[data-testid=\"quick-action-acc.record_payment\"]", "[data-testid=\"quick-action-acc.customers\"]", "[data-testid=\"quick-action-acc.reports\"]"]}
+    ],
+    "design_issues": []
+  },
+  "verified_ok": [
+    "persona_finance/Meelora: data-testid=company-home + user (Persona E — Responsable financier) + name (meelora) + entrypoint present.",
+    "5 KPI cards rendered exactly (kpi-acc.revenue_month, revenue_ytd, open_invoices, collections_month, active_customers) with class 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5'.",
+    "company-home-kpi-hint 'KPI affichés selon vos modules et permissions' visible.",
+    "company-home-quick-actions with the 4 expected quick-action-acc.* buttons rendered.",
+    "company-home-recent contains 6 entries (recent-0..5) with proper colored amounts (paiement vert, note de crédit rouge).",
+    "company-home-info contains 3 info- entries.",
+    "admin/9434-3977 QC inc.: sidebar overlay shows BUDGETS/ACCOUNTING/FIXED_ASSETS/CONSOLIDATION modules but Accueil renders ONLY company-home-no-kpis (Aucun indicateur disponible pour le moment). No KPI cards, no quick-actions, no recent, no info section — no leak, no empty filler cards.",
+    "Mandate switcher (data-testid=mandat-switcher / mandat-switch-<id>) works: from admin/9434 -> meelora, active-mandat-name updates and KPI area re-fetches (still empty for admin overlay on meelora, as expected since admin has no operational access).",
+    "No console errors on any of the tested screens."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "Fix KPI/QuickAction/Recent destinations: either rename backend destination \"acct_sales_ar\" to \"acct_sales\" in /app/backend/core/home/registry.py (lines 146, 150, 154, 158, 160, 168, 170, 172, 174, 188, 193, 198) OR register an alias route \"acct_sales_ar\" mapping to SalesAR in /app/frontend/src/components/Layout.js. Preferred: align backend to existing frontend key \"acct_sales\"."
+  ],
+  "critical_code_review_comments": [
+    "Destination naming should be sourced from a single shared enum/constant to prevent backend↔frontend drift for route keys.",
+    "CompanyHome.js line 79 grid reflow logic is fine but does not handle >5 KPIs; registry currently caps at 5 so OK, but add an explicit slice/guard if the registry grows."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "88% (all rendering & gating OK; navigation from KPI/QuickAction broken)"},
+  "test_credentials": "persona_finance@accslegro.com/persona123 (ACCOUNTING on meelora, CHF) and admin@accslegro.com/admin123 (multi-mandats). Both validated.",
+  "seed_data_creation": "none",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "After main agent aligns destination key, re-test: click kpi-acc.revenue_month -> ar-page visible; click quick-action-acc.new_invoice -> ar-page visible. Everything else already validated (layout, testids, empty state on admin/9434, mandate switch reload, no console errors).",
+  "rca of the issue": "Registry (/app/backend/core/home/registry.py) emits destination=\"acct_sales_ar\" for all ACCOUNTING KPIs, quick actions and recent activity items. Frontend Layout routes map (/app/frontend/src/components/Layout.js line 63) only knows the key \"acct_sales\" (title 'Ventes & Clients', comp SalesAR which renders data-testid=ar-page). useNav().go(\"acct_sales_ar\") therefore does nothing — the button click handler in CompanyHome.js KpiCard/QuickAction fires but the router does not recognize the destination. Reproduction: login persona_finance/persona123 → click any KPI card or Quick Action → URL/page stays on Accueil, ar-page never mounts. Mitigation: change destination in registry.py to \"acct_sales\" (single-word), or add `acct_sales_ar: { ...comp: SalesAR }` alias in Layout.js. This impacts KPIs (5), quick actions (4) and recent activity click-throughs (all)."
+}
