@@ -55,6 +55,9 @@ async def cleanup():
                  "draft_test", "co_override"]
     await db.jurisdiction_policies.delete_many({"key": {"$in": test_keys}})
     await db.jurisdiction_policies.delete_many({"jurisdiction": {"$in": ["XX", "XX-A"]}})
+    # Remove the hypothetical future vat_ch/CH v3 (2027) injected by CH.2 tests.
+    await db.jurisdiction_policies.delete_many({"domain": "vat_ch", "jurisdiction": "CH",
+                                                "effective_from": "2027-01-01"})
     await db.policy_audit.delete_many({"jurisdiction": {"$in": ["XX", "XX-A", "CH"]},
                                        "policy_id": {"$regex": "|".join(test_keys)}})
 
@@ -254,6 +257,70 @@ async def main():
 
     # 17) explain works with NO current resolution (simulate rate table gone).
     check("explain(snapshot) works without any resolve", pe.explain(snap)["statement"] is not None)
+
+    # ===== CH.2 — Swiss VAT domain (vat_ch) =====
+    await db.company_compliance_profiles.update_one({"workspace_id": WS, "company_id": CO},
+                                                    {"$set": {"country": "CH", "vat_status": "taxable"}}, upsert=True)
+    pe.clear_cache()
+    # C1 output parity: std 8.1% (2024) / 7.7% (2023) vs sales_tax_codes.
+    o24 = await pe.resolve(db, WS, CO, domain="vat_ch", context={"side": "output", "rate_category": "standard"}, as_of="2024-06-30")
+    o23 = await pe.resolve(db, WS, CO, domain="vat_ch", context={"side": "output", "rate_category": "standard"}, as_of="2023-06-30")
+    check("vat_ch output std 2024 = 8.1% (parity)", o24["result"]["rate"] == 0.081)
+    check("vat_ch output std 2023 = 7.7% (parity/historical)", o23["result"]["rate"] == 0.077)
+    check("vat_ch output treatment standard_rated", o24["result"]["tax_treatment"] == "standard_rated")
+    # C2 accommodation 3.8% and export/exempt treatments.
+    acc = await pe.resolve(db, WS, CO, domain="vat_ch", context={"side": "output", "rate_category": "accommodation"}, as_of="2024-06-30")
+    exp = await pe.resolve(db, WS, CO, domain="vat_ch", context={"side": "output", "transaction_kind": "export"}, as_of="2024-06-30")
+    exm = await pe.resolve(db, WS, CO, domain="vat_ch", context={"side": "output", "rate_category": "exempt"}, as_of="2024-06-30")
+    check("vat_ch accommodation = 3.8%", acc["result"]["rate"] == 0.038)
+    check("vat_ch export zero_rated_export", exp["result"]["tax_treatment"] == "zero_rated_export" and exp["result"]["rate"] == 0.0)
+    check("vat_ch exempt_without_credit", exm["result"]["tax_treatment"] == "exempt_without_credit")
+    # C3 recoverability: full / none / NEVER implicit full.
+    inp_full = await pe.resolve(db, WS, CO, domain="vat_ch", context={"side": "input", "recoverability_hint": "business_taxable"}, as_of="2024-06-30")
+    inp_none = await pe.resolve(db, WS, CO, domain="vat_ch", context={"side": "input", "recoverability_hint": "excluded"}, as_of="2024-06-30")
+    inp_unknown = await pe.resolve(db, WS, CO, domain="vat_ch", context={"side": "input"}, as_of="2024-06-30")
+    check("recoverability full when business_taxable", inp_full["result"]["recoverability"]["mode"] == "full")
+    check("recoverability none when excluded (VAT to expense)", inp_none["result"]["recoverability"]["mode"] == "none")
+    check("recoverability NEVER implicit full -> needs_review", inp_unknown["result"]["recoverability"]["mode"] == "needs_review" and inp_unknown["needs_review"])
+    # C4 acquisition tax by VAT status (no universal 10k threshold for a taxable person).
+    acq_taxable = await pe.resolve(db, WS, CO, domain="vat_ch",
+        context={"side": "input", "transaction_kind": "services_from_abroad", "recoverability_hint": "business_taxable", "acquisition_ytd": 1000}, as_of="2024-06-30")
+    check("acquisition taxable CH @ CHF1000 -> liable (no 10k threshold)", acq_taxable["result"]["acquisition_liable"] is True and acq_taxable["result"]["tax_treatment"] == "reverse_charge_acquisition")
+    await db.company_compliance_profiles.update_one({"workspace_id": WS, "company_id": CO}, {"$set": {"vat_status": "non_taxable"}})
+    pe.clear_cache()
+    acq_under = await pe.resolve(db, WS, CO, domain="vat_ch",
+        context={"side": "input", "transaction_kind": "services_from_abroad", "acquisition_ytd": 5000}, as_of="2024-06-30")
+    acq_over = await pe.resolve(db, WS, CO, domain="vat_ch",
+        context={"side": "input", "transaction_kind": "services_from_abroad", "acquisition_ytd": 12000}, as_of="2024-06-30")
+    check("non-taxable under CHF10k -> not liable", acq_under["result"]["acquisition_liable"] is False)
+    check("non-taxable over CHF10k -> liable", acq_over["result"]["acquisition_liable"] is True)
+    await db.company_compliance_profiles.update_one({"workspace_id": WS, "company_id": CO}, {"$set": {"vat_status": "taxable"}})
+    pe.clear_cache()
+    # C5 VAT FX distinct from closing FX.
+    from core.financial import fx as fxs
+    from core.accounting.ar import _functional_currency
+    func = await _functional_currency(db, WS, CO)
+    ccy = "EUR" if func != "EUR" else "USD"
+    await db.exchange_rates.delete_many({"workspace_id": WS, "company_id": CO})
+    await fxs.record_rate(db, WS, CO, from_currency=ccy, to_currency=func, rate=0.95, rate_date="2024-03-15", source="test", rate_type="current")
+    await fxs.record_rate(db, WS, CO, from_currency=ccy, to_currency=func, rate=0.90, rate_date="2024-12-31", source="test", rate_type="closing")
+    vfx = await pe.resolve(db, WS, CO, domain="vat_ch",
+        context={"side": "output", "rate_category": "standard", "currency": ccy, "tax_date": "2024-03-15"}, as_of="2024-03-15")
+    check("VAT FX uses fiscal-date rate (0.95), independent of closing (0.90)",
+          vfx["result"]["vat_fx"]["rate"] == 0.95 and vfx["result"]["vat_fx"]["basis"] == "fiscal_date_rate")
+    # C6 historical fiscal/FX snapshot unchanged after a future policy correction.
+    snap_ch2 = pe.snapshot(o23)
+    await pe.publish_policy(db, domain="vat_ch", jurisdiction="CH", scope="system", key="base",
+                            priority=100, effective_from="2027-01-01",
+                            rules=[{"rule_id": "ch_v3", "match": {}, "result": {**{"reporting": {}, "legal_basis": [], "account_roles": {}},
+                                    "rates": {"standard": 0.09, "reduced": 0.03, "accommodation": 0.04}}, "reason": "hypothetical 2027"}],
+                            sources=[], overridability="non_overrideable")
+    pe.clear_cache()
+    o23_again = await pe.resolve(db, WS, CO, domain="vat_ch", context={"side": "output", "rate_category": "standard"}, as_of="2023-06-30")
+    check("historical vat_ch 2023 still 7.7% after future 2027 policy", o23_again["result"]["rate"] == 0.077)
+    check("historical vat_ch snapshot unchanged (explain)", pe.explain(snap_ch2)["result"]["rate"] == 0.077)
+    check("rounding snapshot present on vat_ch decision", isinstance(o24["result"].get("rounding"), dict) and "decimals" in o24["result"]["rounding"])
+    # cleanup ch2 exchange rates + future vat_ch handled below (key base) -> must not pollute real CH!
 
     await cleanup()
     npass = sum(1 for _, ok in results if ok)

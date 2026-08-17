@@ -35,6 +35,7 @@ ENGINE_VERSION = "CH1-1.0"
 # Per-domain absence strategy.
 DOMAIN_STRATEGY = {
     "vat": "required",
+    "vat_ch": "required",
     "monetary_classification": "required",
     "fx_freshness": "fallback_allowed",
     "rounding": "fallback_allowed",
@@ -322,6 +323,155 @@ async def _handle_policy_doc_domain(db, ws, co, domain, context, as_of, candidat
                      context, as_of)
 
 
+async def _company_vat_status(db, ws, co, context):
+    if context and context.get("vat_status"):
+        return context["vat_status"]
+    from . import jurisdiction
+    prof = await jurisdiction.get_compliance_profile(db, ws, co)
+    return prof.get("vat_status") or "taxable"
+
+
+async def _vat_fx(db, ws, co, context, tax_date):
+    """VAT FX: snapshot the FISCAL-date rate (AFC), conceptually distinct from the
+    booking (transaction) FX and from closing/revaluation FX (A4.6). Reads the
+    canonical exchange_rates registry — never a duplicate FX store."""
+    ccy = (context or {}).get("currency")
+    if not ccy:
+        return None
+    from ..financial import fx as fx_service
+    from ..accounting.ar import _functional_currency
+    functional = await _functional_currency(db, ws, co)
+    if (ccy or "").upper() == (functional or "").upper():
+        return {"applicable": False, "currency": ccy, "functional_currency": functional}
+    rate = await fx_service.get_rate(db, ws, co, from_currency=ccy, to_currency=functional, on_date=tax_date)
+    if not rate:
+        return {"applicable": True, "currency": ccy, "functional_currency": functional,
+                "rate": None, "needs_review": True, "reason": "Taux fiscal indisponible à la date fiscale."}
+    return {"applicable": True, "currency": ccy, "functional_currency": functional,
+            "tax_date": tax_date, "rate": rate.get("rate"), "rate_source": rate.get("source"),
+            "basis": "fiscal_date_rate",
+            "reason": f"Conversion TVA au taux du {rate.get('rate_date') or tax_date} (indépendant du taux de clôture)."}
+
+
+async def _handle_vat_ch(db, ws, co, context, as_of, candidates):
+    """Structured Swiss VAT decision (output/input) — A3/A4 consume it, never CH rules."""
+    policy = await _resolve_policy_doc(db, ws, co, "vat_ch", candidates, as_of)
+    if policy is None:
+        return None
+    conf = (policy.get("rules") or [{}])[0].get("result", {})
+    rates = conf.get("rates", {})
+    reporting = conf.get("reporting", {})
+    roles = conf.get("account_roles", {})
+    ctx = context or {}
+    side = ctx.get("side", "output")
+    kind = ctx.get("transaction_kind", "domestic")
+    tax_date = ctx.get("tax_date") or as_of
+    vat_status = await _company_vat_status(db, ws, co, ctx)
+
+    def rate_for(cat):
+        return float(rates.get(cat, 0.0))
+
+    res = {"tax_code": None, "tax_treatment": None, "rate": 0.0, "side": side,
+           "recoverability": None, "reporting_mapping": {}, "account_roles": {},
+           "legal_basis": conf.get("legal_basis", []), "vat_status": vat_status}
+    needs_review = False
+
+    if side == "output":
+        cat = ctx.get("rate_category")
+        if kind == "export":
+            res.update({"tax_treatment": "zero_rated_export", "tax_code": "CH_VAT_EXPORT", "rate": 0.0,
+                        "reporting_mapping": {"base_field": "200", "deduction_field": "220"}})
+            reason = "Exportation / prestation à l'étranger : exonérée avec droit à déduction (0 %)."
+        elif cat == "exempt":
+            res.update({"tax_treatment": "exempt_without_credit", "tax_code": "CH_VAT_EXEMPT", "rate": 0.0,
+                        "reporting_mapping": {"base_field": "200", "exempt_field": "230"}})
+            reason = "Prestation exclue du champ (art. 21) : sans TVA ni droit à déduction amont."
+        elif cat == "out_of_scope":
+            res.update({"tax_treatment": "out_of_scope", "tax_code": "CH_VAT_OOS", "rate": 0.0,
+                        "reporting_mapping": {"base_field": "910"}})
+            reason = "Opération hors champ de la TVA."
+        else:
+            cat = cat or "standard"  # Happy Path proposal for a domestic sale
+            code = {"standard": "CH_VAT_STD", "reduced": "CH_VAT_REDUCED", "accommodation": "CH_VAT_ACC"}[cat]
+            tf = {"standard": "302", "reduced": "312", "accommodation": "342"}[cat]
+            res.update({"tax_treatment": f"{cat}_rated" if cat != "standard" else "standard_rated",
+                        "tax_code": code, "rate": rate_for(cat),
+                        "reporting_mapping": {"base_field": "200", "tax_field": tf},
+                        "account_roles": {"output_vat_role": roles.get("output_vat_role", "TAX_VAT_PAYABLE")}})
+            reason = f"Vente domestique — TVA {res['rate']*100:.1f}% (taux {cat})."
+    else:  # input / both
+        hint = ctx.get("recoverability_hint")
+        if hint == "business_taxable":
+            rec = {"mode": "full", "reason": "Achat professionnel taxable : impôt préalable déductible."}
+        elif hint == "excluded":
+            rec = {"mode": "none", "reason": "Lié à une activité exclue : TVA non déductible (portée en charge)."}
+        elif hint == "mixed":
+            mr = ctx.get("mixed_rate")
+            if mr is None:
+                rec = {"mode": "needs_review", "reason": "Usage mixte : clé de répartition à préciser."}
+                needs_review = True
+            else:
+                rec = {"mode": "partial", "rate": float(mr), "reason": f"Usage mixte : {float(mr)*100:.0f}% déductible."}
+        else:
+            rec = {"mode": "needs_review", "reason": "Information fiscale insuffisante : récupérabilité à confirmer."}
+            needs_review = True  # NEVER invent a deduction (adjustment 2)
+
+        if kind == "services_from_abroad":
+            liable = True
+            if vat_status != "taxable":
+                # Non-registered recipient: CHF 10'000/year threshold applies (adjustment 1).
+                ytd = float(ctx.get("acquisition_ytd") or 0)
+                liable = ytd >= 10000.0
+            res.update({"tax_treatment": "reverse_charge_acquisition", "tax_code": "CH_VAT_ACQ",
+                        "rate": rate_for("standard"), "side": "both",
+                        "reporting_mapping": {"acquisition_tax_field": "380", "input_tax_field": "400"},
+                        "account_roles": {"acquisition_vat_role": roles.get("acquisition_vat_role", "TAX_VAT_ACQUISITION"),
+                                          "input_vat_role": roles.get("input_vat_role", "TAX_RECOVERABLE"),
+                                          "non_recoverable_target": roles.get("non_recoverable_target", "EXPENSE")},
+                        "acquisition_liable": liable,
+                        "recoverability": rec if liable else {"mode": "none", "reason": "Non assujetti sous le seuil CHF 10'000 : pas d'impôt sur les acquisitions."}})
+            if vat_status == "taxable":
+                reason = "Acquisition de prestations de l'étranger (auto-liquidation) — assujetti CH : imposable."
+            elif liable:
+                reason = "Acquisition de prestations de l'étranger — non assujetti, seuil CHF 10000 franchi : imposable."
+            else:
+                reason = "Acquisition de prestations de l'étranger — non assujetti, sous le seuil CHF 10000 : non imposable."
+        elif kind == "import_goods":
+            res.update({"tax_treatment": "import_goods", "tax_code": "CH_VAT_IMPORT",
+                        "rate": rate_for(ctx.get("rate_category") or "standard"),
+                        "reporting_mapping": {"input_tax_field": "400"},
+                        "account_roles": {"input_vat_role": roles.get("input_vat_role", "TAX_RECOVERABLE"),
+                                          "non_recoverable_target": roles.get("non_recoverable_target", "EXPENSE")},
+                        "recoverability": rec})
+            reason = "Importation de biens : TVA à l'importation (justificatif OFDF)."
+        else:  # domestic purchase
+            cat = ctx.get("rate_category") or "standard"
+            res.update({"tax_treatment": "standard_rated" if cat == "standard" else f"{cat}_rated",
+                        "tax_code": {"standard": "CH_VAT_STD", "reduced": "CH_VAT_REDUCED", "accommodation": "CH_VAT_ACC"}[cat],
+                        "rate": rate_for(cat),
+                        "reporting_mapping": {"input_tax_field": "400"},
+                        "account_roles": {"input_vat_role": roles.get("input_vat_role", "TAX_RECOVERABLE"),
+                                          "non_recoverable_target": roles.get("non_recoverable_target", "EXPENSE")},
+                        "recoverability": rec})
+            reason = f"Achat domestique — impôt préalable {res['rate']*100:.1f}%."
+
+    # VAT FX (adjustment 3) — separate from transaction/closing FX.
+    res["vat_fx"] = await _vat_fx(db, ws, co, ctx, tax_date)
+    if res.get("vat_fx") and res["vat_fx"].get("needs_review"):
+        needs_review = True
+    # Rounding snapshot from the canonical CH.1 domain.
+    try:
+        rnd = await resolve(db, ws, co, domain="rounding", context={}, as_of=as_of)
+        res["rounding"] = rnd.get("result")
+    except PolicyError:
+        res["rounding"] = None
+
+    dec = _decision("vat_ch", policy["jurisdiction"], policy, (policy.get("rules") or [{}])[0],
+                    res, reason, context, as_of, sources=policy.get("sources", []),
+                    extra={"needs_review": needs_review})
+    return dec
+
+
 async def _handle_document_ai(db, ws, co, context, as_of, candidates):
     """Absorb existing jurisdiction.document_ai_policy (optional domain)."""
     from . import jurisdiction
@@ -363,6 +513,8 @@ async def resolve(db, ws, co, *, domain, context=None, as_of):
 
     if domain == "vat":
         decision = await _handle_vat(db, ws, co, context, as_of, candidates)
+    elif domain == "vat_ch":
+        decision = await _handle_vat_ch(db, ws, co, context, as_of, candidates)
     elif domain == "document_ai":
         decision = await _handle_document_ai(db, ws, co, context, as_of, candidates)
     else:
@@ -439,7 +591,8 @@ async def ensure_seed(db):
     async def seed(domain, jurisdiction, rules, sources, overridability, effective_from="2000-01-01",
                    key="base", priority=100):
         pid = _pid("system", domain, jurisdiction, key)
-        if await db.jurisdiction_policies.find_one({"policy_id": pid, "status": "published"}):
+        if await db.jurisdiction_policies.find_one({"policy_id": pid, "status": "published",
+                                                    "effective_from": effective_from}):
             return
         await publish_policy(db, domain=domain, jurisdiction=jurisdiction, rules=rules,
                              sources=sources, effective_from=effective_from, scope="system",
@@ -472,6 +625,20 @@ async def ensure_seed(db):
                "result": {"delegated_to": "sales_tax_codes"},
                "reason": "Taux TVA suisses issus du référentiel versionné des codes de taxe."}],
                ch_sources, "non_overrideable")
+
+    # vat_ch — structured Swiss VAT authority (rates delegated for parity; adds
+    # treatment/recoverability/reporting/roles). Two versions for reproducibility.
+    common = {"reporting": {}, "legal_basis": ["MWSTG art. 18, 21, 23, 25, 28-30, 45-49"],
+              "account_roles": {"output_vat_role": "TAX_VAT_PAYABLE", "input_vat_role": "TAX_RECOVERABLE",
+                                "acquisition_vat_role": "TAX_VAT_ACQUISITION", "non_recoverable_target": "EXPENSE"}}
+    await seed("vat_ch", "CH", [{"rule_id": "ch_v1", "match": {},
+               "result": {**common, "rates": {"standard": 0.077, "reduced": 0.025, "accommodation": 0.037}},
+               "reason": "TVA CH taux 2018-2023."}], ch_sources, "non_overrideable",
+               effective_from="2018-01-01")
+    await seed("vat_ch", "CH", [{"rule_id": "ch_v2", "match": {},
+               "result": {**common, "rates": {"standard": 0.081, "reduced": 0.026, "accommodation": 0.038}},
+               "reason": "TVA CH taux dès 2024."}], ch_sources, "non_overrideable",
+               effective_from="2024-01-01")
 
 
 async def ensure_indexes(db):

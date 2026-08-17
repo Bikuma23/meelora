@@ -1778,3 +1778,16 @@ Fondation transverse (CH/CA/EU). Doc : `memory/CH1_POLICY_ENGINE_SCOPING.md`. Te
 - **Reports** : A4.6 **non modifié** (interface d'autorité disponible, câblage R4 ultérieur) ; DT1/DT2 → CH.9 ; R1 production-only ; OANDA/IA facultatifs.
 
 **STOP après CH.1 — ne pas démarrer CH.2 automatiquement.**
+
+### CH.2 — TVA Suisse (LIVRÉ & TESTÉ — 2026-06)
+Doc : `memory/SWISS_CH2_VAT_SCOPING.md`. Domaine **`vat_ch`** ajouté au Policy Engine CH.1 (aucun second moteur fiscal ; A3/A4 consommeront la décision). Tests : **46/46 PASS** (`backend/tests/test_ch1_policy_engine.py`).
+- **`VATPolicyDecision`** structurée : `tax_treatment` (standard/reduced/accommodation/zero_rated_export/exempt_without_credit/out_of_scope/reverse_charge_acquisition/import_goods), `rate`, `recoverability{full|none|partial|needs_review}`, `reporting_mapping` (200/302/312/342/380/400 pour CH.4), `account_roles` canoniques, `vat_fx`, `rounding` snapshot, `legal_basis`, `sources`, `needs_review`.
+- **Seed** `vat_ch/CH` v1 (2018 : 7.7/2.5/3.7 %) + v2 (2024 : 8.1/2.6/3.8 %), versionné, reproductible.
+- **Ajustement 1 (acquisition tax)** : assujetti CH → imposable **sans** seuil ; non-assujetti → seuil CHF 10 000 (statut + `acquisition_ytd`). Testé (CHF 1000 assujetti = imposable ; non-assujetti <10k non ; >10k oui).
+- **Ajustement 2 (recoverability)** : `full` = résultat du Happy Path, **jamais** fallback ; info insuffisante → `needs_review` fail-closed (aucun droit à déduction inventé).
+- **Ajustement 3 (VAT FX)** : bloc `vat_fx` = taux **à la date fiscale** (registre `exchange_rates` canonique, non dupliqué), distinct du FX transaction et du closing/revaluation A4.6. Testé (fiscal 0.95 ≠ closing 0.90).
+- Nouveaux rôles : `TAX_VAT_ACQUISITION`, part non récupérable → `EXPENSE`. Taux légaux `non_overrideable` ; override sensible réservé aux décisions réellement overrideable (`accounting.vat_decision_override`, à câbler côté A3/A4 lors de la consommation).
+- **Migration** : taux en parité `sales_tax_codes` ; **A3/A4 non encore recâblés** (CH.2 = autorité + API prêtes) → posting P2 et historique **inchangés** (non-régression réconciliation 0 confirmée). Shadow/parité std/reduced validés dans les tests.
+- Routes CH.1 `POST /policy/resolve` servent `vat_ch`. Notes de crédit : héritage du snapshot fiscal d'origine (règle définie, appliquée lors du câblage A4).
+
+**STOP après CH.2 — ne pas démarrer CH.3 automatiquement.**
