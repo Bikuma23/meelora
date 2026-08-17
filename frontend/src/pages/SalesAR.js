@@ -245,18 +245,32 @@ function AgingTab({ cid, custName }) {
 function RemindersTab({ cid, custName }) {
   const [overdue, setOverdue] = useState([]);
   const [reminders, setReminders] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [policy, setPolicy] = useState({ enabled: true, levels: [7, 15, 30] });
+  const [policyDraft, setPolicyDraft] = useState({ enabled: true, levels: [7, 15, 30] });
+  const [savingPolicy, setSavingPolicy] = useState(false);
   const [msg, setMsg] = useState("");
   const [openFor, setOpenFor] = useState(null);
   const load = useCallback(async () => {
     try {
-      const [o, r] = await Promise.all([api.arOverdue(cid), api.arReminders(cid)]);
+      const [o, r, s, p] = await Promise.all([api.arOverdue(cid), api.arReminders(cid), api.arReminderSuggestions(cid), api.arDunningPolicy(cid)]);
       setOverdue(o.overdue || []); setReminders(r.reminders || []);
+      setSuggestions(s.suggestions || []);
+      setPolicy({ enabled: s.enabled, levels: s.levels }); setPolicyDraft(p);
     } catch (e) { /* gated */ }
   }, [cid]);
   useEffect(() => { load(); }, [load]);
-  const send = async (invoice_id) => {
+  const savePolicy = async () => {
+    setSavingPolicy(true);
     try {
-      const r = await api.arCreateReminder(cid, { invoice_id, message: msg });
+      await api.arSetDunningPolicy(cid, { levels: policyDraft.levels.map((x) => Number(x)), enabled: policyDraft.enabled });
+      toast.success("Politique de relance enregistrée"); load();
+    } catch (e) { toast.error(errMsg(e)); }
+    setSavingPolicy(false);
+  };
+  const send = async (invoice_id, level) => {
+    try {
+      const r = await api.arCreateReminder(cid, { invoice_id, message: msg, ...(level ? { level } : {}) });
       if (r.status === "sent") toast.success(`Relance envoyée à ${r.sent_to}`);
       else if (r.status === "failed") toast.warning(`Relance générée mais envoi échoué : ${r.error || ""}`);
       else toast.success("Relance générée");
@@ -265,6 +279,46 @@ function RemindersTab({ cid, custName }) {
   };
   return (
     <div className="space-y-5" data-testid="ar-reminders-tab">
+      {/* Politique de relance (proposition, non agressive) */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="dunning-policy">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="font-600 text-[#063044]">Politique de relance</h3>
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input type="checkbox" checked={policyDraft.enabled} onChange={(e) => setPolicyDraft((d) => ({ ...d, enabled: e.target.checked }))} data-testid="dunning-enabled" /> Activer les suggestions
+          </label>
+        </div>
+        <p className="mb-3 text-xs text-slate-400">Meelora <b>propose</b> une relance dès qu'une facture dépasse son échéance du nombre de jours ci-dessous. Aucun envoi automatique : un utilisateur autorisé confirme chaque relance.</p>
+        <div className="flex flex-wrap items-end gap-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i}><label className="text-[11px] uppercase text-slate-500">Niveau {i + 1} (jours)</label>
+              <Input type="number" min="0" value={policyDraft.levels[i]} data-testid={`dunning-level-${i + 1}`}
+                onChange={(e) => setPolicyDraft((d) => { const lv = [...d.levels]; lv[i] = e.target.value; return { ...d, levels: lv }; })} className="mt-1 h-9 w-24" /></div>
+          ))}
+          <Button size="sm" className="h-9 bg-[#063044] text-white" data-testid="dunning-save" disabled={savingPolicy} onClick={savePolicy}>Enregistrer</Button>
+        </div>
+      </div>
+
+      {/* Relances suggérées */}
+      <div>
+        <h3 className="mb-2 flex items-center gap-2 font-600 text-[#063044]">Relances suggérées
+          {suggestions.length > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-700 text-amber-700" data-testid="suggestions-count">{suggestions.length}</span>}</h3>
+        {(!policy.enabled) && <p className="text-sm text-slate-400" data-testid="suggestions-disabled">Suggestions désactivées dans la politique.</p>}
+        {policy.enabled && suggestions.length === 0 && <p className="text-sm text-slate-400" data-testid="suggestions-empty">Aucune relance à proposer pour l'instant.</p>}
+        <div className="space-y-2">
+          {policy.enabled && suggestions.map((o) => (
+            <div key={o.invoice_id} data-testid={`suggestion-row-${o.invoice_id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="font-mono-data text-sm font-600 text-[#0F172A]">{o.number || o.invoice_id.slice(0, 8)}</span>
+                <span className="text-sm text-slate-500">{custName(o.customer_id)} · Solde {money(o.balance, o.currency)}</span>
+                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-600 text-rose-700">{o.days_overdue} j de retard</span>
+                <span className="rounded-full bg-[#063044] px-2 py-0.5 text-[11px] font-600 text-white">Relance niveau {o.suggested_level} suggérée (≥ {o.threshold} j)</span>
+              </div>
+              <Button size="sm" className="h-8 gap-1 bg-[#22C55E] text-white" data-testid={`suggestion-send-${o.invoice_id}`} onClick={() => send(o.invoice_id, o.suggested_level)}><Send size={13}/> Envoyer niveau {o.suggested_level}</Button>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div>
         <h3 className="mb-2 font-600 text-[#063044]">Factures échues</h3>
         {overdue.length === 0 && <p className="text-sm text-slate-400" data-testid="ar-overdue-empty">Aucune facture échue.</p>}

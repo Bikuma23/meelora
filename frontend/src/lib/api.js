@@ -322,4 +322,7 @@ export const api = {
   arOverdue: (cid, params) => client.get(`/companies/${cid}/ar/overdue`, { params }).then((r) => r.data),
   arReminders: (cid, params) => client.get(`/companies/${cid}/ar/reminders`, { params }).then((r) => r.data),
   arCreateReminder: (cid, body) => client.post(`/companies/${cid}/ar/reminders`, body).then((r) => r.data),
+  arDunningPolicy: (cid) => client.get(`/companies/${cid}/ar/reminders/policy`).then((r) => r.data),
+  arSetDunningPolicy: (cid, body) => client.put(`/companies/${cid}/ar/reminders/policy`, body).then((r) => r.data),
+  arReminderSuggestions: (cid, params) => client.get(`/companies/${cid}/ar/reminders/suggestions`, { params }).then((r) => r.data),
 };

@@ -213,6 +213,15 @@ async def _accounting_home(ctx):
         amt_str = f"{amt:,.2f}".replace(",", "\u00A0").replace(".", ",")
         info.append({"module": "ACCOUNTING", "code": "acc.info_overdue", "tone": "warning",
                      "text": f"{len(overdue_list)} facture(s) échue(s) — {amt_str} {cur} en souffrance. Pensez à envoyer une relance."})
+        try:
+            from ..accounting import dunning as _dun
+            sug = await _dun.suggestions(ctx.db, ws, co, as_of=as_of)
+            n = len(sug.get("suggestions") or [])
+            if sug.get("enabled") and n:
+                info.append({"module": "ACCOUNTING", "code": "acc.info_dunning", "tone": "warning",
+                             "text": f"{n} relance(s) suggérée(s) — des factures ont franchi un seuil de relance."})
+        except Exception:
+            pass
     if due_soon:
         info.append({"module": "ACCOUNTING", "code": "acc.info_due_soon", "tone": "warning",
                      "text": f"{len(due_soon)} facture(s) arrivent à échéance dans les 7 prochains jours."})

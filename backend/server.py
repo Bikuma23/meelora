@@ -3770,6 +3770,33 @@ async def ar_create_reminder(company_id: str, payload: ARReminderIn, user: dict 
     return r
 
 
+class ARDunningPolicyIn(BaseModel):
+    levels: List[int]
+    enabled: bool = True
+
+
+@api.get("/companies/{company_id}/ar/reminders/policy")
+async def ar_get_dunning_policy(company_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await dunning_service.get_policy(db, ws, company_id)
+
+
+@api.put("/companies/{company_id}/ar/reminders/policy")
+async def ar_set_dunning_policy(company_id: str, payload: ARDunningPolicyIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    res = await dunning_service.set_policy(db, ws, company_id, payload.levels, enabled=payload.enabled)
+    await log_action(user, "update", "ar_dunning_policy", company_id,
+                     details=f"Politique de relance {res['levels']} (activée={res['enabled']})",
+                     company_id=company_id, entity_id=company_id, event_type="ar.dunning.policy_updated")
+    return res
+
+
+@api.get("/companies/{company_id}/ar/reminders/suggestions")
+async def ar_reminder_suggestions(company_id: str, as_of: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await dunning_service.suggestions(db, ws, company_id, as_of=as_of)
+
+
 
 
 @api.get("/platform/logs")

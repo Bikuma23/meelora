@@ -56,6 +56,55 @@ async def overdue_invoices(db, ws, co, as_of=None):
     return out
 
 
+DEFAULT_DUNNING_LEVELS = [7, 15, 30]
+
+
+def _policy_from_company(company):
+    p = (company or {}).get("dunning_policy") or {}
+    levels = p.get("levels")
+    if not (isinstance(levels, list) and len(levels) == 3 and all(isinstance(x, (int, float)) for x in levels)):
+        levels = list(DEFAULT_DUNNING_LEVELS)
+    return {"enabled": p.get("enabled", True), "levels": [int(x) for x in levels]}
+
+
+async def get_policy(db, ws, co):
+    return _policy_from_company(await _company(db, ws, co))
+
+
+async def set_policy(db, ws, co, levels, enabled=True):
+    if not (isinstance(levels, list) and len(levels) == 3):
+        raise HTTPException(status_code=422, detail="Trois seuils requis (niveaux 1, 2 et 3).")
+    try:
+        lv = [int(x) for x in levels]
+    except Exception:
+        raise HTTPException(status_code=422, detail="Seuils invalides.")
+    if any(x < 0 for x in lv) or not (lv[0] < lv[1] < lv[2]):
+        raise HTTPException(status_code=422, detail="Les seuils doivent être positifs et croissants (niveau 1 < 2 < 3).")
+    await db.companies.update_one({"$or": [{"id": co}, {"_id": co}], "workspace_id": ws},
+                                  {"$set": {"dunning_policy": {"enabled": bool(enabled), "levels": lv}}})
+    return {"enabled": bool(enabled), "levels": lv}
+
+
+async def suggestions(db, ws, co, as_of=None):
+    """Non-aggressive dunning: PROPOSE (never auto-send) a reminder for each overdue
+    invoice that has crossed the next un-sent level threshold. An authorised user confirms."""
+    company = await _company(db, ws, co)
+    policy = _policy_from_company(company)
+    levels = policy["levels"]
+    rows = await overdue_invoices(db, ws, co, as_of=as_of)
+    out = []
+    for r in rows:
+        nxt = int(r.get("reminders_sent") or 0) + 1
+        if nxt > len(levels):
+            continue  # every reminder level already sent
+        threshold = levels[nxt - 1]
+        if r["days_overdue"] >= threshold:
+            out.append({**r, "suggested_level": nxt, "threshold": threshold})
+    out.sort(key=lambda x: (x["suggested_level"], x["days_overdue"]), reverse=True)
+    return {"enabled": policy["enabled"], "levels": levels, "suggestions": out}
+
+
+
 async def list_reminders(db, ws, co, *, invoice_id=None):
     q = {"workspace_id": ws, "company_id": co}
     if invoice_id:

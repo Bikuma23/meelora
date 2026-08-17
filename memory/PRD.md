@@ -1613,3 +1613,12 @@ Correction UX/navigation UNIQUEMENT (aucun moteur financier, calcul, entitlement
 - [x] Tests : backend **100 % (8/8)** iteration_72 ; frontend **100 % (4/4)** iteration_73 (après correctifs : toast d'erreur sûr `errMsg()`, primary_contact dict, tax_exemptions List[dict], accès admin Sociétés). Non-régression workflow facture/paiement/note de crédit/aging confirmée.
 - [ ] Restant A3 : brancher la clé OANDA réelle (tester CAD/USD, CHF/EUR) ; warning React dev-only `<span> in <option>` (cosmétique) ; UI Documents/Historique de la fiche client (placeholders pour l'instant). **STOP A3 — ne pas démarrer A4 sans approbation.**
 
+
+
+## Relances — proposition programmée (2026-08-17)
+Conforme A3 §16 (pas d'automatisation agressive) — mode **proposition + confirmation manuelle** validé par l'utilisateur.
+- [x] **Politique de relance par société** : `dunning_policy = {enabled, levels:[7,15,30]}` (défauts modifiables, seuils positifs et strictement croissants). Endpoints `GET/PUT /companies/{cid}/ar/reminders/policy` (lecture = _ar_read_scope, écriture = _ar_write_scope, auditée).
+- [x] **Suggestions** : `GET /companies/{cid}/ar/reminders/suggestions` — propose pour chaque facture échue le prochain niveau non encore envoyé dont le seuil (jours de retard) est franchi. Un envoi échoué ne compte pas comme relance envoyée. Aucun envoi automatique en arrière-plan.
+- [x] **UI onglet Relances** (`SalesAR.js` RemindersTab) : panneau « Politique de relance » (toggle + 3 seuils + Enregistrer) et « Relances suggérées » (facture, retard, niveau suggéré) avec bouton « Envoyer niveau N » (réutilise `create_reminder` avec `level`).
+- [x] **Accueil « À savoir »** : item contextuel « N relance(s) suggérée(s) » (registre, si politique activée).
+- [x] Vérifié : endpoints (policy défaut/valide/invalide, suggestions=2) par curl + rendu UI. ⚠️ L'envoi réel reste dégradé (statut "failed") tant que `RESEND_API_KEY` est absent.
