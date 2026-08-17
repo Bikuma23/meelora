@@ -1,5 +1,15 @@
 # PRD — Budget Salaires Pro (Masse salariale CCQ, Québec)
 
+> ⚠️ **CONTRAINTE PERMANENTE — STRAT-01 PRODUCT CHARTER** : voir
+> `/app/memory/STRAT-01_PRODUCT_CHARTER.md`. Toute nouvelle tranche doit respecter
+> la charte (UX Happy Path/Exceptions First, Time-to-Done, Financial Core sans
+> ledger parallèle, périodes closed terminales, P1.13, IA = assistance non-autorité
+> + zéro-entraînement, Country Packs, fiscalité versionnée snapshotée, documents
+> Object Storage). Passer le **Gate §21** avant de déclarer une fonctionnalité
+> terminée. Ne PAS modifier l'existant seulement pour « aligner » la charte sans
+> demande explicite ; signaler les contradictions importantes.
+
+
 ## Problème / Objectif
 Application web de budgétisation de la masse salariale (Québec, convention CCQ) reconstruite d'après un modèle Excel puis refondue d'après des maquettes fournies. Saisie & extraction faciles, tableaux de bord, hypothèses modifiables, séparation stricte employés CCQ (Électricien/Frigoriste) vs standard.
 
