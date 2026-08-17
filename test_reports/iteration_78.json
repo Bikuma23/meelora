@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend-only test of A4.3 finition (AP Overview near-real-time refresh). Login as persona_finance, navigated to Comptabilité → Achats & Fournisseurs (Aperçu). Verified baseline (no badges), then created a new AP invoice via API (POST create → verify → submit), and triggered revalidation via visibilitychange (hidden→visible). Observed KPI 'À traiter' incremented 23→24 and the +1 badge (ap-kpi-to_process-badge) appeared with ap-fade-in class. Badge was stable (no flashing). Clicking the KPI removed the badge and navigated to inbox tab; returning to Aperçu kept the badge cleared. No audio tags. Priority-new badge (ap-priority-new-{id}) could NOT be observed in the UI because the /ap/overview priorities API is capped at 8 items and sorted such that newly-created regular invoices do not surface in the top-N (dominated by 6 payments + 2 pre-existing invoices). Frontend logic for newIds is correctly wired per code review (lines 127-128, 226 of PurchasesAP.js).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "DELETE /api/companies/{cid}/ap/invoices/{id}", "issue": "Returns 405 Method Not Allowed — test invoices could not be cleaned up. 3 test invoices persist (sinv_7019..., sinv_5502..., sinv_5aa2...). Consider adding DELETE endpoint for draft/submitted supplier invoices or a test cleanup path."},
+      {"endpoint": "GET /api/companies/{cid}/ap/overview", "issue": "priorities[] capped at 8 items with payments prioritized; newly created invoices do not appear in the priorities list unless they outrank existing ones. This limits the observability of the 'Nouveau' badge in real-world usage. Not a bug but a UX consideration."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional) Provide a DELETE endpoint for AP supplier invoices to allow cleanup of test data.",
+    "(Optional) Consider surfacing newly created 'to_process' invoices in priorities list (e.g., dedicated recency slot) so the 'Nouveau' badge is more visible in normal workflow.",
+    "Manually clean up test invoices in Meelora: sinv_7019e1f42bfa469689ede9cb3c360fbd, sinv_5502d48211514be2a3bc66781431efeb, sinv_5aa2326b754f438494492f20e7dced94."
+  ],
+  "critical_code_review_comments": [
+    "PurchasesAP.js OverviewTab correctly implements: (a) baseline seenRef on first paint, (b) newIds set with fresh id detection on revalidation, (c) toProcessDelta computed strictly server-confirmed (no optimistic UI), (d) polling 25s + visibilitychange listener with proper cleanup, (e) acknowledge() removes ids from newIds Set and adds to seenRef, (f) KPI click resets toProcessDelta to 0 and acknowledges invoice-kind priorities. ap-fade-in animation class applied only during isNew (not permanent).",
+    "index.css @keyframes apFadeIn + prefers-reduced-motion global rule are correctly scoped (animation runs once, 420ms).",
+    "Module-level cache _ovCache[cid] persists between mounts — this is intentional for fast paint but could cause stale baseline if user rapidly switches companies. useEffect properly resets seenRef/baseRef/firstRef on cid change."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested)", "frontend": "90% — 5/6 acceptance criteria fully verified; 'Nouveau' priority badge not observable due to API pagination constraint"},
+  "test_credentials": "persona_finance@accslegro.com / persona123 (Meelora CID 965f0770-8cf2-4199-a99f-819ff270436a)",
+  "seed_data_creation": "Created 3 test AP invoices for supplier sup_29e6f59905e643f1802d691d51ce52e6 in period fp_meelora_2026_01 (Realtime test x2 + Realtime prio test). Verify+Submit executed. Cleanup failed due to 405 on DELETE endpoint.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The A4.3 near-real-time refresh feature works as designed for the KPI +N badge (verified end-to-end). The 'Nouveau' priority-row badge (ap-priority-new-{id}) is wired correctly in code but is hard to observe empirically because /ap/overview priorities[] is capped at 8 and dominated by payments. To force-test the Nouveau badge, either (a) pre-seed a fresh company with few or no existing priorities, or (b) mock/patch the priorities API response to inject a synthetic id, or (c) create an invoice whose due date/amount ranks it into the top-8. Baseline check works. visibilitychange dispatch pattern used: Object.defineProperty(document,'visibilityState',{value:'visible'}) + dispatchEvent(new Event('visibilitychange')) — successfully triggers OverviewTab load(true).",
+  "rca of the issue": "N/A — no bugs found. Nouveau badge non-observation is due to API priorities pagination (capped at 8), not a frontend defect."
+}

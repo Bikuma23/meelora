@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNav } from "../context/NavContext";
 import { api } from "../lib/api";
 import { toast } from "sonner";
@@ -106,17 +106,63 @@ const PRIO_CLS = {
 function OverviewTab({ cid, onNavigate }) {
   const [data, setData] = useState(() => _ovCache[cid] || null);
   const [loading, setLoading] = useState(!_ovCache[cid]);
+  const [newIds, setNewIds] = useState(() => new Set());
+  const [toProcessDelta, setToProcessDelta] = useState(0);
+  const seenRef = useRef(new Set());
+  const baseRef = useRef({ to_process: null });
+  const firstRef = useRef(true);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isPoll = false) => {
     if (!cid) return;
-    if (!_ovCache[cid]) setLoading(true);
+    if (!isPoll && !_ovCache[cid]) setLoading(true);
     try {
       const d = await api.apOverview(cid, {});
+      const ids = (d.priorities || []).map((p) => p.id);
+      if (firstRef.current) {
+        // Baseline on first paint: nothing is "new" yet (scoped to this company).
+        ids.forEach((id) => seenRef.current.add(id));
+        baseRef.current.to_process = d.kpis.to_process;
+        firstRef.current = false;
+      } else {
+        const fresh = ids.filter((id) => !seenRef.current.has(id));
+        if (fresh.length) setNewIds((prev) => new Set([...prev, ...fresh]));
+        const delta = d.kpis.to_process - (baseRef.current.to_process ?? d.kpis.to_process);
+        if (delta > 0) setToProcessDelta(delta);
+        else { baseRef.current.to_process = d.kpis.to_process; setToProcessDelta(0); }
+      }
       _ovCache[cid] = d; setData(d);
-    } catch (e) { /* gated */ }
+    } catch (e) { /* gated / scoped by effective rights server-side */ }
     setLoading(false);
   }, [cid]);
-  useEffect(() => { load(); }, [load]);
+
+  // Reset acknowledgment state per active company, then poll (server-confirmed only,
+  // never optimistic for financial figures). ~25s + revalidate on tab focus.
+  useEffect(() => {
+    seenRef.current = new Set(); baseRef.current = { to_process: null };
+    firstRef.current = true; setNewIds(new Set()); setToProcessDelta(0);
+    load(false);
+    const iv = setInterval(() => load(true), 25000);
+    const onVis = () => { if (document.visibilityState === "visible") load(true); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(iv); document.removeEventListener("visibilitychange", onVis); };
+  }, [cid, load]);
+
+  const acknowledge = (ids) => {
+    ids.forEach((id) => seenRef.current.add(id));
+    setNewIds((prev) => { const n = new Set(prev); ids.forEach((id) => n.delete(id)); return n; });
+  };
+  const onPriorityClick = (p) => {
+    acknowledge([p.id]);
+    onNavigate(p.target, p.kind === "payment" ? { payView: "prepared" } : undefined);
+  };
+  const onKpiClick = (k) => {
+    if (k.key === "to_process") {
+      setToProcessDelta(0);
+      if (data) baseRef.current.to_process = data.kpis.to_process;
+      acknowledge((data?.priorities || []).filter((p) => p.kind === "invoice").map((p) => p.id));
+    }
+    onNavigate(k.tab, k.opts);
+  };
 
   const fc = data?.functional_currency || "";
   const KPIS = data ? [
@@ -148,8 +194,12 @@ function OverviewTab({ cid, onNavigate }) {
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {KPIS.map((k) => (
-          <button key={k.key} data-testid={k.testid} onClick={() => onNavigate(k.tab, k.opts)}
-            className="group rounded-xl border border-slate-200 bg-white p-3 text-left transition-all hover:-translate-y-0.5 hover:border-[#22C55E] hover:shadow-sm">
+          <button key={k.key} data-testid={k.testid} onClick={() => onKpiClick(k)}
+            className="group relative rounded-xl border border-slate-200 bg-white p-3 text-left transition-all hover:-translate-y-0.5 hover:border-[#22C55E] hover:shadow-sm">
+            {k.key === "to_process" && toProcessDelta > 0 && (
+              <span data-testid="ap-kpi-to_process-badge"
+                className="ap-fade-in absolute -right-1.5 -top-1.5 rounded-full bg-[#22C55E] px-1.5 py-0.5 text-[10px] font-700 text-white shadow-sm">+{toProcessDelta}</span>
+            )}
             <p className="text-[11px] uppercase tracking-wide text-slate-500">{k.label}</p>
             <p className={`mt-1 text-lg font-700 ${k.accent}`}>{k.value}</p>
             <p className="text-[11px] text-slate-400">{k.sub}</p>
@@ -164,12 +214,17 @@ function OverviewTab({ cid, onNavigate }) {
           {data.priorities.length === 0 ? <p className="text-sm text-slate-400" data-testid="ap-priorities-empty">Rien à traiter — tout est à jour.</p>
             : (
               <div className="divide-y divide-slate-100">
-                {data.priorities.map((p) => (
+                {data.priorities.map((p) => {
+                  const isNew = newIds.has(p.id);
+                  return (
                   <button key={`${p.kind}-${p.id}`} data-testid={`ap-priority-${p.id}`}
-                    onClick={() => onNavigate(p.target, p.kind === "payment" ? { payView: "prepared" } : undefined)}
-                    className="flex w-full items-center justify-between gap-2 py-2 text-left transition-colors hover:bg-slate-50">
+                    onClick={() => onPriorityClick(p)}
+                    className={`flex w-full items-center justify-between gap-2 py-2 text-left transition-colors hover:bg-slate-50 ${isNew ? "ap-fade-in" : ""}`}>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-600 text-[#0F172A]">{p.supplier}</p>
+                      <p className="flex items-center gap-1.5 truncate text-sm font-600 text-[#0F172A]">
+                        {p.supplier}
+                        {isNew && <span data-testid={`ap-priority-new-${p.id}`} className="rounded-full bg-[#22C55E]/15 px-1.5 py-0.5 text-[9px] font-700 uppercase tracking-wide text-[#16a34a]">Nouveau</span>}
+                      </p>
                       <p className="truncate text-xs text-slate-400">{p.number || (p.kind === "payment" ? "Paiement" : p.id.slice(0, 10))}{p.due_date ? ` · éch. ${p.due_date}` : ""}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -177,7 +232,8 @@ function OverviewTab({ cid, onNavigate }) {
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-600 ${PRIO_CLS[p.action] || "bg-slate-100 text-slate-600"}`}>{p.issue}</span>
                     </div>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             )}
         </div>

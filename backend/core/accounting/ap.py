@@ -1199,11 +1199,14 @@ async def overview(db, ws, co, as_of=None):
                 issue, action = "Écart détecté", "review"
             else:
                 issue, action = "À compléter", "complete"
+            # Recency boost: a freshly received/submitted invoice (≤2 j) surfaces
+            # near authorised payments, but never above a genuinely overdue item.
+            recent = _days_between(as_of, (inv.get("created_at") or "")[:10]) <= 2
             priorities.append({"kind": "invoice", "id": inv["_id"], "supplier": sup_name(inv.get("supplier_id")),
                                "supplier_id": inv.get("supplier_id"), "number": inv.get("supplier_invoice_number"),
                                "amount": inv.get("total"), "currency": inv.get("currency"),
                                "due_date": inv.get("due_date"), "issue": issue, "action": action,
-                               "urgency": 40, "target": "inbox"})
+                               "urgency": 40 + (30 if recent else 0), "target": "inbox"})
             continue
         if st != "approved":
             continue
