@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
 import { useLang } from "../context/LanguageContext";
 import {
-  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight, Minimize2, HelpCircle, Bell, Camera, Trash2, Pencil, AlertTriangle, Layers, Globe, ShieldAlert,
+  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight, Minimize2, HelpCircle, Bell, Camera, Trash2, Pencil, AlertTriangle, Layers, Globe, ShieldAlert, Loader2,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
@@ -546,19 +546,38 @@ function DynamicCompanyNav({ manifest, active, go, companies, activeCompanyId, e
   );
 }
 
+function BootScreen() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#F3F4F6]" data-testid="boot-loading">
+      <div className="flex items-center gap-2 text-slate-500"><Loader2 className="animate-spin" size={18} /> Chargement du mandat…</div>
+    </div>
+  );
+}
+
+function NoMandateScreen({ user, logout, t }) {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#F3F4F6] px-6 text-center" data-testid="no-mandate">
+      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-200 text-slate-400"><Building2 size={26} /></span>
+      <div>
+        <h1 className="font-display text-2xl font-800 text-[#063044]">{t("Aucun mandat attribué")}</h1>
+        <p className="mt-2 max-w-md text-sm text-slate-500">{t("Votre compte est actif mais aucun mandat ne vous a encore été attribué. Contactez votre administrateur pour obtenir l'accès à une société.")}</p>
+      </div>
+      <button onClick={logout} data-testid="no-mandate-logout" className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-600 text-slate-600 hover:bg-slate-50">{t("Déconnexion")}</button>
+    </div>
+  );
+}
+
 function LayoutInner() {
   const { user, logout } = useAuth();
   const { t } = useLang();
   const isPlatformStaff = !!user?.platform_role;
+  // Deterministic post-auth landing: NEVER derive it from a saved browser route.
+  // Support a canonical company-home URL (/company/:id/home) for direct refresh.
+  const bootHome = (typeof window !== "undefined") && window.location.pathname.match(/^\/company\/([^/]+)\/home\/?$/);
   const [active, setActive] = useState(() => {
-    try {
-      const s = localStorage.getItem("acct:lastPage");
-      if (s && PAGES[s]) {
-        if (isPlatformStaff && !s.startsWith("platform_")) return "platform_home";
-        return s;
-      }
-    } catch (e) { /* ignore */ }
-    return isPlatformStaff ? "platform_home" : "dashboard";
+    if (isPlatformStaff) return "platform_home";
+    if (bootHome) return "company_home";
+    return "__boot__";
   });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -566,7 +585,9 @@ function LayoutInner() {
   const [presentation, setPresentation] = useState(false);
   // P1.13E — dynamic company navigation (backend authority).
   const [navCompanies, setNavCompanies] = useState([]);
+  const [ctxLoaded, setCtxLoaded] = useState(false);
   const [activeCompanyId, setActiveCompanyId] = useState(() => {
+    if (bootHome) return bootHome[1];
     try { return localStorage.getItem("meelora:activeCompany") || null; } catch (e) { return null; }
   });
   const [navManifest, setNavManifest] = useState(null);
@@ -576,17 +597,27 @@ function LayoutInner() {
   const page = PAGES[active] || PAGES.dashboard;
   const Active = page.comp;
   const go = (k) => { setActive(k); setMobileOpen(false); };
-  useEffect(() => { try { localStorage.setItem("acct:lastPage", active); } catch (e) { /* ignore */ } }, [active]);
+  // Canonical company-home URL sync (deterministic landing target; refresh-safe).
+  useEffect(() => {
+    if (isPlatformStaff) return;
+    if (active === "company_home" && activeCompanyId) {
+      const url = `/company/${activeCompanyId}/home`;
+      if (window.location.pathname !== url) window.history.replaceState({}, "", url);
+    } else if (active !== "__boot__" && window.location.pathname.startsWith("/company/")) {
+      window.history.replaceState({}, "", "/");
+    }
+  }, [active, activeCompanyId, isPlatformStaff]);
   // Companies the user may operate in (platform staff — to reach "Société Meelora"
   // — AND business users).
   useEffect(() => {
     api.getCompanyContext().then((d) => {
       const cs = d.companies || [];
       setNavCompanies(cs);
+      setCtxLoaded(true);
       if (!isPlatformStaff) {
         setActiveCompanyId((prev) => (prev && cs.some((c) => c.id === prev)) ? prev : (cs[0]?.id || null));
       }
-    }).catch(() => setNavCompanies([]));
+    }).catch(() => { setNavCompanies([]); setCtxLoaded(true); });
   }, [isPlatformStaff]);
   // Recompute the sidebar manifest whenever the active company changes.
   useEffect(() => {
@@ -623,27 +654,26 @@ function LayoutInner() {
     mods.forEach((m) => (MODULE_PAGES[m.module_code] || []).forEach((k) => allowed.add(k)));
     return allowed;
   };
-  // Non-platform business users: entering a mandate (via "Accéder") always lands
-  // on the company home; multi-mandate users otherwise see the chooser. No ghost pages.
+  // Non-platform business users: deterministic post-auth landing computed ONLY
+  // from accessible mandates (never from a saved route). Single mandate → company
+  // home; multiple → chooser; entering a mandate → company home.
   useEffect(() => {
     if (isPlatformStaff || !navManifest || active.startsWith("platform_")) return;
     const mods = navManifest.modules || [];
     const adminView = !!navManifest.admin_view;
     const multi = navCompanies.length > 1;
     const allowed = allowedBusinessPages(mods, adminView);
-    // Just entered a mandate from the chooser: land on the company home (welcome
-    // + KPIs), before entering any module. Never bounce back to the chooser.
     if (justEntered) {
       setJustEntered(false);
       setActive("company_home");
       return;
     }
-    if (!allowed.has(active)) { setActive(multi ? "mandats_list" : "company_home"); return; }
-    // "dashboard" is the app default landing: multi users go to the chooser,
-    // single-mandate users land on their company home.
-    if (active === "dashboard") {
+    // Boot / default landing: resolve deterministically from memberships.
+    if (active === "__boot__" || active === "dashboard") {
       setActive(multi ? "mandats_list" : "company_home");
+      return;
     }
+    if (!allowed.has(active)) { setActive(multi ? "mandats_list" : "company_home"); }
   }, [navManifest, navCompanies]); // eslint-disable-line react-hooks/exhaustive-deps
   // Platform staff stay within platform pages only. Business modules never
   // appear in the platform sidebar; Société Meelora modules are managed from its
@@ -679,6 +709,16 @@ function LayoutInner() {
     : "Gestion des Budgets";
   const roleMeta = { admin: { label: "Admin", c: "#0F172A", t: "#93B4FF" }, editor: { label: "Utilisateur", c: "#64748B", t: "#94A3B8" }, user: { label: "Utilisateur", c: "#64748B", t: "#94A3B8" } }[user?.role] || { label: "Utilisateur", c: "#64748B", t: "#94A3B8" };
   useEffect(() => { api.getPreferences().then((p) => { applyTheme(p?.theme); if (p?.avatar_color) setAvatarColor(p.avatar_color); }).catch(() => {}); }, []);
+
+  // No accessible mandate → clean empty state (business users only).
+  if (!isPlatformStaff && ctxLoaded && navCompanies.length === 0) {
+    return <NoMandateScreen user={user} logout={logout} t={t} />;
+  }
+  // Deterministic resolution / mandate switch in progress → fail-closed loader;
+  // never render the previous mandate's modules or data.
+  if (!isPlatformStaff && (active === "__boot__" || !navManifest)) {
+    return <BootScreen />;
+  }
 
   return (
     <div className="flex min-h-screen bg-[#F3F4F6]">

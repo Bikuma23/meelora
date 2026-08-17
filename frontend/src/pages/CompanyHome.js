@@ -3,24 +3,8 @@ import { useNav } from "../context/NavContext";
 import { useLang } from "../context/LanguageContext";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/api";
-import { MapPin, Phone, Mail, Globe, Building2, Loader2, TrendingUp, FileText, Wallet, Receipt } from "lucide-react";
-
-function CompanyLogo({ cid, hasLogo, name }) {
-  const [url, setUrl] = useState(null);
-  useEffect(() => {
-    let obj = null;
-    if (cid && hasLogo) {
-      api.getCompanyLogoBlob(cid).then((blob) => { obj = URL.createObjectURL(blob); setUrl(obj); }).catch(() => setUrl(null));
-    } else setUrl(null);
-    return () => { if (obj) URL.revokeObjectURL(obj); };
-  }, [cid, hasLogo]);
-  if (url) return <img src={url} alt={name} className="h-9 w-9 rounded-lg object-contain" data-testid="company-logo-img" />;
-  return (
-    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#063044] text-white" data-testid="company-logo-initials">
-      {name ? <span className="text-xs font-800">{name.trim().slice(0, 2).toUpperCase()}</span> : <Building2 size={16} />}
-    </span>
-  );
-}
+import { CompanyLogo } from "../components/CompanyLogo";
+import { MapPin, Phone, Mail, Globe, Loader2, TrendingUp, FileText, Wallet, Receipt } from "lucide-react";
 
 function Kpi({ icon: Icon, label, value, sub, testid }) {
   return (
@@ -67,9 +51,10 @@ export default function CompanyHome() {
         <p className="text-sm font-500 tracking-wide text-slate-400">{t("Bonjour")}</p>
         <h1 className="font-display mt-1 text-4xl font-800 tracking-tight text-[#063044] sm:text-5xl" data-testid="company-home-user">{userName}</h1>
         <div className="mt-5 flex items-center gap-2.5 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm" data-testid="company-home-company">
-          <CompanyLogo cid={activeCompanyId} hasLogo={c.branding?.has_logo} name={c.name} />
+          <CompanyLogo cid={activeCompanyId} hasLogo={c.branding?.has_logo} name={c.name} size={36} />
           <span className="text-base font-700 text-[#0F172A]" data-testid="company-home-name">{c.name}</span>
         </div>
+        <p className="mt-2 text-xs font-500 uppercase tracking-wide text-slate-400" data-testid="company-home-entrypoint">{t("Point d'entrée du mandat")}</p>
         <div className="mt-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-500">
           {(c.address || locality || c.country) && (
             <span className="flex items-center gap-1.5" data-testid="company-home-address">

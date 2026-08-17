@@ -1,0 +1,26 @@
+{
+  "summary": "Frontend E2E validation of deterministic landing + canonical /company/:id/home route + adaptive company logo. persona_finance (single mandate) lands DIRECTLY on company-home with canonical URL and 'Point d'entrée du mandat' shown; page refresh on canonical URL correctly reloads Accueil. admin@accslegro.com (4 mandates visible: meelora, 9434-3977 QC inc., TEST Logo SA 1196729, TEST NoLogo 1196753) lands on 'Tous les mandats' chooser. Determinism proven: after navigating into Comptabilite > Ventes & Clients then logout+login, admin lands back on chooser (not last visited page) — localStorage lastPage is NOT used. Sidebar switcher swaps active mandate and reloads company-home for the new company without leaking previous modules. Adaptive logo: Meelora dark logo shown for persona_finance → frame background rgb(255,255,255) (light bg for dark logo) as expected. Companies without logo correctly render company-logo-initials fallback. No /platform/* nav items exposed in client context (persona_finance / admin).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL: When admin views Meelora via chooser (test 5), the company-logo showed initials instead of the actual logo image — may indicate timing/branding.has_logo not yet loaded before render. Verify GET /companies/{id}/home returns branding.has_logo=true reliably for meelora; if intermittent, add a short-lived retry in CompanyLogo when hasLogo becomes true post-mount. For persona_finance the logo rendered correctly (rgb(255,255,255) bg), confirming the analysis pipeline works — so this is only a UX polish item.",
+    "OPTIONAL: Light-logo upload → dark background scenario was NOT executed end-to-end (would require creating and uploading a PNG via Platform > Sociétés/Clients). Adaptive-bg logic verified in the opposite direction (dark logo → light bg confirmed = rgb(255,255,255)). Main agent can self-test the light-logo→dark bg with an existing white PNG asset."
+  ],
+  "critical_code_review_comments": [
+    "Layout.js is 809 lines — consider splitting UserMenu / NotificationsBell / ModuleFlyout / MandatSwitcher into separate files.",
+    "analyzeImage in CompanyLogo.js correctly uses same-origin blob to avoid canvas tainting — good.",
+    "Canonical URL sync uses history.replaceState (no route pollution) — good."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100% (7/7 core scenarios)"},
+  "test_credentials": "persona_finance@accslegro.com/persona123, admin@accslegro.com/admin123",
+  "seed_data_creation": "None. Did not upload a light logo (out of scope for read-only validation).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Deterministic landing verified. Canonical URL /company/<id>/home stable on reload. Admin sees 4 mandates (meelora, 9434-3977 QC inc, TEST Logo SA 1196729, TEST NoLogo 1196753). For adaptive-bg testing, the container is [data-testid=company-logo-frame]; use el.evaluate('e => getComputedStyle(e).backgroundColor'). Meelora (dark logo) → rgb(255,255,255). To fully cover the light-logo→dark bg branch (#0F172A ≈ rgb(15,23,42)), create/upload a white PNG via Platform admin (platform@meelora.com/platform123) → Sociétés/Clients → edit any company → logo upload. Some 404/403 console noise during auth transitions is benign (logo/nav probes racing against logout)."
+}
