@@ -305,6 +305,9 @@ function UserMenu({ user, logout, go, t, adminView }) {
             <DropdownMenuItem data-testid="menu-admin" onSelect={() => go("access")}>
               <ShieldCheck size={15} className="mr-2 text-slate-500" /> {t("Utilisateurs et accès")}
             </DropdownMenuItem>
+            <DropdownMenuItem data-testid="menu-companies" onSelect={() => go("companies")}>
+              <Building2 size={15} className="mr-2 text-slate-500" /> {t("Sociétés / Mandats")}
+            </DropdownMenuItem>
             <DropdownMenuItem data-testid="menu-logs" onSelect={() => go("logs")}>
               <ScrollText size={15} className="mr-2 text-slate-500" /> {t("Logs société")}
             </DropdownMenuItem>
@@ -654,7 +657,7 @@ function LayoutInner() {
     const allowed = new Set(["preferences", "mandats_list", "company_home"]);
     // Admin functions moved to the avatar → Administration menu (Sociétés/Clients
     // is platform-only). Keep the pages reachable for company admins.
-    if (adminView) ["access", "logs", "utilisateurs"].forEach((k) => allowed.add(k));
+    if (adminView) ["access", "logs", "utilisateurs", "companies"].forEach((k) => allowed.add(k));
     mods.forEach((m) => (MODULE_PAGES[m.module_code] || []).forEach((k) => allowed.add(k)));
     return allowed;
   };
@@ -725,7 +728,12 @@ function LayoutInner() {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#F3F4F6]">
+    <div className="relative flex min-h-screen bg-[#F3F4F6]">
+      {/* Global Meelora watermark — full page, extremely light; visible through the near-white content on every tool page. */}
+      {!presentation && (
+        <img src="/login-bg.png" alt="" aria-hidden="true" data-testid="app-watermark"
+          className="pointer-events-none fixed inset-0 z-0 h-full w-full select-none object-cover opacity-[0.035]" />
+      )}
       {mobileOpen && <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setMobileOpen(false)} data-testid="sidebar-overlay" />}
       <aside className={`fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-[#F3F4F6] bg-white px-3 py-4 transition-transform duration-200 ${presentation ? "-translate-x-full" : "lg:translate-x-0"} ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="mb-6 flex items-center justify-between gap-2.5 px-2">
@@ -760,7 +768,7 @@ function LayoutInner() {
         </nav>
       </aside>
 
-      <div className={`flex-1 ${presentation ? "" : "lg:ml-64"}`}>
+      <div className={`relative z-10 flex-1 ${presentation ? "" : "lg:ml-64"}`}>
         {!presentation && (
         <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/80 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-2.5">

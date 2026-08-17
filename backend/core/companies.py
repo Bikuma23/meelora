@@ -75,6 +75,7 @@ class CompanyUpdate(BaseModel):
     tax_profile: Optional[dict] = None
     status: Optional[Literal["active", "inactive"]] = None
     status_reason: Optional[str] = Field(default=None, max_length=500)
+    accent_color: Optional[str] = Field(default=None, max_length=9)
 
 
 def public_company(doc: dict) -> dict:
@@ -109,6 +110,7 @@ def public_company(doc: dict) -> dict:
             "has_logo": bool((doc.get("branding") or {}).get("logo_document_id")),
             "logo_mime": (doc.get("branding") or {}).get("logo_mime"),
             "logo_updated_at": (doc.get("branding") or {}).get("logo_updated_at"),
+            "accent_color": (doc.get("branding") or {}).get("accent_color"),
         },
         "admin_email": doc.get("admin_email"),
         "status": doc.get("status", "active" if doc.get("active", True) else "inactive"),
@@ -247,6 +249,13 @@ async def update_company_for_admin(db, company_id: str, user: dict, payload: Com
         changes["functional_currency"] = changes["functional_currency"].upper()
     if changes.get("jurisdiction"):
         changes["jurisdiction"] = changes["jurisdiction"].upper()
+    if "accent_color" in changes:
+        acc = changes.pop("accent_color")
+        acc = (acc or "").strip() if isinstance(acc, str) else None
+        if acc and acc.startswith("#") and len(acc) in (4, 7):
+            changes["branding.accent_color"] = acc
+        else:
+            changes["branding.accent_color"] = None
     ops = {}
     now_iso = datetime.now(timezone.utc).isoformat()
     if "status" in changes:

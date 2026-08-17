@@ -295,6 +295,7 @@ export const api = {
   arMapping: (cid) => client.get(`/companies/${cid}/ar/mapping`).then((r) => r.data),
   arSetMapping: (cid, body) => client.put(`/companies/${cid}/ar/mapping`, body).then((r) => r.data),
   arRecordFxRate: (cid, body) => client.post(`/companies/${cid}/ar/fx-rates`, body).then((r) => r.data),
+  arOandaRate: (cid, params) => client.get(`/companies/${cid}/ar/fx-oanda`, { params }).then((r) => r.data),
   arCustomers: (cid) => client.get(`/companies/${cid}/ar/customers`).then((r) => r.data),
   arCreateCustomer: (cid, body) => client.post(`/companies/${cid}/ar/customers`, body).then((r) => r.data),
   arUpdateCustomer: (cid, id, body) => client.patch(`/companies/${cid}/ar/customers/${id}`, body).then((r) => r.data),

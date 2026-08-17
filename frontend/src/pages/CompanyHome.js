@@ -6,7 +6,7 @@ import { api } from "../lib/api";
 import { CompanyLogo } from "../components/CompanyLogo";
 import {
   MapPin, Phone, Mail, Globe, Loader2, TrendingUp, ArrowUpRight, ArrowDownRight,
-  FilePlus, Wallet, Users, BarChart3, CheckCircle2, Info, Lightbulb,
+  FilePlus, Wallet, Users, BarChart3, CheckCircle2, Info, Lightbulb, AlertTriangle,
 } from "lucide-react";
 
 const QA_ICONS = { "file-plus": FilePlus, wallet: Wallet, users: Users, "bar-chart": BarChart3 };
@@ -66,6 +66,14 @@ export default function CompanyHome() {
     api.getCompanyHome(activeCompanyId).then(setData).catch(() => setData(null)).finally(() => setLoading(false));
   }, [activeCompanyId]);
 
+  const openActivity = (r) => {
+    if (r.ref_type && r.ref_id) {
+      const tabMap = { invoice: "invoices", payment: "payments", credit_note: "credit_notes" };
+      try { sessionStorage.setItem("ar_focus", JSON.stringify({ tab: tabMap[r.ref_type] || "overview", id: r.ref_id })); } catch (e) { /* ignore */ }
+    }
+    if (r.destination) go(r.destination);
+  };
+
   if (loading) return <div className="flex items-center gap-2 p-8 text-slate-500" data-testid="company-home-loading"><Loader2 className="animate-spin" size={16} /> {t("Chargement…")}</div>;
   if (!data) return <div className="p-8 text-sm text-slate-400" data-testid="company-home-empty">{t("Sélectionnez un mandat.")}</div>;
 
@@ -79,22 +87,20 @@ export default function CompanyHome() {
   const gridCols = kpis.length >= 5 ? "lg:grid-cols-5" : kpis.length === 4 ? "lg:grid-cols-4" : kpis.length === 3 ? "lg:grid-cols-3" : kpis.length === 2 ? "sm:grid-cols-2" : "sm:grid-cols-1";
 
   return (
-    <div className="relative overflow-hidden" data-testid="company-home">
-      {/* Meelora watermark — extremely light, right/back of the content; the dashboard keeps its near-white background. */}
-      <img src="/meelora-mark.png" alt="" aria-hidden="true" data-testid="company-home-watermark"
-        className="pointer-events-none absolute -top-8 right-0 w-[380px] max-w-[52%] select-none opacity-[0.05]" />
-
-      <div className="relative mx-auto max-w-6xl space-y-8">
-      {/* Welcome header — user is primary; the mandate is secondary. Left-aligned per the final mockup. */}
-      <div className="flex flex-col items-start gap-5 py-6 sm:flex-row sm:items-center sm:gap-7" data-testid="company-home-header">
-        <CompanyLogo cid={activeCompanyId} hasLogo={c.branding?.has_logo} name={c.name} size={124} rounded="rounded-2xl" />
+    <div data-testid="company-home">
+      <div className="mx-auto max-w-6xl space-y-8">
+      {/* Welcome header — logo aligned to the greeting line, slightly larger than the user name. */}
+      <div className="flex flex-col items-start gap-5 py-6 sm:flex-row sm:gap-7" data-testid="company-home-header">
+        <div className="flex shrink-0 items-start pt-1" data-testid="company-home-logo">
+          <CompanyLogo cid={activeCompanyId} hasLogo={c.branding?.has_logo} name={c.name} size={52} bare />
+        </div>
         <div className="min-w-0">
           <p className="text-sm font-500 tracking-wide text-slate-400">{t("Bonjour")}</p>
-          <h1 className="font-display mt-0.5 text-4xl font-800 leading-tight tracking-tight text-[#063044] sm:text-5xl" data-testid="company-home-user">{userName}</h1>
+          <h1 className="font-display mt-0.5 text-3xl font-800 leading-tight tracking-tight text-[#063044] sm:text-4xl" data-testid="company-home-user">{userName}</h1>
           <div className="mt-2 flex items-center gap-2" data-testid="company-home-company">
-            <span className="text-xl font-700 text-[#0F172A] sm:text-2xl" data-testid="company-home-name">{c.name}</span>
+            <span className="text-lg font-700 text-[#0F172A] sm:text-xl" data-testid="company-home-name">{c.name}</span>
             {c.status === "active"
-              ? <CheckCircle2 size={20} className="shrink-0 fill-emerald-500 text-white" data-testid="company-home-status-active" />
+              ? <CheckCircle2 size={18} className="shrink-0 fill-emerald-500 text-white" data-testid="company-home-status-active" />
               : <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-slate-300" data-testid="company-home-status-neutral" />}
           </div>
           <div className="mt-4 flex flex-col gap-y-2 text-sm text-slate-500">
@@ -156,15 +162,22 @@ export default function CompanyHome() {
               <div className={quickActions.length > 0 ? "mt-5" : ""} data-testid="company-home-recent">
                 <h3 className="mb-2 text-sm font-700 text-[#0F172A]">{t("Activités récentes")}</h3>
                 <ul className="divide-y divide-slate-100">
-                  {recent.map((r, i) => (
-                    <li key={i} className="flex items-center justify-between gap-3 py-2.5 text-sm" data-testid={`recent-${i}`}>
-                      <span className="min-w-0 flex-1 truncate text-slate-600">{r.label}</span>
-                      <span className="shrink-0 text-xs text-slate-400">{r.date}</span>
-                      <span className={`shrink-0 text-sm font-600 ${r.tone === "positive" ? "text-emerald-600" : r.tone === "negative" ? "text-rose-600" : "text-[#0F172A]"}`}>
-                        {r.amount != null ? `${r.amount < 0 ? "-" : ""}${nf(Math.abs(r.amount))} ${r.currency || ""}`.trim() : ""}
-                      </span>
-                    </li>
-                  ))}
+                  {recent.map((r, i) => {
+                    const clickable = !!(r.destination || r.ref_id);
+                    return (
+                      <li key={i} data-testid={`recent-${i}`}>
+                        <button type="button" onClick={() => clickable && openActivity(r)} disabled={!clickable}
+                          data-testid={`recent-btn-${i}`}
+                          className={`-mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-lg px-2 py-2.5 text-left text-sm transition-colors ${clickable ? "cursor-pointer hover:bg-slate-50" : "cursor-default"}`}>
+                          <span className="min-w-0 flex-1 truncate text-slate-600">{r.label}</span>
+                          <span className="shrink-0 text-xs text-slate-400">{r.date}</span>
+                          <span className={`shrink-0 text-sm font-600 ${r.tone === "positive" ? "text-emerald-600" : r.tone === "negative" ? "text-rose-600" : "text-[#0F172A]"}`}>
+                            {r.amount != null ? `${r.amount < 0 ? "-" : ""}${nf(Math.abs(r.amount))} ${r.currency || ""}`.trim() : ""}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
@@ -174,11 +187,15 @@ export default function CompanyHome() {
             <h3 className="mb-3 flex items-center gap-2 text-sm font-700 text-[#0F172A]"><Lightbulb size={16} className="text-[#22C55E]" /> {t("À savoir")}</h3>
             {info.length > 0 ? (
               <ul className="space-y-2.5">
-                {info.map((it, i) => (
-                  <li key={it.code || i} className="flex items-start gap-2 text-sm text-slate-600" data-testid={`info-${i}`}>
-                    <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-500" /> <span>{it.text}</span>
-                  </li>
-                ))}
+                {info.map((it, i) => {
+                  const warn = it.tone === "warning";
+                  const IconC = warn ? AlertTriangle : CheckCircle2;
+                  return (
+                    <li key={it.code || i} className={`flex items-start gap-2 text-sm ${warn ? "text-[#B45309]" : "text-slate-600"}`} data-testid={`info-${i}`}>
+                      <IconC size={16} className={`mt-0.5 shrink-0 ${warn ? "text-amber-500" : "text-emerald-500"}`} /> <span>{it.text}</span>
+                    </li>
+                  );
+                })}
               </ul>
             ) : <p className="text-xs text-slate-400">{t("Aucune information pour le moment.")}</p>}
           </div>

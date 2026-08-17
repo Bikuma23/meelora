@@ -54,7 +54,7 @@ const emptyCompany = {
   jurisdiction: "CA", country: "CA", region: "", city: "", address_line1: "", address_line2: "", postal_code: "",
   phone: "", email: "", functional_currency: "CAD", language: "fr", industry: "services",
   company_type: "operating", fiscal_year_start: "01-01", subscribed_modules: ["ACCOUNTING"], admin_email: "",
-  tax: {},
+  tax: {}, accent_color: "",
 };
 
 function FormSection({ title, children }) {
@@ -138,6 +138,7 @@ export function CompanyForm({ open, onOpenChange, initial, onSubmit, saving }) {
     setF(initial ? { ...emptyCompany,
       ...Object.fromEntries(Object.keys(emptyCompany).map((k) => [k, initial[k] != null ? initial[k] : emptyCompany[k]])),
       tax: initial.tax_profile || {},
+      accent_color: initial.branding?.accent_color || "",
       subscribed_modules: initial.subscribed_modules?.length ? initial.subscribed_modules : emptyCompany.subscribed_modules,
     } : emptyCompany);
   }, [initial, open]);
@@ -157,6 +158,7 @@ export function CompanyForm({ open, onOpenChange, initial, onSubmit, saving }) {
       phone: f.phone.trim() || null, email: f.email.trim() || null, functional_currency: f.functional_currency,
       language: f.language, industry: f.industry, company_type: f.company_type, fiscal_year_start: f.fiscal_year_start,
       subscribed_modules: f.subscribed_modules, admin_email: f.admin_email.trim() || null, tax_profile,
+      accent_color: (f.accent_color || "").trim() || null,
       _admin_action: f.admin_email.trim() ? (adminCheck?.action || null) : null,
       _logo: logo.data || null, _logoRemove: logo.remove || false,
     });
@@ -214,6 +216,13 @@ export function CompanyForm({ open, onOpenChange, initial, onSubmit, saving }) {
 
         <FormSection title={t("Paramètres")}>
           <F label={t("Devise fonctionnelle")}><Input maxLength={3} className="uppercase" value={f.functional_currency} onChange={(e) => set("functional_currency", e.target.value.toUpperCase())} data-testid="company-currency" /></F>
+          <F label={t("Couleur d'accent (marque)")}>
+            <div className="flex items-center gap-2">
+              <input type="color" value={f.accent_color || "#063044"} onChange={(e) => set("accent_color", e.target.value)} data-testid="company-accent-color" className="h-9 w-12 cursor-pointer rounded border border-slate-200 bg-white p-0.5" />
+              <Input value={f.accent_color || ""} placeholder="#063044" onChange={(e) => set("accent_color", e.target.value)} data-testid="company-accent-hex" className="h-9 flex-1 font-mono-data" />
+              {f.accent_color && <button type="button" onClick={() => set("accent_color", "")} data-testid="company-accent-clear" className="text-xs text-slate-400 hover:text-rose-500">Effacer</button>}
+            </div>
+          </F>
           <F label={t("Langue")}><Select value={f.language} onValueChange={(v) => set("language", v)}><SelectTrigger data-testid="company-language"><SelectValue /></SelectTrigger><SelectContent>{LANGUAGES.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent></Select></F>
           <F label={t("Secteur")}><Select value={f.industry} onValueChange={(v) => set("industry", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{INDUSTRIES.map(([v, l]) => <SelectItem key={v} value={v}>{t(l)}</SelectItem>)}</SelectContent></Select></F>
           <F label={t("Type de société")}><Select value={f.company_type} onValueChange={(v) => set("company_type", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{COMPANY_TYPES.map(([v, l]) => <SelectItem key={v} value={v}>{t(l)}</SelectItem>)}</SelectContent></Select></F>

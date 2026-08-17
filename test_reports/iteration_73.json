@@ -1,0 +1,29 @@
+{
+  "summary": "Retest ciblé Meelora V2 A3 des 3 bugs frontend + accès admin Sociétés/accent color. Les 4 scénarios passent sans crash React. (1) Création client end-to-end réussie : nom rempli sur onglet Général, contact ajouté sur Adresses & contacts avec Principal coché, exemption 'revente' sur Fiscalité, clic 'Créer le client' → toast 'Client créé', le client TEST_Client_Auto_A3 apparaît dans la liste (12 cust-row-*), aucun 'Objects are not valid as a React child'. (2) Validation sans nom : bouton cust-create est correctement disabled côté client (garde UI), donc pas de plantage possible. (3) Formulaire Facture : inv-po, inv-reference, inv-fetch-rate présents ; clic fetch-rate ne crash pas (OANDA non configuré, dégradation attendue). (4) Admin admin@accslegro.com : menu Avatar → 'Sociétés / Mandats' (menu-companies) ouvre la page Sociétés ; pencil (hover) sur la carte meelora ouvre CompanyForm ; company-accent-color et company-accent-hex visibles et éditables ; saisie #FF00AA + clic company-submit → toast 'Société mise à jour', aucun crash.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "SalesAR - Ventes & Clients", "issues": ["Console warning React (hydration) : <span> ne peut pas être enfant de <option> dans inv-period (dev-only, sans impact fonctionnel; à corriger en supprimant les wrappers span injectés autour de {p.code} dans <option>)"]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optionnel : nettoyer le warning React 'In HTML, <span> cannot be a child of <option>' dans SalesAR InvoicesTab inv-period (dev-only)."
+  ],
+  "critical_code_review_comments": [
+    "errMsg() correctement importé au top du module SalesAR.js — stringifie proprement les détails 422 sous forme d'objet/array (plus de crash React).",
+    "Payload create() correct : primary_contact={name} (dict), tax_exemptions=[{code}] (List[dict]) — conforme Pydantic backend.",
+    "Bouton cust-create disabled quand form.name est vide : bon UX/défensif. La consigne 'toast lisible sur erreur validation' n'est pas testable via UI puisque la soumission est bloquée avant l'appel API — comportement acceptable.",
+    "Layout.js UserMenu inclut bien menu-companies (adminView) et allowedBusinessPages inclut 'companies'.",
+    "Companies.js CompanyForm expose company-accent-color et company-accent-hex avec bouton company-accent-clear — accent picker fonctionnel et persistant."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100% (4/4 scénarios)"},
+  "test_credentials": "persona_finance@accslegro.com/persona123 et admin@accslegro.com/admin123 — valides.",
+  "seed_data_creation": "Client 'TEST_Client_Auto_A3' créé (CAD) sur société meelora via UI.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Les 3 bugs de iteration_72.json sont corrigés et vérifiés end-to-end. OANDA reste non configuré (attendu). Un warning React hydration mineur reste dans inv-period (SalesAR InvoicesTab). Backend non testé (skip demandé)."
+}

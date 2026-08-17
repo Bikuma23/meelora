@@ -185,20 +185,38 @@ async def _accounting_home(ctx):
     for p in pays[-12:]:
         recent.append({"type": "payment", "label": f"Paiement reçu de {cust_names.get(p.get('customer_id')) or ''}".strip(),
                        "date": p.get("date") or "", "amount": _money(float(p.get("amount") or 0)), "currency": p.get("currency"),
-                       "tone": "positive", "destination": "acct_sales"})
+                       "tone": "positive", "destination": "acct_sales",
+                       "ref_type": "payment", "ref_id": p.get("id") or str(p.get("_id") or "")})
     posted = [i for i in invs if i.get("status") in ("posted", "partially_paid", "paid")]
     for inv in posted[-12:]:
         recent.append({"type": "invoice", "label": f"Facture {inv.get('number') or ''} comptabilisée".strip(),
                        "date": inv.get("issue_date") or "", "amount": _money(float(inv.get("total") or 0)),
-                       "currency": inv.get("currency"), "tone": "neutral", "destination": "acct_sales"})
+                       "currency": inv.get("currency"), "tone": "neutral", "destination": "acct_sales",
+                       "ref_type": "invoice", "ref_id": inv.get("id") or str(inv.get("_id") or "")})
     cns = await db.sales_credit_notes.find({"workspace_id": ws, "company_id": co, "status": "posted"}).to_list(None)
     for cn in cns[-6:]:
         recent.append({"type": "credit_note", "label": f"Note de crédit {cn.get('number') or ''} émise".strip(),
                        "date": cn.get("issue_date") or cn.get("created_at", "")[:10], "amount": -_money(float(cn.get("total") or 0)),
-                       "currency": cn.get("currency"), "tone": "negative", "destination": "acct_sales"})
+                       "currency": cn.get("currency"), "tone": "negative", "destination": "acct_sales",
+                       "ref_type": "credit_note", "ref_id": cn.get("id") or str(cn.get("_id") or "")})
 
-    # Informational items — truthful, derived from the company configuration.
+    # Informational items — contextual reminders first (dynamic), then truthful config facts.
     info = []
+    from datetime import timedelta
+    horizon = (datetime.fromisoformat(as_of) + timedelta(days=7)).date().isoformat()
+    overdue_list = [i for i in open_invs
+                    if float(i.get("balance") or 0) > 0.001 and (i.get("due_date") or i.get("issue_date") or "") < as_of]
+    due_soon = [i for i in open_invs
+                if float(i.get("balance") or 0) > 0.001 and as_of <= (i.get("due_date") or i.get("issue_date") or "") <= horizon]
+    if overdue_list:
+        amt = _money(sum(float(i.get("balance") or 0) * _fx(i) for i in overdue_list))
+        amt_str = f"{amt:,.2f}".replace(",", "\u00A0").replace(".", ",")
+        info.append({"module": "ACCOUNTING", "code": "acc.info_overdue", "tone": "warning",
+                     "text": f"{len(overdue_list)} facture(s) échue(s) — {amt_str} {cur} en souffrance. Pensez à envoyer une relance."})
+    if due_soon:
+        info.append({"module": "ACCOUNTING", "code": "acc.info_due_soon", "tone": "warning",
+                     "text": f"{len(due_soon)} facture(s) arrivent à échéance dans les 7 prochains jours."})
+
     tp = ctx.company.get("tax_profile") or {}
     if ctx.company.get("functional_currency"):
         info.append({"module": "ACCOUNTING", "code": "acc.info_currency",

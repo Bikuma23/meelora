@@ -1596,3 +1596,20 @@ Correction UX/navigation UNIQUEMENT (aucun moteur financier, calcul, entitlement
 - [x] **Bloc « Budget actif » + sélecteur d'année + bouton « + Année » retiré de l'en-tête** sur tous les écrans (demande utilisateur). `YearControls` conservé mais non monté.
 - [x] Tests : testing_agent iteration_71 — frontend **100 % (10/10)**, aucun problème. Landing mono/multi, refresh, changement de mandat, popover modules, logo, absence de « Point d'entrée » et de capsule, pastille de statut, fidélité au mockup : tous validés.
 
+
+## Accueil raffiné + REPRISE A3 (2026-08-17)
+### Accueil (raffinements)
+- [x] Filigrane Meelora **global** (`login-bg.png`, opacité ~3,5 %, `fixed inset-0 z-0`) sur toutes les pages de l'outil ; contenu en `z-10`, sidebar opaque.
+- [x] Logo Accueil **sans cadre ni fond** (mode `bare` de CompanyLogo, contrainte par la hauteur pour les logos larges), aligné en haut avec « Bonjour », légèrement plus grand que le nom utilisateur (nom réduit à text-3xl/4xl).
+- [x] Activités récentes **cliquables** → onglet source (Factures/Paiements/Notes de crédit) + surbrillance de la ligne (sessionStorage `ar_focus`). « À savoir » **contextuel** (factures échues/à échéance, ton avertissement).
+### A3 — Ventes & Clients (reprise)
+- [x] **§7 Logo canonique + couleur d'accent société dans les PDF** (facture & relance) — `documents.company_branding_assets()` + `ar_pdf` (logo_bytes/accent). Aucun upload par module.
+- [x] **§2 Échéance auto** depuis les conditions du client (Net N / due_days) à la création de facture ; `due_date_source` (customer_terms|manual) ; override auditée ; jamais d'écrasement rétroactif.
+- [x] **§5 Référence / PO client** sur la facture (auto-proposé depuis la fiche client) + affiché sur le PDF ; champs `customer_po`/`reference` sur ARInvoiceIn/Update et public_invoice.
+- [x] **§9 OANDA** : service serveur `core/financial/oanda.py` (API v20 REST, candles midpoint, pas de scraping) + endpoint `GET /companies/{cid}/ar/fx-oanda`. Clés env `OANDA_BASE_URL/OANDA_API_TOKEN/OANDA_ACCOUNT_ID` (VIDES → **dégradation gracieuse** `{available:false}` ; même devise → rate 1). Bouton « Récupérer le taux » fonctionnel. **⚠️ Clé OANDA à fournir par l'utilisateur pour activer l'appel réel.**
+- [x] **§12 Écart de change réalisé** : déjà géré à l'encaissement (gain/perte vs taux facture) — confirmé.
+- [x] **Couleur d'accent société** : champ `branding.accent_color` (modèle + update `branding.accent_color` + expose) ; sélecteur couleur dans la fiche société (Companies.js) ; accès admin via Avatar → « Sociétés / Mandats » (`menu-companies`).
+- [x] **Fiche client 6 sections** (Général | Adresses & contacts | Facturation | Fiscalité | Documents | Historique) : contacts multiples + contact principal, exemptions fiscales, statut actif/inactif, dénomination légale, adresse légale (`_CUSTOMER_FIELDS` + ARCustomerIn étendus).
+- [x] Tests : backend **100 % (8/8)** iteration_72 ; frontend **100 % (4/4)** iteration_73 (après correctifs : toast d'erreur sûr `errMsg()`, primary_contact dict, tax_exemptions List[dict], accès admin Sociétés). Non-régression workflow facture/paiement/note de crédit/aging confirmée.
+- [ ] Restant A3 : brancher la clé OANDA réelle (tester CAD/USD, CHF/EUR) ; warning React dev-only `<span> in <option>` (cosmétique) ; UI Documents/Historique de la fiche client (placeholders pour l'instant). **STOP A3 — ne pas démarrer A4 sans approbation.**
+

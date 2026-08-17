@@ -10,11 +10,40 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle)
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage)
 
 NAVY = colors.HexColor("#063044")
 GREY = colors.HexColor("#64748B")
 LINE = colors.HexColor("#E2E8F0")
+
+
+def _accent(accent):
+    """Company brand accent → reportlab color; falls back to NAVY on any issue."""
+    try:
+        if accent and isinstance(accent, str) and accent.strip().startswith("#") and len(accent.strip()) in (4, 7):
+            return colors.HexColor(accent.strip())
+    except Exception:
+        pass
+    return NAVY
+
+
+def _logo_flowable(logo_bytes, max_h=18 * mm, max_w=48 * mm):
+    """Canonical company logo as a ratio-preserving flowable (None on failure)."""
+    if not logo_bytes:
+        return None
+    try:
+        ir = ImageReader(BytesIO(logo_bytes))
+        iw, ih = ir.getSize()
+        if not iw or not ih:
+            return None
+        r = min(max_w / iw, max_h / ih)
+        img = RLImage(BytesIO(logo_bytes), width=iw * r, height=ih * r)
+        img.hAlign = "LEFT"
+        return img
+    except Exception:
+        return None
+
 
 
 def _styles():
@@ -39,14 +68,20 @@ def _addr_block(ss, title, name, lines):
     return out
 
 
-def build_invoice_pdf(*, company, customer, invoice) -> bytes:
+def build_invoice_pdf(*, company, customer, invoice, logo_bytes=None, accent=None) -> bytes:
     ss = _styles()
+    acc = _accent(accent)
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=18 * mm, bottomMargin=16 * mm,
                             leftMargin=16 * mm, rightMargin=16 * mm, title=f"Facture {invoice.get('number') or ''}")
     cur = invoice.get("currency") or (company or {}).get("functional_currency") or ""
     el = []
-    el.append(Paragraph((company or {}).get("name") or "Société", ss["arTitle"]))
+    logo = _logo_flowable(logo_bytes)
+    if logo is not None:
+        el.append(logo)
+        el.append(Spacer(1, 3 * mm))
+    title_style = ParagraphStyle("arTitleAcc", parent=ss["arTitle"], textColor=acc)
+    el.append(Paragraph((company or {}).get("name") or "Société", title_style))
     seller_meta = []
     for k in ("address", "city", "postal_code", "country"):
         if (company or {}).get(k):
@@ -69,7 +104,15 @@ def build_invoice_pdf(*, company, customer, invoice) -> bytes:
                    Paragraph(f"Statut : {status}", ss["arSmall"])]],
                  colWidths=[90 * mm, 88 * mm])
     head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    ref_bits = []
+    if invoice.get("customer_po"):
+        ref_bits.append(f"Réf. / PO client : <b>{invoice.get('customer_po')}</b>")
+    if invoice.get("reference"):
+        ref_bits.append(f"Référence : {invoice.get('reference')}")
     el.append(head)
+    if ref_bits:
+        el.append(Spacer(1, 2 * mm))
+        el.append(Paragraph(" · ".join(ref_bits), ss["arSmall"]))
     el.append(Spacer(1, 6 * mm))
 
     # Customer block
@@ -138,14 +181,21 @@ def build_invoice_pdf(*, company, customer, invoice) -> bytes:
     return buf.getvalue()
 
 
-def build_reminder_pdf(*, company, customer, invoice, level, message) -> bytes:
+def build_reminder_pdf(*, company, customer, invoice, level, message, logo_bytes=None, accent=None) -> bytes:
     ss = _styles()
+    acc = _accent(accent)
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=20 * mm, bottomMargin=18 * mm,
                             leftMargin=18 * mm, rightMargin=18 * mm)
     cur = invoice.get("currency") or ""
     labels = {1: "Premier rappel", 2: "Deuxième rappel", 3: "Rappel final"}
-    el = [Paragraph((company or {}).get("name") or "Société", ss["arTitle"]),
+    title_style = ParagraphStyle("arTitleAccR", parent=ss["arTitle"], textColor=acc)
+    el = []
+    logo = _logo_flowable(logo_bytes)
+    if logo is not None:
+        el.append(logo)
+        el.append(Spacer(1, 3 * mm))
+    el += [Paragraph((company or {}).get("name") or "Société", title_style),
           Spacer(1, 6 * mm),
           Paragraph(f"<b>{labels.get(level, 'Rappel')}</b>", ss["arVal"]),
           Spacer(1, 4 * mm),

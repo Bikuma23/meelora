@@ -98,7 +98,9 @@ async def create_reminder(db, ws, co, user, payload):
     company = await _company(db, ws, co)
     inv_pub = {**inv, "id": inv["_id"]}
     message = payload.get("message") or ""
-    pdf = ar_pdf.build_reminder_pdf(company=company, customer=cust, invoice=inv_pub, level=level, message=message)
+    logo_bytes, accent = await doc_service.company_branding_assets(db, ws, co, company)
+    pdf = ar_pdf.build_reminder_pdf(company=company, customer=cust, invoice=inv_pub, level=level, message=message,
+                                    logo_bytes=logo_bytes, accent=accent)
     stored = await doc_service.store_document(
         db, ws, co, user, source_type="ar_reminder", source_id=inv["_id"], data=pdf,
         filename=f"relance_{inv.get('number') or inv['_id']}_n{level}.pdf", kind="reminder",

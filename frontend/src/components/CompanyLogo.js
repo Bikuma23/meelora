@@ -39,7 +39,7 @@ function analyzeImage(img) {
   }
 }
 
-export function CompanyLogo({ cid, hasLogo, src, name, size = 40, rounded = "rounded-lg", testid = "company-logo" }) {
+export function CompanyLogo({ cid, hasLogo, src, name, size = 40, rounded = "rounded-lg", testid = "company-logo", bare = false }) {
   const [url, setUrl] = useState(src || null);
   const [bg, setBg] = useState("#F1F5F9");
   const objRef = useRef(null);
@@ -55,6 +55,22 @@ export function CompanyLogo({ cid, hasLogo, src, name, size = 40, rounded = "rou
 
   const dim = { width: size, height: size };
   const onLoad = (e) => { const res = analyzeImage(e.target); if (res) setBg(res.bg); };
+
+  // Bare mode: the logo blends directly into the page — no frame, no background,
+  // ratio preserved (object-contain).
+  if (bare) {
+    if (!url) {
+      return (
+        <span data-testid={`${testid}-initials`} style={dim} className="flex items-center justify-center text-slate-400">
+          {name ? <span className="text-2xl font-800 text-[#063044]">{name.trim().slice(0, 2).toUpperCase()}</span> : <Building2 size={size * 0.5} />}
+        </span>
+      );
+    }
+    return (
+      <img src={url} alt={name || "logo"} data-testid={`${testid}-img`} draggable={false}
+        style={{ maxHeight: size, maxWidth: size * 3.5 }} className="select-none object-contain object-left" />
+    );
+  }
 
   if (!url) {
     return (

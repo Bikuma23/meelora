@@ -32,8 +32,8 @@ from .gl import _assert_postable_period, _get_period
 
 # Full customer referential (Section 2) — extensible, jurisdiction-agnostic.
 _CUSTOMER_FIELDS = (
-    "code", "name", "emails", "billing_email", "phone", "billing_address", "shipping_address",
-    "contacts", "jurisdiction", "country", "region", "language", "default_currency", "payment_terms",
+    "code", "name", "legal_name", "emails", "billing_email", "phone", "legal_address", "billing_address", "shipping_address",
+    "contacts", "primary_contact", "jurisdiction", "country", "region", "language", "default_currency", "payment_terms",
     "due_days", "tax_regime", "customer_po", "credit_limit", "tax_ids", "tax_exemptions", "default_tax_code",
     "default_revenue_account_code", "dimensions", "internal_notes", "attachments", "status")
 
@@ -94,6 +94,8 @@ def public_customer(d):
     return {"id": d.get("_id"), "workspace_id": d.get("workspace_id"), "company_id": d.get("company_id"),
             "code": d.get("code"), "name": d.get("name"), "emails": d.get("emails", []),
             "billing_email": d.get("billing_email"), "phone": d.get("phone"),
+            "legal_name": d.get("legal_name"), "legal_address": d.get("legal_address"),
+            "primary_contact": d.get("primary_contact"),
             "billing_address": d.get("billing_address"), "shipping_address": d.get("shipping_address"),
             "contacts": d.get("contacts", []), "jurisdiction": d.get("jurisdiction"), "country": d.get("country"),
             "region": d.get("region"), "language": d.get("language"), "payment_terms": d.get("payment_terms"),
@@ -207,6 +209,8 @@ def public_invoice(d):
             "number": d.get("number"), "customer_id": d.get("customer_id"), "status": d.get("status", "draft"),
             "currency": d.get("currency"), "fx": d.get("fx"), "issue_date": d.get("issue_date"),
             "due_date": d.get("due_date"), "period_id": d.get("period_id"),
+            "customer_po": d.get("customer_po"), "reference": d.get("reference"),
+            "due_date_source": d.get("due_date_source"),
             "financial_period_id": d.get("financial_period_id"), "financial_year_id": d.get("financial_year_id"),
             "lines": d.get("lines", []), "subtotal": d.get("subtotal"), "tax_total": d.get("tax_total"),
             "total": d.get("total"), "amount_paid": d.get("amount_paid", 0.0),
@@ -243,6 +247,26 @@ async def create_invoice(db, workspace_id, company_id, user, payload):
         raise HTTPException(status_code=409, detail="Période clôturée : création impossible.")
     currency = (payload.get("currency") or customer.get("default_currency") or functional).upper()
     issue_date = payload.get("issue_date") or _now()[:10]
+    # §2 — due date defaults from the customer payment terms (Net N / due_days),
+    # never overwriting an explicit value. §5 — PO/reference auto-proposed from the
+    # customer record; either can be overridden by the caller.
+    due_date = payload.get("due_date")
+    due_source = "manual" if due_date else None
+    if not due_date:
+        dd = customer.get("due_days")
+        if dd is None:
+            import re
+            m = re.search(r"(\d+)", str(customer.get("payment_terms") or ""))
+            dd = int(m.group(1)) if m else None
+        if dd is not None:
+            from datetime import date as _date, timedelta as _td
+            try:
+                due_date = (_date.fromisoformat(issue_date) + _td(days=int(dd))).isoformat()
+                due_source = "customer_terms"
+            except Exception:
+                due_date = None
+    customer_po = payload.get("customer_po") if payload.get("customer_po") is not None else customer.get("customer_po")
+    reference = payload.get("reference")
     mapping = await get_mapping(db, workspace_id, company_id)
     default_rev = customer.get("default_revenue_account_code") or mapping["default_revenue_account_code"]
     lines, subtotal, tax_total, total = await _compute_lines(
@@ -250,7 +274,8 @@ async def create_invoice(db, workspace_id, company_id, user, payload):
     fx = await _resolve_fx(db, workspace_id, company_id, currency, functional, issue_date, payload.get("fx_rate"))
     doc = {"_id": f"inv_{uuid.uuid4().hex}", "workspace_id": workspace_id, "company_id": company_id,
            "number": None, "customer_id": customer["_id"], "status": "draft", "currency": currency, "fx": fx,
-           "issue_date": issue_date, "due_date": payload.get("due_date"),
+           "issue_date": issue_date, "due_date": due_date, "due_date_source": due_source,
+           "customer_po": customer_po, "reference": reference,
            "period_id": period["_id"], "financial_period_id": period["_id"],
            "financial_year_id": period.get("financial_year_id"),
            "lines": lines, "subtotal": subtotal, "tax_total": tax_total, "total": total,
@@ -282,6 +307,10 @@ async def update_invoice_draft(db, ws, co, user, invoice_id, payload):
     for f in ("due_date",):
         if payload.get(f) is not None:
             changes[f] = payload[f]
+            changes["due_date_source"] = "manual"  # override auditée
+    for f in ("customer_po", "reference"):
+        if payload.get(f) is not None:
+            changes[f] = payload[f]
     if payload.get("currency") or payload.get("issue_date") or payload.get("fx_rate") is not None:
         changes["currency"] = currency
         changes["issue_date"] = issue_date
@@ -310,7 +339,9 @@ async def approve_invoice(db, ws, co, user, invoice_id):
     customer = await get_customer(db, ws, co, d["customer_id"])
     number = d.get("number") or await _next_number(db, ws, co, "INV", (d.get("issue_date") or _now())[:4])
     inv_for_pdf = {**d, "id": d["_id"], "number": number, "status": "approved"}
-    pdf = ar_pdf.build_invoice_pdf(company=company, customer=customer, invoice=inv_for_pdf)
+    logo_bytes, accent = await doc_service.company_branding_assets(db, ws, co, company)
+    pdf = ar_pdf.build_invoice_pdf(company=company, customer=customer, invoice=inv_for_pdf,
+                                   logo_bytes=logo_bytes, accent=accent)
     stored = await doc_service.store_document(
         db, ws, co, user, source_type="ar_invoice", source_id=invoice_id, data=pdf,
         filename=f"facture_{number}.pdf", kind="invoice",

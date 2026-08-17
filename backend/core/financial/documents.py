@@ -137,6 +137,27 @@ async def download_document(db, workspace_id, company_id, doc_id):
     return data, d.get("mime_type") or ct, d.get("filename")
 
 
+async def company_branding_assets(db, workspace_id, company_id, company=None):
+    """Return (logo_bytes|None, accent_hex|None) for official document rendering.
+    Reuses the canonical company logo from Object Storage — no per-module upload."""
+    if company is None:
+        company = await db.companies.find_one(
+            {"workspace_id": workspace_id, "$or": [{"id": company_id}, {"_id": company_id}]}) or {}
+    branding = (company or {}).get("branding") or {}
+    accent = branding.get("accent_color")
+    logo_bytes = None
+    did = branding.get("logo_document_id")
+    if did:
+        try:
+            data, _mime, _fn = await download_document(db, workspace_id, company_id, did)
+            logo_bytes = data
+        except Exception:
+            logo_bytes = None
+    return logo_bytes, accent
+
+
+
+
 async def link_journal(db, workspace_id, company_id, doc_id, journal_entry_id):
     """Freeze the document to its posted journal entry (bidirectional link)."""
     await db.source_documents.update_one(

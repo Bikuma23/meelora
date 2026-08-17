@@ -1,0 +1,59 @@
+{
+  "summary": "REPRISE A3 (Ventes & Clients) — both backend and frontend tested. BACKEND: 8/8 endpoints pass after applying a trivial 3-field Pydantic model fix (see updated_files). Customer new fields (legal_name/legal_address/primary_contact/contacts/tax_exemptions/status) persist and are exposed by public_customer; §2 due_date auto (+30j from Net 30 / due_days) with due_date_source='customer_terms', explicit override kept with source='manual'; §5 customer_po auto-proposé from customer, reference persisted; approve generates a PDF stored via /documents (sha256 present) with maker-checker enforced (creator cannot approve → 403); OANDA endpoint degrades gracefully when unconfigured, same-currency returns rate=1; company PATCH accent_color persists under branding.accent_color; aging + workflow non-regression OK. FRONTEND: SalesAR loads via sidebar (nav-module-ACCOUNTING → nav-acct_sales); all 6 customer form sections and testids present; invoice form fields (inv-po, inv-reference, inv-fetch-rate) present. CRITICAL: creating a customer with a primary contact triggers a 422 backend error AND crashes the entire React app because the error toast renders a raw Pydantic validation-error array as a React child. Root cause = frontend/backend contract drift on primary_contact (frontend sends string, backend expects dict) plus unsafe toast handling.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/companies/{cid}/ar/customers", "issue": "ARCustomerIn Pydantic model was missing declarations for legal_name, legal_address, primary_contact — fields were silently dropped. FIXED in this iteration (see updated_files)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "SalesAR CustomersTab error handling", "issue": "toast.error(e.response?.data?.detail || 'Erreur') renders the raw FastAPI/Pydantic validation error ARRAY (list of {type, loc, msg, input, url}) directly. Sonner tries to render it → React 'Objects are not valid as a React child' crash → uncaught runtime error overlay covers the whole app.", "selector": "SalesAR.js line 389 (and identically lines ~636/700/701 for invoice/payment/CN)", "priority": "CRITICAL"},
+      {"component": "SalesAR CustomersTab primary_contact radio", "issue": "primary_contact is stored as a STRING (contact.name or `#${i}`) in the form state (SalesAR.js line 451) and POSTed as a string. Backend ARCustomerIn expects Optional[dict] → 422. Also tax_exemptions is transformed to List[str] (line 385) while backend expects List[dict]. Result: any customer creation with a contact marked primary or tax_exemptions filled will 422.", "selector": "[data-testid=\"cust-contact-primary-0\"]", "priority": "CRITICAL"},
+      {"component": "Admin navigation to CompaniesPage / accent color picker", "issue": "The CompanyForm carrying data-testid=company-accent-color / company-accent-hex is registered under key 'companies' in Layout.js (line 47) but NO sidebar menu item, admin sub-nav, or route links to active='companies'. Workspace admin (admin@accslegro.com) has no UI path to reach the accent color picker. Only reachable via platform_clients (platform staff role, which admin@accslegro.com does not have).", "selector": "[data-testid=\"company-accent-color\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Customer creation UI → POST /ar/customers", "issue": "Contract drift on primary_contact (string vs dict) + tax_exemptions (List[str] vs List[dict]) causes systemic 422. Combined with unsafe toast rendering, this crashes the whole app on the first invalid submission.", "affected_selectors": ["[data-testid=\"cust-create\"]", "[data-testid=\"cust-contact-primary-0\"]"]}
+    ],
+    "design_issues": []
+  },
+  "verified_ok": [
+    "Backend: 8/8 tests pass in /app/test_reports/pytest/iter72_a3_reprise.xml.",
+    "Customer create/read round-trip persists legal_name, legal_address, primary_contact, contacts[], tax_exemptions[], status (after Pydantic fix).",
+    "§2: due_date auto = issue_date + due_days when omitted, source='customer_terms'; explicit due_date kept with source='manual'.",
+    "§5: customer_po auto-proposed from customer.customer_po when payload omits it; reference persisted; both exposed in public_invoice.",
+    "§7: Approve produces a stored PDF (sha256 present on the invoice + listed via /documents). Maker cannot approve own invoice (HTTP 403). Post idempotent; payment recorded.",
+    "§9: GET /ar/fx-oanda?from=CHF&to=CHF → available:true, rate:1.0 (identity). from=USD&to=CHF → available:false, reason='OANDA non configuré...' (graceful).",
+    "PATCH /companies/{cid} with accent_color persists under branding.accent_color and is returned by GET /companies/{cid}.",
+    "Frontend: SalesAR CustomersTab renders all 6 section tabs (general/addresses/billing/tax/documents/history) with matching cust-section-* / cust-sec-* testids; cust-contact-add creates a contact row (cust-contact-0) with name/email/phone/primary testids.",
+    "Frontend: Invoice form testids present: inv-form, inv-customer, inv-currency, inv-fx, inv-fetch-rate, inv-date, inv-due, inv-po, inv-reference, inv-create."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_a3_reprise_a3_v2.py",
+    "/app/test_reports/pytest/iter72_a3_reprise.xml"
+  ],
+  "action_items": [
+    "FRONTEND (CRITICAL): Fix SalesAR.js create() (customer, invoice, payment, credit note) toast.error to safely stringify the FastAPI 422 detail array. Suggested: `toast.error(typeof e.response?.data?.detail === 'string' ? e.response.data.detail : (Array.isArray(e.response?.data?.detail) ? e.response.data.detail.map(x=>x.msg).join(' — ') : 'Erreur'))`. Applies to all 4 places (lines ~389, 636, 700, 701).",
+    "FRONTEND (CRITICAL): Change primary_contact state from a string to a {name,email,phone} dict OR wrap it into a dict when POSTing: `body.primary_contact = form.primary_contact ? { name: form.primary_contact } : undefined;`. Same for tax_exemptions: send List[{code,reason}] not List[str] to match backend.",
+    "FRONTEND (HIGH): Add an admin-visible sidebar/menu item that routes go('companies') so workspace admins can open the CompanyForm and edit the accent color (per Section 5 of the request). Alternatively, add a 'Modifier' action directly on mandat-card-* rows of MandatsList that opens CompanyForm.",
+    "OPTIONAL: In ar.py public_customer / _CUSTOMER_FIELDS, ensure new fields survive PATCH as well (already covered because primary_contact/legal_name are declared in _CUSTOMER_FIELDS after the Pydantic fix)."
+  ],
+  "critical_code_review_comments": [
+    "SalesAR.js: 4 identical unsafe `toast.error(e.response?.data?.detail || 'Erreur')` handlers — should be centralized (e.g. a util `apiErr(e)`) to avoid the React-child crash class of bugs across the app.",
+    "SalesAR.js line 385: `tax_exemptions` CSV → List[str] mapping is wrong per backend contract (List[dict]); either widen backend to accept either shape or fix the frontend transform.",
+    "SalesAR.js line 451: radio-based primary_contact stores a display string; consider storing the contact index or the full contact object to keep the data model consistent with backend expectations.",
+    "server.py ARCustomerIn: after the fix, still misses `legal_name`/`legal_address`/`primary_contact` in comments — the model surface should be kept in lock-step with _CUSTOMER_FIELDS in ar.py to prevent silent field-drop drift.",
+    "Layout.js: `companies` route key is orphan (registered but unreachable from admin sidebar); either wire it or remove to avoid dead routes."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (added legal_name / legal_address / primary_contact to ARCustomerIn Pydantic model)",
+    "/app/backend/tests/test_a3_reprise_a3_v2.py (new pytest module — 8 tests covering all A3 REPRISE items)"
+  ],
+  "success_rate": {"backend": "100% (8/8 after fix)", "frontend": "~60% — form structure OK, but customer create is broken end-to-end and admin cannot reach the accent color UI"},
+  "test_credentials": "persona_junior@accslegro.com/persona123 (maker), persona_finance@accslegro.com/persona123 (checker), admin@accslegro.com/admin123 — all valid on preview.",
+  "seed_data_creation": "Created a handful of TEST_Client_* customers and one PDF-approved invoice in Meelora fp_meelora_2026_01. Cleanup not performed (test data prefixed TEST_).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend A3 REPRISE is green (8/8 in test_a3_reprise_a3_v2.py). The two frontend blocking bugs are (1) toast.error rendering the Pydantic detail array as a React child (whole-app crash) and (2) primary_contact/tax_exemptions shape mismatch causing 422. After main agent fixes those, retest: create customer with primary contact + tax_exemption via UI → cust-row-* appears; then create invoice → verify auto-filled currency/due/po from customer; click inv-fetch-rate with a foreign currency and confirm the OANDA-unavailable toast is a readable string (no React crash). Also validate that some admin path leads to CompanyForm (company-accent-color / company-accent-hex).",
+  "rca of the issue": "Frontend/backend contract drift + unsafe error rendering. (a) SalesAR.js line 451 stores `primary_contact` as a display string, but backend ARCustomerIn declares `primary_contact: Optional[dict]` → Pydantic returns HTTP 422 with detail=[{type,loc,msg,input,url}, ...]. (b) SalesAR.js line 389 passes `e.response.data.detail` (the array) directly to sonner's toast.error, which forwards it as a React child → 'Objects are not valid as a React child' uncaught runtime error, blanking the app. Reproduction: login persona_junior → Comptabilité → Ventes & Clients → Clients → Nouveau client → set Nom, add contact + mark Principal → Créer. Mitigation: (1) coerce primary_contact to a dict before POST OR change frontend state to dict; (2) safely stringify FastAPI error detail before toast; ideally centralize as a helper."
+}

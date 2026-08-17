@@ -156,6 +156,7 @@ from core.financial import documents as doc_service
 from core.home import registry as home_registry
 from core.financial import tax_engine as tax_engine
 from core.financial import fx as fx_service
+from core.financial import oanda as oanda_service
 from core.access.indexes import ensure_indexes as _ensure_access_indexes
 
 
@@ -2823,7 +2824,8 @@ async def get_company_home(company_id: str, user: dict = Depends(get_current_use
         "currency": company.get("functional_currency") or company.get("currency"),
         "industry": company.get("industry"),
         "status": company.get("status", "active" if company.get("active", True) else "inactive"),
-        "branding": {"has_logo": bool((company.get("branding") or {}).get("logo_document_id"))},
+        "branding": {"has_logo": bool((company.get("branding") or {}).get("logo_document_id")),
+                     "accent_color": (company.get("branding") or {}).get("accent_color")},
     }
     kpis = None
     home_ext = {"kpis": [], "quick_actions": [], "recent_activity": [], "informational_items": []}
@@ -3376,6 +3378,9 @@ class ARCustomerIn(BaseModel):
     phone: Optional[str] = None
     billing_address: Optional[str] = None
     shipping_address: Optional[str] = None
+    legal_name: Optional[str] = None
+    legal_address: Optional[str] = None
+    primary_contact: Optional[dict] = None
     contacts: Optional[List[dict]] = None
     jurisdiction: Optional[str] = None
     country: Optional[str] = None
@@ -3420,6 +3425,8 @@ class ARInvoiceIn(BaseModel):
     fx_rate: Optional[float] = None
     issue_date: Optional[str] = None
     due_date: Optional[str] = None
+    customer_po: Optional[str] = None
+    reference: Optional[str] = None
     lines: List[ARInvoiceLineIn] = []
 
 
@@ -3428,6 +3435,8 @@ class ARInvoiceUpdate(BaseModel):
     fx_rate: Optional[float] = None
     issue_date: Optional[str] = None
     due_date: Optional[str] = None
+    customer_po: Optional[str] = None
+    reference: Optional[str] = None
     lines: Optional[List[ARInvoiceLineIn]] = None
 
 
@@ -3541,6 +3550,18 @@ async def ar_record_fx_rate(company_id: str, payload: ARFxRateIn, user: dict = D
                                      to_currency=payload.to_currency, rate=payload.rate,
                                      rate_date=payload.rate_date, source=payload.source)
     return {"id": r["_id"], "from_currency": r["from_currency"], "to_currency": r["to_currency"], "rate": r["rate"]}
+
+
+@api.get("/companies/{company_id}/ar/fx-oanda")
+async def ar_fetch_oanda_rate(company_id: str, from_currency: str, to_currency: str, on_date: str,
+                              user: dict = Depends(get_current_user)):
+    """Propose an OANDA-sourced rate for the invoice date (server-side). Degrades
+    gracefully ({available:false}) when the OANDA key is not configured."""
+    ws = require_tenant_context(user)
+    company = await db.companies.find_one({"id": company_id, "workspace_id": ws})
+    if not company:
+        raise HTTPException(status_code=404, detail="Société introuvable")
+    return await oanda_service.fetch_daily_rate(from_currency, to_currency, on_date)
 
 
 # ---- Customers -------------------------------------------------------------

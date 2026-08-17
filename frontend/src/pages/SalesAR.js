@@ -25,6 +25,13 @@ const CN_STATUS = {
   posted: { label: "Comptabilisée", cls: "bg-emerald-100 text-emerald-700" },
 };
 const money = (v, c) => `${Number(v || 0).toFixed(2)} ${c || ""}`.trim();
+// Safely stringify FastAPI errors (422 detail may be an array of objects → never render an object).
+const errMsg = (e) => {
+  const d = e?.response?.data?.detail;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d)) return d.map((x) => x?.msg || "").filter(Boolean).join(" — ") || "Erreur de validation";
+  return "Erreur";
+};
 const BUCKETS = [
   { key: "current", label: "Courant" }, { key: "d1_30", label: "1–30 j" },
   { key: "d31_60", label: "31–60 j" }, { key: "d61_90", label: "61–90 j" }, { key: "d90_plus", label: "90+ j" },
@@ -76,6 +83,27 @@ export default function SalesAR() {
     setLoading(false);
   }, [cid]);
   useEffect(() => { reload(); }, [reload]);
+
+  // Deep-link focus from the Company Home "recent activity" click.
+  useEffect(() => {
+    let raw = null;
+    try { raw = sessionStorage.getItem("ar_focus"); } catch (e) { /* ignore */ }
+    if (!raw) return;
+    try { sessionStorage.removeItem("ar_focus"); } catch (e) { /* ignore */ }
+    let f = null;
+    try { f = JSON.parse(raw); } catch (e) { return; }
+    if (f?.tab) setTab(f.tab);
+    if (f?.id) {
+      setTimeout(() => {
+        const el = document.querySelector(`[data-testid$="row-${f.id}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("ring-2", "ring-emerald-400", "ring-offset-2");
+          setTimeout(() => el.classList.remove("ring-2", "ring-emerald-400", "ring-offset-2"), 2600);
+        }
+      }, 600);
+    }
+  }, []);
 
   const custName = (id) => customers.find((x) => x.id === id)?.name || (id || "").slice(0, 8);
 
@@ -233,7 +261,7 @@ function RemindersTab({ cid, custName }) {
       else if (r.status === "failed") toast.warning(`Relance générée mais envoi échoué : ${r.error || ""}`);
       else toast.success("Relance générée");
       setOpenFor(null); setMsg(""); load();
-    } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+    } catch (e) { toast.error(errMsg(e)); }
   };
   return (
     <div className="space-y-5" data-testid="ar-reminders-tab">
@@ -288,7 +316,7 @@ function RemindersTab({ cid, custName }) {
 
 function CreditNotesTab({ cid, creditNotes, invoices, reload }) {
   const invNum = (id) => { const i = invoices.find((x) => x.id === id); return i ? (i.number || i.id.slice(0, 8)) : (id || "").slice(0, 8); };
-  const act = async (fn, msg) => { try { await fn(); toast.success(msg); reload(); } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); } };
+  const act = async (fn, msg) => { try { await fn(); toast.success(msg); reload(); } catch (e) { toast.error(errMsg(e)); } };
   return (
     <div className="space-y-2" data-testid="ar-credit-notes-tab">
       <p className="text-xs text-slate-400">Créez une note de crédit depuis l'onglet Factures. Approbation & comptabilisation ici (maker-checker : le créateur ne peut pas approuver).</p>
@@ -316,10 +344,19 @@ function CreditNotesTab({ cid, creditNotes, invoices, reload }) {
 }
 
 const EMPTY_CUST = {
-  name: "", code: "", default_currency: "CAD", default_tax_code: "", billing_email: "", phone: "",
-  billing_address: "", shipping_address: "", country: "", region: "", jurisdiction: "", language: "fr",
-  payment_terms: "", due_days: "", tax_regime: "", customer_po: "", credit_limit: "", tax_ids: "", internal_notes: "",
+  name: "", legal_name: "", code: "", status: "active", default_currency: "CAD", default_tax_code: "", billing_email: "", phone: "",
+  legal_address: "", billing_address: "", shipping_address: "", country: "", region: "", jurisdiction: "", language: "fr",
+  payment_terms: "", due_days: "", tax_regime: "", customer_po: "", credit_limit: "", tax_ids: "", tax_exemptions: "", internal_notes: "",
+  contacts: [], primary_contact: "",
 };
+const CUST_SECTIONS = [
+  { key: "general", label: "Général" },
+  { key: "addresses", label: "Adresses & contacts" },
+  { key: "billing", label: "Facturation" },
+  { key: "tax", label: "Fiscalité" },
+  { key: "documents", label: "Documents" },
+  { key: "history", label: "Historique" },
+];
 const COUNTRIES = [{ v: "CA", l: "Canada" }, { v: "CH", l: "Suisse" }, { v: "", l: "Autre / International" }];
 const REGIONS = {
   CA: [["QC", "Québec"], ["ON", "Ontario"], ["BC", "Colombie-Britannique"], ["AB", "Alberta"], ["MB", "Manitoba"],
@@ -333,6 +370,7 @@ function CustomersTab({ cid, customers, taxCodes, reload }) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(null);
   const [taxProposal, setTaxProposal] = useState(null);
+  const [section, setSection] = useState("general");
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   // Country + region → propose the applicable tax configuration from the central
@@ -349,68 +387,138 @@ function CustomersTab({ cid, customers, taxCodes, reload }) {
   const create = async () => {
     try {
       const body = { ...form, credit_limit: form.credit_limit ? Number(form.credit_limit) : undefined,
-        due_days: form.due_days ? Number(form.due_days) : undefined };
+        due_days: form.due_days ? Number(form.due_days) : undefined,
+        contacts: (form.contacts || []).filter((c) => c.name || c.email || c.phone),
+        primary_contact: form.primary_contact ? { name: form.primary_contact } : undefined,
+        tax_exemptions: form.tax_exemptions ? String(form.tax_exemptions).split(",").map((s) => ({ code: s.trim() })).filter((x) => x.code) : [] };
       if (form.tax_ids) { const tt = {}; form.tax_ids.split(",").forEach((p) => { const [k, v] = p.split(":"); if (k && v) tt[k.trim()] = v.trim(); }); body.tax_ids = tt; }
       else delete body.tax_ids;
-      await api.arCreateCustomer(cid, body); toast.success("Client créé"); setForm({ ...EMPTY_CUST }); setTaxProposal(null); setOpen(false); reload();
-    } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+      await api.arCreateCustomer(cid, body); toast.success("Client créé"); setForm({ ...EMPTY_CUST }); setTaxProposal(null); setSection("general"); setOpen(false); reload();
+    } catch (e) { toast.error(errMsg(e)); }
   };
   const F = (k, label, props = {}) => (
     <div><label className="text-[11px] uppercase text-slate-500">{label}</label>
       <Input data-testid={`cust-${k}`} value={form[k]} onChange={(e) => set(k, props.upper ? e.target.value.toUpperCase() : e.target.value)} className="mt-1 h-9 w-full" placeholder={props.ph || ""} /></div>
   );
+  const addContact = () => set("contacts", [...(form.contacts || []), { name: "", email: "", phone: "", role: "" }]);
+  const setContact = (i, k, v) => set("contacts", (form.contacts || []).map((c, j) => j === i ? { ...c, [k]: v } : c));
+  const rmContact = (i) => set("contacts", (form.contacts || []).filter((_, j) => j !== i));
   return (
     <div className="space-y-4" data-testid="ar-customers-tab">
       <Button data-testid="cust-toggle" onClick={() => setOpen((v) => !v)} className="h-9 gap-1 bg-[#063044] text-white"><Plus size={14}/> Nouveau client</Button>
       {open && (
         <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="cust-form">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-            {F("name", "Nom / Raison sociale")}
-            {F("code", "N° client")}
-            {F("billing_email", "Courriel facturation")}
-            {F("phone", "Téléphone")}
-            {F("billing_address", "Adresse facturation")}
-            {F("shipping_address", "Adresse livraison")}
-            <div><label className="text-[11px] uppercase text-slate-500">Pays</label>
-              <select data-testid="cust-country" value={form.country} onChange={(e) => set("country", e.target.value) || set("region", "")} className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-sm">
-                {COUNTRIES.map((c) => <option key={c.v} value={c.v}>{c.l}</option>)}</select></div>
-            <div><label className="text-[11px] uppercase text-slate-500">{form.country === "CH" ? "Canton" : "Province / Territoire"}</label>
-              <select data-testid="cust-region" value={form.region} onChange={(e) => set("region", e.target.value)} disabled={!REGIONS[form.country]} className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-sm disabled:bg-slate-50">
-                <option value="">—</option>{(REGIONS[form.country] || []).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
-            {F("language", "Langue")}
-            <div><label className="text-[11px] uppercase text-slate-500">Devise facturation</label>
-              <Input data-testid="cust-currency" value={form.default_currency} onChange={(e) => set("default_currency", e.target.value.toUpperCase())} className="mt-1 h-9 w-full" /></div>
-            {F("payment_terms", "Conditions paiement", { ph: "Net 30" })}
-            {F("due_days", "Échéance (jours)", { ph: "30" })}
-            {F("tax_regime", "Régime fiscal", { ph: "Standard / Exempté…" })}
-            {F("customer_po", "Référence / PO client")}
-            {F("credit_limit", "Limite de crédit")}
-            {F("tax_ids", "Identifiants fiscaux", { ph: "TVA:CHE-123, GST:456" })}
-            {F("internal_notes", "Notes internes")}
+          <div className="mb-4 flex flex-wrap gap-1 border-b border-slate-200">
+            {CUST_SECTIONS.map((s) => (
+              <button key={s.key} type="button" data-testid={`cust-section-${s.key}`} onClick={() => setSection(s.key)}
+                className={`px-3 py-2 text-sm font-600 transition-colors ${section === s.key ? "border-b-2 border-[#22C55E] text-[#0F172A]" : "text-slate-500 hover:text-[#0F172A]"}`}>{s.label}</button>
+            ))}
           </div>
-          {/* Proposition fiscale automatique (moteur central) */}
-          {form.country && (
-            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3" data-testid="cust-tax-proposal">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-[11px] font-700 uppercase text-slate-500">Configuration fiscale proposée {taxProposal?.jurisdiction ? `· ${taxProposal.jurisdiction}` : ""}</span>
-                {taxProposal && !taxProposal.supported && <span className="text-[11px] text-amber-600">Juridiction à configurer manuellement</span>}
-              </div>
-              {taxProposal ? (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-1.5" data-testid="cust-tax-codes">
-                    {taxProposal.tax_codes.filter((c) => c.tax_kind === "taxable").map((c) => (
-                      <button key={c.code} type="button" data-testid={`cust-tax-pick-${c.code}`} onClick={() => set("default_tax_code", c.code)}
-                        className={`rounded-full border px-3 py-1 text-xs font-600 transition ${form.default_tax_code === c.code ? "border-[#22C55E] bg-[#22C55E]/10 text-[#063044]" : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"}`}>
-                        {c.label} · {c.components.map((k) => `${(k.rate * 100).toFixed(k.rate * 100 % 1 ? 3 : 0)}%`).join(" + ") || "0%"}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[11px] text-slate-400">Défaut du client — modifiable par un utilisateur autorisé. Les taux sont versionnés : une facture historique n'est jamais recalculée.</p>
-                </div>
-              ) : <p className="text-xs text-slate-400">Sélectionnez un pays (et une province/canton) pour proposer la configuration.</p>}
+
+          {section === "general" && (
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3" data-testid="cust-sec-general">
+              {F("name", "Nom / Raison sociale")}
+              {F("legal_name", "Dénomination légale")}
+              {F("code", "N° client")}
+              <div><label className="text-[11px] uppercase text-slate-500">Statut</label>
+                <select data-testid="cust-status" value={form.status} onChange={(e) => set("status", e.target.value)} className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-sm">
+                  <option value="active">Actif</option><option value="inactive">Inactif</option></select></div>
+              <div><label className="text-[11px] uppercase text-slate-500">Langue</label>
+                <select data-testid="cust-language" value={form.language} onChange={(e) => set("language", e.target.value)} className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-sm">
+                  <option value="fr">Français</option><option value="en">Anglais</option></select></div>
+              <div className="col-span-2 lg:col-span-3">{F("internal_notes", "Notes")}</div>
             </div>
           )}
-          <div className="mt-3"><Button data-testid="cust-create" onClick={create} disabled={!form.name.trim()} className="h-9 gap-1 bg-[#22C55E] text-white"><Plus size={14}/> Créer le client</Button></div>
+
+          {section === "addresses" && (
+            <div className="space-y-3" data-testid="cust-sec-addresses">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                {F("legal_address", "Adresse légale")}
+                {F("billing_address", "Adresse de facturation")}
+                {F("shipping_address", "Adresse de livraison")}
+                {F("phone", "Téléphone")}
+                {F("billing_email", "Courriel de facturation")}
+                <div><label className="text-[11px] uppercase text-slate-500">Pays</label>
+                  <select data-testid="cust-country" value={form.country} onChange={(e) => set("country", e.target.value) || set("region", "")} className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-sm">
+                    {COUNTRIES.map((c) => <option key={c.v} value={c.v}>{c.l}</option>)}</select></div>
+                <div><label className="text-[11px] uppercase text-slate-500">{form.country === "CH" ? "Canton" : "Province / Territoire"}</label>
+                  <select data-testid="cust-region" value={form.region} onChange={(e) => set("region", e.target.value)} disabled={!REGIONS[form.country]} className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-sm disabled:bg-slate-50">
+                    <option value="">—</option>{(REGIONS[form.country] || []).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3" data-testid="cust-contacts">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11px] font-700 uppercase text-slate-500">Contacts</span>
+                  <Button type="button" variant="outline" size="sm" className="h-7 gap-1" data-testid="cust-contact-add" onClick={addContact}><Plus size={12}/> Ajouter</Button>
+                </div>
+                {(form.contacts || []).length === 0 && <p className="text-xs text-slate-400">Aucun contact.</p>}
+                {(form.contacts || []).map((ct, i) => (
+                  <div key={i} className="mb-2 flex flex-wrap items-center gap-2" data-testid={`cust-contact-${i}`}>
+                    <Input placeholder="Nom" value={ct.name} onChange={(e) => setContact(i, "name", e.target.value)} className="h-9 w-40" data-testid={`cust-contact-name-${i}`} />
+                    <Input placeholder="Courriel" value={ct.email} onChange={(e) => setContact(i, "email", e.target.value)} className="h-9 w-48" data-testid={`cust-contact-email-${i}`} />
+                    <Input placeholder="Téléphone" value={ct.phone} onChange={(e) => setContact(i, "phone", e.target.value)} className="h-9 w-36" data-testid={`cust-contact-phone-${i}`} />
+                    <label className="flex items-center gap-1 text-xs text-slate-500"><input type="radio" name="primary_contact" checked={form.primary_contact === (ct.name || `#${i}`)} onChange={() => set("primary_contact", ct.name || `#${i}`)} data-testid={`cust-contact-primary-${i}`} /> Principal</label>
+                    <Button type="button" variant="ghost" size="sm" className="h-9 text-rose-500" onClick={() => rmContact(i)}><Trash2 size={14}/></Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {section === "billing" && (
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3" data-testid="cust-sec-billing">
+              <div><label className="text-[11px] uppercase text-slate-500">Devise de facturation</label>
+                <Input data-testid="cust-currency" value={form.default_currency} onChange={(e) => set("default_currency", e.target.value.toUpperCase())} className="mt-1 h-9 w-full" /></div>
+              {F("payment_terms", "Conditions de paiement", { ph: "Net 30" })}
+              {F("due_days", "Échéance (jours)", { ph: "30" })}
+              {F("customer_po", "Référence / PO client")}
+              {F("credit_limit", "Limite de crédit")}
+            </div>
+          )}
+
+          {section === "tax" && (
+            <div className="space-y-3" data-testid="cust-sec-tax">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+                {F("tax_regime", "Régime fiscal", { ph: "Standard / Exempté…" })}
+                {F("tax_ids", "Identifiants fiscaux", { ph: "TVA:CHE-123, GST:456" })}
+                {F("tax_exemptions", "Exemptions fiscales", { ph: "Ex: revente, OSBL…" })}
+              </div>
+              {form.country && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3" data-testid="cust-tax-proposal">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-[11px] font-700 uppercase text-slate-500">Configuration fiscale proposée {taxProposal?.jurisdiction ? `· ${taxProposal.jurisdiction}` : ""}</span>
+                    {taxProposal && !taxProposal.supported && <span className="text-[11px] text-amber-600">Juridiction à configurer manuellement</span>}
+                  </div>
+                  {taxProposal ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-1.5" data-testid="cust-tax-codes">
+                        {taxProposal.tax_codes.filter((c) => c.tax_kind === "taxable").map((c) => (
+                          <button key={c.code} type="button" data-testid={`cust-tax-pick-${c.code}`} onClick={() => set("default_tax_code", c.code)}
+                            className={`rounded-full border px-3 py-1 text-xs font-600 transition ${form.default_tax_code === c.code ? "border-[#22C55E] bg-[#22C55E]/10 text-[#063044]" : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"}`}>
+                            {c.label} · {c.components.map((k) => `${(k.rate * 100).toFixed(k.rate * 100 % 1 ? 3 : 0)}%`).join(" + ") || "0%"}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-slate-400">Défaut du client — modifiable par un utilisateur autorisé. Les taux sont versionnés : une facture historique n'est jamais recalculée.</p>
+                    </div>
+                  ) : <p className="text-xs text-slate-400">Sélectionnez un pays (et une province/canton) pour proposer la configuration.</p>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {section === "documents" && (
+            <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-400" data-testid="cust-sec-documents">
+              Les documents liés (contrats, pièces justificatives) apparaîtront ici après la création du client.
+            </div>
+          )}
+
+          {section === "history" && (
+            <div className="rounded-lg border border-slate-200 p-4 text-sm text-slate-500" data-testid="cust-sec-history">
+              L'historique d'audit (création, modifications, statut) sera visible ici une fois le client enregistré.
+            </div>
+          )}
+
+          <div className="mt-4 border-t border-slate-100 pt-3"><Button data-testid="cust-create" onClick={create} disabled={!form.name.trim()} className="h-9 gap-1 bg-[#22C55E] text-white"><Plus size={14}/> Créer le client</Button></div>
         </div>
       )}
       <div className="space-y-2">
@@ -452,9 +560,9 @@ function ConfigTab({ cid, reload }) {
   const [mapping, setMapping] = useState(null);
   const [fx, setFx] = useState({ from_currency: "USD", to_currency: "CAD", rate: "", rate_date: "" });
   useEffect(() => { api.arMapping(cid).then(setMapping).catch(() => setMapping({})); }, [cid]);
-  const seed = async () => { try { const r = await api.arSeedTaxCodes(cid); toast.success(`Codes de taxe : ${r.created.length || "déjà présents"}`); reload(); } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); } };
-  const saveMapping = async () => { try { await api.arSetMapping(cid, mapping); toast.success("Mapping enregistré"); } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); } };
-  const recordFx = async () => { try { await api.arRecordFxRate(cid, { ...fx, rate: Number(fx.rate) }); toast.success("Taux enregistré"); setFx({ ...fx, rate: "" }); } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); } };
+  const seed = async () => { try { const r = await api.arSeedTaxCodes(cid); toast.success(`Codes de taxe : ${r.created.length || "déjà présents"}`); reload(); } catch (e) { toast.error(errMsg(e)); } };
+  const saveMapping = async () => { try { await api.arSetMapping(cid, mapping); toast.success("Mapping enregistré"); } catch (e) { toast.error(errMsg(e)); } };
+  const recordFx = async () => { try { await api.arRecordFxRate(cid, { ...fx, rate: Number(fx.rate) }); toast.success("Taux enregistré"); setFx({ ...fx, rate: "" }); } catch (e) { toast.error(errMsg(e)); } };
   const M = (k, label) => (
     <div><label className="text-[11px] uppercase text-slate-500">{label}</label>
       <Input data-testid={`map-${k}`} value={(mapping || {})[k] || ""} onChange={(e) => setMapping({ ...mapping, [k]: e.target.value })} className="mt-1 h-9 w-40" /></div>
@@ -486,19 +594,60 @@ function ConfigTab({ cid, reload }) {
 
 function InvoicesTab({ cid, customers, taxCodes, periods, invoices, reload, custName }) {
   const [creating, setCreating] = useState(false);
+  const [functional, setFunctional] = useState("");
+  const [fetchingRate, setFetchingRate] = useState(false);
   const emptyLine = { description: "", qty: 1, unit_price: "", tax_code: taxCodes[0]?.code || "EXEMPT" };
-  const [form, setForm] = useState({ customer_id: "", period_id: "", currency: "", fx_rate: "", issue_date: "", due_date: "", lines: [{ ...emptyLine }] });
+  const [form, setForm] = useState({ customer_id: "", period_id: "", currency: "", fx_rate: "", issue_date: "", due_date: "", customer_po: "", reference: "", lines: [{ ...emptyLine }] });
+
+  useEffect(() => { api.getCompany(cid).then((c) => setFunctional((c.functional_currency || "").toUpperCase())).catch(() => {}); }, [cid]);
+
+  const termDays = (c) => c?.due_days ?? (String(c?.payment_terms || "").match(/\d+/)?.[0] ? Number(String(c.payment_terms).match(/\d+/)[0]) : null);
+  const addDays = (iso, n) => { try { const d = new Date(iso); d.setDate(d.getDate() + Number(n)); return d.toISOString().slice(0, 10); } catch { return ""; } };
+
+  const onCustomer = (id) => {
+    const c = customers.find((x) => x.id === id);
+    setForm((f) => {
+      const next = { ...f, customer_id: id };
+      if (c) {
+        if (!f.customer_po) next.customer_po = c.customer_po || "";
+        if (!f.currency) next.currency = (c.default_currency || "").toUpperCase();
+        const dd = termDays(c);
+        if (dd != null && f.issue_date) next.due_date = addDays(f.issue_date, dd);
+      }
+      return next;
+    });
+  };
+  const onIssueDate = (v) => setForm((f) => {
+    const c = customers.find((x) => x.id === f.customer_id);
+    const dd = termDays(c);
+    return { ...f, issue_date: v, due_date: (dd != null && v) ? addDays(v, dd) : f.due_date };
+  });
+  const fetchRate = async () => {
+    const cur = (form.currency || "").toUpperCase();
+    const datev = form.issue_date || new Date().toISOString().slice(0, 10);
+    if (!cur || !functional) { toast.error("Devise et date requises."); return; }
+    if (cur === functional) { setForm((f) => ({ ...f, fx_rate: "1" })); toast.info("Même devise : taux 1."); return; }
+    setFetchingRate(true);
+    try {
+      const r = await api.arOandaRate(cid, { from_currency: cur, to_currency: functional, on_date: datev });
+      if (r.available) { setForm((f) => ({ ...f, fx_rate: String(r.rate) })); toast.success(`Taux OANDA ${cur}/${functional} au ${datev} = ${r.rate}`); }
+      else toast.error(r.reason || "Taux OANDA indisponible.");
+    } catch (e) { toast.error(e.response?.data?.detail || "Erreur OANDA"); }
+    setFetchingRate(false);
+  };
 
   const create = async () => {
     try {
       const body = { ...form, fx_rate: form.fx_rate ? Number(form.fx_rate) : undefined,
+        customer_po: form.customer_po || undefined, reference: form.reference || undefined,
         lines: form.lines.map((l) => ({ ...l, qty: Number(l.qty || 1), unit_price: Number(l.unit_price || 0) })) };
       await api.arCreateInvoice(cid, body);
       toast.success("Facture créée"); setCreating(false);
-      setForm({ customer_id: "", period_id: "", currency: "", fx_rate: "", issue_date: "", due_date: "", lines: [{ ...emptyLine }] });
+      setForm({ customer_id: "", period_id: "", currency: "", fx_rate: "", issue_date: "", due_date: "", customer_po: "", reference: "", lines: [{ ...emptyLine }] });
       reload();
-    } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+    } catch (e) { toast.error(errMsg(e)); }
   };
+  const fxDisabled = !form.currency || form.currency.toUpperCase() === functional;
   return (
     <div className="space-y-4" data-testid="ar-invoices-tab">
       <Button data-testid="inv-new" onClick={() => setCreating((v) => !v)} className="h-9 gap-1 bg-[#063044] text-white"><Plus size={14}/> Nouvelle facture</Button>
@@ -506,7 +655,7 @@ function InvoicesTab({ cid, customers, taxCodes, periods, invoices, reload, cust
         <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4" data-testid="inv-form">
           <div className="flex flex-wrap gap-3">
             <div><label className="text-[11px] uppercase text-slate-500">Client</label>
-              <select data-testid="inv-customer" value={form.customer_id} onChange={(e) => setForm({ ...form, customer_id: e.target.value })} className="mt-1 h-9 w-52 rounded-md border border-slate-200 px-2 text-sm">
+              <select data-testid="inv-customer" value={form.customer_id} onChange={(e) => onCustomer(e.target.value)} className="mt-1 h-9 w-52 rounded-md border border-slate-200 px-2 text-sm">
                 <option value="">—</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
             <div><label className="text-[11px] uppercase text-slate-500">Période</label>
               <select data-testid="inv-period" value={form.period_id} onChange={(e) => setForm({ ...form, period_id: e.target.value })} className="mt-1 h-9 w-36 rounded-md border border-slate-200 px-2 text-sm">
@@ -514,9 +663,13 @@ function InvoicesTab({ cid, customers, taxCodes, periods, invoices, reload, cust
             <div><label className="text-[11px] uppercase text-slate-500">Devise</label><Input data-testid="inv-currency" value={form.currency} placeholder="défaut client" onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} className="mt-1 h-9 w-28"/></div>
             <div><label className="text-[11px] uppercase text-slate-500">Taux FX</label><Input data-testid="inv-fx" value={form.fx_rate} placeholder="auto" onChange={(e) => setForm({ ...form, fx_rate: e.target.value })} className="mt-1 h-9 w-24"/></div>
             <div><label className="text-[11px] uppercase text-slate-500">&nbsp;</label>
-              <Button type="button" variant="outline" size="sm" disabled title="Intégration OANDA à venir (taux à la date de transaction)" data-testid="inv-fetch-rate" className="mt-1 h-9 gap-1 text-slate-400"><RefreshCw size={13}/> Récupérer le taux</Button></div>
-            <div><label className="text-[11px] uppercase text-slate-500">Date</label><Input data-testid="inv-date" type="date" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} className="mt-1 h-9 w-40"/></div>
-            <div><label className="text-[11px] uppercase text-slate-500">Échéance</label><Input data-testid="inv-due" type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className="mt-1 h-9 w-40"/></div>
+              <Button type="button" variant="outline" size="sm" disabled={fxDisabled || fetchingRate} onClick={fetchRate}
+                title={fxDisabled ? "Devise fonctionnelle : aucun taux requis" : "Récupérer le taux OANDA à la date de facture"}
+                data-testid="inv-fetch-rate" className="mt-1 h-9 gap-1"><RefreshCw size={13} className={fetchingRate ? "animate-spin" : ""}/> Récupérer le taux</Button></div>
+            <div><label className="text-[11px] uppercase text-slate-500">Date</label><Input data-testid="inv-date" type="date" value={form.issue_date} onChange={(e) => onIssueDate(e.target.value)} className="mt-1 h-9 w-40"/></div>
+            <div><label className="text-[11px] uppercase text-slate-500">Échéance (auto)</label><Input data-testid="inv-due" type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className="mt-1 h-9 w-40"/></div>
+            <div><label className="text-[11px] uppercase text-slate-500">Réf. / PO client</label><Input data-testid="inv-po" value={form.customer_po} placeholder="auto (fiche client)" onChange={(e) => setForm({ ...form, customer_po: e.target.value })} className="mt-1 h-9 w-40"/></div>
+            <div><label className="text-[11px] uppercase text-slate-500">Référence</label><Input data-testid="inv-reference" value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} className="mt-1 h-9 w-40"/></div>
           </div>
           {form.lines.map((l, i) => (
             <div key={i} className="flex flex-wrap items-end gap-2" data-testid={`inv-line-${i}`}>
@@ -551,9 +704,9 @@ function InvoiceRow({ cid, inv, reload, custName }) {
   const [pay, setPay] = useState({ amount: "", fx_rate: "" });
   const [cn, setCn] = useState({ invoice_line_index: 0, net_credit: "" });
   const M = INV_STATUS[inv.status] || INV_STATUS.draft;
-  const act = async (fn, msg) => { try { await fn(); toast.success(msg); reload(); } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); } };
-  const doPay = async () => { try { await api.arCreatePayment(cid, { invoice_id: inv.id, amount: Number(pay.amount), fx_rate: pay.fx_rate ? Number(pay.fx_rate) : undefined }); toast.success("Encaissement enregistré"); setPayOpen(false); setPay({ amount: "", fx_rate: "" }); reload(); } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); } };
-  const doCn = async () => { try { const c = await api.arCreateCreditNote(cid, { invoice_id: inv.id, lines: [{ invoice_line_index: Number(cn.invoice_line_index), net_credit: Number(cn.net_credit) }] }); await api.arSubmitCreditNote(cid, c.id); toast.success("Note de crédit créée & soumise (à approuver)"); setCnOpen(false); setCn({ invoice_line_index: 0, net_credit: "" }); reload(); } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); } };
+  const act = async (fn, msg) => { try { await fn(); toast.success(msg); reload(); } catch (e) { toast.error(errMsg(e)); } };
+  const doPay = async () => { try { await api.arCreatePayment(cid, { invoice_id: inv.id, amount: Number(pay.amount), fx_rate: pay.fx_rate ? Number(pay.fx_rate) : undefined }); toast.success("Encaissement enregistré"); setPayOpen(false); setPay({ amount: "", fx_rate: "" }); reload(); } catch (e) { toast.error(errMsg(e)); } };
+  const doCn = async () => { try { const c = await api.arCreateCreditNote(cid, { invoice_id: inv.id, lines: [{ invoice_line_index: Number(cn.invoice_line_index), net_credit: Number(cn.net_credit) }] }); await api.arSubmitCreditNote(cid, c.id); toast.success("Note de crédit créée & soumise (à approuver)"); setCnOpen(false); setCn({ invoice_line_index: 0, net_credit: "" }); reload(); } catch (e) { toast.error(errMsg(e)); } };
   const loadSource = async () => {
     const next = !drillOpen; setDrillOpen(next);
     if (next && inv.journal_entry_id && !source) {
