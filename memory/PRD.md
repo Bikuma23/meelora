@@ -1732,3 +1732,15 @@ Contrôle financier AP (pas de procurement/ERP). Construit sur A4.1–A4.4 + P2.
 - Endpoints : `/ap/settings`, `/ap/purchase-orders(+/{id}/{submit|approve|reject|send|cancel|close})`, `/ap/invoices/{id}/{match|auto-match|match-override}`. Fichiers : `core/accounting/po.py`, `pages/PurchaseOrders.js`. Tests : `test_reports/iteration_81.json` (backend 11/11, frontend 100%, 0 bug).
 
 **STOP après A4.5 — A4.6 et Swiss Country Pack NON démarrés.**
+
+### A4.6 — Réévaluation FX non réalisée + Réconciliation Aging AP ↔ GL (CADRAGE LIVRÉ — 2026-06, EN ATTENTE VALIDATION)
+Cadrage document uniquement (`memory/A4_6_SCOPING.md`), **AUCUN code**. Gate STRAT-01 §21 complet. Décisions validées client (ask_human) :
+- **Taux** : `exchange_rates` étendu `rate_type = current|closing` ; priorité `closing`, fallback `current` tracé dans « Pourquoi ? » (jamais silencieux) ; fraîcheur douteuse → exception `rate_stale` ; snapshot immuable par run.
+- **Comptabilisation** : toujours calculable sans GL ; posting = action humaine sensible `accounting.fx_revaluation_post` (P2 atomique/idempotent) ; extourne auto-préparée période suivante, liée bidirectionnellement ; périodes open/locked/closed respectées, aucun bypass.
+- **Soldes** : classification canonique `monetary_classification = monetary|non_monetary` + `classification_reason` (déterministe, explicable, auditée, jamais l'IA) ; factures/crédits/soldes partiels postés ouverts = monétaires ; avances biens/services = non monétaires ; avances remboursables = monétaires. Réévalue seulement le solde ouvert.
+- **Comptes** (rôles canoniques, mapping société) : `FX_UNREAL_GAIN`/`FX_UNREAL_LOSS` (P&L) + `AP_FX_REVAL` (bilan) — DISTINCTS du réalisé A4.3 (`FX_GAIN`/`FX_LOSS`). Compte de contrôle fournisseurs historique jamais touché. Équation réconciliation : `Aging(hist.) +/− AP_FX_REVAL = AP GL clôture`.
+- **Réconciliation** : rapport dérivé Aging(hist.) ↔ solde GL compte(s) fournisseurs ; taxonomie temporelle / légitime / anomalie ; « Réconcilié ✓ » si concordance, sinon Exceptions First ; drill-down ≤3.
+- **Permission** : NOUVELLE `accounting.fx_revaluation_post` (sensible, maker-checker, aucun bypass) ; pas de réutilisation `supplier_invoice_post`, pas de couplage clôture période.
+- **Preuve zéro ledger parallèle** : sous-registre Aging dérivé au taux historique (inchangé) ; positions du run = photo d'audit non autoritative ; seule écriture GL via journal canonique P2. Nouvelles collections : `ap_fx_revaluations`, `ap_reconciliations` (runs/rapports, jamais des soldes).
+
+**STOP après cadrage A4.6 — attendre validation avant tout développement. Swiss Country Pack toujours NON démarré.**
