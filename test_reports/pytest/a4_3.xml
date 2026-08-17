@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="3" failures="0" skipped="0" tests="15" time="74.173" timestamp="2026-08-17T07:59:47.924833+00:00" hostname="agent-env-0783a599-4d63-4554-8910-cb7d66ba0f31"><testcase classname="tests.test_a4_3_ap_payments.TestPaymentLifecycle" name="test_partial_payment_lifecycle" time="3.786" /><testcase classname="tests.test_a4_3_ap_payments.TestPaymentLifecycle" name="test_total_payment_marks_invoice_paid" time="1.307" /><testcase classname="tests.test_a4_3_ap_payments.TestPaymentLifecycle" name="test_multiple_partials_cumulate" time="1.777" /><testcase classname="tests.test_a4_3_ap_payments.TestPaymentLifecycle" name="test_one_payment_multiple_invoices" time="1.985" /><testcase classname="tests.test_a4_3_ap_payments.TestPermission" name="test_maker_can_prepare_authorize_but_not_execute_or_post" time="1.448" /><testcase classname="tests.test_a4_3_ap_payments.TestPayBeforePosting" name="test_execute_then_post_payment_then_post_invoice" time="1.766" /><testcase classname="tests.test_a4_3_ap_payments.TestAdvance" name="test_advance_then_allocate" time="2.203" /><testcase classname="tests.test_a4_3_ap_payments.TestOverAllocation" name="test_over_allocation_returns_422" time="0.748" /><testcase classname="tests.test_a4_3_ap_payments.TestCreditNotes" name="test_junior_cannot_approve_or_post" time="30.294"><error message="failed on setup with &quot;requests.exceptions.ConnectTimeout: HTTPSConnectionPool(host='budgetapp-qc.preview.emergentagent.com', port=443): Max retries exceeded with url: /api/companies/965f0770-8cf2-4199-a99f-819ff270436a/ap/invoices/sinv_f9ba1fb32d4748839259b56abc2ebf46/submit (Caused by ConnectTimeoutError(&lt;HTTPSConnection(host='budgetapp-qc.preview.emergentagent.com', port=443) at 0xfe59ee316c10&gt;, 'Connection to budgetapp-qc.preview.emergentagent.com timed out. (connect timeout=15)'))&quot;">/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:204: in _new_conn
+    sock = connection.create_connection(
+/root/.venv/lib/python3.11/site-packages/urllib3/util/connection.py:85: in create_connection
+    raise err
+/root/.venv/lib/python3.11/site-packages/urllib3/util/connection.py:73: in create_connection
+    sock.connect(sa)
+E   TimeoutError: timed out
+
+The above exception was the direct cause of the following exception:
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:788: in urlopen
+    response = self._make_request(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:488: in _make_request
+    raise new_e
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:464: in _make_request
+    self._validate_conn(conn)
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:1106: in _validate_conn
+    conn.connect()
+/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:759: in connect
+    self.sock = sock = self._new_conn()
+                       ^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:213: in _new_conn
+    raise ConnectTimeoutError(
+E   urllib3.exceptions.ConnectTimeoutError: (&lt;HTTPSConnection(host='budgetapp-qc.preview.emergentagent.com', port=443) at 0xfe59ee316c10&gt;, 'Connection to budgetapp-qc.preview.emergentagent.com timed out. (connect timeout=15)')
+
+The above exception was the direct cause of the following exception:
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:696: in send
+    resp = conn.urlopen(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:842: in urlopen
+    retries = retries.increment(
+/root/.venv/lib/python3.11/site-packages/urllib3/util/retry.py:543: in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='budgetapp-qc.preview.emergentagent.com', port=443): Max retries exceeded with url: /api/companies/965f0770-8cf2-4199-a99f-819ff270436a/ap/invoices/sinv_f9ba1fb32d4748839259b56abc2ebf46/submit (Caused by ConnectTimeoutError(&lt;HTTPSConnection(host='budgetapp-qc.preview.emergentagent.com', port=443) at 0xfe59ee316c10&gt;, 'Connection to budgetapp-qc.preview.emergentagent.com timed out. (connect timeout=15)'))
+
+During handling of the above exception, another exception occurred:
+backend/tests/test_a4_3_ap_payments.py:355: in posted_invoice
+    return _make_approved_posted(maker_tok, checker_tok, amount=200.0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/test_a4_3_ap_payments.py:126: in _make_approved_posted
+    _approve_invoice(maker, checker, inv["id"])
+backend/tests/test_a4_3_ap_payments.py:108: in _approve_invoice
+    r = requests.post(f"{API}/companies/{COMPANY_A}/ap/invoices/{inv_id}/{path}",
+/root/.venv/lib/python3.11/site-packages/requests/api.py:134: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:71: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:651: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:784: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:717: in send
+    raise ConnectTimeout(e, request=request)
+E   requests.exceptions.ConnectTimeout: HTTPSConnectionPool(host='budgetapp-qc.preview.emergentagent.com', port=443): Max retries exceeded with url: /api/companies/965f0770-8cf2-4199-a99f-819ff270436a/ap/invoices/sinv_f9ba1fb32d4748839259b56abc2ebf46/submit (Caused by ConnectTimeoutError(&lt;HTTPSConnection(host='budgetapp-qc.preview.emergentagent.com', port=443) at 0xfe59ee316c10&gt;, 'Connection to budgetapp-qc.preview.emergentagent.com timed out. (connect timeout=15)'))</error></testcase><testcase classname="tests.test_a4_3_ap_payments.TestCreditNotes" name="test_checker_approve_post_generates_je_and_number" time="0.000"><error message="failed on setup with &quot;requests.exceptions.ConnectTimeout: HTTPSConnectionPool(host='budgetapp-qc.preview.emergentagent.com', port=443): Max retries exceeded with url: /api/companies/965f0770-8cf2-4199-a99f-819ff270436a/ap/invoices/sinv_f9ba1fb32d4748839259b56abc2ebf46/submit (Caused by ConnectTimeoutError(&lt;HTTPSConnection(host='budgetapp-qc.preview.emergentagent.com', port=443) at 0xfe59ee316c10&gt;, 'Connection to budgetapp-qc.preview.emergentagent.com timed out. (connect timeout=15)'))&quot;">/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:204: in _new_conn
+    sock = connection.create_connection(
+/root/.venv/lib/python3.11/site-packages/urllib3/util/connection.py:85: in create_connection
+    raise err
+/root/.venv/lib/python3.11/site-packages/urllib3/util/connection.py:73: in create_connection
+    sock.connect(sa)
+E   TimeoutError: timed out
+
+The above exception was the direct cause of the following exception:
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:788: in urlopen
+    response = self._make_request(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:488: in _make_request
+    raise new_e
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:464: in _make_request
+    self._validate_conn(conn)
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:1106: in _validate_conn
+    conn.connect()
+/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:759: in connect
+    self.sock = sock = self._new_conn()
+                       ^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:213: in _new_conn
+    raise ConnectTimeoutError(
+E   urllib3.exceptions.ConnectTimeoutError: (&lt;HTTPSConnection(host='budgetapp-qc.preview.emergentagent.com', port=443) at 0xfe59ee316c10&gt;, 'Connection to budgetapp-qc.preview.emergentagent.com timed out. (connect timeout=15)')
+
+The above exception was the direct cause of the following exception:
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:696: in send
+    resp = conn.urlopen(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:842: in urlopen
+    retries = retries.increment(
+/root/.venv/lib/python3.11/site-packages/urllib3/util/retry.py:543: in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='budgetapp-qc.preview.emergentagent.com', port=443): Max retries exceeded with url: /api/companies/965f0770-8cf2-4199-a99f-819ff270436a/ap/invoices/sinv_f9ba1fb32d4748839259b56abc2ebf46/submit (Caused by ConnectTimeoutError(&lt;HTTPSConnection(host='budgetapp-qc.preview.emergentagent.com', port=443) at 0xfe59ee316c10&gt;, 'Connection to budgetapp-qc.preview.emergentagent.com timed out. (connect timeout=15)'))
+
+During handling of the above exception, another exception occurred:
+backend/tests/test_a4_3_ap_payments.py:355: in posted_invoice
+    return _make_approved_posted(maker_tok, checker_tok, amount=200.0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/test_a4_3_ap_payments.py:126: in _make_approved_posted
+    _approve_invoice(maker, checker, inv["id"])
+backend/tests/test_a4_3_ap_payments.py:108: in _approve_invoice
+    r = requests.post(f"{API}/companies/{COMPANY_A}/ap/invoices/{inv_id}/{path}",
+/root/.venv/lib/python3.11/site-packages/requests/api.py:134: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:71: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:651: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:784: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:717: in send
+    raise ConnectTimeout(e, request=request)
+E   requests.exceptions.ConnectTimeout: HTTPSConnectionPool(host='budgetapp-qc.preview.emergentagent.com', port=443): Max retries exceeded with url: /api/companies/965f0770-8cf2-4199-a99f-819ff270436a/ap/invoices/sinv_f9ba1fb32d4748839259b56abc2ebf46/submit (Caused by ConnectTimeoutError(&lt;HTTPSConnection(host='budgetapp-qc.preview.emergentagent.com', port=443) at 0xfe59ee316c10&gt;, 'Connection to budgetapp-qc.preview.emergentagent.com timed out. (connect timeout=15)'))</error></testcase><testcase classname="tests.test_a4_3_ap_payments.TestCreditNotes" name="test_over_credit_cumulative_returns_422" time="0.001"><error message="failed on setup with &quot;requests.exceptions.ConnectTimeout: HTTPSConnectionPool(host='budgetapp-qc.preview.emergentagent.com', port=443): Max retries exceeded with url: /api/companies/965f0770-8cf2-4199-a99f-819ff270436a/ap/invoices/sinv_f9ba1fb32d4748839259b56abc2ebf46/submit (Caused by ConnectTimeoutError(&lt;HTTPSConnection(host='budgetapp-qc.preview.emergentagent.com', port=443) at 0xfe59ee316c10&gt;, 'Connection to budgetapp-qc.preview.emergentagent.com timed out. (connect timeout=15)'))&quot;">/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:204: in _new_conn
+    sock = connection.create_connection(
+/root/.venv/lib/python3.11/site-packages/urllib3/util/connection.py:85: in create_connection
+    raise err
+/root/.venv/lib/python3.11/site-packages/urllib3/util/connection.py:73: in create_connection
+    sock.connect(sa)
+E   TimeoutError: timed out
+
+The above exception was the direct cause of the following exception:
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:788: in urlopen
+    response = self._make_request(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:488: in _make_request
+    raise new_e
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:464: in _make_request
+    self._validate_conn(conn)
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:1106: in _validate_conn
+    conn.connect()
+/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:759: in connect
+    self.sock = sock = self._new_conn()
+                       ^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:213: in _new_conn
+    raise ConnectTimeoutError(
+E   urllib3.exceptions.ConnectTimeoutError: (&lt;HTTPSConnection(host='budgetapp-qc.preview.emergentagent.com', port=443) at 0xfe59ee316c10&gt;, 'Connection to budgetapp-qc.preview.emergentagent.com timed out. (connect timeout=15)')
+
+The above exception was the direct cause of the following exception:
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:696: in send
+    resp = conn.urlopen(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:842: in urlopen
+    retries = retries.increment(
+/root/.venv/lib/python3.11/site-packages/urllib3/util/retry.py:543: in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='budgetapp-qc.preview.emergentagent.com', port=443): Max retries exceeded with url: /api/companies/965f0770-8cf2-4199-a99f-819ff270436a/ap/invoices/sinv_f9ba1fb32d4748839259b56abc2ebf46/submit (Caused by ConnectTimeoutError(&lt;HTTPSConnection(host='budgetapp-qc.preview.emergentagent.com', port=443) at 0xfe59ee316c10&gt;, 'Connection to budgetapp-qc.preview.emergentagent.com timed out. (connect timeout=15)'))
+
+During handling of the above exception, another exception occurred:
+backend/tests/test_a4_3_ap_payments.py:355: in posted_invoice
+    return _make_approved_posted(maker_tok, checker_tok, amount=200.0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/test_a4_3_ap_payments.py:126: in _make_approved_posted
+    _approve_invoice(maker, checker, inv["id"])
+backend/tests/test_a4_3_ap_payments.py:108: in _approve_invoice
+    r = requests.post(f"{API}/companies/{COMPANY_A}/ap/invoices/{inv_id}/{path}",
+/root/.venv/lib/python3.11/site-packages/requests/api.py:134: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:71: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:651: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:784: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:717: in send
+    raise ConnectTimeout(e, request=request)
+E   requests.exceptions.ConnectTimeout: HTTPSConnectionPool(host='budgetapp-qc.preview.emergentagent.com', port=443): Max retries exceeded with url: /api/companies/965f0770-8cf2-4199-a99f-819ff270436a/ap/invoices/sinv_f9ba1fb32d4748839259b56abc2ebf46/submit (Caused by ConnectTimeoutError(&lt;HTTPSConnection(host='budgetapp-qc.preview.emergentagent.com', port=443) at 0xfe59ee316c10&gt;, 'Connection to budgetapp-qc.preview.emergentagent.com timed out. (connect timeout=15)'))</error></testcase><testcase classname="tests.test_a4_3_ap_payments.TestAging" name="test_aging_separates_accounting_and_approved_unposted" time="27.615" /><testcase classname="tests.test_a4_3_ap_payments.TestAging" name="test_aging_as_of_parameter_changes_buckets" time="0.215" /><testcase classname="tests.test_a4_3_ap_payments.TestIsolation" name="test_julie_no_access_company_b" time="0.566" /><testcase classname="tests.test_a4_3_ap_payments.TestIsolation" name="test_julie_cannot_create_payment_company_b" time="0.133" /></testsuite></testsuites>

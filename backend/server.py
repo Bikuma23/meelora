@@ -3806,6 +3806,265 @@ async def ap_set_mapping(company_id: str, payload: APMappingIn, user: dict = Dep
     return await ap_service.set_ap_mapping(db, ws, company_id, payload.model_dump(exclude_unset=True))
 
 
+# ---- A4.3 Supplier payments · credit notes · aging · batches --------------
+class APAllocationIn(BaseModel):
+    invoice_id: str
+    amount: float
+
+
+class APPaymentIn(BaseModel):
+    supplier_id: str
+    amount: float
+    currency: Optional[str] = None
+    fx_rate: Optional[float] = None
+    payment_date: Optional[str] = None
+    value_date: Optional[str] = None
+    method: Optional[str] = None
+    bank_account: Optional[str] = None
+    bank_reference: Optional[str] = None
+    note: Optional[str] = None
+    period_id: Optional[str] = None
+    allocations: List[APAllocationIn] = []
+
+
+class APPaymentUpdate(BaseModel):
+    amount: Optional[float] = None
+    currency: Optional[str] = None
+    fx_rate: Optional[float] = None
+    payment_date: Optional[str] = None
+    value_date: Optional[str] = None
+    method: Optional[str] = None
+    bank_account: Optional[str] = None
+    bank_reference: Optional[str] = None
+    note: Optional[str] = None
+    allocations: Optional[List[APAllocationIn]] = None
+
+
+class APExecuteIn(BaseModel):
+    execution_method: Optional[str] = None
+    execution_reference: Optional[str] = None
+    external_ref: Optional[str] = None
+
+
+class APAllocateIn(BaseModel):
+    invoice_id: str
+    amount: float
+
+
+class APCreditLineIn(BaseModel):
+    invoice_line_index: int
+    net_credit: float
+
+
+class APCreditNoteIn(BaseModel):
+    invoice_id: str
+    period_id: Optional[str] = None
+    lines: List[APCreditLineIn] = []
+
+
+class APBatchLineIn(BaseModel):
+    invoice_id: str
+    amount: Optional[float] = None
+
+
+class APBatchIn(BaseModel):
+    lines: List[APBatchLineIn] = []
+    note: Optional[str] = None
+
+
+@api.get("/companies/{company_id}/ap/payments")
+async def ap_list_payments(company_id: str, supplier_id: Optional[str] = None, invoice_id: Optional[str] = None,
+                           payment_state: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"payments": await ap_service.list_payments(db, ws, company_id, supplier_id=supplier_id,
+                                                        invoice_id=invoice_id, payment_state=payment_state)}
+
+
+@api.get("/companies/{company_id}/ap/payments/{pid}")
+async def ap_get_payment(company_id: str, pid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return ap_service.public_payment(await ap_service.get_payment(db, ws, company_id, pid))
+
+
+@api.post("/companies/{company_id}/ap/payments")
+async def ap_create_payment(company_id: str, payload: APPaymentIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    p = await ap_service.create_payment(db, ws, company_id, user, payload.model_dump(exclude_unset=True))
+    await log_action(user, "create", "ap_payment", p["id"], company_id=company_id, entity_id=p["id"],
+                     event_type="ap.payment.created")
+    return p
+
+
+@api.patch("/companies/{company_id}/ap/payments/{pid}")
+async def ap_update_payment(company_id: str, pid: str, payload: APPaymentUpdate, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ap_service.update_payment(db, ws, company_id, user, pid, payload.model_dump(exclude_unset=True))
+
+
+@api.post("/companies/{company_id}/ap/payments/{pid}/prepare")
+async def ap_prepare_payment(company_id: str, pid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ap_service.prepare_payment(db, ws, company_id, user, pid)
+
+
+@api.post("/companies/{company_id}/ap/payments/{pid}/authorize")
+async def ap_authorize_payment(company_id: str, pid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ap_service.authorize_payment(db, ws, company_id, user, pid)
+
+
+@api.post("/companies/{company_id}/ap/payments/{pid}/cancel")
+async def ap_cancel_payment(company_id: str, pid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ap_service.cancel_payment(db, ws, company_id, user, pid)
+
+
+@api.post("/companies/{company_id}/ap/payments/{pid}/execute")
+async def ap_execute_payment(company_id: str, pid: str, payload: APExecuteIn, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.supplier_payment_post", workspace_id=ws)
+    p = await ap_service.mark_executed(db, ws, company_id, user, pid, payload.model_dump(exclude_unset=True))
+    await log_action(user, "execute", "ap_payment", pid, details="Décaissement confirmé", company_id=company_id,
+                     entity_id=pid, event_type="ap.payment.executed")
+    return p
+
+
+@api.post("/companies/{company_id}/ap/payments/{pid}/post")
+async def ap_post_payment(company_id: str, pid: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.supplier_payment_post", workspace_id=ws)
+    p = await ap_service.post_payment(db, ws, company_id, user, pid)
+    await log_action(user, "post", "ap_payment", pid, details="Paiement fournisseur comptabilisé", company_id=company_id,
+                     entity_id=pid, event_type="ap.payment.posted")
+    return p
+
+
+@api.post("/companies/{company_id}/ap/payments/{pid}/allocate")
+async def ap_allocate_payment(company_id: str, pid: str, payload: APAllocateIn, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.supplier_payment_post", workspace_id=ws)
+    return await ap_service.allocate_advance(db, ws, company_id, user, pid, payload.model_dump(exclude_unset=True))
+
+
+# Credit notes
+@api.get("/companies/{company_id}/ap/credit-notes")
+async def ap_list_credit_notes(company_id: str, invoice_id: Optional[str] = None, supplier_id: Optional[str] = None,
+                               status: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"credit_notes": await ap_service.list_credit_notes(db, ws, company_id, invoice_id=invoice_id,
+                                                               supplier_id=supplier_id, status=status)}
+
+
+@api.get("/companies/{company_id}/ap/credit-notes/{cid}")
+async def ap_get_credit_note(company_id: str, cid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return ap_service.public_credit_note(await ap_service.get_credit_note(db, ws, company_id, cid))
+
+
+@api.post("/companies/{company_id}/ap/credit-notes")
+async def ap_create_credit_note(company_id: str, payload: APCreditNoteIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    cn = await ap_service.create_credit_note(db, ws, company_id, user, payload.model_dump(exclude_unset=True))
+    await log_action(user, "create", "ap_credit_note", cn["id"], company_id=company_id, entity_id=cn["id"],
+                     event_type="ap.credit_note.created")
+    return cn
+
+
+@api.post("/companies/{company_id}/ap/credit-notes/{cid}/submit")
+async def ap_submit_credit_note(company_id: str, cid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ap_service.submit_credit_note(db, ws, company_id, user, cid)
+
+
+@api.post("/companies/{company_id}/ap/credit-notes/{cid}/approve")
+async def ap_approve_credit_note(company_id: str, cid: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.supplier_credit_note_approve", workspace_id=ws)
+    cn = await ap_service.approve_credit_note(db, ws, company_id, user, cid)
+    await log_action(user, "approve", "ap_credit_note", cid, company_id=company_id, entity_id=cid,
+                     event_type="ap.credit_note.approved")
+    return cn
+
+
+@api.post("/companies/{company_id}/ap/credit-notes/{cid}/post")
+async def ap_post_credit_note(company_id: str, cid: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.supplier_credit_note_post", workspace_id=ws)
+    cn = await ap_service.post_credit_note(db, ws, company_id, user, cid)
+    await log_action(user, "post", "ap_credit_note", cid, details="Note de crédit fournisseur comptabilisée",
+                     company_id=company_id, entity_id=cid, event_type="ap.credit_note.posted")
+    return cn
+
+
+# Aging + supplier synthetic view
+@api.get("/companies/{company_id}/ap/aging")
+async def ap_aging(company_id: str, as_of: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await ap_service.aging(db, ws, company_id, as_of=as_of)
+
+
+@api.get("/companies/{company_id}/ap/suppliers/{supplier_id}/summary")
+async def ap_supplier_summary(company_id: str, supplier_id: str, as_of: Optional[str] = None,
+                              user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await ap_service.supplier_summary(db, ws, company_id, supplier_id, as_of=as_of)
+
+
+# Payment batches (preparation object only — never GL, never proof of payment)
+@api.get("/companies/{company_id}/ap/batch-candidates")
+async def ap_batch_candidates(company_id: str, currency: Optional[str] = None, supplier_id: Optional[str] = None,
+                              due_before: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await ap_service.propose_batch_candidates(db, ws, company_id, currency=currency,
+                                                     supplier_id=supplier_id, due_before=due_before)
+
+
+@api.get("/companies/{company_id}/ap/batches")
+async def ap_list_batches(company_id: str, state: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"batches": await ap_service.list_batches(db, ws, company_id, state=state)}
+
+
+@api.get("/companies/{company_id}/ap/batches/{bid}")
+async def ap_get_batch(company_id: str, bid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return ap_service.public_batch(await ap_service.get_batch(db, ws, company_id, bid))
+
+
+@api.get("/companies/{company_id}/ap/batches/{bid}/revalidate")
+async def ap_revalidate_batch(company_id: str, bid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await ap_service.revalidate_batch(db, ws, company_id, bid)
+
+
+@api.post("/companies/{company_id}/ap/batches")
+async def ap_create_batch(company_id: str, payload: APBatchIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    b = await ap_service.create_batch(db, ws, company_id, user, payload.model_dump(exclude_unset=True))
+    await log_action(user, "create", "ap_payment_batch", b["id"], company_id=company_id, entity_id=b["id"],
+                     event_type="ap.batch.created")
+    return b
+
+
+@api.post("/companies/{company_id}/ap/batches/{bid}/prepare")
+async def ap_prepare_batch(company_id: str, bid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ap_service.prepare_batch(db, ws, company_id, user, bid)
+
+
+@api.post("/companies/{company_id}/ap/batches/{bid}/authorize")
+async def ap_authorize_batch(company_id: str, bid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ap_service.authorize_batch(db, ws, company_id, user, bid)
+
+
+@api.post("/companies/{company_id}/ap/batches/{bid}/cancel")
+async def ap_cancel_batch(company_id: str, bid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ap_service.cancel_batch(db, ws, company_id, user, bid)
+
+
+
 # ---- Invoices --------------------------------------------------------------
 @api.get("/companies/{company_id}/ar/invoices")
 async def ar_list_invoices(company_id: str, status: Optional[str] = None, customer_id: Optional[str] = None,
@@ -10164,6 +10423,8 @@ async def startup():
         await _ensure_custom_template_indexes(db)
         await _ensure_report_runs_indexes(db)
         await _ensure_access_indexes(db)
+        await ap_service.ensure_indexes(db)
+        await ap_service.ensure_a43_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     # P1.13A — seed Meelora workspace entitlements (availability only; grants no

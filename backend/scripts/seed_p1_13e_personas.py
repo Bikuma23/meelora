@@ -66,6 +66,10 @@ PERSONAS = {
                   (CA, "accounting.customer_invoice_approve"), (CA, "accounting.customer_invoice_post"),
                   (CA, "accounting.customer_payment_post"),
                   (CA, "accounting.customer_credit_note_approve"), (CA, "accounting.customer_credit_note_post"),
+                  # A4 — Achats & Fournisseurs sensitive permissions (A4.2 + A4.3).
+                  (CA, "accounting.supplier_invoice_approve"), (CA, "accounting.supplier_invoice_post"),
+                  (CA, "accounting.supplier_payment_post"),
+                  (CA, "accounting.supplier_credit_note_approve"), (CA, "accounting.supplier_credit_note_post"),
                   (CA, "accounting.entry_reverse"), (CA, "accounting.chart_manage")],   # granular: NO period_reopen
     },
     "persona_reporting@accslegro.com": {  # F — Responsable Reporting

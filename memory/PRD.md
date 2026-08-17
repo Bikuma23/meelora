@@ -1636,3 +1636,37 @@ Conforme A3 §16 (pas d'automatisation agressive) — mode **proposition + confi
 - UI `PurchasesAP.js` : onglets **Factures** + **Factures à traiter** activés (formulaire création, actions workflow, upload PDF, badges).
 - **Testé : backend 100 % (13/13), frontend 100 %** (iteration_75). Reste : warning React dev-only `<span> in <option>` (cosmétique). **STOP après A4.2 — A4.3+ sur validation.**
 
+
+---
+
+## A4.3 — Paiements fournisseurs · Crédits · Aging AP (LIVRÉ — 2026-06)
+Module Achats & Fournisseurs (AP) uniquement. Aucun ledger parallèle : réutilise le Cœur P2/A2, le moteur FX/OANDA et l'Object Storage. **STOP strict après A4.3** (A4.4 IA, A4.5 PO, A4.7 courriel entrant NON démarrés — attente validation).
+
+### Implémenté
+- **Paiements fournisseurs (`ap_payments`)** — cycle de vie à 5 états : `draft → prepared → authorized → executed → posted` (+ cancelled). Invariants clés :
+  - draft/prepared/authorized NE modifient PAS `invoice.payment_status` et NE créent AUCUN journal.
+  - `execute` (SENSIBLE `accounting.supplier_payment_post`) = décaissement confirmé (acteur/date/méthode/référence/audit) → SEUL déclencheur de `invoice.payment_status` (unpaid→partially_paid→paid), dérivé des allocations exécutées.
+  - `post` (SENSIBLE) = écriture canonique P2 `Dr Fournisseurs / Cr Banque (+ Gain/Perte FX réalisé)`, équilibrée, atomique, idempotente (external_id).
+  - Partiel/total/multiples/multi-factures ; allocations = registre traçable (flag `active`) ; avance/non affecté (`unapplied_amount`) + affectation ultérieure (`allocate`, aucun 2e décaissement/journal).
+  - **Paiement AVANT posting facture** démontré : les 2 journaux (paiement + facture) s'annulent nets sur le compte AP, aucune double comptabilisation.
+  - Points d'extension prévus (prepare/approve/execute séparés) pour le futur module Banque & Trésorerie qui CONSOMMERA le même `ap_payment` (idempotency_key/external_ref).
+- **Notes de crédit fournisseurs (`ap_credit_notes`)** — workflow propre `draft→submitted→approved→posted`, maker-checker, journal inverse proportionnel (`Dr Fournisseurs / Cr Charge(s) / Cr Taxes récupérables`) au taux/snapshot fiscal d'origine, crédit partiel par ligne, **sur-crédit cumulatif interdit** (posted + pending), crédit non affecté → crédit fournisseur disponible (`ap_supplier_credits`). Permissions `supplier_credit_note_approve/post`.
+- **Aging AP** — buckets Courant/1-30/31-60/61-90/90+ par date d'échéance, dérivés des transactions, date d'analyse (`as_of`) paramétrable. Sépare **Solde comptable** (factures posted) de **Approuvé à comptabiliser** (approved non posted) + **Crédits disponibles** ; consolidation devise fonctionnelle ; tableau par fournisseur.
+- **Vue synthétique fournisseur** (`GET /ap/suppliers/{id}/summary`) : solde, buckets, échu, plus ancienne facture échue, crédits dispo, derniers paiements.
+- **Lots de paiement (`ap_payment_batches`)** — objet de PRÉPARATION seulement (jamais preuve de paiement, jamais GL) : `propose_batch_candidates`, snapshot au `prepare`, lifecycle draft→prepared→authorized→processing→completed(+cancelled/partially_completed), `revalidate` (exceptions sans mutation silencieuse). **Aucune émission bancaire** (réservée à Banque & Trésorerie).
+
+### Endpoints (préfixe `/api/companies/{cid}/ap`)
+`POST/GET/PATCH /payments` · `/payments/{id}/{prepare|authorize|cancel|execute|post|allocate}` · `GET/POST /credit-notes` · `/credit-notes/{id}/{submit|approve|post}` · `GET /aging?as_of=` · `GET /suppliers/{sid}/summary` · `GET /batch-candidates` · `GET/POST /batches` · `/batches/{id}/{prepare|authorize|cancel}` · `GET /batches/{id}/revalidate`.
+
+### Fichiers
+- Backend : `core/accounting/ap.py` (paiements/crédits/aging/lots), `server.py` (routes + modèles Pydantic), `scripts/seed_p1_13e_personas.py` (grants supplier_payment/credit).
+- Frontend : `pages/PurchasesAP.js` (PaymentsTab/CreditsTab/AgingTab), `lib/api.js`.
+- Tests : `backend/tests/test_a4_3_ap_payments.py` (15/15) — rapport `test_reports/iteration_76.json` (backend 100%, frontend 100%, 0 bug).
+
+### Roadmap AP restante (NON démarrée — validation requale)
+- **A4.4 (P0)** — Analyse documentaire IA (OCR factures). ⚠️ Gouvernance stricte `A4_PLAN.md` (abstraction DocumentAIProvider, zéro entraînement, isolation, audit).
+- **A4.5 (P0)** — Bons de commande (PO) minimaux + matching 2-way.
+- **A4.6 (P1)** — Réévaluation FX non réalisée + réconciliation Aging↔GL avancée.
+- **A4.7 (P1)** — Boîte de réception courriel AP dédiée.
+- **Banque & Trésorerie (futur)** — exécution/rapprochement bancaire consommant `ap_payments` + `ap_payment_batches`.
+- OANDA_API_KEY (P2) et RESEND_API_KEY (P2) : en attente des clés utilisateur.

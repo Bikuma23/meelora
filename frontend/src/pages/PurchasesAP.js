@@ -70,6 +70,9 @@ export default function PurchasesAP() {
       {tab === "suppliers" ? <SuppliersTab cid={cid} />
         : tab === "invoices" ? <InvoicesTab cid={cid} toProcess={false} />
         : tab === "inbox" ? <InvoicesTab cid={cid} toProcess={true} />
+        : tab === "payments" ? <PaymentsTab cid={cid} />
+        : tab === "credits" ? <CreditsTab cid={cid} />
+        : tab === "aging" ? <AgingTab cid={cid} />
         : <ComingSoon label={TABS.find((t) => t.key === tab)?.label} />}
     </div>
   );
@@ -464,6 +467,335 @@ function SuppliersTab({ cid }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+
+const PAY_STATE = {
+  draft: { label: "Brouillon", cls: "bg-slate-100 text-slate-600" },
+  prepared: { label: "Préparé", cls: "bg-blue-100 text-blue-700" },
+  authorized: { label: "Autorisé", cls: "bg-indigo-100 text-indigo-700" },
+  executed: { label: "Exécuté", cls: "bg-amber-100 text-amber-700" },
+  posted: { label: "Comptabilisé", cls: "bg-emerald-100 text-emerald-700" },
+  cancelled: { label: "Annulé", cls: "bg-rose-100 text-rose-600" },
+};
+const PAY_VIEWS = [
+  { key: "to_pay", label: "À payer" },
+  { key: "prepared", label: "Paiements préparés" },
+  { key: "paid", label: "Payés" },
+];
+
+function PaymentsTab({ cid }) {
+  const [view, setView] = useState("to_pay");
+  const [payments, setPayments] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [openInvoices, setOpenInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ supplier_id: "", amount: "", currency: "", allocations: [] });
+
+  const load = useCallback(async () => {
+    if (!cid) return;
+    setLoading(true);
+    try {
+      const [pay, sup, cand] = await Promise.all([api.apPayments(cid, {}), api.apSuppliers(cid), api.apBatchCandidates(cid, {})]);
+      setPayments(pay.payments || []); setSuppliers(sup.suppliers || []); setOpenInvoices(cand.candidates || []);
+    } catch (e) { /* gated */ }
+    setLoading(false);
+  }, [cid]);
+  useEffect(() => { load(); }, [load]);
+
+  const supName = (id) => suppliers.find((s) => s.id === id)?.name || (id || "").slice(0, 8);
+  const act = async (id, action, body, okMsg) => { try { await api.apPaymentAction(cid, id, action, body); toast.success(okMsg || "Fait"); load(); } catch (e) { toast.error(errMsg(e)); } };
+
+  const supplierOpen = openInvoices.filter((i) => i.supplier_id === form.supplier_id);
+  const toggleAlloc = (inv) => setForm((f) => {
+    const ex = f.allocations.find((a) => a.invoice_id === inv.invoice_id);
+    if (ex) return { ...f, allocations: f.allocations.filter((a) => a.invoice_id !== inv.invoice_id) };
+    return { ...f, currency: f.currency || inv.currency, allocations: [...f.allocations, { invoice_id: inv.invoice_id, amount: inv.open_balance, number: inv.number, currency: inv.currency }] };
+  });
+  const setAllocAmt = (id, v) => setForm((f) => ({ ...f, allocations: f.allocations.map((a) => a.invoice_id === id ? { ...a, amount: v } : a) }));
+  const allocTotal = form.allocations.reduce((s, a) => s + Number(a.amount || 0), 0);
+
+  const create = async () => {
+    try {
+      const body = { supplier_id: form.supplier_id, amount: Number(form.amount || allocTotal), currency: form.currency || undefined,
+        allocations: form.allocations.map((a) => ({ invoice_id: a.invoice_id, amount: Number(a.amount || 0) })) };
+      await api.apCreatePayment(cid, body);
+      toast.success("Paiement préparé (brouillon)"); setOpen(false);
+      setForm({ supplier_id: "", amount: "", currency: "", allocations: [] }); load();
+    } catch (e) { toast.error(errMsg(e)); }
+  };
+
+  const filtered = payments.filter((p) => view === "paid" ? p.payment_state === "posted"
+    : view === "prepared" ? ["prepared", "authorized", "executed"].includes(p.payment_state)
+    : ["draft"].includes(p.payment_state));
+
+  return (
+    <div className="space-y-4" data-testid="ap-payments-tab">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+          {PAY_VIEWS.map((v) => (
+            <button key={v.key} data-testid={`ap-payview-${v.key}`} onClick={() => setView(v.key)}
+              className={`rounded-md px-3 py-1.5 text-xs font-600 transition-colors ${view === v.key ? "bg-white text-[#063044] shadow-sm" : "text-slate-500"}`}>{v.label}</button>
+          ))}
+        </div>
+        <Button data-testid="ap-newpay-toggle" onClick={() => setOpen((v) => !v)} className="h-9 gap-1 bg-[#063044] text-white"><Plus size={14} /> Nouveau paiement</Button>
+      </div>
+
+      {open && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="ap-pay-form">
+          <div className="flex flex-wrap items-end gap-3">
+            <div><label className="text-[11px] uppercase text-slate-500">Fournisseur</label>
+              <select data-testid="ap-pay-supplier" value={form.supplier_id} onChange={(e) => setForm({ ...form, supplier_id: e.target.value, allocations: [], currency: "" })} className="mt-1 h-9 w-52 rounded-md border border-slate-200 px-2 text-sm">
+                <option value="">—</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+            <div><label className="text-[11px] uppercase text-slate-500">Montant total</label><Input data-testid="ap-pay-amount" value={form.amount} placeholder={allocTotal ? String(allocTotal) : "avance ?"} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="mt-1 h-9 w-28" /></div>
+            <div><label className="text-[11px] uppercase text-slate-500">Devise</label><Input data-testid="ap-pay-currency" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} className="mt-1 h-9 w-20" /></div>
+          </div>
+          {form.supplier_id && (
+            <div className="mt-3">
+              <p className="mb-1 text-[11px] uppercase text-slate-500">Factures approuvées à régler</p>
+              {supplierOpen.length === 0 ? <p className="text-sm text-slate-400">Aucune facture ouverte.</p> : supplierOpen.map((inv) => {
+                const sel = form.allocations.find((a) => a.invoice_id === inv.invoice_id);
+                return (
+                  <div key={inv.invoice_id} className="flex items-center gap-2 py-1" data-testid={`ap-pay-cand-${inv.invoice_id}`}>
+                    <input type="checkbox" checked={!!sel} onChange={() => toggleAlloc(inv)} data-testid={`ap-pay-cand-check-${inv.invoice_id}`} />
+                    <span className="text-sm text-slate-600">{inv.number || inv.invoice_id.slice(0, 8)} · éch. {inv.due_date || "—"} · dû {money(inv.open_balance, inv.currency)} {inv.posting_status !== "posted" && <em className="text-amber-600">(non comptabilisée)</em>}</span>
+                    {sel && <Input value={sel.amount} onChange={(e) => setAllocAmt(inv.invoice_id, e.target.value)} className="h-8 w-24" data-testid={`ap-pay-alloc-${inv.invoice_id}`} />}
+                  </div>
+                );
+              })}
+              <p className="mt-2 text-sm text-slate-600">Affecté : <b>{money(allocTotal, form.currency)}</b>{form.amount && Number(form.amount) > allocTotal ? <span className="text-slate-400"> · avance {money(Number(form.amount) - allocTotal, form.currency)}</span> : null}</p>
+            </div>
+          )}
+          <div className="mt-4 border-t border-slate-100 pt-3">
+            <Button data-testid="ap-pay-create" onClick={create} disabled={!form.supplier_id || (!form.amount && allocTotal <= 0)} className="h-9 gap-1 bg-[#22C55E] text-white"><Plus size={14} /> Préparer</Button>
+          </div>
+        </div>
+      )}
+
+      {loading ? <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        : filtered.length === 0 ? <p className="text-sm text-slate-400" data-testid="ap-payments-empty">Aucun paiement dans cette vue.</p>
+        : (
+          <div className="space-y-2">
+            {filtered.map((p) => {
+              const st = PAY_STATE[p.payment_state] || PAY_STATE.draft;
+              return (
+                <div key={p.id} data-testid={`ap-pay-row-${p.id}`} className="rounded-xl border border-slate-200 bg-white p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="font-600 text-[#0F172A]">{supName(p.supplier_id)}</span>
+                      <span className="text-sm text-slate-500">{money(p.amount, p.currency)} · {p.payment_date}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-600 ${st.cls}`}>{st.label}</span>
+                      {p.unapplied_amount > 0 && <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-600 text-purple-700">Avance {money(p.unapplied_amount, p.currency)}</span>}
+                      {p.journal_entry_id && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-mono-data text-slate-500">JE {p.journal_entry_id.slice(-6)}</span>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {p.payment_state === "draft" && <>
+                        <Button size="sm" variant="outline" className="h-8" data-testid={`ap-pay-prepare-${p.id}`} onClick={() => act(p.id, "prepare", null, "Préparé")}>Préparer</Button>
+                        <Button size="sm" variant="outline" className="h-8 text-rose-600" data-testid={`ap-pay-cancel-${p.id}`} onClick={() => act(p.id, "cancel", null, "Annulé")}>Annuler</Button>
+                      </>}
+                      {p.payment_state === "prepared" && <Button size="sm" variant="outline" className="h-8" data-testid={`ap-pay-authorize-${p.id}`} onClick={() => act(p.id, "authorize", null, "Autorisé")}>Autoriser</Button>}
+                      {p.payment_state === "authorized" && <Button size="sm" className="h-8 bg-amber-600 text-white" data-testid={`ap-pay-execute-${p.id}`} onClick={() => act(p.id, "execute", { execution_reference: "MANUEL" }, "Marqué exécuté")}>Marquer exécuté</Button>}
+                      {p.payment_state === "executed" && <Button size="sm" className="h-8 bg-[#063044] text-white" data-testid={`ap-pay-post-${p.id}`} onClick={() => act(p.id, "post", null, "Comptabilisé")}>Comptabiliser</Button>}
+                    </div>
+                  </div>
+                  {(p.allocations || []).filter((a) => a.active).length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2 border-t border-slate-100 pt-2 text-xs text-slate-500">
+                      {p.allocations.filter((a) => a.active).map((a) => <span key={a.id}>→ {money(a.amount_applied, a.currency)} sur {a.invoice_id.slice(0, 10)}</span>)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+    </div>
+  );
+}
+
+const CN_ST = {
+  draft: { label: "Brouillon", cls: "bg-slate-100 text-slate-600" },
+  submitted: { label: "Soumise", cls: "bg-indigo-100 text-indigo-700" },
+  approved: { label: "Approuvée", cls: "bg-blue-100 text-blue-700" },
+  posted: { label: "Comptabilisée", cls: "bg-emerald-100 text-emerald-700" },
+};
+
+function CreditsTab({ cid }) {
+  const [notes, setNotes] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ invoice_id: "", lines: [] });
+  const [invLines, setInvLines] = useState([]);
+
+  const load = useCallback(async () => {
+    if (!cid) return;
+    setLoading(true);
+    try {
+      const [cn, sup, inv] = await Promise.all([api.apCreditNotes(cid, {}), api.apSuppliers(cid), api.apInvoices(cid, { document_status: "approved" })]);
+      setNotes(cn.credit_notes || []); setSuppliers(sup.suppliers || []);
+      setInvoices((inv.invoices || []).filter((i) => i.posting_status === "posted"));
+    } catch (e) { /* gated */ }
+    setLoading(false);
+  }, [cid]);
+  useEffect(() => { load(); }, [load]);
+
+  const supName = (id) => suppliers.find((s) => s.id === id)?.name || (id || "").slice(0, 8);
+  const act = async (id, action, okMsg) => { try { await api.apCreditNoteAction(cid, id, action, {}); toast.success(okMsg || "Fait"); load(); } catch (e) { toast.error(errMsg(e)); } };
+  const onInvoice = async (id) => {
+    setForm({ invoice_id: id, lines: [] });
+    if (!id) { setInvLines([]); return; }
+    try { const inv = await api.apInvoice(cid, id); setInvLines(inv.lines || []); } catch (e) { setInvLines([]); }
+  };
+  const setLineCredit = (idx, v) => setForm((f) => {
+    const ex = f.lines.find((l) => l.invoice_line_index === idx);
+    if (v === "" || Number(v) <= 0) return { ...f, lines: f.lines.filter((l) => l.invoice_line_index !== idx) };
+    if (ex) return { ...f, lines: f.lines.map((l) => l.invoice_line_index === idx ? { ...l, net_credit: v } : l) };
+    return { ...f, lines: [...f.lines, { invoice_line_index: idx, net_credit: v }] };
+  });
+  const create = async () => {
+    try {
+      await api.apCreateCreditNote(cid, { invoice_id: form.invoice_id, lines: form.lines.map((l) => ({ invoice_line_index: l.invoice_line_index, net_credit: Number(l.net_credit) })) });
+      toast.success("Note de crédit créée"); setOpen(false); setForm({ invoice_id: "", lines: [] }); setInvLines([]); load();
+    } catch (e) { toast.error(errMsg(e)); }
+  };
+
+  return (
+    <div className="space-y-4" data-testid="ap-credits-tab">
+      <Button data-testid="ap-newcn-toggle" onClick={() => setOpen((v) => !v)} className="h-9 gap-1 bg-[#063044] text-white"><Plus size={14} /> Nouvelle note de crédit</Button>
+      {open && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="ap-cn-form">
+          <div><label className="text-[11px] uppercase text-slate-500">Facture source (comptabilisée)</label>
+            <select data-testid="ap-cn-invoice" value={form.invoice_id} onChange={(e) => onInvoice(e.target.value)} className="mt-1 h-9 w-full max-w-md rounded-md border border-slate-200 px-2 text-sm">
+              <option value="">—</option>{invoices.map((i) => <option key={i.id} value={i.id}>{supName(i.supplier_id)} · {i.supplier_invoice_number || i.id.slice(0, 8)} · {money(i.total, i.currency)}</option>)}</select></div>
+          {invLines.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {invLines.map((l, i) => {
+                const remaining = (l.line_net || 0) - (l.credited_net || 0);
+                return (
+                  <div key={i} className="flex flex-wrap items-center gap-2" data-testid={`ap-cn-line-${i}`}>
+                    <span className="w-56 text-sm text-slate-600">{l.description || `Ligne ${i}`}</span>
+                    <span className="text-xs text-slate-400">créditable {remaining.toFixed(2)}</span>
+                    <Input placeholder="Montant à créditer" onChange={(e) => setLineCredit(i, e.target.value)} className="h-9 w-36" data-testid={`ap-cn-line-amt-${i}`} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="mt-4 border-t border-slate-100 pt-3">
+            <Button data-testid="ap-cn-create" onClick={create} disabled={!form.invoice_id || form.lines.length === 0} className="h-9 gap-1 bg-[#22C55E] text-white"><Plus size={14} /> Créer</Button>
+          </div>
+        </div>
+      )}
+      {loading ? <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        : notes.length === 0 ? <p className="text-sm text-slate-400" data-testid="ap-credits-empty">Aucune note de crédit fournisseur.</p>
+        : (
+          <div className="space-y-2">
+            {notes.map((cn) => {
+              const st = CN_ST[cn.status] || CN_ST.draft;
+              return (
+                <div key={cn.id} data-testid={`ap-cn-row-${cn.id}`} className="rounded-xl border border-slate-200 bg-white p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="font-600 text-[#0F172A]">{supName(cn.supplier_id)}</span>
+                      <span className="font-mono-data text-xs text-slate-500">{cn.number || "—"}</span>
+                      <span className="text-sm text-slate-500">{money(cn.total, cn.currency)}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-600 ${st.cls}`}>{st.label}</span>
+                      {cn.creates_supplier_credit && <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-600 text-purple-700">Crédit disponible</span>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {cn.status === "draft" && <Button size="sm" variant="outline" className="h-8" data-testid={`ap-cn-submit-${cn.id}`} onClick={() => act(cn.id, "submit", "Soumise")}>Soumettre</Button>}
+                      {cn.status === "submitted" && <Button size="sm" className="h-8 bg-emerald-600 text-white" data-testid={`ap-cn-approve-${cn.id}`} onClick={() => act(cn.id, "approve", "Approuvée")}>Approuver</Button>}
+                      {cn.status === "approved" && <Button size="sm" className="h-8 bg-[#063044] text-white" data-testid={`ap-cn-post-${cn.id}`} onClick={() => act(cn.id, "post", "Comptabilisée")}>Comptabiliser</Button>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+    </div>
+  );
+}
+
+const BUCKETS = [["current", "Courant"], ["d1_30", "1–30"], ["d31_60", "31–60"], ["d61_90", "61–90"], ["d90_plus", "90+"]];
+
+function AgingTab({ cid }) {
+  const [data, setData] = useState(null);
+  const [suppliers, setSuppliers] = useState([]);
+  const [asOf, setAsOf] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!cid) return;
+    setLoading(true);
+    try {
+      const [ag, sup] = await Promise.all([api.apAging(cid, asOf ? { as_of: asOf } : {}), api.apSuppliers(cid)]);
+      setData(ag); setSuppliers(sup.suppliers || []);
+    } catch (e) { /* gated */ }
+    setLoading(false);
+  }, [cid, asOf]);
+  useEffect(() => { load(); }, [load]);
+
+  const supName = (id) => suppliers.find((s) => s.id === id)?.name || (id || "").slice(0, 8);
+  const bySupplier = {};
+  (data?.rows || []).filter((r) => r.kind === "accounting").forEach((r) => {
+    const s = bySupplier[r.supplier_id] || { current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90_plus: 0, total: 0 };
+    s[r.bucket] += r.balance_functional; s.total += r.balance_functional; bySupplier[r.supplier_id] = s;
+  });
+  const fc = data?.functional_currency || "";
+
+  return (
+    <div className="space-y-4" data-testid="ap-aging-tab">
+      <div className="flex flex-wrap items-center gap-3">
+        <div><label className="text-[11px] uppercase text-slate-500">Date d'analyse (au)</label>
+          <Input type="date" data-testid="ap-aging-asof" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="mt-1 h-9 w-44" /></div>
+      </div>
+      {loading ? <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        : !data ? <p className="text-sm text-slate-400">Aucune donnée.</p>
+        : (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-3" data-testid="ap-aging-accounting-total">
+                <p className="text-[11px] uppercase text-slate-500">Solde comptable (AP)</p>
+                <p className="mt-1 text-lg font-700 text-[#063044]">{money(data.accounting_total, fc)}</p></div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3" data-testid="ap-aging-approved-unposted">
+                <p className="text-[11px] uppercase text-slate-500">Approuvé à comptabiliser</p>
+                <p className="mt-1 text-lg font-700 text-amber-600">{money(data.approved_unposted, fc)}</p></div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3" data-testid="ap-aging-credits">
+                <p className="text-[11px] uppercase text-slate-500">Crédits disponibles</p>
+                <p className="mt-1 text-lg font-700 text-purple-600">{money(data.available_credits, fc)}</p></div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-[11px] uppercase text-slate-500">En souffrance</p>
+                <p className="mt-1 text-lg font-700 text-rose-600">{money(data.accounting_total - data.buckets.current, fc)}</p></div>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead><tr className="border-b border-slate-100 text-left text-[11px] uppercase text-slate-500">
+                  <th className="p-3">Fournisseur</th>{BUCKETS.map(([, l]) => <th key={l} className="p-3 text-right">{l}</th>)}<th className="p-3 text-right">Total</th></tr></thead>
+                <tbody>
+                  {Object.keys(bySupplier).length === 0 ? <tr><td colSpan={7} className="p-4 text-center text-slate-400" data-testid="ap-aging-empty">Aucune facture comptabilisée ouverte.</td></tr>
+                    : Object.entries(bySupplier).map(([sid, s]) => (
+                      <tr key={sid} className="border-b border-slate-50" data-testid={`ap-aging-sup-${sid}`}>
+                        <td className="p-3 font-600 text-[#0F172A]">{supName(sid)}</td>
+                        {BUCKETS.map(([k]) => <td key={k} className="p-3 text-right text-slate-600">{s[k] ? money(s[k], fc) : "—"}</td>)}
+                        <td className="p-3 text-right font-600 text-[#063044]">{money(s.total, fc)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+                <tfoot><tr className="border-t border-slate-200 bg-slate-50 font-700 text-[#063044]">
+                  <td className="p-3">Total ({fc})</td>
+                  {BUCKETS.map(([k]) => <td key={k} className="p-3 text-right">{money(data.buckets[k], fc)}</td>)}
+                  <td className="p-3 text-right">{money(data.accounting_total, fc)}</td></tr></tfoot>
+              </table>
+            </div>
+            <p className="text-xs text-slate-400">Soldes dérivés des transactions comptabilisées à la date d'analyse. « Approuvé à comptabiliser » représente l'exposition opérationnelle (factures approuvées non encore comptabilisées) et n'est pas mélangé au solde comptable.</p>
+          </>
+        )}
     </div>
   );
 }

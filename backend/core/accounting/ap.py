@@ -132,7 +132,7 @@ from .gl import _get_period, _assert_postable_period  # noqa: E402
 
 _DEFAULT_AP_MAPPING = {
     "ap_account_code": "AP", "default_expense_account_code": "EXPENSE",
-    "recoverable_tax_account_code": "TAX_RECOVERABLE",
+    "recoverable_tax_account_code": "TAX_RECOVERABLE", "bank_account_code": "BANK",
     "fx_gain_account_code": "FX_GAIN", "fx_loss_account_code": "FX_LOSS",
 }
 
@@ -415,3 +415,739 @@ async def post_invoice(db, ws, co, user, invoice_id):
         "$push": {"audit": _audit("post", user, "approved", "posted")}})
     return public_invoice(await get_invoice(db, ws, co, invoice_id))
 
+
+# =========================================================================== #
+# A4.3 — Supplier PAYMENTS · CREDIT NOTES · AGING · PAYMENT BATCHES
+#
+# Cardinal rules (validated with the product owner):
+#  - A payment has a 5-state lifecycle: draft → prepared → authorized →
+#    executed → posted (+ cancelled). Only EXECUTED (+ its allocations) affects
+#    invoice.payment_status; only POSTED creates a canonical P2 journal.
+#  - preparing ≠ authorizing ≠ executing ≠ posting ≠ reconciling. The future
+#    Bank & Treasury engine will CONSUME this same ap_payment (no 2nd object).
+#  - Allocations are a traceable registry (active flag + history), never a
+#    single overwritable amount. Applying an advance later never re-disburses
+#    cash nor re-posts a bank movement.
+#  - A payment executed before its invoice is posted keeps the economic event;
+#    posting the invoice + posting the payment yields the SAME final GL result
+#    as invoice-then-pay, with no double entry (independent, idempotent journals).
+# =========================================================================== #
+from ..financial import fx as _fx  # noqa: E402  (alias, fx_service already imported)
+
+_PAYMENT_STATES = ("draft", "prepared", "authorized", "executed", "posted", "cancelled")
+# invoice.payment_status is DERIVED from executed allocations + posted credits only.
+_PAY_STATUS = ("unpaid", "partially_paid", "paid")
+
+
+def _pay_audit(action, user, frm, to, extra=None):
+    a = {"action": action, "by": user.get("id"), "by_email": user.get("email"),
+         "from": frm, "to": to, "at": _now()}
+    if extra:
+        a.update(extra)
+    return a
+
+
+def public_payment(d):
+    if not d:
+        return None
+    allocs = [{"id": a.get("id"), "invoice_id": a.get("invoice_id"),
+               "amount_applied": a.get("amount_applied"), "currency": a.get("currency"),
+               "invoice_fx_rate": a.get("invoice_fx_rate"), "active": a.get("active", True),
+               "allocated_at": a.get("allocated_at"), "allocated_by": a.get("allocated_by"),
+               "deallocated_at": a.get("deallocated_at")} for a in (d.get("allocations") or [])]
+    applied = _money(sum(float(a["amount_applied"] or 0) for a in allocs if a.get("active", True)))
+    return {
+        "id": d.get("_id"), "supplier_id": d.get("supplier_id"), "payment_state": d.get("payment_state", "draft"),
+        "amount": d.get("amount"), "currency": d.get("currency"), "fx": d.get("fx"),
+        "payment_date": d.get("payment_date"), "value_date": d.get("value_date"),
+        "method": d.get("method"), "bank_account": d.get("bank_account"), "bank_reference": d.get("bank_reference"),
+        "note": d.get("note"), "allocations": allocs, "applied_amount": applied,
+        "unapplied_amount": _money(float(d.get("amount") or 0) - applied),
+        "realized_fx": d.get("realized_fx", 0.0), "journal_entry_id": d.get("journal_entry_id"),
+        "posting_status": ("posted" if d.get("journal_entry_id") else "not_posted"),
+        "period_id": d.get("period_id"), "batch_id": d.get("batch_id"),
+        "external_ref": d.get("external_ref"), "idempotency_key": d.get("idempotency_key"),
+        "execution_method": d.get("execution_method"), "execution_reference": d.get("execution_reference"),
+        "executed_at": d.get("executed_at"), "executed_by": d.get("executed_by"),
+        "attachments": d.get("attachments") or [],
+        "created_by": d.get("created_by"), "created_at": d.get("created_at"), "audit": d.get("audit", []),
+    }
+
+
+async def get_payment(db, ws, co, pid):
+    d = await db.ap_payments.find_one({"_id": pid, "workspace_id": ws, "company_id": co})
+    if not d:
+        raise HTTPException(status_code=404, detail="Paiement fournisseur introuvable")
+    return d
+
+
+async def list_payments(db, ws, co, *, supplier_id=None, invoice_id=None, payment_state=None):
+    q = {"workspace_id": ws, "company_id": co}
+    if supplier_id:
+        q["supplier_id"] = supplier_id
+    if payment_state:
+        q["payment_state"] = payment_state
+    if invoice_id:
+        q["allocations.invoice_id"] = invoice_id
+    docs = await db.ap_payments.find(q).sort("created_at", -1).to_list(2000)
+    return [public_payment(d) for d in docs]
+
+
+async def _invoice_open_balance(inv):
+    """Balance still OWED = total − posted credits − executed payment allocations."""
+    return _money(float(inv.get("total") or 0) - float(inv.get("credited_total") or 0) - float(inv.get("amount_paid") or 0))
+
+
+async def _recompute_invoice_payment(db, ws, co, invoice_id):
+    """invoice.payment_status is derived ONLY from EXECUTED/POSTED payment
+    allocations (never from draft/prepared/authorized) + POSTED credit notes.
+    The payment/credit documents remain the source of truth (invoice history is
+    never rewritten destructively — only the derived cache is refreshed)."""
+    inv = await db.ap_invoices.find_one({"_id": invoice_id, "workspace_id": ws, "company_id": co})
+    if not inv:
+        return
+    paid = 0.0
+    async for p in db.ap_payments.find({"workspace_id": ws, "company_id": co,
+                                        "payment_state": {"$in": ["executed", "posted"]},
+                                        "allocations.invoice_id": invoice_id}):
+        for a in p.get("allocations") or []:
+            if a.get("invoice_id") == invoice_id and a.get("active", True):
+                paid += float(a.get("amount_applied") or 0)
+    credited = 0.0
+    async for cn in db.ap_credit_notes.find({"workspace_id": ws, "company_id": co,
+                                             "status": "posted", "invoice_id": invoice_id}):
+        credited += float(cn.get("total") or 0)
+    paid, credited = _money(paid), _money(credited)
+    total = float(inv.get("total") or 0)
+    balance = _money(total - credited - paid)
+    if paid <= 0.001 and credited <= 0.001:
+        status = "unpaid"
+    elif balance <= 0.001:
+        status = "paid"
+    else:
+        status = "partially_paid"
+    await db.ap_invoices.update_one({"_id": invoice_id}, {"$set": {
+        "amount_paid": paid, "credited_total": credited, "balance": max(balance, 0.0), "payment_status": status}})
+
+
+async def _validate_allocations(db, ws, co, supplier_id, currency, requested, *, exclude_payment_id=None):
+    """Normalize allocation lines; enforce same-currency + same-supplier + not
+    over-allocating the invoice open balance (considering OTHER executed/posted
+    payments so two concurrent payments cannot over-pay the same portion)."""
+    out, total = [], 0.0
+    for rl in requested or []:
+        inv = await get_invoice(db, ws, co, rl["invoice_id"])
+        if inv.get("supplier_id") != supplier_id:
+            raise HTTPException(status_code=422, detail="Une facture allouée n'appartient pas au fournisseur du paiement.")
+        if inv.get("document_status") not in ("approved",):
+            raise HTTPException(status_code=409, detail="Seule une facture approuvée peut être réglée.")
+        if (inv.get("currency") or "").upper() != currency:
+            raise HTTPException(status_code=422, detail="A4.3 : allocation dans la devise de la facture uniquement (pas de conversion croisée).")
+        amount = _money(rl.get("amount"))
+        if amount <= 0:
+            raise HTTPException(status_code=422, detail="Montant d'allocation invalide.")
+        open_bal = await _invoice_open_balance(inv)
+        if amount > open_bal + 0.001:
+            raise HTTPException(status_code=422, detail=f"Sur-affectation : allocation ({amount}) > solde dû ({open_bal}) de la facture {inv.get('supplier_invoice_number') or inv['_id']}.")
+        out.append({"id": f"alloc_{uuid.uuid4().hex}", "invoice_id": inv["_id"], "amount_applied": amount,
+                    "currency": currency, "invoice_fx_rate": (inv.get("fx") or {}).get("rate", 1.0),
+                    "active": True, "allocated_at": _now(), "allocated_by": None})
+        total += amount
+    return out, _money(total)
+
+
+async def create_payment(db, ws, co, user, payload):
+    """Create a DRAFT payment (no cash out, no GL, no invoice mutation)."""
+    supplier = await get_supplier(db, ws, co, payload["supplier_id"])
+    functional = await _functional_currency(db, ws, co)
+    currency = (payload.get("currency") or supplier.get("default_currency") or functional).upper()
+    amount = _money(payload.get("amount"))
+    if amount <= 0:
+        raise HTTPException(status_code=422, detail="Montant de paiement invalide.")
+    pay_date = payload.get("payment_date") or _now()[:10]
+    allocs, alloc_total = await _validate_allocations(db, ws, co, supplier["_id"], currency, payload.get("allocations"))
+    if alloc_total > amount + 0.001:
+        raise HTTPException(status_code=422, detail=f"Les allocations ({alloc_total}) dépassent le montant du paiement ({amount}).")
+    for a in allocs:
+        a["allocated_by"] = user.get("id")
+    fx = await _resolve_fx(db, ws, co, currency, functional, pay_date, payload.get("fx_rate"))
+    doc = {"_id": f"pay_{uuid.uuid4().hex}", "workspace_id": ws, "company_id": co, "supplier_id": supplier["_id"],
+           "payment_state": "draft", "amount": amount, "currency": currency, "fx": fx,
+           "payment_date": pay_date, "value_date": payload.get("value_date") or pay_date,
+           "method": payload.get("method") or "bank_transfer", "bank_account": payload.get("bank_account"),
+           "bank_reference": payload.get("bank_reference"), "note": payload.get("note"),
+           "allocations": allocs, "realized_fx": 0.0, "journal_entry_id": None,
+           "period_id": payload.get("period_id"), "batch_id": payload.get("batch_id"),
+           "idempotency_key": f"appay_{uuid.uuid4().hex}", "external_ref": None, "attachments": [],
+           "created_by": user.get("id"), "created_at": _now(),
+           "audit": [_pay_audit("create", user, None, "draft")]}
+    await db.ap_payments.insert_one(doc)
+    return public_payment(doc)
+
+
+async def update_payment(db, ws, co, user, pid, payload):
+    d = await get_payment(db, ws, co, pid)
+    if d.get("payment_state") not in ("draft", "prepared"):
+        raise HTTPException(status_code=409, detail="Un paiement autorisé/exécuté ne peut plus être modifié (créez une réaffectation tracée).")
+    functional = await _functional_currency(db, ws, co)
+    changes = {}
+    currency = (payload.get("currency") or d["currency"]).upper()
+    pay_date = payload.get("payment_date") or d["payment_date"]
+    if payload.get("amount") is not None:
+        changes["amount"] = _money(payload["amount"])
+    for f in ("value_date", "method", "bank_account", "bank_reference", "note"):
+        if payload.get(f) is not None:
+            changes[f] = payload[f]
+    if payload.get("allocations") is not None:
+        allocs, alloc_total = await _validate_allocations(db, ws, co, d["supplier_id"], currency, payload["allocations"])
+        for a in allocs:
+            a["allocated_by"] = user.get("id")
+        amt = changes.get("amount", d["amount"])
+        if alloc_total > amt + 0.001:
+            raise HTTPException(status_code=422, detail=f"Les allocations ({alloc_total}) dépassent le montant ({amt}).")
+        changes["allocations"] = allocs
+    if payload.get("currency") or payload.get("payment_date") or payload.get("fx_rate") is not None:
+        changes["currency"], changes["payment_date"] = currency, pay_date
+        changes["fx"] = await _resolve_fx(db, ws, co, currency, functional, pay_date, payload.get("fx_rate"))
+    if changes:
+        await db.ap_payments.update_one({"_id": pid}, {"$set": changes, "$push": {"audit": _pay_audit("update", user, d["payment_state"], d["payment_state"])}})
+    return public_payment(await get_payment(db, ws, co, pid))
+
+
+async def _transition_payment(db, ws, co, user, pid, allowed_from, to, action):
+    d = await get_payment(db, ws, co, pid)
+    if d.get("payment_state") not in allowed_from:
+        raise HTTPException(status_code=409, detail=f"Transition impossible : état « {d.get('payment_state')} ».")
+    await db.ap_payments.update_one({"_id": pid}, {
+        "$set": {"payment_state": to},
+        "$push": {"audit": _pay_audit(action, user, d.get("payment_state"), to)}})
+    return await get_payment(db, ws, co, pid)
+
+
+async def prepare_payment(db, ws, co, user, pid):
+    return public_payment(await _transition_payment(db, ws, co, user, pid, ("draft",), "prepared", "prepare"))
+
+
+async def authorize_payment(db, ws, co, user, pid):
+    return public_payment(await _transition_payment(db, ws, co, user, pid, ("prepared",), "authorized", "authorize"))
+
+
+async def cancel_payment(db, ws, co, user, pid):
+    d = await get_payment(db, ws, co, pid)
+    if d.get("payment_state") in ("executed", "posted"):
+        raise HTTPException(status_code=409, detail="Un paiement exécuté/comptabilisé ne peut être annulé (utilisez une extourne/remboursement).")
+    return public_payment(await _transition_payment(db, ws, co, user, pid, ("draft", "prepared", "authorized"), "cancelled", "cancel"))
+
+
+async def mark_executed(db, ws, co, user, pid, payload):
+    """authorized → executed. Controlled 'the disbursement really happened'
+    action (actor/timestamp/method/reference/audit). SENSITIVE. This is what
+    makes the payment count toward invoice.payment_status — NOT the GL posting.
+    A future Bank & Treasury module will replace/confirm this without creating a
+    second financial object."""
+    d = await get_payment(db, ws, co, pid)
+    if d.get("payment_state") != "authorized":
+        raise HTTPException(status_code=409, detail=f"Seul un paiement autorisé peut être marqué exécuté (état « {d.get('payment_state')} »).")
+    exec_ref = (payload or {}).get("execution_reference")
+    exec_method = (payload or {}).get("execution_method") or d.get("method")
+    await db.ap_payments.update_one({"_id": pid}, {"$set": {
+        "payment_state": "executed", "executed_at": _now(), "executed_by": user.get("id"),
+        "execution_method": exec_method, "execution_reference": exec_ref,
+        "external_ref": (payload or {}).get("external_ref") or d.get("external_ref")},
+        "$push": {"audit": _pay_audit("execute", user, "authorized", "executed",
+                                      {"method": exec_method, "reference": exec_ref})}})
+    for a in d.get("allocations") or []:
+        if a.get("active", True):
+            await _recompute_invoice_payment(db, ws, co, a["invoice_id"])
+    return public_payment(await get_payment(db, ws, co, pid))
+
+
+async def post_payment(db, ws, co, user, pid):
+    """executed → posted. Canonical P2 journal: Dr Fournisseurs / Cr Banque
+    (+ realised FX). Balanced, atomic, idempotent. Locked/closed periods block
+    ONLY the accounting posting — the executed economic event is preserved."""
+    d = await get_payment(db, ws, co, pid)
+    if d.get("journal_entry_id"):
+        return public_payment(d)  # idempotent
+    if d.get("payment_state") != "executed":
+        raise HTTPException(status_code=409, detail="Seul un paiement exécuté peut être comptabilisé.")
+    period_id = d.get("period_id")
+    if not period_id:
+        allocs = d.get("allocations") or []
+        if allocs:
+            first_inv = await get_invoice(db, ws, co, allocs[0]["invoice_id"])
+            period_id = first_inv["period_id"]
+    if not period_id:
+        raise HTTPException(status_code=422, detail="Période comptable requise pour comptabiliser le paiement.")
+    period = await _get_period(db, ws, co, period_id)
+    await _assert_postable_period(db, ws, co, period)
+    mapping = await get_ap_mapping(db, ws, co)
+    pay_rate = d["fx"]["rate"]
+    gl, debits_func = [], 0.0
+    applied_total = 0.0
+    for a in d.get("allocations") or []:
+        if not a.get("active", True):
+            continue
+        ap_func = _fx.convert(a["amount_applied"], a.get("invoice_fx_rate") or pay_rate)  # AP relieved at INVOICE rate
+        if ap_func:
+            gl.append({"account": mapping["ap_account_code"], "description": "Règlement facture fournisseur",
+                       "debit": ap_func, "credit": 0, "txn_debit": a["amount_applied"], "txn_currency": d["currency"]})
+            debits_func += ap_func
+        applied_total += a["amount_applied"]
+    advance = _money(float(d["amount"]) - applied_total)
+    if advance > 0.001:  # unapplied advance sits in AP as a supplier prepayment (at payment rate)
+        adv_func = _fx.convert(advance, pay_rate)
+        gl.append({"account": mapping["ap_account_code"], "description": "Avance / paiement non affecté fournisseur",
+                   "debit": adv_func, "credit": 0, "txn_debit": advance, "txn_currency": d["currency"]})
+        debits_func += adv_func
+    bank_func = _fx.convert(d["amount"], pay_rate)
+    gl.append({"account": mapping["bank_account_code"], "description": "Décaissement bancaire",
+               "debit": 0, "credit": bank_func, "txn_credit": d["amount"], "txn_currency": d["currency"]})
+    diff = round(_money(debits_func) - bank_func, 2)  # realised FX to balance (functional)
+    realized = 0.0
+    if diff < -0.001:      # debits < credits → extra debit = FX loss
+        gl.append({"account": mapping["fx_loss_account_code"], "description": "Perte de change réalisée", "debit": -diff, "credit": 0})
+        realized = diff
+    elif diff > 0.001:     # debits > credits → extra credit = FX gain
+        gl.append({"account": mapping["fx_gain_account_code"], "description": "Gain de change réalisé", "debit": 0, "credit": diff})
+        realized = diff
+    je = await journal_service.create_workflow_journal_entry(
+        db, ws, co, user, financial_year_id=period.get("financial_year_id"), financial_period_id=period["_id"],
+        entry_date=d.get("value_date") or d["payment_date"], reference=f"PAY-{d['_id'][-8:]}",
+        description="Paiement fournisseur", lines=gl, external_id=d["_id"],
+        source_type="supplier_payment", source_system="purchases", transaction_currency=d["currency"], fx=d["fx"])
+    await db.ap_payments.update_one({"_id": pid}, {"$set": {
+        "payment_state": "posted", "journal_entry_id": je["_id"], "realized_fx": realized,
+        "posted_by": user.get("id"), "posted_at": _now()},
+        "$push": {"audit": _pay_audit("post", user, "executed", "posted")}})
+    return public_payment(await get_payment(db, ws, co, pid))
+
+
+async def allocate_advance(db, ws, co, user, pid, payload):
+    """Apply an executed/posted payment's UNAPPLIED amount to an invoice. A
+    distinct traceable event — never re-disburses cash nor re-posts a bank
+    movement (the advance already sits in AP)."""
+    d = await get_payment(db, ws, co, pid)
+    if d.get("payment_state") not in ("executed", "posted"):
+        raise HTTPException(status_code=409, detail="Seul un paiement exécuté peut être affecté.")
+    applied = _money(sum(float(a["amount_applied"] or 0) for a in d.get("allocations") or [] if a.get("active", True)))
+    unapplied = _money(float(d["amount"]) - applied)
+    inv = await get_invoice(db, ws, co, payload["invoice_id"])
+    if inv.get("supplier_id") != d["supplier_id"]:
+        raise HTTPException(status_code=422, detail="La facture n'appartient pas au fournisseur du paiement.")
+    if (inv.get("currency") or "").upper() != d["currency"]:
+        raise HTTPException(status_code=422, detail="Affectation dans la devise du paiement uniquement.")
+    amount = _money(payload.get("amount"))
+    if amount <= 0 or amount > unapplied + 0.001:
+        raise HTTPException(status_code=422, detail=f"Montant à affecter invalide (disponible : {unapplied}).")
+    open_bal = await _invoice_open_balance(inv)
+    if amount > open_bal + 0.001:
+        raise HTTPException(status_code=422, detail=f"Sur-affectation : {amount} > solde dû {open_bal}.")
+    alloc = {"id": f"alloc_{uuid.uuid4().hex}", "invoice_id": inv["_id"], "amount_applied": amount,
+             "currency": d["currency"], "invoice_fx_rate": (inv.get("fx") or {}).get("rate", 1.0),
+             "active": True, "allocated_at": _now(), "allocated_by": user.get("id")}
+    await db.ap_payments.update_one({"_id": pid}, {"$push": {"allocations": alloc,
+        "audit": _pay_audit("allocate", user, d["payment_state"], d["payment_state"], {"invoice_id": inv["_id"], "amount": amount})}})
+    await _recompute_invoice_payment(db, ws, co, inv["_id"])
+    return public_payment(await get_payment(db, ws, co, pid))
+
+
+# --------------------------------------------------------------------------- #
+# Supplier credit notes — own workflow + own canonical journal (reversal-style)
+# --------------------------------------------------------------------------- #
+def public_credit_note(d):
+    if not d:
+        return None
+    return {"id": d.get("_id"), "supplier_id": d.get("supplier_id"), "invoice_id": d.get("invoice_id"),
+            "number": d.get("number"), "status": d.get("status", "draft"), "currency": d.get("currency"), "fx": d.get("fx"),
+            "lines": d.get("lines") or [], "subtotal": d.get("subtotal"), "tax_total": d.get("tax_total"), "total": d.get("total"),
+            "period_id": d.get("period_id"), "financial_year_id": d.get("financial_year_id"),
+            "journal_entry_id": d.get("journal_entry_id"), "creates_supplier_credit": d.get("creates_supplier_credit", False),
+            "created_by": d.get("created_by"), "approved_by": d.get("approved_by"), "posted_by": d.get("posted_by"),
+            "created_at": d.get("created_at"), "audit": d.get("audit", [])}
+
+
+async def get_credit_note(db, ws, co, cid):
+    d = await db.ap_credit_notes.find_one({"_id": cid, "workspace_id": ws, "company_id": co})
+    if not d:
+        raise HTTPException(status_code=404, detail="Note de crédit fournisseur introuvable")
+    return d
+
+
+async def list_credit_notes(db, ws, co, *, invoice_id=None, supplier_id=None, status=None):
+    q = {"workspace_id": ws, "company_id": co}
+    if invoice_id:
+        q["invoice_id"] = invoice_id
+    if supplier_id:
+        q["supplier_id"] = supplier_id
+    if status:
+        q["status"] = status
+    docs = await db.ap_credit_notes.find(q).sort("created_at", -1).to_list(2000)
+    return [public_credit_note(d) for d in docs]
+
+
+async def create_credit_note(db, ws, co, user, payload):
+    """Autonomous AP credit against a POSTED supplier invoice. Reuses the
+    ORIGINAL invoice tax + FX snapshot (never recomputes with current rates).
+    Cumulative over-credit guard: billed − posted credits − pending credits −
+    new ≥ 0 per line."""
+    inv = await get_invoice(db, ws, co, payload["invoice_id"])
+    if inv.get("posting_status") != "posted":
+        raise HTTPException(status_code=409, detail="Note de crédit possible seulement sur une facture comptabilisée.")
+    req_lines = payload.get("lines") or []
+    if not req_lines:
+        raise HTTPException(status_code=422, detail="Au moins une ligne à créditer est requise.")
+    period = await _get_period(db, ws, co, payload.get("period_id") or inv["period_id"])
+    if period.get("status") == "closed":
+        raise HTTPException(status_code=409, detail="Période clôturée.")
+    # Pending (submitted/approved but not posted) credited amounts per line, to
+    # stop two users preparing a simultaneous over-credit.
+    pending = {}
+    async for cn in db.ap_credit_notes.find({"workspace_id": ws, "company_id": co,
+                                             "invoice_id": inv["_id"], "status": {"$in": ["submitted", "approved"]}}):
+        for ln in cn.get("lines") or []:
+            pending[ln["invoice_line_index"]] = pending.get(ln["invoice_line_index"], 0.0) + float(ln.get("net_credit") or 0)
+    out_lines, subtotal, tax_total = [], 0.0, 0.0
+    for rl in req_lines:
+        idx = int(rl.get("invoice_line_index"))
+        if idx < 0 or idx >= len(inv["lines"]):
+            raise HTTPException(status_code=422, detail="Ligne de facture invalide.")
+        src = inv["lines"][idx]
+        credit_net = _money(rl.get("net_credit"))
+        posted_credited = float(src.get("credited_net", 0.0))
+        remaining = _money(src["line_net"] - posted_credited - pending.get(idx, 0.0))
+        if credit_net <= 0:
+            raise HTTPException(status_code=422, detail="Montant à créditer invalide.")
+        if credit_net > remaining + 0.001:
+            raise HTTPException(status_code=422, detail=f"Sur-crédit interdit (ligne {idx}) : restant créditable {remaining} (crédits comptabilisés + en attente déduits).")
+        ratio = (credit_net / src["line_net"]) if src["line_net"] else 0
+        comps = [{"name": c["name"], "tax_type": c["tax_type"], "rate": c["rate"],
+                  "payable_account_code": c.get("payable_account_code") or c.get("account_code"),
+                  "amount": _money(c["amount"] * ratio)} for c in (src.get("tax") or {}).get("components", [])]
+        line_tax = _money(sum(c["amount"] for c in comps))
+        subtotal += credit_net
+        tax_total += line_tax
+        out_lines.append({"invoice_line_index": idx, "description": src.get("description", ""),
+                          "expense_account_code": src.get("expense_account_code"),
+                          "dimensions": src.get("dimensions") or {}, "net_credit": credit_net,
+                          "tax": {"components": comps, "tax_total": line_tax}})
+    subtotal, tax_total = _money(subtotal), _money(tax_total)
+    doc = {"_id": f"scn_{uuid.uuid4().hex}", "workspace_id": ws, "company_id": co, "number": None,
+           "supplier_id": inv["supplier_id"], "invoice_id": inv["_id"], "status": "draft",
+           "currency": inv["currency"], "fx": inv["fx"], "lines": out_lines,
+           "subtotal": subtotal, "tax_total": tax_total, "total": _money(subtotal + tax_total),
+           "period_id": period["_id"], "financial_period_id": period["_id"], "financial_year_id": period.get("financial_year_id"),
+           "created_by": user.get("id"), "created_at": _now(), "audit": [_pay_audit("create", user, None, "draft")]}
+    await db.ap_credit_notes.insert_one(doc)
+    return public_credit_note(doc)
+
+
+async def _require_cn_status(db, ws, co, cid, expected):
+    d = await get_credit_note(db, ws, co, cid)
+    if d.get("status") != expected:
+        raise HTTPException(status_code=409, detail=f"Transition impossible : statut « {d.get('status')} ».")
+    return d
+
+
+async def submit_credit_note(db, ws, co, user, cid):
+    await _require_cn_status(db, ws, co, cid, "draft")
+    await db.ap_credit_notes.update_one({"_id": cid}, {"$set": {"status": "submitted", "submitted_by": user.get("id")},
+        "$push": {"audit": _pay_audit("submit", user, "draft", "submitted")}})
+    return public_credit_note(await get_credit_note(db, ws, co, cid))
+
+
+async def approve_credit_note(db, ws, co, user, cid):
+    d = await _require_cn_status(db, ws, co, cid, "submitted")
+    if d.get("created_by") == user.get("id"):
+        raise HTTPException(status_code=403, detail="Séparation des tâches : le créateur ne peut pas approuver la note de crédit.")
+    await db.ap_credit_notes.update_one({"_id": cid}, {"$set": {"status": "approved", "approved_by": user.get("id")},
+        "$push": {"audit": _pay_audit("approve", user, "submitted", "approved")}})
+    return public_credit_note(await get_credit_note(db, ws, co, cid))
+
+
+async def post_credit_note(db, ws, co, user, cid):
+    """approved → posted. Canonical journal reversing the ORIGINAL charge lines
+    proportionally: Dr Fournisseurs / Cr Charge(s) / Cr Taxes récupérables (at
+    the ORIGINAL invoice rate). Immutable once posted."""
+    d = await get_credit_note(db, ws, co, cid)
+    if d.get("journal_entry_id"):
+        return public_credit_note(d)  # idempotent
+    if d.get("status") != "approved":
+        raise HTTPException(status_code=409, detail=f"Transition impossible : statut « {d.get('status')} ».")
+    period = await _get_period(db, ws, co, d["period_id"])
+    await _assert_postable_period(db, ws, co, period)
+    inv = await get_invoice(db, ws, co, d["invoice_id"])
+    mapping = await get_ap_mapping(db, ws, co)
+    rate = d["fx"]["rate"]
+    gl, credits_func = [], 0.0
+    for ln in d["lines"]:
+        net_func = _fx.convert(ln["net_credit"], rate)
+        if net_func:
+            gl.append({"account": ln.get("expense_account_code") or mapping["default_expense_account_code"],
+                       "description": "Crédit charge fournisseur", "debit": 0, "credit": net_func,
+                       "txn_credit": ln["net_credit"], "txn_currency": d["currency"]})
+            credits_func += net_func
+        for c in ln["tax"]["components"]:
+            amt_func = _fx.convert(c["amount"], rate)
+            if amt_func:
+                gl.append({"account": c.get("payable_account_code") or mapping["recoverable_tax_account_code"],
+                           "description": f"Crédit {c['name']}", "debit": 0, "credit": amt_func,
+                           "txn_credit": c["amount"], "txn_currency": d["currency"]})
+                credits_func += amt_func
+    ap_func = _money(credits_func)
+    gl.insert(0, {"account": mapping["ap_account_code"], "description": "Réduction comptes fournisseurs",
+                  "debit": ap_func, "credit": 0, "txn_debit": d["total"], "txn_currency": d["currency"]})
+    number = await _next_number(db, ws, co, "SCN", _now()[:4])
+    je = await journal_service.create_workflow_journal_entry(
+        db, ws, co, user, financial_year_id=d.get("financial_year_id"), financial_period_id=d["period_id"],
+        entry_date=_now()[:10], reference=number, description=f"Note de crédit fournisseur {number} (facture {inv.get('supplier_invoice_number')})",
+        lines=gl, external_id=cid, source_type="supplier_credit_note", source_system="purchases",
+        transaction_currency=d["currency"], fx=d["fx"])
+    for ln in d["lines"]:
+        inv["lines"][ln["invoice_line_index"]]["credited_net"] = _money(
+            inv["lines"][ln["invoice_line_index"]].get("credited_net", 0.0) + ln["net_credit"])
+    await db.ap_invoices.update_one({"_id": inv["_id"]}, {"$set": {"lines": inv["lines"]}})
+    # Available supplier credit if the invoice is now over-credited/over-relieved.
+    await _recompute_invoice_payment(db, ws, co, inv["_id"])
+    refreshed = await get_invoice(db, ws, co, inv["_id"])
+    creates_credit = float(refreshed.get("balance") or 0) <= 0.001 and (float(refreshed.get("credited_total") or 0) + float(refreshed.get("amount_paid") or 0)) > float(refreshed.get("total") or 0) + 0.001
+    credit_amount = _money(float(refreshed.get("credited_total") or 0) + float(refreshed.get("amount_paid") or 0) - float(refreshed.get("total") or 0)) if creates_credit else 0.0
+    if creates_credit:
+        await db.ap_supplier_credits.insert_one({
+            "_id": f"scr_{uuid.uuid4().hex}", "workspace_id": ws, "company_id": co, "supplier_id": inv["supplier_id"],
+            "currency": d["currency"], "amount": credit_amount, "remaining": credit_amount,
+            "source_credit_note_id": cid, "status": "available", "created_at": _now()})
+        await db.ap_suppliers.update_one({"_id": inv["supplier_id"]}, {"$inc": {"credit_balance": credit_amount}})
+    await db.ap_credit_notes.update_one({"_id": cid}, {"$set": {
+        "status": "posted", "number": number, "journal_entry_id": je["_id"], "posted_by": user.get("id"),
+        "posted_at": _now(), "creates_supplier_credit": creates_credit},
+        "$push": {"audit": _pay_audit("post", user, "approved", "posted")}})
+    return public_credit_note(await get_credit_note(db, ws, co, cid))
+
+
+# --------------------------------------------------------------------------- #
+# Aging AP + supplier synthetic view (derived from transactions; never stored)
+# --------------------------------------------------------------------------- #
+def _bucket(as_of, due):
+    try:
+        days = (datetime.fromisoformat(as_of) - datetime.fromisoformat(due)).days
+    except Exception:
+        days = 0
+    if days <= 0:
+        return "current"
+    return "d1_30" if days <= 30 else "d31_60" if days <= 60 else "d61_90" if days <= 90 else "d90_plus"
+
+
+async def aging(db, ws, co, as_of=None):
+    """Aging derived from canonical transactions at ``as_of``. Separates the
+    accounting AP (posted invoices) from operational commitments (approved but
+    not yet posted). Amounts kept per-currency + a functional consolidation."""
+    as_of = as_of or _now()[:10]
+    functional = await _functional_currency(db, ws, co)
+    empty = lambda: {"current": 0.0, "d1_30": 0.0, "d31_60": 0.0, "d61_90": 0.0, "d90_plus": 0.0}
+    accounting = empty()
+    approved_unposted = 0.0
+    rows = []
+    invs = await db.ap_invoices.find({"workspace_id": ws, "company_id": co,
+                                      "document_status": "approved"}).to_list(None)
+    for inv in invs:
+        bal = float(inv.get("balance") or 0)
+        if bal <= 0.001:
+            continue
+        rate = (inv.get("fx") or {}).get("rate", 1.0)
+        bal_func = _fx.convert(bal, rate)
+        due = inv.get("due_date") or inv.get("invoice_date") or as_of
+        if inv.get("posting_status") == "posted":
+            bkt = _bucket(as_of, due)
+            accounting[bkt] = _money(accounting[bkt] + bal_func)
+            rows.append({"invoice_id": inv["_id"], "supplier_id": inv["supplier_id"],
+                         "number": inv.get("supplier_invoice_number"), "currency": inv["currency"],
+                         "balance": _money(bal), "balance_functional": bal_func, "due_date": due,
+                         "bucket": bkt, "kind": "accounting", "journal_entry_id": inv.get("journal_entry_id")})
+        else:
+            approved_unposted = _money(approved_unposted + bal_func)
+            rows.append({"invoice_id": inv["_id"], "supplier_id": inv["supplier_id"],
+                         "number": inv.get("supplier_invoice_number"), "currency": inv["currency"],
+                         "balance": _money(bal), "balance_functional": bal_func, "due_date": due,
+                         "bucket": None, "kind": "approved_unposted", "journal_entry_id": None})
+    accounting_total = _money(sum(accounting.values()))
+    credits = await db.ap_supplier_credits.find({"workspace_id": ws, "company_id": co, "status": "available"}).to_list(None)
+    available_credits = _money(sum(float(c.get("remaining") or 0) for c in credits))
+    return {"as_of": as_of, "functional_currency": functional, "buckets": accounting,
+            "accounting_total": accounting_total, "approved_unposted": approved_unposted,
+            "available_credits": available_credits, "rows": rows}
+
+
+async def supplier_summary(db, ws, co, supplier_id, as_of=None):
+    """Compact supplier KPIs derived from transactions + drill-down anchors."""
+    as_of = as_of or _now()[:10]
+    functional = await _functional_currency(db, ws, co)
+    ag = await aging(db, ws, co, as_of=as_of)
+    rows = [r for r in ag["rows"] if r["supplier_id"] == supplier_id]
+    buckets = {"current": 0.0, "d1_30": 0.0, "d31_60": 0.0, "d61_90": 0.0, "d90_plus": 0.0}
+    overdue = 0.0
+    oldest_due = None
+    for r in rows:
+        if r["kind"] != "accounting":
+            continue
+        buckets[r["bucket"]] = _money(buckets[r["bucket"]] + r["balance_functional"])
+        if r["bucket"] != "current":
+            overdue = _money(overdue + r["balance_functional"])
+        if r["due_date"] and (oldest_due is None or r["due_date"] < oldest_due):
+            oldest_due = r["due_date"]
+    balance = _money(sum(buckets.values()))
+    approved_unposted = _money(sum(r["balance_functional"] for r in rows if r["kind"] == "approved_unposted"))
+    sup = await db.ap_suppliers.find_one({"_id": supplier_id, "workspace_id": ws, "company_id": co})
+    open_count = sum(1 for r in rows if r["kind"] == "accounting")
+    recent_pays = await db.ap_payments.find({"workspace_id": ws, "company_id": co, "supplier_id": supplier_id,
+        "payment_state": {"$in": ["executed", "posted"]}}).sort("executed_at", -1).to_list(5)
+    return {"supplier_id": supplier_id, "functional_currency": functional, "as_of": as_of,
+            "balance": balance, "buckets": buckets, "overdue": overdue, "oldest_due_date": oldest_due,
+            "approved_unposted": approved_unposted, "open_invoices_count": open_count,
+            "available_credits": _money(float((sup or {}).get("credit_balance") or 0)),
+            "recent_payments": [public_payment(p) for p in recent_pays]}
+
+
+# --------------------------------------------------------------------------- #
+# Payment batches — PREPARATION object only (never a proof of payment, never GL)
+# --------------------------------------------------------------------------- #
+_BATCH_STATES = ("draft", "prepared", "authorized", "processing", "completed", "partially_completed", "cancelled")
+
+
+def public_batch(d):
+    if not d:
+        return None
+    return {"id": d.get("_id"), "state": d.get("state", "draft"), "currency": d.get("currency"),
+            "lines": d.get("lines") or [], "snapshot_at": d.get("snapshot_at"),
+            "proposed_total": d.get("proposed_total"), "supplier_count": d.get("supplier_count"),
+            "invoice_count": d.get("invoice_count"), "note": d.get("note"),
+            "created_by": d.get("created_by"), "created_at": d.get("created_at"), "audit": d.get("audit", [])}
+
+
+async def propose_batch_candidates(db, ws, co, *, currency=None, supplier_id=None, due_before=None):
+    """Selectable approved invoices with an open balance (posted or not)."""
+    functional = await _functional_currency(db, ws, co)
+    q = {"workspace_id": ws, "company_id": co, "document_status": "approved"}
+    if supplier_id:
+        q["supplier_id"] = supplier_id
+    invs = await db.ap_invoices.find(q).sort("due_date", 1).to_list(2000)
+    out = []
+    for inv in invs:
+        bal = float(inv.get("balance") or 0)
+        if bal <= 0.001:
+            continue
+        if currency and (inv.get("currency") or "").upper() != currency.upper():
+            continue
+        if due_before and (inv.get("due_date") or "9999") > due_before:
+            continue
+        out.append({"invoice_id": inv["_id"], "supplier_id": inv["supplier_id"],
+                    "number": inv.get("supplier_invoice_number"), "currency": inv["currency"],
+                    "due_date": inv.get("due_date"), "open_balance": _money(bal),
+                    "posting_status": inv.get("posting_status")})
+    return {"functional_currency": functional, "candidates": out}
+
+
+async def create_batch(db, ws, co, user, payload):
+    """Freeze a batch snapshot from a selection. No cash out, no GL, no invoice
+    mutation. A batch NEVER means the invoices are paid."""
+    sel = payload.get("lines") or []
+    if not sel:
+        raise HTTPException(status_code=422, detail="Sélection vide.")
+    lines, total, suppliers, currency = [], 0.0, set(), None
+    for rl in sel:
+        inv = await get_invoice(db, ws, co, rl["invoice_id"])
+        if inv.get("document_status") != "approved":
+            raise HTTPException(status_code=409, detail="Seules des factures approuvées peuvent être mises en lot.")
+        cur = (inv.get("currency") or "").upper()
+        if currency is None:
+            currency = cur
+        amount = _money(rl.get("amount") if rl.get("amount") is not None else inv.get("balance"))
+        open_bal = await _invoice_open_balance(inv)
+        if amount <= 0 or amount > open_bal + 0.001:
+            raise HTTPException(status_code=422, detail=f"Montant proposé invalide pour {inv.get('supplier_invoice_number') or inv['_id']} (solde {open_bal}).")
+        lines.append({"invoice_id": inv["_id"], "supplier_id": inv["supplier_id"],
+                      "number": inv.get("supplier_invoice_number"), "currency": cur,
+                      "due_date": inv.get("due_date"), "open_balance": open_bal, "proposed_amount": amount})
+        total += amount
+        suppliers.add(inv["supplier_id"])
+    doc = {"_id": f"batch_{uuid.uuid4().hex}", "workspace_id": ws, "company_id": co, "state": "draft",
+           "currency": currency, "lines": lines, "proposed_total": _money(total),
+           "supplier_count": len(suppliers), "invoice_count": len(lines), "note": payload.get("note"),
+           "snapshot_at": _now(), "created_by": user.get("id"), "created_at": _now(),
+           "audit": [_pay_audit("create", user, None, "draft")]}
+    await db.ap_payment_batches.insert_one(doc)
+    return public_batch(doc)
+
+
+async def get_batch(db, ws, co, bid):
+    d = await db.ap_payment_batches.find_one({"_id": bid, "workspace_id": ws, "company_id": co})
+    if not d:
+        raise HTTPException(status_code=404, detail="Lot de paiement introuvable")
+    return d
+
+
+async def list_batches(db, ws, co, *, state=None):
+    q = {"workspace_id": ws, "company_id": co}
+    if state:
+        q["state"] = state
+    return [public_batch(d) for d in await db.ap_payment_batches.find(q).sort("created_at", -1).to_list(500)]
+
+
+async def _batch_transition(db, ws, co, user, bid, allowed_from, to, action):
+    d = await get_batch(db, ws, co, bid)
+    if d.get("state") not in allowed_from:
+        raise HTTPException(status_code=409, detail=f"Transition de lot impossible : « {d.get('state')} ».")
+    await db.ap_payment_batches.update_one({"_id": bid}, {"$set": {"state": to},
+        "$push": {"audit": _pay_audit(action, user, d.get("state"), to)}})
+    return await get_batch(db, ws, co, bid)
+
+
+async def prepare_batch(db, ws, co, user, bid):
+    return public_batch(await _batch_transition(db, ws, co, user, bid, ("draft",), "prepared", "prepare"))
+
+
+async def authorize_batch(db, ws, co, user, bid):
+    return public_batch(await _batch_transition(db, ws, co, user, bid, ("prepared",), "authorized", "authorize"))
+
+
+async def cancel_batch(db, ws, co, user, bid):
+    d = await get_batch(db, ws, co, bid)
+    if d.get("state") in ("processing", "completed", "partially_completed"):
+        raise HTTPException(status_code=409, detail="Un lot en cours/terminé ne peut être annulé.")
+    return public_batch(await _batch_transition(db, ws, co, user, bid, ("draft", "prepared", "authorized"), "cancelled", "cancel"))
+
+
+async def revalidate_batch(db, ws, co, bid):
+    """Re-check each snapshot line against the CURRENT state; surface exceptions
+    (invoice no longer approved / balance changed / already paid / supplier
+    inactive) without silently mutating the batch."""
+    d = await get_batch(db, ws, co, bid)
+    exceptions = []
+    for ln in d.get("lines") or []:
+        inv = await db.ap_invoices.find_one({"_id": ln["invoice_id"], "workspace_id": ws, "company_id": co})
+        if not inv:
+            exceptions.append({"invoice_id": ln["invoice_id"], "issue": "missing"})
+            continue
+        if inv.get("document_status") != "approved":
+            exceptions.append({"invoice_id": ln["invoice_id"], "issue": "not_approved", "status": inv.get("document_status")})
+        open_bal = await _invoice_open_balance(inv)
+        if abs(open_bal - float(ln.get("open_balance") or 0)) > 0.01:
+            exceptions.append({"invoice_id": ln["invoice_id"], "issue": "balance_changed",
+                               "snapshot": ln.get("open_balance"), "current": open_bal})
+        if open_bal <= 0.001:
+            exceptions.append({"invoice_id": ln["invoice_id"], "issue": "already_settled"})
+        sup = await db.ap_suppliers.find_one({"_id": inv["supplier_id"], "workspace_id": ws, "company_id": co})
+        if (sup or {}).get("status") == "inactive":
+            exceptions.append({"invoice_id": ln["invoice_id"], "issue": "supplier_inactive"})
+        if inv.get("po_required") and not inv.get("purchase_order_id"):
+            exceptions.append({"invoice_id": ln["invoice_id"], "issue": "po_missing"})
+    return {"batch_id": bid, "ok": len(exceptions) == 0, "exceptions": exceptions}
+
+
+async def ensure_a43_indexes(db):
+    await db.ap_payments.create_index([("workspace_id", 1), ("company_id", 1), ("supplier_id", 1)])
+    await db.ap_payments.create_index([("workspace_id", 1), ("company_id", 1), ("allocations.invoice_id", 1)])
+    await db.ap_payments.create_index([("workspace_id", 1), ("company_id", 1), ("payment_state", 1)])
+    await db.ap_credit_notes.create_index([("workspace_id", 1), ("company_id", 1), ("invoice_id", 1)])
+    await db.ap_supplier_credits.create_index([("workspace_id", 1), ("company_id", 1), ("supplier_id", 1)])
+    await db.ap_payment_batches.create_index([("workspace_id", 1), ("company_id", 1), ("state", 1)])
