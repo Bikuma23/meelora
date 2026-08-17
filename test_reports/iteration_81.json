@@ -1,0 +1,44 @@
+{
+  "summary": "A4.5 — Bons de commande + matching 2-way. Backend regression (11/11 tests) + frontend UI + isolation + no PO ledger, all PASS. Verified: maker-checker + accounting.po_approve gating, PO number PO-YYYY-#### on approve, partial match (invoicing_status=partially_invoiced, remaining=6000), over-invoicing exception + override refusé 409, fully_invoiced does NOT auto-close (po_status stays sent), explicit close via /close, cancel forbidden si factures liées, settings versionnés strict/standard/custom (Standard=amount_abs 1.0), isolation société (403 sur fake company), aucun ledger PO (compte inchangé), UX FR complet (po-page, tabs, KPIs, tolerance presets, options avancées repliées, création + soumission + approbation + envoi via boutons).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "detailed_results": {
+    "TEST_junior_create_submit": "PASS — POST /ap/purchase-orders (junior, 1x10000 EXEMPT) → po_status=draft; POST /submit → submitted.",
+    "TEST_junior_cannot_approve_own": "PASS — Junior POST /approve returns 403 (accounting.po_approve missing + SoD).",
+    "TEST_finance_approve_assigns_number": "PASS — Finance approve → po_status=approved, number matches PO-YYYY-####.",
+    "TEST_finance_send": "PASS — /send → sent.",
+    "TEST_partial_match": "PASS — Invoice 4000 CHF POST /match → matching_status=matched; PO invoicing_status=partially_invoiced, remaining_amount=6000, po_status stays sent.",
+    "TEST_over_invoicing_exception_and_override_refused": "PASS — Invoice 6100 CHF (cum 10100 > 10000) → matching_status=exception, exception_kind=over_invoicing. Finance override returns 409 'Sur-facturation : override interdit'.",
+    "TEST_explicit_close_and_no_auto": "PASS — After fully invoicing (1000/1000), invoicing_status=fully_invoiced but po_status stays sent (no auto-close). POST /close → po_status=closed.",
+    "TEST_cancel_blocked_when_linked": "PASS — /cancel on PO with linked invoices → 409.",
+    "TEST_settings_presets_and_versioning": "PASS — GET /ap/settings returns match_tolerance. PUT preset=strict → amount_abs=0.0, policy_version+1. PUT preset=standard → amount_abs=1.0, policy_version+2. PUT preset=custom amount_abs=5 → policy_version+3.",
+    "TEST_isolation_unknown_company": "PASS — GET/POST /ap/purchase-orders on unknown company id → 403/404.",
+    "TEST_no_journal_from_po": "PASS — Journal entries count identical before/after PO create+submit+approve+send (no ledger emitted by PO actions).",
+    "FRONTEND_navigation": "PASS — Comptabilité → Bons de commande ouvre /po-page. Tabs po-tab-overview/approve/all présents. KPIs po-kpi-approve/partial/total rendus (0/0/4 puis 5 après création).",
+    "FRONTEND_tolerance": "PASS — data-testid po-tolerance affiche 'Tolérance de rapprochement' avec po-tol-strict/standard/custom + po-tol-advanced-toggle. Après clic Standard, advanced 'Écart absolu 1 · % 0 · prix % 0 · qté 0 · v7' — policy_version bien incrémentée.",
+    "FRONTEND_create_flow": "PASS — po-new-toggle ouvre po-form (supplier select, qty, price, addline). po-form-create crée le PO (toast 'Bon de commande créé', ligne visible dans la liste). Onglet À approuver affiche po-approve-list."
+  },
+  "critical_code_review_comments": [
+    "Séparation po_status ⟂ invoicing_status bien respectée dans public_po() et _recompute_po_invoicing() — fully_invoiced n'écrit jamais po_status.",
+    "override_match refuse strictement exception_kind='over_invoicing' avant tout autre contrôle (ligne 351 po.py) — audit + reason stocké dans matching_result.overridden/override_reason/override_by.",
+    "assert_invoice_matchable est le seul hook A4.5 vers A4.2 (via lazy import dans ap.approve_invoice) — aucune posting ni journal_entries dans po.py (grep confirme).",
+    "cancel_po vérifie linked_invoice_ids AVANT tout changement d'état — 409 déterministe.",
+    "Tolerance preset merge (ligne 66-70) : les overrides custom écrasent la base preset, policy_version s'incrémente TOUJOURS même si valeurs identiques — comportement conforme au GATE (versionnement à chaque PUT).",
+    "Minor : approve_po (ligne 196) calcule seq = count_documents(number:{$ne:null})+1 — race possible en concurrence forte (deux approbations simultanées pourraient obtenir le même numéro). Non bloquant vu le débit AP attendu, mais un compteur atomique (findOneAndUpdate) serait plus robuste.",
+    "Minor : link_invoice (ligne 317-320) tolère po_status='partially_invoiced' via la logique in-liste mais la garde suivante ne l'accepte pas (redondance morte — le contrôle est fonctionnellement correct, juste illisible).",
+    "auto_match currency filter (ligne 340) comparé sans normalisation upper() sur .currency — déjà upper() dans compute_matching donc OK, mais la ligne 340 fait déjà .upper() des deux côtés."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_a4_5_purchase_orders.py",
+    "/app/test_reports/pytest/a45_results.xml"
+  ],
+  "action_items": [],
+  "updated_files": ["/app/backend/tests/test_a4_5_purchase_orders.py"],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% (nav + tabs + KPIs + tolerance + form + création + toast OK)"},
+  "test_credentials": "persona_finance@accslegro.com / persona123 (Meelora 965f0770-8cf2-4199-a99f-819ff270436a) ; persona_junior@accslegro.com / persona123.",
+  "seed_data_creation": "Backend tests: ~5 POs de test (TEST-A45-*) + ~4 factures fournisseur AP (TEST-A45-*) créés sur Meelora / fp_meelora_2026_01. 2 POs terminaux (closed, cancelled non atteint car bloqué), 1 PO 'sent' avec factures liées (exception over_invoicing). Frontend: 1 PO supplémentaire créé via l'UI (supplier sup_29e6f59905e643f1802d691d51ce52e6, 1x500 CHF). Aucun endpoint delete disponible (déjà noté iter 79/80). Aucune écriture GL générée par ces POs (vérifié).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "A4.5 pleinement fonctionnel. Pour rejouer : REACT_APP_BACKEND_URL=<url> pytest /app/backend/tests/test_a4_5_purchase_orders.py -v -n 0. Notes : (1) pytest.ini force -n 2 --dist loadscope ; utiliser -n 0 pour cette suite car les classes partagent l'état (pytest.po_id, pytest.match_po). (2) La navigation frontend passe par Comptabilité → Bons de commande dans la sidebar (composant Layout.js — le menu est fermé par défaut). (3) Aucun test A4.4 (Document AI) n'est requis pour valider A4.5 — le matching est totalement indépendant de l'IA.",
+  "rca of the issue": "N/A — aucun défaut détecté sur A4.5."
+}

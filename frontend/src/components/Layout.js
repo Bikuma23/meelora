@@ -39,6 +39,7 @@ const importComptabilite = () => import("../pages/Comptabilite");
 const importAccountingA1 = () => import("../pages/AccountingA1");
 const SalesAR = lazy(importSalesAR);
 const PurchasesAP = lazy(importPurchasesAP);
+const PurchaseOrders = lazy(() => import("../pages/PurchaseOrders"));
 const AcctDashboard = lazy(() => importComptabilite().then((m) => ({ default: m.AcctDashboard })));
 const AcctBV = lazy(() => importComptabilite().then((m) => ({ default: m.AcctBV })));
 const AcctBilan = lazy(() => importComptabilite().then((m) => ({ default: m.AcctBilan })));
@@ -102,7 +103,7 @@ const PAGES = {
   acct_apercu: { title: "Aperçu", sub: "Comptabilité", comp: makePlaceholder("Aperçu comptable", "Vue d'ensemble du module Comptabilité (à venir).") },
   acct_sales: { title: "Ventes & Clients", sub: "Comptabilité", comp: SalesAR },
   acct_purchases: { title: "Achats & Fournisseurs", sub: "Comptabilité", comp: PurchasesAP },
-  acct_po: { title: "Bons de commande", sub: "Comptabilité", comp: makePlaceholder("Bons de commande") },
+  acct_po: { title: "Bons de commande", sub: "Comptabilité", comp: PurchaseOrders },
   acct_bank: { title: "Banque & Trésorerie", sub: "Comptabilité", comp: makePlaceholder("Banque & Trésorerie") },
   acct_entries: { title: "Écritures comptables", sub: "Grand livre", comp: AcctEntries },
   acct_ledger: { title: "Grand livre", sub: "Comptabilité", comp: makePlaceholder("Grand livre") },

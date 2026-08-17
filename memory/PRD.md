@@ -1720,3 +1720,15 @@ Extraction IA de factures fournisseurs comme couche d'ASSISTANCE (STRAT-01 §10)
 - Doc de gouvernance : `memory/A4_4_GOVERNANCE_SCOPING.md`. Tests : `test_reports/iteration_80.json` (backend 5/5, frontend 100%, 0 bug).
 
 **Prérequis d'ACTIVATION réelle (non faits)** : provider BYO conforme configuré + **attestation écrite** (non-entraînement, rétention, DPA/sous-traitants, région UE/CH, chiffrement, suppression) → puis câblage du vrai appel vision dans une tranche ultérieure. **STOP après A4.4 — A4.5 non démarré.**
+
+### A4.5 — Bons de commande (PO) + Matching 2-way (LIVRÉ — 2026-06)
+Contrôle financier AP (pas de procurement/ERP). Construit sur A4.1–A4.4 + P2. Aucun ledger PO.
+- **Objet PO** (`ap_purchase_orders`) : numéro PO-YYYY-#### (à l'approbation), lignes avec `line_id` stable + taxes (moteur fiscal), FX snapshot, pièces jointes, approbateurs, factures liées, invoiced/remaining dérivés. **`po_status` ⟂ `invoicing_status`** (indépendants). `closed` **explicite** (jamais auto). **Annulation interdite si facture liée**.
+- **Matrice d'approbation + tolérance** : `company_ap_settings` **versionnée** (matrix_version / policy_version). Tolérance presets **Strict/Standard/Personnalisé**, Standard=CHF 1.00 abs. `required_levels` par montant (contre-valeur fonctionnelle), extensible multi-niveaux.
+- **Matching 2-way déterministe** : fournisseur/devise/total + cumul facturé ; statut ∈ matched/within_tolerance/exception(over_invoicing|tolerance|mismatch)/partial. **Anti sur-facturation** (Σ ≤ total PO). Auto-association PO (société active, unique+fiable). A4.4 = hint, jamais décideur.
+- **Override** `accounting.po_match_override` (sensible) : accepte exception tolérance/mismatch + motif + audit ; **REFUSE la sur-facturation** (→ amendement/ré-approbation PO).
+- **P1.13** : approbation PO = `accounting.po_approve` (sensible, maker-checker, aucun bypass). Hook `assert_invoice_matchable` bloque l'approbation facture si matching non validé / PO obligatoire manquant. **Posting facture inchangé (A4.2/P2)**.
+- **UX** : page Bons de commande (Aperçu | À approuver | Bons de commande) + KPIs + sélecteur de tolérance (avancé replié). Happy Path 1 décision, Exceptions First.
+- Endpoints : `/ap/settings`, `/ap/purchase-orders(+/{id}/{submit|approve|reject|send|cancel|close})`, `/ap/invoices/{id}/{match|auto-match|match-override}`. Fichiers : `core/accounting/po.py`, `pages/PurchaseOrders.js`. Tests : `test_reports/iteration_81.json` (backend 11/11, frontend 100%, 0 bug).
+
+**STOP après A4.5 — A4.6 et Swiss Country Pack NON démarrés.**

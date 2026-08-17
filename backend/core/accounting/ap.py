@@ -355,6 +355,8 @@ async def approve_invoice(db, ws, co, user, invoice_id):
         raise HTTPException(status_code=403, detail="Séparation des tâches : le créateur ne peut pas approuver sa facture.")
     if not await _assert_po_ok(d):
         raise HTTPException(status_code=409, detail="PO obligatoire manquant : approbation bloquée.")
+    from . import po as _po  # A4.5 matching enforcement (lazy import, no circular dep)
+    await _po.assert_invoice_matchable(db, ws, co, d)
     dup = await check_duplicate(db, ws, co, d.get("supplier_id"), d.get("supplier_invoice_number"), exclude_id=invoice_id)
     if dup:
         raise HTTPException(status_code=409, detail=f"Doublon certain : approbation bloquée ({dup}).")

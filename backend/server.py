@@ -153,6 +153,7 @@ from core.accounting import gl as gl_service
 from core.accounting import ar as ar_service
 from core.accounting import ap as ap_service
 from core.accounting import ap_extraction as ap_ai
+from core.accounting import po as po_service
 from core.compliance import jurisdiction as jurisdiction_service
 from core.accounting import dunning as dunning_service
 from core.financial import documents as doc_service
@@ -4119,6 +4120,156 @@ async def ap_list_extractions(company_id: str, invoice_id: Optional[str] = None,
 async def ap_extraction_corrections(company_id: str, xid: str, payload: APCorrectionsIn, user: dict = Depends(get_current_user)):
     ws = await _ar_write_scope(company_id, user)
     return await ap_ai.apply_corrections(db, ws, company_id, user, xid, [c.model_dump() for c in payload.corrections])
+
+
+# ---- A4.5 Purchase Orders + 2-way matching -------------------------------
+class POLineIn(BaseModel):
+    line_id: Optional[str] = None
+    description: Optional[str] = ""
+    qty: Optional[float] = 1
+    unit_price: Optional[float] = 0
+    tax_code: Optional[str] = "EXEMPT"
+    expense_account_code: Optional[str] = None
+    dimensions: Optional[dict] = None
+
+
+class POIn(BaseModel):
+    supplier_id: str
+    currency: Optional[str] = None
+    fx_rate: Optional[float] = None
+    po_date: Optional[str] = None
+    po_owner_id: Optional[str] = None
+    note: Optional[str] = None
+    reference: Optional[str] = None
+    lines: List[POLineIn] = []
+
+
+class POUpdateIn(BaseModel):
+    note: Optional[str] = None
+    reference: Optional[str] = None
+    po_owner_id: Optional[str] = None
+    lines: Optional[List[POLineIn]] = None
+
+
+class PORejectIn(BaseModel):
+    reason: Optional[str] = None
+
+
+class POLinkIn(BaseModel):
+    po_id: str
+
+
+class POAutoMatchIn(BaseModel):
+    po_reference_text: Optional[str] = None
+
+
+class POOverrideIn(BaseModel):
+    reason: str
+
+
+class APSettingsIn(BaseModel):
+    po_approval_matrix: Optional[dict] = None
+    match_tolerance: Optional[dict] = None
+
+
+@api.get("/companies/{company_id}/ap/settings")
+async def ap_get_settings(company_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await po_service.get_ap_settings(db, ws, company_id)
+
+
+@api.put("/companies/{company_id}/ap/settings")
+async def ap_set_settings(company_id: str, payload: APSettingsIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await po_service.set_ap_settings(db, ws, company_id, user, payload.model_dump(exclude_unset=True))
+
+
+@api.get("/companies/{company_id}/ap/purchase-orders")
+async def po_list(company_id: str, po_status: Optional[str] = None, supplier_id: Optional[str] = None,
+                  user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"purchase_orders": await po_service.list_pos(db, ws, company_id, po_status=po_status, supplier_id=supplier_id)}
+
+
+@api.get("/companies/{company_id}/ap/purchase-orders/{pid}")
+async def po_get(company_id: str, pid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return po_service.public_po(await po_service.get_po(db, ws, company_id, pid))
+
+
+@api.post("/companies/{company_id}/ap/purchase-orders")
+async def po_create(company_id: str, payload: POIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    po = await po_service.create_po(db, ws, company_id, user, payload.model_dump(exclude_unset=True))
+    await log_action(user, "create", "ap_purchase_order", po["id"], company_id=company_id, entity_id=po["id"], event_type="ap.po.created")
+    return po
+
+
+@api.patch("/companies/{company_id}/ap/purchase-orders/{pid}")
+async def po_update(company_id: str, pid: str, payload: POUpdateIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await po_service.update_po(db, ws, company_id, user, pid, payload.model_dump(exclude_unset=True))
+
+
+@api.post("/companies/{company_id}/ap/purchase-orders/{pid}/submit")
+async def po_submit(company_id: str, pid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await po_service.submit_po(db, ws, company_id, user, pid)
+
+
+@api.post("/companies/{company_id}/ap/purchase-orders/{pid}/approve")
+async def po_approve(company_id: str, pid: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.po_approve", workspace_id=ws)
+    po = await po_service.approve_po(db, ws, company_id, user, pid)
+    await log_action(user, "approve", "ap_purchase_order", pid, company_id=company_id, entity_id=pid, event_type="ap.po.approved")
+    return po
+
+
+@api.post("/companies/{company_id}/ap/purchase-orders/{pid}/reject")
+async def po_reject(company_id: str, pid: str, payload: PORejectIn, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.po_approve", workspace_id=ws)
+    return await po_service.reject_po(db, ws, company_id, user, pid, payload.reason)
+
+
+@api.post("/companies/{company_id}/ap/purchase-orders/{pid}/send")
+async def po_send(company_id: str, pid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await po_service.send_po(db, ws, company_id, user, pid)
+
+
+@api.post("/companies/{company_id}/ap/purchase-orders/{pid}/cancel")
+async def po_cancel(company_id: str, pid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await po_service.cancel_po(db, ws, company_id, user, pid)
+
+
+@api.post("/companies/{company_id}/ap/purchase-orders/{pid}/close")
+async def po_close(company_id: str, pid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await po_service.close_po(db, ws, company_id, user, pid)
+
+
+@api.post("/companies/{company_id}/ap/invoices/{invoice_id}/match")
+async def po_link_invoice(company_id: str, invoice_id: str, payload: POLinkIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await po_service.link_invoice(db, ws, company_id, user, invoice_id, payload.po_id)
+
+
+@api.post("/companies/{company_id}/ap/invoices/{invoice_id}/auto-match")
+async def po_auto_match(company_id: str, invoice_id: str, payload: POAutoMatchIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await po_service.auto_match(db, ws, company_id, user, invoice_id, payload.po_reference_text)
+
+
+@api.post("/companies/{company_id}/ap/invoices/{invoice_id}/match-override")
+async def po_match_override(company_id: str, invoice_id: str, payload: POOverrideIn, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.po_match_override", workspace_id=ws)
+    inv = await po_service.override_match(db, ws, company_id, user, invoice_id, payload.reason)
+    await log_action(user, "override", "ap_invoice_match", invoice_id, details=payload.reason, company_id=company_id, entity_id=invoice_id, event_type="ap.match.overridden")
+    return inv
 
 
 
@@ -10483,6 +10634,7 @@ async def startup():
         await ap_service.ensure_indexes(db)
         await ap_service.ensure_a43_indexes(db)
         await ap_ai.ensure_a44_indexes(db)
+        await po_service.ensure_a45_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     # P1.13A — seed Meelora workspace entitlements (availability only; grants no
