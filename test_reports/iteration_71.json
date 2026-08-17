@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend-only fidelity + navigation testing of the redesigned Company Home (Accueil) page. All 10 requested checks pass on the live preview URL. Layout matches the final left-aligned mockup with the 124px logo tile, dominant user name, green status pill (CheckCircle2), watermark at ~5% opacity on a light-grey body background. No 'Point d'entrée du mandat' text anywhere on the page or sidebar. Sidebar item Accueil (nav-company_home) is present, active on the Home page, and correctly returns from module views. Deterministic landing works: persona_finance (mono) → /company/<id>/home directly; admin (multi) → Tous les mandats then Accéder → company-home with correct name. Module click opens a flyout popover (flyout-ACCOUNTING), not an accordion. Mandate switcher updates the active mandate and reloads the correct home. Refresh on the /home URL stays deterministic (no rebound to a module). No JS console errors related to Home; one unrelated 404 on a non-critical resource.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_ok": [
+    "Mono-mandat landing: persona_finance@accslegro.com → https://.../company/965f0770-.../home directly, company-home rendered (no bounce to Comptabilité).",
+    "Header: 'Bonjour' visible, company-home-user='Persona E — Responsable financier' (dominant text-5xl), company-home-name='meelora' with green company-home-status-active (CheckCircle2), company-home-address='25 avenue Dumas, Genève, Genève, 1206, CH'.",
+    "No 'Point d'entrée du mandat' text on the page (count=0) and none in the sidebar (aside filter count=0).",
+    "No capsule/pill wrapper around identity: company block class = 'mt-2 flex items-center gap-2' (no rounded/bg-* pill).",
+    "Watermark: company-home-watermark present with computed opacity 0.05; body background stays rgb(243,244,246) — light, not dark blue.",
+    "Sidebar Accueil: [data-testid=nav-company_home] present, visible, active on Home; module ACCOUNTING opens flyout-ACCOUNTING as popover (verified visible after click).",
+    "Return path: click a submodule (Aperçu) → leaves company-home, then click nav-company_home → company-home re-mounts.",
+    "KPIs: 5 KPI cards render (kpi-acc.revenue_month, revenue_ytd, open_invoices, collections_month, active_customers) with proper Ventes numbers (CHF), no empty cards; company-home-kpi-hint visible.",
+    "Quick actions (company-home-quick-actions with 4 buttons: Nouvelle facture, Paiements reçus, Clients, Rapports), Activités récentes (company-home-recent, 6+ entries) and À savoir panel (company-home-info, 3 entries) all present and populated.",
+    "Refresh determinism: reload on /company/<id>/home stays on the same URL and re-renders company-home (no redirect to a module).",
+    "Multi-mandat admin@accslegro.com: lands on 'Tous les mandats' (text count=2, company-home count=0). Clicking Accéder navigates to /company/58a59a28-.../home with company-home-name='9434-3977 QC inc.'.",
+    "Mandat switcher: [data-testid=mandat-switcher] opens list of mandat-switch-<id> options; selecting a different one navigates to that company's /home and updates company-home-name (validated: switched to 'TEST NoLogo 1196753', URL changed, home re-mounted, no cross-company leak observed)."
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "CompanyHome.js: consider capping visible mandat-switch options or filtering out demo/QA sandbox companies (currently 4 entries incl. 'TEST NoLogo …' surface for admin) — not a bug but noisy UX."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100% (10/10 checks passing)"},
+  "test_credentials": "persona_finance@accslegro.com / persona123 (mono-mandat, meelora), admin@accslegro.com / admin123 (multi-mandat). Both valid on preview URL.",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Company Home redesign fully validated (layout, watermark, status pill, sidebar Accueil, mono/multi landing determinism, mandate switcher). No pending frontend or backend issues from this pass. If next iteration touches the KPI registry or the /home aggregator, revalidate KPI codes and destinations against Layout.js route table.",
+  "rca of the issue": "N/A — no defects found in this iteration."
+}

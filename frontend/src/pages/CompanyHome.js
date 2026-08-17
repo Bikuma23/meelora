@@ -79,26 +79,37 @@ export default function CompanyHome() {
   const gridCols = kpis.length >= 5 ? "lg:grid-cols-5" : kpis.length === 4 ? "lg:grid-cols-4" : kpis.length === 3 ? "lg:grid-cols-3" : kpis.length === 2 ? "sm:grid-cols-2" : "sm:grid-cols-1";
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8" data-testid="company-home">
-      {/* Welcome header — the connected user is primary; the mandate is smaller. */}
-      <div className="flex flex-col items-center py-8 text-center" data-testid="company-home-header">
-        <p className="text-sm font-500 tracking-wide text-slate-400">{t("Bonjour")}</p>
-        <h1 className="font-display mt-1 text-4xl font-800 tracking-tight text-[#063044] sm:text-5xl" data-testid="company-home-user">{userName}</h1>
-        <div className="mt-5 flex items-center gap-2.5 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm" data-testid="company-home-company">
-          <CompanyLogo cid={activeCompanyId} hasLogo={c.branding?.has_logo} name={c.name} size={36} />
-          <span className="text-base font-700 text-[#0F172A]" data-testid="company-home-name">{c.name}</span>
-        </div>
-        <p className="mt-2 text-xs font-500 uppercase tracking-wide text-slate-400" data-testid="company-home-entrypoint">{t("Point d'entrée du mandat")}</p>
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-500">
-          {(c.address || locality || c.country) && (
-            <span className="flex items-center gap-1.5" data-testid="company-home-address">
-              <MapPin size={13} className="text-slate-400" />
-              {[c.address, locality, c.postal_code, c.country].filter(Boolean).join(" · ")}
-            </span>
-          )}
-          {c.phone && <span className="flex items-center gap-1.5" data-testid="company-home-phone"><Phone size={13} className="text-slate-400" /> {c.phone}</span>}
-          {c.email && <span className="flex items-center gap-1.5" data-testid="company-home-email"><Mail size={13} className="text-slate-400" /> {c.email}</span>}
-          {c.website && <a href={c.website} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 hover:text-[#22C55E]" data-testid="company-home-website"><Globe size={13} className="text-slate-400" /> {c.website.replace(/^https?:\/\//, "")}</a>}
+    <div className="relative overflow-hidden" data-testid="company-home">
+      {/* Meelora watermark — extremely light, right/back of the content; the dashboard keeps its near-white background. */}
+      <img src="/meelora-mark.png" alt="" aria-hidden="true" data-testid="company-home-watermark"
+        className="pointer-events-none absolute -top-8 right-0 w-[380px] max-w-[52%] select-none opacity-[0.05]" />
+
+      <div className="relative mx-auto max-w-6xl space-y-8">
+      {/* Welcome header — user is primary; the mandate is secondary. Left-aligned per the final mockup. */}
+      <div className="flex flex-col items-start gap-5 py-6 sm:flex-row sm:items-center sm:gap-7" data-testid="company-home-header">
+        <CompanyLogo cid={activeCompanyId} hasLogo={c.branding?.has_logo} name={c.name} size={124} rounded="rounded-2xl" />
+        <div className="min-w-0">
+          <p className="text-sm font-500 tracking-wide text-slate-400">{t("Bonjour")}</p>
+          <h1 className="font-display mt-0.5 text-4xl font-800 leading-tight tracking-tight text-[#063044] sm:text-5xl" data-testid="company-home-user">{userName}</h1>
+          <div className="mt-2 flex items-center gap-2" data-testid="company-home-company">
+            <span className="text-xl font-700 text-[#0F172A] sm:text-2xl" data-testid="company-home-name">{c.name}</span>
+            {c.status === "active"
+              ? <CheckCircle2 size={20} className="shrink-0 fill-emerald-500 text-white" data-testid="company-home-status-active" />
+              : <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-slate-300" data-testid="company-home-status-neutral" />}
+          </div>
+          <div className="mt-4 flex flex-col gap-y-2 text-sm text-slate-500">
+            {(c.address || locality || c.country) && (
+              <span className="flex items-center gap-2" data-testid="company-home-address">
+                <MapPin size={14} className="shrink-0 text-slate-400" />
+                {[c.address, locality, c.postal_code, c.country].filter(Boolean).join(", ")}
+              </span>
+            )}
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+              {c.phone && <span className="flex items-center gap-2" data-testid="company-home-phone"><Phone size={14} className="shrink-0 text-slate-400" /> {c.phone}</span>}
+              {c.email && <span className="flex items-center gap-2" data-testid="company-home-email"><Mail size={14} className="shrink-0 text-slate-400" /> {c.email}</span>}
+              {c.website && <a href={c.website} target="_blank" rel="noreferrer" className="flex items-center gap-2 hover:text-[#22C55E]" data-testid="company-home-website"><Globe size={14} className="shrink-0 text-slate-400" /> {c.website.replace(/^https?:\/\//, "")}</a>}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -173,6 +184,7 @@ export default function CompanyHome() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

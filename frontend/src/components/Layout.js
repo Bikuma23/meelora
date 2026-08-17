@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
 import { useLang } from "../context/LanguageContext";
 import {
-  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight, Minimize2, HelpCircle, Bell, Camera, Trash2, Pencil, AlertTriangle, Layers, Globe, ShieldAlert, Loader2,
+  LayoutDashboard, Users, DollarSign, Settings, Building2, FileText, ScrollText, LogOut, Briefcase, Plus, CalendarRange, ShieldCheck, Menu, X, UserCog, ChevronUp, ChevronDown, ChevronRight, Minimize2, HelpCircle, Bell, Camera, Trash2, Pencil, AlertTriangle, Layers, Globe, ShieldAlert, Loader2, Home,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
@@ -49,7 +49,7 @@ const PAGES = {
   access: { title: "Utilisateurs et accès", sub: "Invitations & permissions", comp: AccessManagement },
   logs: { title: "Logs", sub: "Historique des activités", comp: Logs },
   preferences: { title: "Mon profil", sub: "Préférences & apparence", comp: Preferences },
-  company_home: { title: "Accueil", sub: "Point d'entrée du mandat", comp: CompanyHome },
+  company_home: { title: "Accueil", sub: "Vue d'ensemble du mandat", comp: CompanyHome },
   acct_dashboard: { title: "Tableau de bord", sub: "Vue d'ensemble du mois", comp: AcctDashboard },
   acct_bv: { title: "Balance de vérification", sub: "Upload & gestion mensuelle", comp: AcctBV },
   acct_bilan: { title: "Bilan", sub: "État de situation financière", comp: AcctBilan },
@@ -357,7 +357,7 @@ function NavItem({ item, active, onClick }) {
       </span>
       <span className="min-w-0">
         <span className={`block truncate text-sm ${on ? "font-700" : "font-600"}`}>{t(item.label)}</span>
-        <span className={`block truncate text-[11px] ${on ? "text-[#22C55E]" : "text-slate-400"}`}>{t(item.sub)}</span>
+        {item.sub ? <span className={`block truncate text-[11px] ${on ? "text-[#22C55E]" : "text-slate-400"}`}>{t(item.sub)}</span> : null}
       </span>
     </button>
   );
@@ -532,6 +532,10 @@ function DynamicCompanyNav({ manifest, active, go, companies, activeCompanyId, e
   return (
     <div data-testid="company-nav">
       <MandatSwitcher companies={companies} activeCompanyId={activeCompanyId} active={active} go={go} enterMandat={enterMandat} />
+
+      {activeCompanyId && !choosing && (
+        <NavItem item={{ key: "company_home", label: "Accueil", sub: "", icon: Home }} active={active} onClick={go} />
+      )}
 
       {!activeCompanyId && !choosing && (
         <p className="px-3 py-6 text-xs text-slate-400" data-testid="company-nav-choose">Choisissez un mandat dans « Tous les mandats » pour afficher ses modules.</p>
@@ -768,9 +772,7 @@ function LayoutInner() {
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            {!isPlatformPage && !isPlaceholderPage && !active.startsWith("acct_") && active !== "company_home" && <span className="hidden rounded-full bg-[#22C55E]/10 px-3 py-1 text-xs font-600 text-[#22C55E] sm:inline-flex">{t("Budget actif")}</span>}
-            {!isPlatformPage && !isPlaceholderPage && !active.startsWith("acct_") && active !== "company_home" && <YearControls />}
-            <div className="ml-1 flex items-center gap-1 border-l border-slate-200 pl-2">
+            <div className="flex items-center gap-1">
               <button data-testid="header-help-btn" title={t("Aide")} className="hidden rounded-full p-2 text-slate-500 transition-colors hover:bg-[#F3F4F6] hover:text-[#0F172A] sm:block"><HelpCircle size={18} /></button>
               <NotificationsBell go={go} />
               <UserMenu user={user} logout={logout} go={go} t={t} adminView={!!navManifest?.admin_view} />

@@ -2822,6 +2822,7 @@ async def get_company_home(company_id: str, user: dict = Depends(get_current_use
         "email": company.get("email"), "website": company.get("website"),
         "currency": company.get("functional_currency") or company.get("currency"),
         "industry": company.get("industry"),
+        "status": company.get("status", "active" if company.get("active", True) else "inactive"),
         "branding": {"has_logo": bool((company.get("branding") or {}).get("logo_document_id"))},
     }
     kpis = None
