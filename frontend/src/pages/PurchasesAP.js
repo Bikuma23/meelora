@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { Loader2, Plus, Trash2, Building2, Inbox, FileText, Banknote, FileMinus, Clock, LayoutDashboard, Sparkles } from "lucide-react";
+import { Loader2, Plus, Trash2, Building2, Inbox, FileText, Banknote, FileMinus, Clock, LayoutDashboard, Sparkles, Scale, RefreshCw, CheckCircle2, AlertTriangle, HelpCircle } from "lucide-react";
 
 const money = (v, c) => `${Number(v || 0).toFixed(2)} ${c || ""}`.trim();
 const errMsg = (e) => {
@@ -32,6 +32,8 @@ const TABS = [
   { key: "payments", label: "Paiements", icon: Banknote },
   { key: "credits", label: "Crédits", icon: FileMinus },
   { key: "aging", label: "Aging", icon: Clock },
+  { key: "revaluation", label: "Réévaluation FX", icon: RefreshCw },
+  { key: "reconciliation", label: "Réconciliation", icon: Scale },
 ];
 
 const SUP_SECTIONS = [
@@ -77,6 +79,8 @@ export default function PurchasesAP() {
         : tab === "payments" ? <PaymentsTab cid={cid} initialView={payView} />
         : tab === "credits" ? <CreditsTab cid={cid} />
         : tab === "aging" ? <AgingTab cid={cid} />
+        : tab === "revaluation" ? <RevaluationTab cid={cid} />
+        : tab === "reconciliation" ? <ReconciliationTab cid={cid} />
         : <ComingSoon label={TABS.find((t) => t.key === tab)?.label} />}
     </div>
   );
@@ -1030,6 +1034,247 @@ function AgingTab({ cid }) {
               </table>
             </div>
             <p className="text-xs text-slate-400">Soldes dérivés des transactions comptabilisées à la date d'analyse. « Approuvé à comptabiliser » représente l'exposition opérationnelle (factures approuvées non encore comptabilisées) et n'est pas mélangé au solde comptable.</p>
+          </>
+        )}
+    </div>
+  );
+}
+
+
+
+// A4.6 — Unrealized FX revaluation. UX: Calculate → verify exceptions → Post.
+// The historical AP control account is never touched; posting is a sensitive act.
+function RevaluationTab({ cid }) {
+  const [periods, setPeriods] = useState([]);
+  const [runs, setRuns] = useState([]);
+  const [asOf, setAsOf] = useState("");
+  const [periodId, setPeriodId] = useState("");
+  const [current, setCurrent] = useState(null);
+  const [why, setWhy] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!cid) return;
+    setLoading(true);
+    try {
+      const [per, rv] = await Promise.all([api.glPeriods(cid), api.apRevaluations(cid)]);
+      const ps = per.periods || per || [];
+      setPeriods(ps); setRuns(rv.revaluations || []);
+      if (!periodId && ps.length) {
+        const openPs = ps.filter((p) => p.status === "open");
+        setPeriodId((openPs[0] || ps[ps.length - 1]).id);
+      }
+    } catch (e) { /* gated */ }
+    setLoading(false);
+  }, [cid]); // eslint-disable-line
+  useEffect(() => { load(); }, [load]);
+
+  const calc = async () => {
+    if (!periodId) { toast.error("Choisissez une période."); return; }
+    setBusy(true);
+    try {
+      const r = await api.apCalculateRevaluation(cid, { as_of: asOf || undefined, period_id: periodId });
+      setCurrent(r); setWhy(false);
+      if (r.already_posted) toast.info("Une réévaluation est déjà comptabilisée pour cette date/période.");
+      else toast.success(`Calcul terminé — ${r.totals?.position_count || 0} position(s).`);
+    } catch (e) { toast.error(errMsg(e)); }
+    setBusy(false);
+  };
+  const post = async () => {
+    setBusy(true);
+    try {
+      const r = await api.apPostRevaluation(cid, current.id);
+      setCurrent(r); await load();
+      toast.success("Réévaluation comptabilisée. Extourne préparée pour la période suivante.");
+    } catch (e) { toast.error(errMsg(e)); }
+    setBusy(false);
+  };
+  const postRev = async () => {
+    setBusy(true);
+    try { const r = await api.apPostRevaluationReversal(cid, current.id); setCurrent(r); await load(); toast.success("Extourne comptabilisée."); }
+    catch (e) { toast.error(errMsg(e)); }
+    setBusy(false);
+  };
+
+  const t = current?.totals || {};
+  const fc = current?.functional_currency || "";
+  const exceptions = current?.exceptions || [];
+  const hasDelta = (t.total_unrealized_loss || 0) > 0.01 || (t.total_unrealized_gain || 0) > 0.01;
+
+  return (
+    <div className="space-y-4" data-testid="ap-revaluation-tab">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div><label className="text-[11px] uppercase text-slate-500">Date de réévaluation</label>
+          <Input type="date" data-testid="ap-reval-asof" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="mt-1 h-9 w-44" /></div>
+        <div><label className="text-[11px] uppercase text-slate-500">Période</label>
+          <select data-testid="ap-reval-period" value={periodId} onChange={(e) => setPeriodId(e.target.value)}
+            className="mt-1 h-9 w-48 rounded-md border border-slate-200 px-2 text-sm">
+            <option value="">—</option>{periods.map((p) => <option key={p.id} value={p.id}>{p.code} ({p.status})</option>)}</select></div>
+        <Button data-testid="ap-reval-calculate" onClick={calc} disabled={busy}
+          className="h-9 bg-[#0F172A] hover:bg-[#1E293B]">{busy ? <Loader2 className="animate-spin" size={15} /> : <RefreshCw size={15} />} Calculer</Button>
+      </div>
+
+      {loading ? <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        : !current ? (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-white/60 p-8 text-center" data-testid="ap-reval-idle">
+            <p className="text-sm font-600 text-[#063044]">Réévaluation des devises</p>
+            <p className="mt-1 text-sm text-slate-400">Choisissez une période puis « Calculer » pour estimer la différence de change non réalisée des dettes fournisseurs. Aucun impact comptable tant que vous ne comptabilisez pas.</p>
+          </div>
+        ) : (
+          <>
+            {/* Exceptions First */}
+            {exceptions.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4" data-testid="ap-reval-exceptions">
+                <p className="flex items-center gap-2 text-sm font-700 text-amber-800"><AlertTriangle size={16} /> {exceptions.length} point(s) nécessitent votre attention</p>
+                <ul className="mt-2 space-y-1 text-sm text-amber-800">
+                  {exceptions.map((x, i) => <li key={i}>• {x.message} <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px]">{x.code}</span></li>)}
+                </ul>
+                <p className="mt-2 text-xs text-amber-700">Mettez à jour le taux de clôture (rate_type « closing ») avant de comptabiliser.</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-[11px] uppercase text-slate-500">Positions</p>
+                <p className="mt-1 text-lg font-700 text-[#063044]" data-testid="ap-reval-count">{t.position_count || 0}</p></div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-[11px] uppercase text-slate-500">Perte non réalisée</p>
+                <p className="mt-1 text-lg font-700 text-rose-600" data-testid="ap-reval-loss">{money(t.total_unrealized_loss, fc)}</p></div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-[11px] uppercase text-slate-500">Gain non réalisé</p>
+                <p className="mt-1 text-lg font-700 text-emerald-600" data-testid="ap-reval-gain">{money(t.total_unrealized_gain, fc)}</p></div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-[11px] uppercase text-slate-500">Écart net</p>
+                <p className="mt-1 text-lg font-700 text-[#063044]" data-testid="ap-reval-net">{money(t.net_delta_func, fc)}</p></div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={`rounded-full px-3 py-1 text-xs font-700 ${current.status === "posted" ? "bg-emerald-100 text-emerald-700" : current.status === "reversed" ? "bg-slate-200 text-slate-600" : "bg-blue-100 text-blue-700"}`} data-testid="ap-reval-status">{current.status}</span>
+              {current.status === "calculated" && hasDelta && exceptions.length === 0 && (
+                <Button data-testid="ap-reval-post" onClick={post} disabled={busy} className="h-9 bg-[#22C55E] hover:bg-[#16A34A]">Comptabiliser</Button>)}
+              {current.status === "calculated" && !hasDelta && <span className="text-sm text-slate-400" data-testid="ap-reval-nodelta">Aucune différence à comptabiliser.</span>}
+              {current.status === "posted" && current.reversal_status === "prepared" && (
+                <Button data-testid="ap-reval-post-reversal" onClick={postRev} disabled={busy} variant="outline" className="h-9">Comptabiliser l'extourne (période suivante)</Button>)}
+              {current.reversal_status === "posted" && <span className="text-xs text-slate-500" data-testid="ap-reval-reversed">Extourne comptabilisée ✓</span>}
+              <button type="button" onClick={() => setWhy((v) => !v)} data-testid="ap-reval-why" className="flex items-center gap-1 text-xs font-600 text-slate-500 hover:text-[#0F172A]"><HelpCircle size={14} /> Pourquoi ?</button>
+            </div>
+
+            {why && (
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white" data-testid="ap-reval-detail">
+                <table className="w-full min-w-[760px] text-sm">
+                  <thead><tr className="border-b border-slate-100 text-left text-[11px] uppercase text-slate-500">
+                    <th className="p-3">Facture</th><th className="p-3">Devise</th><th className="p-3 text-right">Solde ouvert</th>
+                    <th className="p-3 text-right">Taux hist.</th><th className="p-3 text-right">Taux clôture</th><th className="p-3 text-right">Écart ({fc})</th><th className="p-3">Taux</th></tr></thead>
+                  <tbody>
+                    {(current.positions || []).length === 0 ? <tr><td colSpan={7} className="p-4 text-center text-slate-400">Aucune position en devise étrangère.</td></tr>
+                      : current.positions.map((p, i) => (
+                        <tr key={i} className="border-b border-slate-50" data-testid={`ap-reval-pos-${i}`}>
+                          <td className="p-3 font-600 text-[#0F172A]">{p.source_number || p.source_id.slice(0, 8)}</td>
+                          <td className="p-3">{p.currency}</td>
+                          <td className="p-3 text-right">{money(p.open_balance_ccy, p.currency)}</td>
+                          <td className="p-3 text-right text-slate-500">{p.historical_rate}</td>
+                          <td className="p-3 text-right text-slate-500">{p.closing_rate}{p.rate_is_fallback ? " ⚠︎" : ""}</td>
+                          <td className={`p-3 text-right font-600 ${p.delta_func > 0 ? "text-rose-600" : p.delta_func < 0 ? "text-emerald-600" : "text-slate-500"}`}>{money(p.delta_func, fc)}</td>
+                          <td className="p-3 text-[11px] text-slate-400">{p.rate_reason}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-xs text-slate-400">Le compte de contrôle fournisseurs historique n'est jamais modifié : l'ajustement est porté par AP_FX_REVAL. La comptabilisation est une action sensible (accounting.fx_revaluation_post) et l'extourne est préparée pour la période suivante.</p>
+          </>
+        )}
+
+      {runs.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="ap-reval-history">
+          <p className="mb-2 text-[11px] uppercase text-slate-500">Réévaluations récentes</p>
+          <div className="space-y-1 text-sm">
+            {runs.slice(0, 8).map((r) => (
+              <button key={r.id} type="button" onClick={() => { setCurrent(r); setWhy(false); }} className="flex w-full items-center justify-between rounded px-2 py-1 text-left hover:bg-slate-50" data-testid={`ap-reval-run-${r.id}`}>
+                <span className="text-[#0F172A]">{r.as_of} · <span className="text-slate-500">{r.status}</span></span>
+                <span className="font-600 text-[#063044]">{money(r.totals?.net_delta_func, r.functional_currency)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// A4.6 — Reconciliation Aging AP ↔ GL. Exceptions First: "Réconcilié ✓" when
+// everything matches; otherwise ONLY the differences that need attention.
+function ReconciliationTab({ cid }) {
+  const [data, setData] = useState(null);
+  const [asOf, setAsOf] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!cid) return;
+    setLoading(true);
+    try { setData(await api.apReconciliation(cid, asOf ? { as_of: asOf } : {})); }
+    catch (e) { /* gated */ }
+    setLoading(false);
+  }, [cid, asOf]);
+  useEffect(() => { load(); }, [load]);
+
+  const fc = data?.functional_currency || "";
+  const reconciled = data?.status === "reconciled";
+  const catStyle = { anomaly: "border-rose-200 bg-rose-50 text-rose-800", legitimate: "border-slate-200 bg-slate-50 text-slate-700", temporal: "border-blue-200 bg-blue-50 text-blue-800" };
+  const catLabel = { anomaly: "Anomalie", legitimate: "Différence expliquée", temporal: "Différence temporelle" };
+
+  return (
+    <div className="space-y-4" data-testid="ap-reconciliation-tab">
+      <div className="flex flex-wrap items-center gap-3">
+        <div><label className="text-[11px] uppercase text-slate-500">Date d'analyse (au)</label>
+          <Input type="date" data-testid="ap-recon-asof" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="mt-1 h-9 w-44" /></div>
+      </div>
+      {loading ? <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        : !data ? <p className="text-sm text-slate-400">Aucune donnée.</p>
+        : (
+          <>
+            {reconciled ? (
+              <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-5" data-testid="ap-recon-ok">
+                <CheckCircle2 className="text-emerald-600" size={28} />
+                <div><p className="text-base font-700 text-emerald-800">Réconcilié ✓</p>
+                  <p className="text-sm text-emerald-700">Le sous-registre fournisseurs concorde avec le Grand Livre au {data.as_of}.</p></div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4" data-testid="ap-recon-diff">
+                <p className="flex items-center gap-2 text-sm font-700 text-rose-800"><AlertTriangle size={16} /> Écart de {money(data.residual_func, fc)} à examiner</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-[11px] uppercase text-slate-500">Sous-registre (historique)</p>
+                <p className="mt-1 text-lg font-700 text-[#063044]" data-testid="ap-recon-subledger">{money(data.subledger_aging_func, fc)}</p></div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-[11px] uppercase text-slate-500">Réévaluation FX (AP_FX_REVAL)</p>
+                <p className="mt-1 text-lg font-700 text-[#063044]" data-testid="ap-recon-reval">{money(data.ap_fx_reval_balance_func, fc)}</p></div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-[11px] uppercase text-slate-500">Grand Livre (compte {data.ap_control_account})</p>
+                <p className="mt-1 text-lg font-700 text-[#063044]" data-testid="ap-recon-gl">{money(data.gl_ap_control_func, fc)}</p></div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-[11px] uppercase text-slate-500">Écart résiduel</p>
+                <p className={`mt-1 text-lg font-700 ${reconciled ? "text-emerald-600" : "text-rose-600"}`} data-testid="ap-recon-residual">{money(data.residual_func, fc)}</p></div>
+            </div>
+
+            {(data.differences || []).length > 0 && (
+              <div className="space-y-2" data-testid="ap-recon-differences">
+                {data.differences.map((d, i) => (
+                  <div key={i} className={`flex items-center justify-between rounded-lg border px-4 py-3 text-sm ${catStyle[d.category] || catStyle.legitimate}`} data-testid={`ap-recon-diff-${d.category}-${i}`}>
+                    <div><span className="mr-2 rounded px-1.5 py-0.5 text-[11px] font-700 uppercase opacity-80">{catLabel[d.category] || d.category}</span>
+                      <span className="font-600">{d.label}</span>
+                      {d.hint && <p className="mt-0.5 text-xs opacity-75">{d.hint}</p>}</div>
+                    <span className="font-700">{money(d.amount_func, fc)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-slate-400">Équation : Sous-registre AP (taux historique) ± AP_FX_REVAL = compte fournisseurs présenté au taux de clôture. Les anomalies apparaissent en premier ; les différences temporelles/expliquées ne requièrent aucune action. Rapport dérivé — aucun solde parallèle, aucune écriture de « forçage ».</p>
           </>
         )}
     </div>

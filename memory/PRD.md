@@ -1744,3 +1744,17 @@ Cadrage document uniquement (`memory/A4_6_SCOPING.md`), **AUCUN code**. Gate STR
 - **Preuve zéro ledger parallèle** : sous-registre Aging dérivé au taux historique (inchangé) ; positions du run = photo d'audit non autoritative ; seule écriture GL via journal canonique P2. Nouvelles collections : `ap_fx_revaluations`, `ap_reconciliations` (runs/rapports, jamais des soldes).
 
 **STOP après cadrage A4.6 — attendre validation avant tout développement. Swiss Country Pack toujours NON démarré.**
+
+### A4.6 — Réévaluation FX non réalisée + Réconciliation Aging AP ↔ GL (LIVRÉ & TESTÉ — 2026-06)
+Gate approuvé, développement autorisé & livré. Backend 9/9 pytest PASS + frontend 100% (`test_reports/iteration_82.json`).
+- **Extension FX** (`core/financial/fx.py`) : `exchange_rates.rate_type = current|closing` (non-breaking) + `get_rate_typed`. `record_rate(rate_type)`. Route `ar/fx-rates` accepte `rate_type`.
+- **Module `core/accounting/fx_revaluation.py`** : `calculate_revaluation` (aucun GL, idempotent — remplace tout brouillon du même périmètre, renvoie `already_posted` si run posté existe), `post_revaluation` (sensible, maker-checker préparateur≠posteur, période postable, écriture P2 idempotente via `external_id={id}:reval`, extourne auto-préparée/postée période suivante liée bidirectionnellement), `post_reversal`, `reconcile`.
+- **Résolution de taux** : priorité `closing`, fallback `current` **tracé** (`is_fallback`+reason dans « Pourquoi ? »), fraîcheur douteuse (>7j) → exception `rate_stale`, taux absent → `rate_unavailable` ; posting bloqué tant qu'exception. Snapshot immuable par run.
+- **Classification** `classify_ap_position` déterministe (monetary|non_monetary), jamais l'IA. Réévalue seulement le solde ouvert des factures postées en devise ≠ fonctionnelle.
+- **Comptes** (mapping société, rôles) : `FX_UNREAL_GAIN`/`FX_UNREAL_LOSS` (P&L) + `AP_FX_REVAL` (bilan). **Le compte de contrôle fournisseurs (`AP`) n'est jamais mouvementé** (vérifié en test). Écriture équilibrée/atomique ; extourne = mêmes comptes inversés + `reverses_journal_entry_id`/`link_reversal`.
+- **Réconciliation** (`GET /ap/reconciliation`) : Aging(historique) ± AP_FX_REVAL = AP présenté au taux de clôture ; taxonomie anomaly/legitimate/temporal ; ponts (avances postées, relief exécuté-non-posté **plafonné par facture**, crédits dispo, paiements postés sur factures non postées, approuvé-non-posté). « Réconcilié ✓ » si résiduel ~0, sinon Exceptions First (anomalies en tête). Données seed réparées (2 factures dont le cache credited_total était périmé).
+- **Permission** NOUVELLE `accounting.fx_revaluation_post` (catalogue) — sensible, aucun bypass ; octroyée à persona_finance.
+- **UI** (`pages/PurchasesAP.js`) : onglets « Réévaluation FX » (Calculer → vérifier exceptions → Comptabiliser, panneau « Pourquoi ? », historique) et « Réconciliation » (Réconcilié ✓ / écarts catégorisés). `api.js` : apReconciliation/apRevaluations/apCalculate/apPost/apPostReversal.
+- **Preuve zéro ledger parallèle** : sous-registre Aging inchangé (dérivé, taux historique) ; positions du run = photo d'audit ; seule écriture GL via journal canonique P2. Collection `ap_fx_revaluations`. Doc : `memory/A4_6_SCOPING.md`.
+
+**STOP après A4.6 — Swiss Country Pack NON démarré.**

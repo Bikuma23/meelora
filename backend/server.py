@@ -154,6 +154,7 @@ from core.accounting import ar as ar_service
 from core.accounting import ap as ap_service
 from core.accounting import ap_extraction as ap_ai
 from core.accounting import po as po_service
+from core.accounting import fx_revaluation as fxrev_service
 from core.compliance import jurisdiction as jurisdiction_service
 from core.accounting import dunning as dunning_service
 from core.financial import documents as doc_service
@@ -3488,6 +3489,7 @@ class ARFxRateIn(BaseModel):
     rate: float
     rate_date: str
     source: Optional[str] = "manual"
+    rate_type: Optional[str] = "current"
 
 
 async def _ar_read_scope(company_id: str, user: dict):
@@ -3552,8 +3554,10 @@ async def ar_record_fx_rate(company_id: str, payload: ARFxRateIn, user: dict = D
     await require_sensitive_permission(db, user, company_id, "accounting.chart_manage", workspace_id=ws)
     r = await fx_service.record_rate(db, ws, company_id, from_currency=payload.from_currency,
                                      to_currency=payload.to_currency, rate=payload.rate,
-                                     rate_date=payload.rate_date, source=payload.source)
-    return {"id": r["_id"], "from_currency": r["from_currency"], "to_currency": r["to_currency"], "rate": r["rate"]}
+                                     rate_date=payload.rate_date, source=payload.source,
+                                     rate_type=payload.rate_type or "current")
+    return {"id": r["_id"], "from_currency": r["from_currency"], "to_currency": r["to_currency"],
+            "rate": r["rate"], "rate_type": r.get("rate_type", "current")}
 
 
 @api.get("/companies/{company_id}/ar/fx-oanda")
@@ -3697,6 +3701,9 @@ class APMappingIn(BaseModel):
     recoverable_tax_account_code: Optional[str] = None
     fx_gain_account_code: Optional[str] = None
     fx_loss_account_code: Optional[str] = None
+    fx_unrealized_gain_account_code: Optional[str] = None
+    fx_unrealized_loss_account_code: Optional[str] = None
+    ap_fx_reval_account_code: Optional[str] = None
 
 
 @api.get("/companies/{company_id}/ap/invoices")
@@ -4010,6 +4017,60 @@ async def ap_post_credit_note(company_id: str, cid: str, user: dict = Depends(ge
 async def ap_aging(company_id: str, as_of: Optional[str] = None, user: dict = Depends(get_current_user)):
     ws = await _ar_read_scope(company_id, user)
     return await ap_service.aging(db, ws, company_id, as_of=as_of)
+
+
+# ---- A4.6 Unrealized FX revaluation + Aging AP ↔ GL reconciliation ---------
+class APRevaluationIn(BaseModel):
+    as_of: str
+    period_id: str
+    stale_days: Optional[int] = None
+
+
+@api.get("/companies/{company_id}/ap/reconciliation")
+async def ap_reconciliation(company_id: str, as_of: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await fxrev_service.reconcile(db, ws, company_id, as_of=as_of)
+
+
+@api.get("/companies/{company_id}/ap/fx-revaluations")
+async def ap_list_revaluations(company_id: str, status: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"revaluations": await fxrev_service.list_revaluations(db, ws, company_id, status=status)}
+
+
+@api.get("/companies/{company_id}/ap/fx-revaluations/{rid}")
+async def ap_get_revaluation(company_id: str, rid: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return fxrev_service.public_revaluation(await fxrev_service.get_revaluation(db, ws, company_id, rid))
+
+
+@api.post("/companies/{company_id}/ap/fx-revaluations/calculate")
+async def ap_calculate_revaluation(company_id: str, payload: APRevaluationIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await fxrev_service.calculate_revaluation(db, ws, company_id, user, as_of=payload.as_of,
+                                                     period_id=payload.period_id, stale_days=payload.stale_days)
+
+
+@api.post("/companies/{company_id}/ap/fx-revaluations/{rid}/post")
+async def ap_post_revaluation(company_id: str, rid: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.fx_revaluation_post", workspace_id=ws)
+    r = await fxrev_service.post_revaluation(db, ws, company_id, user, rid)
+    await log_action(user, "post", "ap_fx_revaluation", rid, details="Réévaluation FX non réalisée comptabilisée",
+                     company_id=company_id, entity_id=rid, event_type="ap.fx_revaluation.posted")
+    return r
+
+
+@api.post("/companies/{company_id}/ap/fx-revaluations/{rid}/post-reversal")
+async def ap_post_revaluation_reversal(company_id: str, rid: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.fx_revaluation_post", workspace_id=ws)
+    r = await fxrev_service.post_reversal(db, ws, company_id, user, rid)
+    await log_action(user, "reverse", "ap_fx_revaluation", rid, details="Extourne de réévaluation FX comptabilisée",
+                     company_id=company_id, entity_id=rid, event_type="ap.fx_revaluation.reversed")
+    return r
+
+
 
 
 @api.get("/companies/{company_id}/ap/suppliers/{supplier_id}/summary")
@@ -10635,6 +10696,7 @@ async def startup():
         await ap_service.ensure_a43_indexes(db)
         await ap_ai.ensure_a44_indexes(db)
         await po_service.ensure_a45_indexes(db)
+        await fxrev_service.ensure_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     # P1.13A — seed Meelora workspace entitlements (availability only; grants no

@@ -134,6 +134,11 @@ _DEFAULT_AP_MAPPING = {
     "ap_account_code": "AP", "default_expense_account_code": "EXPENSE",
     "recoverable_tax_account_code": "TAX_RECOVERABLE", "bank_account_code": "BANK",
     "fx_gain_account_code": "FX_GAIN", "fx_loss_account_code": "FX_LOSS",
+    # A4.6 — unrealized FX revaluation roles (DISTINCT from the realized FX_GAIN/
+    # FX_LOSS above). Configurable per company, never hardcoded by account number.
+    "fx_unrealized_gain_account_code": "FX_UNREAL_GAIN",
+    "fx_unrealized_loss_account_code": "FX_UNREAL_LOSS",
+    "ap_fx_reval_account_code": "AP_FX_REVAL",
 }
 
 

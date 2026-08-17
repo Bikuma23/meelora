@@ -39,6 +39,7 @@ PERMISSIONS: dict[str, list[str]] = {
         "accounting.supplier_credit_note_post",
         "accounting.po_approve",
         "accounting.po_match_override",
+        "accounting.fx_revaluation_post",
         "accounting.entry_reverse",
         "accounting.chart_manage",
         "accounting.reconciliation_manage",
