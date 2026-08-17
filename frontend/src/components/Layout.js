@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { useAuth } from "../context/AuthContext";
 import { YearProvider, useYear } from "../context/YearContext";
 import { useLang } from "../context/LanguageContext";
@@ -15,26 +15,64 @@ import { Button } from "./ui/button";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import Dashboard from "../pages/Dashboard";
-import Employes from "../pages/Employes";
-import SalairesBudget from "../pages/SalairesBudget";
-import Hypotheses from "../pages/Hypotheses";
-import Departements from "../pages/Departements";
-import Rapports from "../pages/Rapports";
-import Logs from "../pages/Logs";
-import UsersPage from "../pages/Users";
-import AccessManagement from "../pages/AccessManagement";
-import CompaniesPage from "../pages/Companies";
-import Preferences from "../pages/Preferences";
-import { applyTheme } from "../lib/theme";
-import { AcctDashboard, AcctBV, AcctBilan, AcctPnl, AcctCashflow, AcctReports } from "../pages/Comptabilite";
-import { AcctEntries, AcctPeriods, makePlaceholder } from "../pages/AccountingA1";
-import SalesAR from "../pages/SalesAR";
-import PurchasesAP from "../pages/PurchasesAP";
 import CompanyHome from "../pages/CompanyHome";
-import QcEntity from "../pages/QcEntity";
-import { PlatformHome, PlatformClients, PlatformLogs, PlatformMeeloraManage } from "../pages/Platform";
-import { ReportingHome, FixedAssetsHome, ConsolidationHome } from "../pages/ModulePlaceholder";
-import MandatsList from "../pages/MandatsList";
+import { makePlaceholder } from "../pages/AccountingA1";
+import { applyTheme } from "../lib/theme";
+
+// Route/code splitting — heavy or non-initial screens load on demand (per-module chunks).
+const Employes = lazy(() => import("../pages/Employes"));
+const SalairesBudget = lazy(() => import("../pages/SalairesBudget"));
+const Hypotheses = lazy(() => import("../pages/Hypotheses"));
+const Departements = lazy(() => import("../pages/Departements"));
+const Rapports = lazy(() => import("../pages/Rapports"));
+const Logs = lazy(() => import("../pages/Logs"));
+const UsersPage = lazy(() => import("../pages/Users"));
+const AccessManagement = lazy(() => import("../pages/AccessManagement"));
+const CompaniesPage = lazy(() => import("../pages/Companies"));
+const Preferences = lazy(() => import("../pages/Preferences"));
+const QcEntity = lazy(() => import("../pages/QcEntity"));
+const MandatsList = lazy(() => import("../pages/MandatsList"));
+const importSalesAR = () => import("../pages/SalesAR");
+const importPurchasesAP = () => import("../pages/PurchasesAP");
+const importComptabilite = () => import("../pages/Comptabilite");
+const importAccountingA1 = () => import("../pages/AccountingA1");
+const SalesAR = lazy(importSalesAR);
+const PurchasesAP = lazy(importPurchasesAP);
+const AcctDashboard = lazy(() => importComptabilite().then((m) => ({ default: m.AcctDashboard })));
+const AcctBV = lazy(() => importComptabilite().then((m) => ({ default: m.AcctBV })));
+const AcctBilan = lazy(() => importComptabilite().then((m) => ({ default: m.AcctBilan })));
+const AcctPnl = lazy(() => importComptabilite().then((m) => ({ default: m.AcctPnl })));
+const AcctCashflow = lazy(() => importComptabilite().then((m) => ({ default: m.AcctCashflow })));
+const AcctReports = lazy(() => importComptabilite().then((m) => ({ default: m.AcctReports })));
+const AcctEntries = lazy(() => importAccountingA1().then((m) => ({ default: m.AcctEntries })));
+const AcctPeriods = lazy(() => importAccountingA1().then((m) => ({ default: m.AcctPeriods })));
+const PlatformHome = lazy(() => import("../pages/Platform").then((m) => ({ default: m.PlatformHome })));
+const PlatformClients = lazy(() => import("../pages/Platform").then((m) => ({ default: m.PlatformClients })));
+const PlatformLogs = lazy(() => import("../pages/Platform").then((m) => ({ default: m.PlatformLogs })));
+const PlatformMeeloraManage = lazy(() => import("../pages/Platform").then((m) => ({ default: m.PlatformMeeloraManage })));
+const ReportingHome = lazy(() => import("../pages/ModulePlaceholder").then((m) => ({ default: m.ReportingHome })));
+const FixedAssetsHome = lazy(() => import("../pages/ModulePlaceholder").then((m) => ({ default: m.FixedAssetsHome })));
+const ConsolidationHome = lazy(() => import("../pages/ModulePlaceholder").then((m) => ({ default: m.ConsolidationHome })));
+
+// Warm module chunks on intent (hover/focus/popover open) — never at boot.
+const PRELOADERS = {
+  ACCOUNTING: [importSalesAR, importPurchasesAP, importComptabilite, importAccountingA1],
+};
+function preloadModule(code) {
+  (PRELOADERS[code] || []).forEach((fn) => { try { fn(); } catch (e) { /* noop */ } });
+}
+
+function PageSkeleton() {
+  return (
+    <div className="mx-auto max-w-6xl animate-pulse space-y-6" data-testid="page-skeleton" aria-busy="true">
+      <div className="h-8 w-64 rounded-lg bg-slate-200/70" />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => <div key={i} className="h-28 rounded-xl bg-slate-200/50" />)}
+      </div>
+      <div className="h-64 rounded-xl bg-slate-200/40" />
+    </div>
+  );
+}
 import { NavContext } from "../context/NavContext";
 import { Calculator, Landmark, FileBarChart, Server, BookOpen, Receipt, ShoppingCart, ClipboardCheck, Banknote, BookText, Scale, ListTree, PieChart, Percent, Boxes, Lock } from "lucide-react";
 
@@ -438,9 +476,10 @@ function ModuleFlyout({ code, active, go, openModule, setOpenModule }) {
   const moduleActive = (MODULE_PAGES[code] || []).includes(active);
   const open = openModule === code;
   return (
-    <Popover open={open} onOpenChange={(o) => setOpenModule(o ? code : null)}>
+    <Popover open={open} onOpenChange={(o) => { if (o) preloadModule(code); setOpenModule(o ? code : null); }}>
       <PopoverTrigger asChild>
         <button data-testid={`nav-module-${code}`}
+          onMouseEnter={() => preloadModule(code)} onFocus={() => preloadModule(code)}
           className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors duration-150 ${moduleActive ? "bg-[#A7F3DD]/40 text-[#0F172A]" : "text-slate-600 hover:bg-[#F3F4F6] hover:text-[#0F172A]"}`}>
           {moduleActive && <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[#22C55E]" />}
           <span className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${moduleActive ? "bg-[#22C55E] text-white" : "bg-[#F3F4F6] text-slate-500 group-hover:bg-[#A7F3DD]/50 group-hover:text-[#22C55E]"}`}><Icon size={16} strokeWidth={2.2} /></span>
@@ -732,7 +771,7 @@ function LayoutInner() {
     <div className="relative flex min-h-screen bg-[#F3F4F6]">
       {/* Global Meelora watermark — full page, extremely light; visible through the near-white content on every tool page. */}
       {!presentation && (
-        <img src="/login-bg.png" alt="" aria-hidden="true" data-testid="app-watermark"
+        <img src="/login-bg.webp" alt="" aria-hidden="true" data-testid="app-watermark"
           className="pointer-events-none fixed inset-0 z-0 h-full w-full select-none object-cover opacity-[0.035]" />
       )}
       {mobileOpen && <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setMobileOpen(false)} data-testid="sidebar-overlay" />}
@@ -769,7 +808,7 @@ function LayoutInner() {
         </nav>
       </aside>
 
-      <div className={`relative z-10 flex-1 ${presentation ? "" : "lg:ml-64"}`}>
+      <div className={`relative z-10 flex min-h-screen flex-1 flex-col ${presentation ? "" : "lg:ml-64"}`}>
         {!presentation && (
         <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/80 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -795,9 +834,11 @@ function LayoutInner() {
             <Minimize2 size={14} /> Quitter
           </button>
         )}
-        <main className={presentation ? "p-3" : "p-4 sm:p-6 lg:p-8"}>
+        <main className={presentation ? "flex-1 p-3" : "flex-1 p-4 sm:p-6 lg:p-8"}>
           <NavContext.Provider value={{ go, enterMandat, enterMeelora, activeCompanyId, companies: navCompanies }}>
-            <Active />
+            <Suspense fallback={<PageSkeleton />}>
+              <Active />
+            </Suspense>
           </NavContext.Provider>
         </main>
         {!presentation && (
