@@ -1,0 +1,36 @@
+{
+  "summary": "A4.2 — Factures fournisseurs & workflow AP testé end-to-end. Backend: 13/13 pytest passent (création CHF avec due_date auto depuis conditions fournisseur + due_date_source='supplier_terms' ; 4 statuts initiaux draft/pending/not_posted/unpaid ; devise étrangère sans fx → 422 « Taux de change requis » (pas de fallback 1) ; verify→submit OK ; doublon supplier+supplier_invoice_number → 409 ; PO requis sans purchase_order_id → submit 409 et statut po_missing ; PO fourni → submit OK ; maker qui approuve sa propre facture → 403 séparation ; checker sans permission → 403 ; grant admin puis approve+post par le checker → JE équilibré, journal_entry_id renseigné, ré-post idempotent (même JE), update_draft refusé 409 après posting ; upload PDF (multipart) OK ; 404 sur id inconnu ; liste to_process bien filtrée). Frontend: login persona_finance → Comptabilité → Achats & Fournisseurs → 7 onglets présents (aperçu/inbox/fournisseurs/factures/paiements/crédits/aging). Onglet Factures (ap-invoices-tab) : formulaire complet avec tous les data-testids (apinv-supplier/period/number/date/currency/fx/po/line-*/add-line/create/fetch-rate). Création → ligne apinv-row-* visible avec badge statut Brouillon. Onglet 'Factures à traiter' (ap-inbox-tab) affiche les factures avec statuts (Brouillon/Vérifiée/Soumise/PO manquant) + badges 'PO requis' pour Fournitures ACME SA. Boutons workflow présents selon statut (Vérifier/Soumettre/Approuver/Rejeter). Bouton apinv-fetch-rate correctement lié à fxDisabled = currency==functional (CHF).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PurchasesAP InvoicesTab (period select)", "issues": ["Console React warning 'In HTML, <span> cannot be a child of <option>' — dû au wrapping x-ve-dynamic sur {p.code} dans <option> ; non bloquant mais génère un hydration warning. Envisager de concaténer la string ou d'utiliser un span externe."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_a4_2_ap_invoices.py",
+    "/app/test_reports/pytest/a4_2.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ap.py create_invoice: due_date snapshot depuis supplier.due_days OU regex sur payment_terms — correct, source 'supplier_terms' vs 'manual' bien tracée.",
+    "ap.py _resolve_fx (via ar.py) : raise 422 explicite si pas de rate → conforme à 'jamais fallback 1 silencieux'.",
+    "check_duplicate exclut document_status='rejected' — correct, permet de re-saisir après un rejet.",
+    "submit_invoice : marque le doc en po_missing AVANT de raise 409 → statut visible dans l'inbox, conforme à §9.",
+    "approve_invoice : garde créateur ≠ approbateur (403) + require_sensitive_permission accounting.supplier_invoice_approve — maker-checker respecté.",
+    "post_invoice : idempotent (early return si posting_status=='posted' et journal_entry_id présent) — même JE réutilisé, aucune double écriture.",
+    "post_invoice construit lines expense→AP en devise fonctionnelle via fx_service.convert(rate), équilibre débits=crédits vérifié ; passe par create_workflow_journal_entry (canonique P2) — pas de 2e ledger.",
+    "update_draft : gate _require_doc_status='draft' → toute modification post-approbation refusée 409 (immutabilité).",
+    "public_invoice : expose les 4 statuts + journal_entry_id + source_document_id, exclut _id ObjectId — pas de leak.",
+    "server.py routes /approve et /post utilisent require_sensitive_permission (jamais un simple require_module_level) → manage/Client Admin/platform_role ne bypassent pas — respecte §13.",
+    "PurchasesAP.js InvoicesTab : rend un <span> automatique dans <option>{p.code}</option> à cause du wrapper Emergent x-ve-dynamic — génère un warning React 'span cannot be a child of option' au hydrate. Non fonctionnel mais bruit console. Idem sur les selects supplier."
+  ],
+  "updated_files": ["/app/backend/tests/test_a4_2_ap_invoices.py"],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100% (scénarios visés)"},
+  "test_credentials": "persona_junior@accslegro.com / persona123 (maker, sans supplier_invoice_approve/post). persona_finance@accslegro.com / persona123 (checker candidat, la permission a été GRANT via l'API admin durant les tests). admin@accslegro.com / admin123 (grant).",
+  "seed_data_creation": "Nombreuses factures TEST créées sur Meelora (préfixes INV-xxxx, DUP-xxxx, UI-xxxx) via l'API + une facture posted (journal_entry associé). Le compte persona_finance a désormais les permissions accounting.supplier_invoice_approve ET accounting.supplier_invoice_post accordées sur Meelora (grant automatisé par le test test_grant_and_approve_and_post — nettoyage non effectué, à considérer si l'on veut re-tester le refus 403 sur ce compte).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "A4.2 livré et vert. Fichier de test : /app/backend/tests/test_a4_2_ap_invoices.py (à réutiliser en régression). ATTENTION : persona_finance a été accordé accounting.supplier_invoice_approve/post sur Meelora par la fixture test_grant_and_approve_and_post — si un futur test doit vérifier le 403 permission_not_granted sur ce compte, révoquer d'abord via PUT /companies/{cid}/users/{uid}/permissions/{perm} {granted:false}. Les factures TEST créées polluent l'inbox mais n'affectent pas les calculs. Warning React hydration 'span in option' à corriger côté PurchasesAP.js (non-bloquant)."
+}

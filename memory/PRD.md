@@ -1627,3 +1627,12 @@ Conforme A3 §16 (pas d'automatisation agressive) — mode **proposition + confi
 - **GATE A4** : plan complet dans `/app/memory/A4_PLAN.md` (inventaire, modèle de données, workflow, permissions, ingestion PDF/email/IA, PO/matching, découpage A4.1→A4.8, risques). Décisions validées : 4 statuts séparés ; PO minimal en A4.5 ; courriel entrant reporté (A4.7) ; IA = GPT vision **sous gouvernance stricte** (non-entraînement, `DocumentAIProvider`, minimisation, rétention, audit, l'IA propose sans jamais poster) — **GATE de vérification avant A4.4**.
 - **A4.1 — Référentiel fournisseurs (livré, testé 100 %)** : `core/accounting/ap.py` (CRUD `ap_suppliers` + masquage bancaire), endpoints `GET/POST/PATCH /companies/{cid}/ap/suppliers`, permissions AP ajoutées au catalogue, écran `PurchasesAP.js` (7 onglets, fiche fournisseur 7 sections, contacts multiples, proposition fiscale par juridiction, PO obligatoire par fournisseur), nav `acct_purchases` branché. Isolation société + refus d'accès validés. **STOP après A4.1** — tranche suivante A4.2 sur validation.
 
+
+## A4.2 — Factures fournisseurs & workflow AP (2026-08-17)
+- Facture fournisseur canonique `ap_invoices` à **4 statuts séparés** (document/approval/posting/payment) ; workflow draft→verified→submitted→approved/rejected ; posting séparé approved→posted.
+- Réutilise le Cœur financier : moteur fiscal versionné (snapshot), FX/OANDA (bouton « Récupérer le taux », jamais fallback 1), posting canonique P2 `create_workflow_journal_entry` (Dr charge/actif · Dr taxes récupérables · Cr fournisseurs — atomique/équilibré/idempotent, périodes locked/closed).
+- Échéance auto depuis conditions fournisseur (snapshot, override audité). Doublon (company+supplier+n°) bloquant. Règle PO obligatoire (statut `po_missing`, submit/approve bloqués). Upload PDF source en Object Storage (`source_document_id`+sha256, jamais base64) + lien au journal.
+- Permissions sensibles `accounting.supplier_invoice_approve` / `supplier_invoice_post` via `require_sensitive_permission` + maker-checker (aucun bypass manage/Client Admin/platform_role). Immutabilité après posting.
+- UI `PurchasesAP.js` : onglets **Factures** + **Factures à traiter** activés (formulaire création, actions workflow, upload PDF, badges).
+- **Testé : backend 100 % (13/13), frontend 100 %** (iteration_75). Reste : warning React dev-only `<span> in <option>` (cosmétique). **STOP après A4.2 — A4.3+ sur validation.**
+

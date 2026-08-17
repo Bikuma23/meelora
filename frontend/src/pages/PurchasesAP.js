@@ -67,7 +67,10 @@ export default function PurchasesAP() {
           </button>
         ))}
       </div>
-      {tab === "suppliers" ? <SuppliersTab cid={cid} /> : <ComingSoon label={TABS.find((t) => t.key === tab)?.label} />}
+      {tab === "suppliers" ? <SuppliersTab cid={cid} />
+        : tab === "invoices" ? <InvoicesTab cid={cid} toProcess={false} />
+        : tab === "inbox" ? <InvoicesTab cid={cid} toProcess={true} />
+        : <ComingSoon label={TABS.find((t) => t.key === tab)?.label} />}
     </div>
   );
 }
@@ -77,6 +80,160 @@ function ComingSoon({ label }) {
     <div className="rounded-xl border border-dashed border-slate-300 bg-white/60 p-10 text-center" data-testid="ap-coming-soon">
       <p className="text-sm font-600 text-[#063044]">{label}</p>
       <p className="mt-1 text-sm text-slate-400">Module Achats & Fournisseurs — disponible dans une prochaine tranche (A4.2+).</p>
+    </div>
+  );
+}
+
+const DOC_ST = {
+  draft: { label: "Brouillon", cls: "bg-slate-100 text-slate-600" },
+  verified: { label: "Vérifiée", cls: "bg-blue-100 text-blue-700" },
+  submitted: { label: "Soumise", cls: "bg-indigo-100 text-indigo-700" },
+  po_missing: { label: "PO manquant", cls: "bg-amber-100 text-amber-700" },
+  discrepancy: { label: "Écart", cls: "bg-orange-100 text-orange-700" },
+  approved: { label: "Approuvée", cls: "bg-emerald-100 text-emerald-700" },
+  rejected: { label: "Rejetée", cls: "bg-rose-100 text-rose-700" },
+};
+
+function InvoicesTab({ cid, toProcess }) {
+  const [invoices, setInvoices] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [periods, setPeriods] = useState([]);
+  const [taxCodes, setTaxCodes] = useState([]);
+  const [functional, setFunctional] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [fetchingRate, setFetchingRate] = useState(false);
+  const emptyLine = { description: "", qty: 1, unit_price: "", tax_code: "EXEMPT" };
+  const [form, setForm] = useState({ supplier_id: "", period_id: "", supplier_invoice_number: "", invoice_date: "", currency: "", fx_rate: "", purchase_order_id: "", reference: "", lines: [{ ...emptyLine }] });
+
+  const load = useCallback(async () => {
+    if (!cid) return;
+    setLoading(true);
+    try {
+      const [inv, sup, per, tc] = await Promise.all([
+        api.apInvoices(cid, toProcess ? { to_process: true } : {}), api.apSuppliers(cid), api.glPeriods(cid), api.arTaxCodes(cid),
+      ]);
+      setInvoices(inv.invoices || []); setSuppliers(sup.suppliers || []);
+      setPeriods(per.periods || per || []); setTaxCodes(tc.tax_codes || tc || []);
+    } catch (e) { /* gated */ }
+    setLoading(false);
+  }, [cid, toProcess]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { api.getCompany(cid).then((c) => setFunctional((c.functional_currency || "").toUpperCase())).catch(() => {}); }, [cid]);
+
+  const supName = (id) => suppliers.find((s) => s.id === id)?.name || (id || "").slice(0, 8);
+  const onSupplier = (id) => setForm((f) => { const s = suppliers.find((x) => x.id === id); return { ...f, supplier_id: id, currency: f.currency || (s?.default_currency || "").toUpperCase() }; });
+  const setLine = (i, k, v) => setForm((f) => ({ ...f, lines: f.lines.map((l, j) => j === i ? { ...l, [k]: v } : l) }));
+  const addLine = () => setForm((f) => ({ ...f, lines: [...f.lines, { ...emptyLine }] }));
+  const rmLine = (i) => setForm((f) => ({ ...f, lines: f.lines.filter((_, j) => j !== i) }));
+
+  const fetchRate = async () => {
+    const cur = (form.currency || "").toUpperCase();
+    const datev = form.invoice_date || new Date().toISOString().slice(0, 10);
+    if (!cur || !functional) { toast.error("Devise et date requises."); return; }
+    if (cur === functional) { setForm((f) => ({ ...f, fx_rate: "1" })); toast.info("Même devise : taux 1."); return; }
+    setFetchingRate(true);
+    try {
+      const r = await api.arOandaRate(cid, { from_currency: cur, to_currency: functional, on_date: datev });
+      if (r.available) { setForm((f) => ({ ...f, fx_rate: String(r.rate) })); toast.success(`Taux OANDA ${cur}/${functional} = ${r.rate}`); }
+      else toast.error(r.reason || "Taux OANDA indisponible.");
+    } catch (e) { toast.error("Erreur OANDA"); }
+    setFetchingRate(false);
+  };
+  const create = async () => {
+    try {
+      const body = { supplier_id: form.supplier_id, period_id: form.period_id,
+        supplier_invoice_number: form.supplier_invoice_number || undefined, invoice_date: form.invoice_date || undefined,
+        currency: form.currency || undefined, fx_rate: form.fx_rate ? Number(form.fx_rate) : undefined,
+        purchase_order_id: form.purchase_order_id || undefined, reference: form.reference || undefined,
+        lines: form.lines.map((l) => ({ ...l, qty: Number(l.qty || 1), unit_price: Number(l.unit_price || 0) })) };
+      await api.apCreateInvoice(cid, body);
+      toast.success("Facture fournisseur créée"); setOpen(false);
+      setForm({ supplier_id: "", period_id: "", supplier_invoice_number: "", invoice_date: "", currency: "", fx_rate: "", purchase_order_id: "", reference: "", lines: [{ ...emptyLine }] });
+      load();
+    } catch (e) { toast.error(errMsg(e)); }
+  };
+  const act = async (id, action, body, okMsg) => { try { await api.apInvoiceAction(cid, id, action, body); toast.success(okMsg || "Fait"); load(); } catch (e) { toast.error(errMsg(e)); } };
+  const upload = async (id, file) => { if (!file) return; try { await api.apUploadInvoicePdf(cid, id, file); toast.success("PDF joint"); load(); } catch (e) { toast.error(errMsg(e)); } };
+  const fxDisabled = !form.currency || form.currency.toUpperCase() === functional;
+
+  return (
+    <div className="space-y-4" data-testid={toProcess ? "ap-inbox-tab" : "ap-invoices-tab"}>
+      {!toProcess && (
+        <Button data-testid="apinv-toggle" onClick={() => setOpen((v) => !v)} className="h-9 gap-1 bg-[#063044] text-white"><Plus size={14} /> Nouvelle facture</Button>
+      )}
+      {open && !toProcess && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="apinv-form">
+          <div className="flex flex-wrap items-end gap-3">
+            <div><label className="text-[11px] uppercase text-slate-500">Fournisseur</label>
+              <select data-testid="apinv-supplier" value={form.supplier_id} onChange={(e) => onSupplier(e.target.value)} className="mt-1 h-9 w-52 rounded-md border border-slate-200 px-2 text-sm">
+                <option value="">—</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+            <div><label className="text-[11px] uppercase text-slate-500">Période</label>
+              <select data-testid="apinv-period" value={form.period_id} onChange={(e) => setForm({ ...form, period_id: e.target.value })} className="mt-1 h-9 w-36 rounded-md border border-slate-200 px-2 text-sm">
+                <option value="">—</option>{periods.map((p) => <option key={p.id} value={p.id}>{p.code} ({p.status})</option>)}</select></div>
+            <div><label className="text-[11px] uppercase text-slate-500">N° facture fourn.</label><Input data-testid="apinv-number" value={form.supplier_invoice_number} onChange={(e) => setForm({ ...form, supplier_invoice_number: e.target.value })} className="mt-1 h-9 w-36" /></div>
+            <div><label className="text-[11px] uppercase text-slate-500">Date</label><Input data-testid="apinv-date" type="date" value={form.invoice_date} onChange={(e) => setForm({ ...form, invoice_date: e.target.value })} className="mt-1 h-9 w-40" /></div>
+            <div><label className="text-[11px] uppercase text-slate-500">Devise</label><Input data-testid="apinv-currency" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} className="mt-1 h-9 w-24" /></div>
+            <div><label className="text-[11px] uppercase text-slate-500">Taux FX</label><Input data-testid="apinv-fx" value={form.fx_rate} placeholder="auto" onChange={(e) => setForm({ ...form, fx_rate: e.target.value })} className="mt-1 h-9 w-24" /></div>
+            <Button type="button" variant="outline" size="sm" disabled={fxDisabled || fetchingRate} onClick={fetchRate} data-testid="apinv-fetch-rate" className="h-9 gap-1"><Loader2 size={13} className={fetchingRate ? "animate-spin" : "hidden"} />Récupérer le taux</Button>
+            <div><label className="text-[11px] uppercase text-slate-500">PO</label><Input data-testid="apinv-po" value={form.purchase_order_id} onChange={(e) => setForm({ ...form, purchase_order_id: e.target.value })} className="mt-1 h-9 w-32" /></div>
+          </div>
+          <div className="mt-3 space-y-2">
+            {form.lines.map((l, i) => (
+              <div key={i} className="flex flex-wrap items-end gap-2" data-testid={`apinv-line-${i}`}>
+                <Input placeholder="Description" value={l.description} onChange={(e) => setLine(i, "description", e.target.value)} className="h-9 w-56" data-testid={`apinv-line-desc-${i}`} />
+                <Input placeholder="Qté" value={l.qty} onChange={(e) => setLine(i, "qty", e.target.value)} className="h-9 w-16" data-testid={`apinv-line-qty-${i}`} />
+                <Input placeholder="Prix" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} className="h-9 w-24" data-testid={`apinv-line-price-${i}`} />
+                <select value={l.tax_code} onChange={(e) => setLine(i, "tax_code", e.target.value)} className="h-9 w-40 rounded-md border border-slate-200 px-2 text-sm" data-testid={`apinv-line-tax-${i}`}>
+                  {taxCodes.map((t) => <option key={t.code} value={t.code}>{t.label || t.code}</option>)}
+                </select>
+                {form.lines.length > 1 && <Button type="button" variant="ghost" size="sm" className="h-9 text-rose-500" onClick={() => rmLine(i)}><Trash2 size={14} /></Button>}
+              </div>
+            ))}
+            <Button type="button" variant="outline" size="sm" className="h-8 gap-1" data-testid="apinv-add-line" onClick={addLine}><Plus size={12} /> Ligne</Button>
+          </div>
+          <div className="mt-4 border-t border-slate-100 pt-3">
+            <Button data-testid="apinv-create" onClick={create} disabled={!form.supplier_id || !form.period_id} className="h-9 gap-1 bg-[#22C55E] text-white"><Plus size={14} /> Créer</Button>
+          </div>
+        </div>
+      )}
+
+      {loading ? <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        : invoices.length === 0 ? <p className="text-sm text-slate-400" data-testid="ap-invoices-empty">{toProcess ? "Aucune facture à traiter." : "Aucune facture fournisseur."}</p>
+        : (
+          <div className="space-y-2">
+            {invoices.map((inv) => {
+              const st = DOC_ST[inv.document_status] || DOC_ST.draft;
+              return (
+                <div key={inv.id} data-testid={`apinv-row-${inv.id}`} className="rounded-xl border border-slate-200 bg-white p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="font-600 text-[#0F172A]">{supName(inv.supplier_id)}</span>
+                      <span className="font-mono-data text-xs text-slate-500">{inv.supplier_invoice_number || "—"}</span>
+                      <span className="text-sm text-slate-500">{inv.invoice_date} · éch. {inv.due_date || "—"} · {money(inv.total, inv.currency)}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-600 ${st.cls}`}>{st.label}</span>
+                      {inv.posting_status === "posted" && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-600 text-emerald-800">Comptabilisée</span>}
+                      {inv.po_required && !inv.purchase_order_id && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-600 text-amber-700">PO requis</span>}
+                      {inv.source_document_id && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-600 text-slate-600">PDF joint</span>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {inv.document_status === "draft" && <>
+                        <label className="cursor-pointer rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50" data-testid={`apinv-upload-${inv.id}`}>Joindre PDF<input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => upload(inv.id, e.target.files?.[0])} /></label>
+                        <Button size="sm" variant="outline" className="h-8" data-testid={`apinv-verify-${inv.id}`} onClick={() => act(inv.id, "verify", null, "Vérifiée")}>Vérifier</Button>
+                      </>}
+                      {(inv.document_status === "verified" || inv.document_status === "po_missing") && <Button size="sm" variant="outline" className="h-8" data-testid={`apinv-submit-${inv.id}`} onClick={() => act(inv.id, "submit", null, "Soumise")}>Soumettre</Button>}
+                      {inv.document_status === "submitted" && <>
+                        <Button size="sm" className="h-8 bg-emerald-600 text-white" data-testid={`apinv-approve-${inv.id}`} onClick={() => act(inv.id, "approve", null, "Approuvée")}>Approuver</Button>
+                        <Button size="sm" variant="outline" className="h-8 text-rose-600" data-testid={`apinv-reject-${inv.id}`} onClick={() => act(inv.id, "reject", { reason: "Rejetée" }, "Rejetée")}>Rejeter</Button>
+                      </>}
+                      {inv.document_status === "approved" && inv.posting_status !== "posted" && <Button size="sm" className="h-8 bg-[#063044] text-white" data-testid={`apinv-post-${inv.id}`} onClick={() => act(inv.id, "post", null, "Comptabilisée")}>Comptabiliser</Button>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
     </div>
   );
 }

@@ -3650,6 +3650,162 @@ async def ap_update_supplier(company_id: str, supplier_id: str, payload: APSuppl
     return s
 
 
+# ---- A4.2 Supplier invoices ------------------------------------------------
+class APInvoiceLineIn(BaseModel):
+    description: Optional[str] = ""
+    qty: Optional[float] = 1
+    unit_price: Optional[float] = 0
+    tax_code: Optional[str] = None
+    expense_account_code: Optional[str] = None
+    dimensions: Optional[dict] = None
+
+
+class APInvoiceIn(BaseModel):
+    supplier_id: str
+    period_id: str
+    supplier_invoice_number: Optional[str] = None
+    invoice_date: Optional[str] = None
+    due_date: Optional[str] = None
+    currency: Optional[str] = None
+    fx_rate: Optional[float] = None
+    purchase_order_id: Optional[str] = None
+    reference: Optional[str] = None
+    lines: List[APInvoiceLineIn] = []
+
+
+class APInvoiceUpdate(BaseModel):
+    supplier_invoice_number: Optional[str] = None
+    invoice_date: Optional[str] = None
+    due_date: Optional[str] = None
+    currency: Optional[str] = None
+    fx_rate: Optional[float] = None
+    purchase_order_id: Optional[str] = None
+    reference: Optional[str] = None
+    lines: Optional[List[APInvoiceLineIn]] = None
+
+
+class APRejectIn(BaseModel):
+    reason: Optional[str] = None
+
+
+class APMappingIn(BaseModel):
+    ap_account_code: Optional[str] = None
+    default_expense_account_code: Optional[str] = None
+    recoverable_tax_account_code: Optional[str] = None
+    fx_gain_account_code: Optional[str] = None
+    fx_loss_account_code: Optional[str] = None
+
+
+@api.get("/companies/{company_id}/ap/invoices")
+async def ap_list_invoices(company_id: str, document_status: Optional[str] = None, supplier_id: Optional[str] = None,
+                           to_process: bool = False, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"invoices": await ap_service.list_invoices(db, ws, company_id, document_status=document_status,
+                                                       supplier_id=supplier_id, to_process=to_process)}
+
+
+@api.get("/companies/{company_id}/ap/invoices/{invoice_id}")
+async def ap_get_invoice(company_id: str, invoice_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return ap_service.public_invoice(await ap_service.get_invoice(db, ws, company_id, invoice_id))
+
+
+@api.get("/companies/{company_id}/ap/invoices/{invoice_id}/documents")
+async def ap_invoice_documents(company_id: str, invoice_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    docs = await db.documents.find({"workspace_id": ws, "company_id": company_id,
+                                    "source_type": "ap_invoice", "source_id": invoice_id}).sort("version", -1).to_list(100)
+    return {"documents": [doc_service.public_document(d) for d in docs]}
+
+
+@api.post("/companies/{company_id}/ap/invoices")
+async def ap_create_invoice(company_id: str, payload: APInvoiceIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    inv = await ap_service.create_invoice(db, ws, company_id, user, payload.model_dump(exclude_unset=True))
+    await log_action(user, "create", "ap_invoice", inv["id"], company_id=company_id, entity_id=inv["id"],
+                     event_type="ap.invoice.created")
+    return inv
+
+
+@api.patch("/companies/{company_id}/ap/invoices/{invoice_id}")
+async def ap_update_invoice(company_id: str, invoice_id: str, payload: APInvoiceUpdate, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ap_service.update_draft(db, ws, company_id, user, invoice_id, payload.model_dump(exclude_unset=True))
+
+
+@api.post("/companies/{company_id}/ap/invoices/{invoice_id}/attachment")
+async def ap_upload_attachment(company_id: str, invoice_id: str, file: UploadFile = File(...),
+                               user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    inv = await ap_service.get_invoice(db, ws, company_id, invoice_id)
+    if inv.get("document_status") not in ("draft", "verified", "po_missing"):
+        raise HTTPException(status_code=409, detail="Le document source ne peut être ajouté/remplacé qu'avant l'approbation.")
+    data = await file.read()
+    stored = await doc_service.store_document(
+        db, ws, company_id, user, source_type="ap_invoice", source_id=invoice_id, data=data,
+        filename=file.filename or "facture_fournisseur.pdf", kind="source",
+        meta={"content_type": file.content_type})
+    await db.ap_invoices.update_one({"_id": invoice_id, "workspace_id": ws, "company_id": company_id},
+                                    {"$set": {"source_document_id": stored["id"], "source_document_sha256": stored["sha256"]}})
+    await log_action(user, "upload", "ap_invoice", invoice_id, details=f"PDF source {file.filename}",
+                     company_id=company_id, entity_id=invoice_id, event_type="ap.invoice.document_uploaded")
+    return {"document_id": stored["id"], "sha256": stored["sha256"], "version": stored["version"]}
+
+
+@api.post("/companies/{company_id}/ap/invoices/{invoice_id}/verify")
+async def ap_verify_invoice(company_id: str, invoice_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ap_service.verify_invoice(db, ws, company_id, user, invoice_id)
+
+
+@api.post("/companies/{company_id}/ap/invoices/{invoice_id}/submit")
+async def ap_submit_invoice(company_id: str, invoice_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    return await ap_service.submit_invoice(db, ws, company_id, user, invoice_id)
+
+
+@api.post("/companies/{company_id}/ap/invoices/{invoice_id}/approve")
+async def ap_approve_invoice(company_id: str, invoice_id: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.supplier_invoice_approve", workspace_id=ws)
+    inv = await ap_service.approve_invoice(db, ws, company_id, user, invoice_id)
+    await log_action(user, "approve", "ap_invoice", inv["id"], company_id=company_id, entity_id=inv["id"],
+                     event_type="ap.invoice.approved")
+    return inv
+
+
+@api.post("/companies/{company_id}/ap/invoices/{invoice_id}/reject")
+async def ap_reject_invoice(company_id: str, invoice_id: str, payload: APRejectIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    inv = await ap_service.reject_invoice(db, ws, company_id, user, invoice_id, reason=payload.reason)
+    await log_action(user, "reject", "ap_invoice", inv["id"], company_id=company_id, entity_id=inv["id"],
+                     event_type="ap.invoice.rejected")
+    return inv
+
+
+@api.post("/companies/{company_id}/ap/invoices/{invoice_id}/post")
+async def ap_post_invoice(company_id: str, invoice_id: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.supplier_invoice_post", workspace_id=ws)
+    inv = await ap_service.post_invoice(db, ws, company_id, user, invoice_id)
+    await log_action(user, "post", "ap_invoice", inv["id"], details="Facture fournisseur comptabilisée",
+                     company_id=company_id, entity_id=inv["id"], event_type="ap.invoice.posted")
+    return inv
+
+
+@api.get("/companies/{company_id}/ap/mapping")
+async def ap_get_mapping(company_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await ap_service.get_ap_mapping(db, ws, company_id)
+
+
+@api.put("/companies/{company_id}/ap/mapping")
+async def ap_set_mapping(company_id: str, payload: APMappingIn, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.chart_manage", workspace_id=ws)
+    return await ap_service.set_ap_mapping(db, ws, company_id, payload.model_dump(exclude_unset=True))
+
+
 # ---- Invoices --------------------------------------------------------------
 @api.get("/companies/{company_id}/ar/invoices")
 async def ar_list_invoices(company_id: str, status: Optional[str] = None, customer_id: Optional[str] = None,
