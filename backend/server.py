@@ -155,6 +155,7 @@ from core.accounting import ap as ap_service
 from core.accounting import ap_extraction as ap_ai
 from core.accounting import po as po_service
 from core.accounting import fx_revaluation as fxrev_service
+from core.compliance import policy_engine
 from core.compliance import jurisdiction as jurisdiction_service
 from core.accounting import dunning as dunning_service
 from core.financial import documents as doc_service
@@ -4069,6 +4070,31 @@ async def ap_post_revaluation_reversal(company_id: str, rid: str, user: dict = D
     await log_action(user, "reverse", "ap_fx_revaluation", rid, details="Extourne de réévaluation FX comptabilisée",
                      company_id=company_id, entity_id=rid, event_type="ap.fx_revaluation.reversed")
     return r
+
+
+# ---- CH.1 Jurisdiction / Accounting Policy Engine (read-only introspection) --
+class PolicyResolveIn(BaseModel):
+    domain: str
+    context: Optional[dict] = None
+    as_of: str
+
+
+@api.get("/companies/{company_id}/policy/effective")
+async def policy_effective(company_id: str, domain: str, jurisdiction: Optional[str] = None,
+                           as_of: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"policies": await policy_engine.list_effective(db, ws, company_id, domain=domain,
+                                                           jurisdiction=jurisdiction, as_of=as_of)}
+
+
+@api.post("/companies/{company_id}/policy/resolve")
+async def policy_resolve(company_id: str, payload: PolicyResolveIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    try:
+        return await policy_engine.resolve(db, ws, company_id, domain=payload.domain,
+                                           context=payload.context, as_of=payload.as_of)
+    except policy_engine.PolicyError as e:
+        raise HTTPException(status_code=409, detail={"code": e.code, "message": e.message, "detail": e.detail})
 
 
 
@@ -10697,6 +10723,8 @@ async def startup():
         await ap_ai.ensure_a44_indexes(db)
         await po_service.ensure_a45_indexes(db)
         await fxrev_service.ensure_indexes(db)
+        await policy_engine.ensure_indexes(db)
+        await policy_engine.ensure_seed(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     # P1.13A — seed Meelora workspace entitlements (availability only; grants no

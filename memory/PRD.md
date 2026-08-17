@@ -1758,3 +1758,23 @@ Gate approuvé, développement autorisé & livré. Backend 9/9 pytest PASS + fro
 - **Preuve zéro ledger parallèle** : sous-registre Aging inchangé (dérivé, taux historique) ; positions du run = photo d'audit ; seule écriture GL via journal canonique P2. Collection `ap_fx_revaluations`. Doc : `memory/A4_6_SCOPING.md`.
 
 **STOP après A4.6 — Swiss Country Pack NON démarré.**
+
+### Swiss Country Pack — CADRAGE GLOBAL (VALIDÉ — 2026-06) → `memory/SWISS_COUNTRY_PACK_SCOPING.md`
+Étude réglementaire sourcée (ESTV, SIX, GeBüV/OLico, veb.ch). Ordre validé CH.1→CH.9. Policy Engine canonique versionné, zéro `if country==CH`, Banking/Treasury = Core réutilisable, migration non-breaking `sales_tax_codes`.
+
+### CH.1 — Jurisdiction / Accounting Policy Engine (LIVRÉ & TESTÉ — 2026-06)
+Fondation transverse (CH/CA/EU). Doc : `memory/CH1_POLICY_ENGINE_SCOPING.md`. Tests : **30/30 PASS** (`backend/tests/test_ch1_policy_engine.py`, exécution directe).
+- **Module** `core/compliance/policy_engine.py` : `resolve(domain, context, as_of) → PolicyDecision`, `explain(snapshot)`, `list_effective`, `create_draft/update_draft/publish_draft`, `check_overlaps`, `assert_overridable`, `snapshot`, `ensure_seed/ensure_indexes`.
+- **Collections** : `jurisdiction_policies` (append-only, draft|published, versions immuables), `policy_audit`.
+- **Domaines câblés** : `vat` (wrapper `sales_tax_codes` — **parité 100%**), `fx_freshness` (R4, défaut 7j), `monetary_classification` (R4), `rounding` (fallback Core 2 déc.), `document_ai` (absorbe `jurisdiction.document_ai_policy`). **Aucune règle métier neuve** (3.8%/QR/camc = CH.2+).
+- **Hiérarchie juridictionnelle générique** (spécificité par profondeur : `CH-GE>CH>*`, `CA-QC>CA>*`), jamais le mot « canton » codé.
+- **Résolution déterministe** : spécificité → scope(company>system) → priorité → effective_from ; **égalité parfaite → `policy_conflict` fail-closed** (aucun tie-break arbitraire) ; détection d'overlap **à la publication** + garde runtime.
+- **Stratégie par domaine** : `required` (vat/monetary → fail-closed, jamais 0 implicite), `fallback_allowed` (rounding/fx → fallback Core explicite), `optional` (document_ai).
+- **Reproductibilité démontrée** : facture 2023 @7.7% ; publication future v2 @8.1% ne touche pas la v1 ; `explain(snapshot)` rejoue 7.7% **sans re-résolution**.
+- **Cache** invalidé depuis `effective_from` d'une nouvelle policy (corrections rétroactives), snapshots jamais invalidés.
+- **Overridability** déclarée (`configurable|overrideable|non_overrideable`) ; `assert_overridable` bloque l'override d'une règle réglementaire même pour admin/manage.
+- **sources[]** objet structuré (authority, title, doc_ref, url, published_version/date, effective_from, verified_at, archived_hash).
+- **Routes lecture** : `GET /companies/{cid}/policy/effective`, `POST /companies/{cid}/policy/resolve`. Seed système au démarrage. **Non-régression** A4/A4.6 confirmée (réconciliation 0, isolation 404).
+- **Reports** : A4.6 **non modifié** (interface d'autorité disponible, câblage R4 ultérieur) ; DT1/DT2 → CH.9 ; R1 production-only ; OANDA/IA facultatifs.
+
+**STOP après CH.1 — ne pas démarrer CH.2 automatiquement.**
