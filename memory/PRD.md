@@ -1622,3 +1622,8 @@ Conforme A3 §16 (pas d'automatisation agressive) — mode **proposition + confi
 - [x] **UI onglet Relances** (`SalesAR.js` RemindersTab) : panneau « Politique de relance » (toggle + 3 seuils + Enregistrer) et « Relances suggérées » (facture, retard, niveau suggéré) avec bouton « Envoyer niveau N » (réutilise `create_reminder` avec `level`).
 - [x] **Accueil « À savoir »** : item contextuel « N relance(s) suggérée(s) » (registre, si politique activée).
 - [x] Vérifié : endpoints (policy défaut/valide/invalide, suggestions=2) par curl + rendu UI. ⚠️ L'envoi réel reste dégradé (statut "failed") tant que `RESEND_API_KEY` est absent.
+
+## A4 — Achats & Fournisseurs : GATE validé + A4.1 livré (2026-08-17)
+- **GATE A4** : plan complet dans `/app/memory/A4_PLAN.md` (inventaire, modèle de données, workflow, permissions, ingestion PDF/email/IA, PO/matching, découpage A4.1→A4.8, risques). Décisions validées : 4 statuts séparés ; PO minimal en A4.5 ; courriel entrant reporté (A4.7) ; IA = GPT vision **sous gouvernance stricte** (non-entraînement, `DocumentAIProvider`, minimisation, rétention, audit, l'IA propose sans jamais poster) — **GATE de vérification avant A4.4**.
+- **A4.1 — Référentiel fournisseurs (livré, testé 100 %)** : `core/accounting/ap.py` (CRUD `ap_suppliers` + masquage bancaire), endpoints `GET/POST/PATCH /companies/{cid}/ap/suppliers`, permissions AP ajoutées au catalogue, écran `PurchasesAP.js` (7 onglets, fiche fournisseur 7 sections, contacts multiples, proposition fiscale par juridiction, PO obligatoire par fournisseur), nav `acct_purchases` branché. Isolation société + refus d'accès validés. **STOP après A4.1** — tranche suivante A4.2 sur validation.
+

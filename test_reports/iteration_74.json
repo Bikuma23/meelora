@@ -1,0 +1,25 @@
+{
+  "summary": "A4.1 (Achats & Fournisseurs — référentiel fournisseurs) testé end-to-end. Backend: 6/6 tests pytest passent (create/get/list, masquage bank, contacts + primary_contact, tax_exemptions [{code}], tax_ids objet, requires_po, PATCH status+payment_terms relu, 404 sur id inconnu, 422 sans nom, 403 sans accès ACCOUNTING, 401/403 sans auth). Frontend: navigation persona_finance → Comptabilité → Achats & Fournisseurs OK ; 7 onglets présents (ap-tab-overview/inbox/suppliers/invoices/payments/credits/aging), non-Fournisseurs affichent bien ap-coming-soon ; formulaire 7 sections (sup-section-general/addresses/billing/tax/accounting/documents/history) ; pays Canada + province Québec active la proposition fiscale (sup-tax-proposal visible) ; contact ajouté avec Principal coché ; requires_po coché ; création → toast 'Fournisseur créé', pas de crash React, ligne sup-row-* présente avec badges 'Actif' + 'PO requis'. Bouton sup-create correctement disabled quand le nom est vide (garde UI, création vide impossible → pas de crash React).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_a4_1_suppliers.py",
+    "/app/test_reports/pytest/a4_1.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/core/accounting/ap.py _mask_bank masque correctement account/iban/account_number (n derniers 4 conservés, reste remplacé par •) — jamais renvoyé en clair.",
+    "public_supplier exclut le _id MongoDB natif (utilise le _id string 'sup_<uuid>' comme id) — pas de leak ObjectId.",
+    "APSupplierIn: primary_contact:Optional[dict] et tax_exemptions:Optional[List[dict]] alignés avec le payload frontend (dict/list of dict) — pas de risque 'Objects are not valid as a React child' côté toast erreur (errMsg gère array/objet).",
+    "PurchasesAP.js : useEffect getTaxJurisdictionConfig déclenché sur country/region → proposition fiscale mise à jour ; jurisdiction auto-remplie depuis cfg.jurisdiction (bon UX).",
+    "sup-create disabled quand !form.name.trim() — le test 'création sans nom → toast lisible' n'est pas déclenchable côté UI (bouton bloqué avant appel API). Backend renvoie bien 422 si appelé directement (vérifié pytest).",
+    "Onglets 'à venir' rendent bien un placeholder statique (ap-coming-soon) — aucune requête réseau parasite."
+  ],
+  "updated_files": ["/app/backend/tests/test_a4_1_suppliers.py"],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (scénarios visés)"},
+  "test_credentials": "persona_finance@accslegro.com / persona123 (OK) ; admin@accslegro.com / admin123 (OK au login mais N'A PAS d'accès direct à la société qc9434 → 403 sur /ap/suppliers, contrairement à la note 'multi-mandat' du review_request). Isolation vérifiée via l'axe accès (persona_finance denied 403 sur qc9434) au lieu de l'axe admin cross-tenant.",
+  "seed_data_creation": "Créés sur Meelora via l'API/UI : TEST_A41_Fournisseur_ACME (code TEST-A41-1, statut inactive après PATCH) et TEST_A41_UI_Fournisseur (code UI-A41, actif, PO requis, contact Alice Bonneau primary, jurisdiction QC).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "A4.1 livré et vert. Onglets non-Fournisseurs = placeholders volontaires (A4.2+). Note admin@accslegro.com : login OK mais pas de membership sur les sociétés Meelora/qc9434 (403 sur ap-suppliers) — si un futur test doit vérifier l'accès admin cross-tenant, il faudra soit lui donner un CompanyAccess ACCOUNTING, soit utiliser un autre compte multi-mandat. Fichier de test réutilisable : /app/backend/tests/test_a4_1_suppliers.py."
+}

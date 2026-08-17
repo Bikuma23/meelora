@@ -151,6 +151,7 @@ from core.access.effective_access import resolve_effective_access
 from core.access.sensitive import require_sensitive_permission, require_module_level
 from core.accounting import gl as gl_service
 from core.accounting import ar as ar_service
+from core.accounting import ap as ap_service
 from core.accounting import dunning as dunning_service
 from core.financial import documents as doc_service
 from core.home import registry as home_registry
@@ -3584,6 +3585,69 @@ async def ar_create_customer(company_id: str, payload: ARCustomerIn, user: dict 
 async def ar_update_customer(company_id: str, customer_id: str, payload: ARCustomerIn, user: dict = Depends(get_current_user)):
     ws = await _ar_write_scope(company_id, user)
     return await ar_service.update_customer(db, ws, company_id, user, customer_id, payload.model_dump(exclude_unset=True))
+
+
+# ---- A4.1 Suppliers / Fournisseurs -----------------------------------------
+class APSupplierIn(BaseModel):
+    code: Optional[str] = None
+    name: Optional[str] = None
+    trade_name: Optional[str] = None
+    status: Optional[str] = None
+    legal_address: Optional[str] = None
+    remit_to_address: Optional[str] = None
+    contacts: Optional[List[dict]] = None
+    primary_contact: Optional[dict] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    country: Optional[str] = None
+    region: Optional[str] = None
+    jurisdiction: Optional[str] = None
+    language: Optional[str] = None
+    default_currency: Optional[str] = None
+    payment_terms: Optional[str] = None
+    due_days: Optional[int] = None
+    tax_ids: Optional[dict] = None
+    tax_regime: Optional[str] = None
+    tax_exemptions: Optional[List[dict]] = None
+    bank_info: Optional[dict] = None
+    preferred_payment_method: Optional[str] = None
+    default_expense_account_code: Optional[str] = None
+    default_ap_account_code: Optional[str] = None
+    default_dimensions: Optional[dict] = None
+    requires_po: Optional[bool] = None
+    internal_notes: Optional[str] = None
+    attachments: Optional[List[dict]] = None
+
+
+@api.get("/companies/{company_id}/ap/suppliers")
+async def ap_list_suppliers(company_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"suppliers": await ap_service.list_suppliers(db, ws, company_id)}
+
+
+@api.get("/companies/{company_id}/ap/suppliers/{supplier_id}")
+async def ap_get_supplier(company_id: str, supplier_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return ap_service.public_supplier(await ap_service.get_supplier(db, ws, company_id, supplier_id))
+
+
+@api.post("/companies/{company_id}/ap/suppliers")
+async def ap_create_supplier(company_id: str, payload: APSupplierIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    s = await ap_service.create_supplier(db, ws, company_id, user, payload.model_dump(exclude_unset=True))
+    await log_action(user, "create", "ap_supplier", s["name"], company_id=company_id, entity_id=s["id"],
+                     event_type="ap.supplier.created")
+    return s
+
+
+@api.patch("/companies/{company_id}/ap/suppliers/{supplier_id}")
+async def ap_update_supplier(company_id: str, supplier_id: str, payload: APSupplierIn, user: dict = Depends(get_current_user)):
+    ws = await _ar_write_scope(company_id, user)
+    s = await ap_service.update_supplier(db, ws, company_id, user, supplier_id, payload.model_dump(exclude_unset=True))
+    await log_action(user, "update", "ap_supplier", s["name"], company_id=company_id, entity_id=s["id"],
+                     event_type="ap.supplier.updated")
+    return s
 
 
 # ---- Invoices --------------------------------------------------------------
