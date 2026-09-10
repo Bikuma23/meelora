@@ -1813,4 +1813,9 @@ Doc : `memory/SWISS_CH3_COMPANY_PROFILE_SCOPING.md`. Cœur : `backend/core/compl
 - **Snapshots transactions** : inchangés (aucun recâblage A3/A4 ; les `VATPolicyDecision` déjà figées ne sont jamais recalculées par une rectification/annulation).
 - **Tests** : backend 14/14 (`backend/tests/test_ch3_cancellation.py`) + curl e2e ; frontend `test_reports/iteration_86.json` (~99%, aucun problème fonctionnel).
 
+#### CH.3 — Retouche UX finale : masquage des actions selon permission (LIVRÉ & TESTÉ — 2026-06)
+- `GET .../tax-profile` renvoie `can_manage` (calculé via `resolve_effective_access`, backend autoritaire). Le frontend masque **toutes** les actions mutatives (Configurer / Compléter / Modifier / Annuler / Activation Gate) pour un utilisateur sans `accounting.tax_profile_manage` — pas de bouton disabled, pas de cadenas, pas de message technique. Lecture seule naturelle : statut, configuration, historique, « Pourquoi ? » restent visibles ; messages neutres `tax-empty-readonly` / `tax-needs-attention-readonly` (« doit être complétée par une personne autorisée »).
+- Le masquage est **purement UX** : les endpoints mutatifs conservent le 403 (vérifié). Frontend `test_reports/iteration_87.json` (100%).
+- Sémantique préparée pour le futur recâblage A3/A4 : lorsqu'une opération métier requiert une info TVA non résolue et que l'utilisateur ne peut pas la corriger, ne pas afficher « Compléter maintenant » comme s'il pouvait agir (à exploiter en A3/A4, non construit ici).
+
 **STOP après CH.3 — ne PAS démarrer CH.4 ni recâbler A3/A4 sans accord explicite de l'utilisateur.**

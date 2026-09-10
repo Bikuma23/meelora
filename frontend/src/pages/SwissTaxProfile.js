@@ -531,6 +531,7 @@ export default function SwissTaxProfile() {
   }, [activeCompanyId]);
 
   const active = data?.active || null;
+  const canManage = !!data?.can_manage;  // UX only — backend stays authoritative (403)
   const status = !active ? "not_configured" : (active.completeness === "complete" ? "complete" : "needs_attention");
   const today = new Date().toISOString().slice(0, 10);
   const futureVersions = (data?.versions || [])
@@ -587,18 +588,27 @@ export default function SwissTaxProfile() {
         <span className={`rounded-full px-3 py-1 text-xs font-700 ${s.cls}`} data-testid="tax-status-badge">{s.label}</span>
       </div>
 
-      {/* not_configured — simple call to action */}
+      {/* not_configured — simple call to action (or read-only notice) */}
       {status === "not_configured" && (
         <div className="card flex flex-col items-center gap-3 py-12 text-center" data-testid="tax-empty">
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#15AF97]/10 text-[#15AF97]"><ShieldCheck size={24} /></span>
-          <div>
-            <p className="text-base font-700 text-[#063044]">Configurez votre TVA</p>
-            <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">Quelques questions simples suffisent — Meelora s'occupe du reste en arrière-plan.</p>
-          </div>
-          <button type="button" onClick={() => startWizard("create")} data-testid="tax-configure-btn"
-            className="mt-1 inline-flex items-center gap-2 rounded-xl bg-[#15AF97] px-5 py-2.5 text-sm font-700 text-white transition-colors hover:bg-[#128a78]">
-            Configurer la TVA <ArrowRight size={16} />
-          </button>
+          {canManage ? (
+            <>
+              <div>
+                <p className="text-base font-700 text-[#063044]">Configurez votre TVA</p>
+                <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">Quelques questions simples suffisent — Meelora s'occupe du reste en arrière-plan.</p>
+              </div>
+              <button type="button" onClick={() => startWizard("create")} data-testid="tax-configure-btn"
+                className="mt-1 inline-flex items-center gap-2 rounded-xl bg-[#15AF97] px-5 py-2.5 text-sm font-700 text-white transition-colors hover:bg-[#128a78]">
+                Configurer la TVA <ArrowRight size={16} />
+              </button>
+            </>
+          ) : (
+            <div data-testid="tax-empty-readonly">
+              <p className="text-base font-700 text-[#063044]">TVA non configurée</p>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">Cette configuration doit être complétée par une personne autorisée.</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -610,10 +620,12 @@ export default function SwissTaxProfile() {
             <span className="font-700">Une nouvelle configuration est planifiée</span>
             <span className="ml-1 text-slate-500">· Applicable à partir du {futureVersions[0].effective_from}</span>
           </div>
-          <button type="button" onClick={() => setCancelTarget(futureVersions[0])} data-testid="tax-future-cancel-btn"
-            className="ml-auto inline-flex items-center gap-1 text-xs font-600 text-slate-400 transition-colors hover:text-[#DC2626]">
-            <Ban size={13} /> Annuler
-          </button>
+          {canManage && (
+            <button type="button" onClick={() => setCancelTarget(futureVersions[0])} data-testid="tax-future-cancel-btn"
+              className="ml-auto inline-flex items-center gap-1 text-xs font-600 text-slate-400 transition-colors hover:text-[#DC2626]">
+              <Ban size={13} /> Annuler
+            </button>
+          )}
         </div>
       )}
 
@@ -627,14 +639,19 @@ export default function SwissTaxProfile() {
               <ul className="mt-1.5 space-y-1 text-xs text-[#92400E]">
                 {(active.unresolved || []).map((u, i) => <li key={i} className="flex items-center gap-1.5" data-testid={`tax-unresolved-${i}`}><X size={11} /> {u.reason}</li>)}
               </ul>
+              {!canManage && (
+                <p className="mt-2 text-xs font-600 text-[#92400E]" data-testid="tax-needs-attention-readonly">Cette configuration doit être complétée par une personne autorisée.</p>
+              )}
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-600">
             <span className="font-600 text-[#063044]">Suisse{active.canton ? ` · ${cantonName(active.canton)}` : ""}</span>
-            <button type="button" onClick={() => startWizard("rectify")} data-testid="tax-complete-btn"
-              className="ml-auto inline-flex items-center gap-2 rounded-xl bg-[#15AF97] px-4 py-2 text-sm font-700 text-white transition-colors hover:bg-[#128a78]">
-              <Pencil size={14} /> Compléter
-            </button>
+            {canManage && (
+              <button type="button" onClick={() => startWizard("rectify")} data-testid="tax-complete-btn"
+                className="ml-auto inline-flex items-center gap-2 rounded-xl bg-[#15AF97] px-4 py-2 text-sm font-700 text-white transition-colors hover:bg-[#128a78]">
+                <Pencil size={14} /> Compléter
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -648,16 +665,18 @@ export default function SwissTaxProfile() {
             {active.vat_method && <div className="text-slate-600" data-testid="tax-complete-method">{METHOD_LABEL[active.vat_method] || active.vat_method}</div>}
             <div className="text-xs text-slate-400">Configuration active depuis le {active.effective_from}</div>
           </div>
-          <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-3">
-            <button type="button" onClick={() => setChoose(true)} data-testid="tax-edit-btn"
-              className="inline-flex items-center gap-1.5 text-sm font-600 text-[#15AF97] transition-colors hover:text-[#128a78]">
-              <Pencil size={14} /> Modifier la configuration
-            </button>
-            <button type="button" onClick={() => setCancelTarget(active)} data-testid="tax-cancel-current-btn"
-              className="ml-auto inline-flex items-center gap-1.5 text-xs font-600 text-slate-400 transition-colors hover:text-[#DC2626]">
-              <Ban size={13} /> Annuler cette configuration
-            </button>
-          </div>
+          {canManage && (
+            <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-3">
+              <button type="button" onClick={() => setChoose(true)} data-testid="tax-edit-btn"
+                className="inline-flex items-center gap-1.5 text-sm font-600 text-[#15AF97] transition-colors hover:text-[#128a78]">
+                <Pencil size={14} /> Modifier la configuration
+              </button>
+              <button type="button" onClick={() => setCancelTarget(active)} data-testid="tax-cancel-current-btn"
+                className="ml-auto inline-flex items-center gap-1.5 text-xs font-600 text-slate-400 transition-colors hover:text-[#DC2626]">
+                <Ban size={13} /> Annuler cette configuration
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -666,7 +685,7 @@ export default function SwissTaxProfile() {
         cid={activeCompanyId} version={cancelTarget} onDone={() => { setCancelTarget(null); refresh(); }} />
 
       {/* Activation gate — only relevant once a profile exists */}
-      {active && <ActivationGate cid={activeCompanyId} active={active} activation={data?.activation} onChange={refresh} />}
+      {active && canManage && <ActivationGate cid={activeCompanyId} active={active} activation={data?.activation} onChange={refresh} />}
 
       {/* History (secondary, read-only) */}
       <HistorySection versions={data?.versions} activeId={active?._id} />

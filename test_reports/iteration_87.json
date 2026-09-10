@@ -1,0 +1,22 @@
+{
+  "summary": "CH.3 UX final: verified conditional HIDING of mutative actions on Meelora Swiss TVA hub based on can_manage flag. Junior (no perm) sees read-only hub; Finance (with perm) sees full mutative actions. Backend remains authoritative (403).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "SwissTaxProfile.js correctly uses canManage = !!data?.can_manage as pure UX gate; all 6 mutative testids (tax-configure-btn, tax-complete-btn, tax-edit-btn, tax-cancel-current-btn, tax-future-cancel-btn, tax-activation-gate) are wrapped in canManage checks; read-only fallbacks tax-empty-readonly / tax-needs-attention-readonly are properly conditioned on !canManage."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "persona_junior@accslegro.com / persona123 (no perm), persona_finance@accslegro.com / persona123 (has perm)",
+  "seed_data_creation": "",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Junior DOM presence: tax-hub=1, tax-status-badge=1, tax-complete=1, tax-history=1, tax-history-toggle=1; ALL mutative testids = 0; 0 disabled buttons in tax-hub; no 'permission' text, no lock icon. Finance DOM presence: tax-edit-btn=1, tax-cancel-current-btn=1, tax-activation-gate=1; clicking tax-edit-btn opens tax-choose-mode=1 (mutative flow intact). Backend regression: POST /api/companies/{meelora}/tax-profile/draft as junior returned HTTP 403 as expected.",
+  "rca of the issue": "N/A - feature verified working as specified"
+}

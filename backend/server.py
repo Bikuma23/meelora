@@ -4117,9 +4117,12 @@ class TaxProfileIn(BaseModel):
 @api.get("/companies/{company_id}/tax-profile")
 async def tax_profile_active(company_id: str, as_of: Optional[str] = None, user: dict = Depends(get_current_user)):
     ws = await _ar_read_scope(company_id, user)
+    _acc = await resolve_effective_access(db, user, workspace_id=ws, company_id=company_id,
+                                          permission="accounting.tax_profile_manage")
     return {"active": await tax_profile_service.get_active_profile(db, ws, company_id, as_of),
             "activation": await tax_profile_service.get_activation(db, ws, company_id),
-            "versions": await tax_profile_service.list_versions(db, ws, company_id)}
+            "versions": await tax_profile_service.list_versions(db, ws, company_id),
+            "can_manage": bool(_acc.get("allowed"))}
 
 
 @api.get("/companies/{company_id}/tax-profile/migration-report")
