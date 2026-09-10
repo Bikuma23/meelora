@@ -69,29 +69,49 @@ def public_profile(d):
     if not d:
         return None
     return {k: d.get(k) for k in (
-        "_id", "company_id", "profile_version", "status", "effective_from", "effective_to",
+        "_id", "company_id", "profile_version", "status", "entry_type", "effective_from", "effective_to",
         "country", "canton", "vat_status", "vat_number", "vat_number_validation",
         "vat_method", "vat_method_start", "vat_period", "net_tax_rates",
         "completeness", "unresolved", "source_entry", "created_at", "published_at",
-        "supersedes_version_id", "supersession_reason", "superseded_at", "superseded_by")}
+        "supersedes_version_id", "supersession_reason", "superseded_at", "superseded_by",
+        "cancels_version_id", "cancellation_reason", "cancelled_at", "cancelled_by")}
 
 
-def _superseded_ids(docs):
+def _is_profile(d):
+    return d.get("entry_type", "profile") == "profile"
+
+
+def _cancelled_ids(docs):
+    """A published version is logically cancelled when an append-only cancellation
+    tombstone references it. The original document is NEVER mutated."""
+    return {d["cancels_version_id"] for d in docs
+            if d.get("status") == "published" and d.get("entry_type") == "cancellation"
+            and d.get("cancels_version_id")}
+
+
+def _superseded_ids(docs, cancelled=None):
     """Append-only supersession: an old version is 'Remplacée' when a NEWER
-    published version references it via supersedes_version_id. The old document
-    is never mutated — the state is DERIVED from the chain."""
+    published version references it via supersedes_version_id. A superseding
+    version that is itself cancelled no longer supersedes (its target revives)."""
+    cancelled = cancelled or set()
     return {d["supersedes_version_id"] for d in docs
-            if d.get("status") == "published" and d.get("supersedes_version_id")}
+            if d.get("status") == "published" and _is_profile(d)
+            and d.get("supersedes_version_id") and d["_id"] not in cancelled}
+
+
+async def _all_published(db, ws, co):
+    return await db.company_tax_profiles.find({
+        "workspace_id": ws, "company_id": co, "status": "published"}).to_list(1000)
 
 
 async def _active_published(db, ws, co, as_of):
-    docs = await db.company_tax_profiles.find({
-        "workspace_id": ws, "company_id": co, "status": "published",
-        "effective_from": {"$lte": as_of}}).to_list(500)
-    docs = [d for d in docs if not d.get("effective_to") or d["effective_to"] > as_of]
-    # Resolution = tip of each supersession chain (exclude superseded versions).
-    dead = _superseded_ids(docs)
-    docs = [d for d in docs if d["_id"] not in dead]
+    allp = await _all_published(db, ws, co)
+    cancelled = _cancelled_ids(allp)
+    dead = _superseded_ids(allp, cancelled)
+    docs = [d for d in allp if _is_profile(d)
+            and d["effective_from"] <= as_of
+            and (not d.get("effective_to") or d["effective_to"] > as_of)
+            and d["_id"] not in cancelled and d["_id"] not in dead]
     if not docs:
         return None
     docs.sort(key=lambda d: (d["effective_from"], d["profile_version"]))
@@ -104,12 +124,23 @@ async def get_active_profile(db, ws, co, as_of=None):
 
 async def list_versions(db, ws, co):
     docs = await db.company_tax_profiles.find({"workspace_id": ws, "company_id": co}).sort(
-        "profile_version", -1).to_list(500)
-    dead = _superseded_ids(docs)
+        "profile_version", -1).to_list(1000)
+    cancelled = _cancelled_ids(docs)
+    dead = _superseded_ids(docs, cancelled)
+    # Map cancelled target -> tombstone (for reason/author shown in history).
+    tomb = {d["cancels_version_id"]: d for d in docs
+            if d.get("entry_type") == "cancellation" and d.get("cancels_version_id")}
     out = []
     for d in docs:
+        if not _is_profile(d):
+            continue  # tombstones are metadata, folded into their target row
         pub = public_profile(d)
         pub["is_superseded"] = d["_id"] in dead  # DERIVED, never stored on the old doc
+        pub["is_cancelled"] = d["_id"] in cancelled
+        if d["_id"] in tomb:
+            t = tomb[d["_id"]]
+            pub["cancellation_reason"] = t.get("cancellation_reason")
+            pub["cancelled_at"] = t.get("cancelled_at")
         out.append(pub)
     return out
 
@@ -127,7 +158,7 @@ async def create_draft(db, ws, co, user, payload, *, source_kind="user", provena
     next_v = (published[0]["profile_version"] + 1) if published else 1
     vatn = payload.get("vat_number")
     p = {"_id": f"txp_{uuid.uuid4().hex}", "workspace_id": ws, "company_id": co,
-         "profile_version": next_v, "status": "draft",
+         "profile_version": next_v, "status": "draft", "entry_type": "profile",
          "effective_from": payload.get("effective_from") or _now()[:10],
          "effective_to": payload.get("effective_to"),
          "country": (payload.get("country") or "").upper() or None,
@@ -176,12 +207,13 @@ async def publish(db, ws, co, user, profile_id):
     if d["status"] != "draft":
         raise HTTPException(status_code=409, detail="Publication impossible.")
     # Same-date published versions (candidates for supersession / overlap).
-    all_pub = await db.company_tax_profiles.find({
-        "workspace_id": ws, "company_id": co, "status": "published"}).to_list(500)
-    dead = _superseded_ids(all_pub)
-    same_date = [p for p in all_pub if p["effective_from"] == d["effective_from"] and p["_id"] != profile_id]
-    # Tip = the not-yet-superseded version for that date (there is at most one).
-    live_same_date = [p for p in same_date if p["_id"] not in dead]
+    all_pub = await _all_published(db, ws, co)
+    cancelled = _cancelled_ids(all_pub)
+    dead = _superseded_ids(all_pub, cancelled)
+    same_date = [p for p in all_pub if _is_profile(p)
+                 and p["effective_from"] == d["effective_from"] and p["_id"] != profile_id]
+    # Tip = the not-yet-superseded, not-cancelled version for that date (≤1).
+    live_same_date = [p for p in same_date if p["_id"] not in dead and p["_id"] not in cancelled]
     sup_id = d.get("supersedes_version_id")
     superseded = False
     if live_same_date:
@@ -198,7 +230,7 @@ async def publish(db, ws, co, user, profile_id):
     elif sup_id:
         # Referenced version must exist, share the date, and still be the live tip.
         target = next((p for p in same_date if p["_id"] == sup_id), None)
-        if not target or sup_id in dead:
+        if not target or sup_id in dead or sup_id in cancelled:
             raise HTTPException(status_code=409,
                                 detail="Rectification impossible : la version à remplacer est introuvable ou déjà remplacée.")
         superseded = True
@@ -217,7 +249,53 @@ async def publish(db, ws, co, user, profile_id):
     return public_profile(await db.company_tax_profiles.find_one({"_id": profile_id}))
 
 
-# --- Migration report (3 columns; sensitive fields never silently confirmed) ---
+async def delete_draft(db, ws, co, user, profile_id):
+    """Physical deletion allowed ONLY for a never-published draft (audited)."""
+    d = await db.company_tax_profiles.find_one({"_id": profile_id, "workspace_id": ws, "company_id": co})
+    if not d:
+        raise HTTPException(status_code=404, detail="Profil introuvable.")
+    if d["status"] != "draft" or not _is_profile(d):
+        raise HTTPException(status_code=409,
+                            detail="Suppression impossible : une version publiée ne peut jamais être supprimée.")
+    await db.company_tax_profiles.delete_one({"_id": profile_id})
+    await db.tax_profile_audit.insert_one({
+        "_id": f"txpaud_{uuid.uuid4().hex}", "workspace_id": ws, "company_id": co,
+        "event": "tax_profile.draft_deleted", "profile_version": d["profile_version"],
+        "effective_from": d["effective_from"], "by": (user or {}).get("id"), "at": _now()})
+    return {"deleted": True, "profile_id": profile_id}
+
+
+async def cancel_version(db, ws, co, user, profile_id, reason):
+    """Logical cancellation of a PUBLISHED version — append-only tombstone, the
+    original is never mutated. Reason is mandatory. Reverts resolution to the
+    prior live version (or none) for that period."""
+    if not (reason or "").strip():
+        raise HTTPException(status_code=422, detail="Motif obligatoire pour annuler une configuration publiée.")
+    d = await db.company_tax_profiles.find_one({"_id": profile_id, "workspace_id": ws, "company_id": co})
+    if not d:
+        raise HTTPException(status_code=404, detail="Profil introuvable.")
+    if d["status"] != "published" or not _is_profile(d):
+        raise HTTPException(status_code=409, detail="Seule une version publiée peut être annulée.")
+    all_pub = await _all_published(db, ws, co)
+    if profile_id in _cancelled_ids(all_pub):
+        raise HTTPException(status_code=409, detail="Cette configuration est déjà annulée.")
+    nxt = await db.company_tax_profiles.find({
+        "workspace_id": ws, "company_id": co}).sort("profile_version", -1).to_list(1)
+    next_v = (nxt[0]["profile_version"] + 1) if nxt else 1
+    tomb = {"_id": f"txp_{uuid.uuid4().hex}", "workspace_id": ws, "company_id": co,
+            "profile_version": next_v, "status": "published", "entry_type": "cancellation",
+            "effective_from": d["effective_from"], "cancels_version_id": profile_id,
+            "cancellation_reason": reason.strip(),
+            "cancelled_at": _now(), "cancelled_by": (user or {}).get("id"),
+            "source_entry": _source_entry(user, "user", "annulation"),
+            "created_by": (user or {}).get("id"), "created_at": _now(), "published_at": _now()}
+    await db.company_tax_profiles.insert_one(tomb)
+    await db.tax_profile_audit.insert_one({
+        "_id": f"txpaud_{uuid.uuid4().hex}", "workspace_id": ws, "company_id": co,
+        "event": "tax_profile.cancelled", "profile_version": d["profile_version"],
+        "cancels_version_id": profile_id, "effective_from": d["effective_from"],
+        "cancellation_reason": reason.strip(), "by": (user or {}).get("id"), "at": _now()})
+    return public_profile(await db.company_tax_profiles.find_one({"_id": profile_id}))
 async def migration_report(db, ws, co):
     company = await db.companies.find_one({"id": co}) or await db.companies.find_one({"_id": co}) or {}
     confirmed, deduced, to_confirm = [], [], []

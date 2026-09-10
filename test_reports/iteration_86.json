@@ -1,0 +1,47 @@
+{
+  "summary": "CH.3 FINITION — Logical cancellation + delete draft UX fully verified end-to-end on Meelora CH tax hub. All acceptance criteria pass: (1) starting state shows badge 'Configuré', tax-complete card, tax-activation-gate, and the tax-future-banner IS HIDDEN even though a 2027-01-01 version exists in DB (because it was previously cancelled — is_cancelled dérivé works). (2) tax-edit-btn opens tax-choose-mode with tax-choose-rectify (subtext contains 'L'information corrigée était déjà valable depuis le 2026-01-01.'), tax-choose-amend and tax-choose-back — NO 'supersession' word visible. (3) Rectify wizard has NO date step (tax-effective-from absent across all steps), review shows tax-review-rectify-note, submit button label = 'Confirmer'. (4) Amend wizard has date step, published a future 2028-01-01 → hub badge stays 'Configuré', tax-future-banner appears with correct date + tax-future-cancel-btn. (5) Cancel-future dialog: tax-cancel-dialog opens, tax-cancel-confirm DISABLED when tax-cancel-reason empty and ENABLED when filled; after confirm, toast success, banner disappears, history shows 2028 as 'Planifiée — annulée' with 'Motif : Erreur de saisie test'. (6) tax-cancel-current-btn opens same dialog with mandatory reason; after cancel, badge → 'Non configuré', tax-empty card appears, NO technical error visible, and history retains the 2026 version as 'Annulée' with motif (append-only, never physically deleted). (7) History labels are all human-readable: 'Configuration actuelle' / 'Remplacée' / 'Planifiée' / 'Planifiée — annulée' / 'Annulée' / 'Version précédente' — no id/hash exposed. (8) Junior persona (no accounting.tax_profile_manage) reads hub OK; sees the cancel button but the POST /cancel returns 403 which is surfaced as a friendly Sonner toast — configuration remains intact.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Junior 403 toast on cancel", "issues": ["Toast text 'Action sensible refusée (accounting.tax_profile_manage) : permission_not_granted' still exposes the raw permission code and error slug. It's functional and friendly-ish, but the spec 'aucun jargon technique dans l'UX' would be better served by a message like 'Vous n'avez pas les droits pour annuler une configuration TVA. Contactez votre administrateur.' — same wording gap flagged in iteration_85."]},
+      {"screen": "CancelDialog (Radix)", "issues": ["Radix warning in console: 'Missing Description or aria-describedby for DialogContent'. Add a DialogDescription for accessibility."]},
+      {"screen": "Junior read-only UX", "issues": ["Junior sees tax-cancel-current-btn and tax-edit-btn even though POST is 403. The spec allows either hiding or blocking, current implementation blocks — acceptable, but hiding destructive actions from users lacking the permission would be a cleaner UX."]}
+    ]
+  },
+  "passed_checks": [
+    "Starting state: badge 'Configuré' + tax-complete + tax-activation-gate; tax-future-banner correctly HIDDEN despite existing 2027 version (cancelled, is_cancelled dérivé works)",
+    "tax-edit-btn → tax-choose-mode with rectify/amend/back; no 'supersession' text",
+    "tax-choose-rectify subtext: 'L'information corrigée était déjà valable depuis le 2026-01-01.'",
+    "tax-choose-back returns to hub without side-effects",
+    "Rectify wizard: tax-effective-from ABSENT at every step; tax-review-rectify-note present; submit label = 'Confirmer'",
+    "Amend wizard: tax-effective-from PRESENT; published a 2028-01-01 version successfully",
+    "After amend: badge stays 'Configuré' (as-of-today = 2026), tax-future-banner shows 'Applicable à partir du 2028-01-01' with tax-future-cancel-btn",
+    "CancelDialog for future: tax-cancel-confirm disabled when tax-cancel-reason empty, enabled after typing; on confirm → success toast + banner disappears",
+    "History after future-cancel: 2028 labeled 'Planifiée — annulée' with tax-history-cancel-reason-0 = 'Motif : Erreur de saisie test'; 2027 still 'Planifiée — annulée' from initial state",
+    "CancelDialog for current: same mandatory-reason behaviour; on confirm → hub returns to tax-empty (no prior valid version) with badge 'Non configuré'; NO technical error visible",
+    "Append-only: history still shows 2026 version as 'Annulée' with motif 'Version 2026 erronée - test' after physical cancellation",
+    "History labels are all human-readable (Configuration actuelle / Remplacée / Planifiée — annulée / Annulée); no id/hash surfaced",
+    "Junior persona: reads hub OK; 403 on cancel surfaced as friendly Sonner toast; configuration NOT mutated (badge stayed 'Configuré')"
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "(LOW/UX) Rephrase junior 403 toast to drop the permission code and error slug (e.g., 'Vous n'avez pas les droits pour annuler une configuration TVA. Contactez votre administrateur.').",
+    "(LOW/A11y) Add <DialogDescription> to CancelDialog to remove Radix aria-describedby console warning.",
+    "(OPTIONAL) Consider hiding tax-cancel-current-btn / tax-edit-btn when the user lacks accounting.tax_profile_manage rather than showing-and-blocking."
+  ],
+  "critical_code_review_comments": [
+    "Backend + frontend implementation is production-quality: is_cancelled is derived correctly (no mutation), append-only history is respected, and the UI never surfaces raw ids/hashes.",
+    "Cancel dialog is well-guarded: submit button is disabled while reason.trim() is empty on BOTH client (disabled attr) and server (422 without motif) — good defense-in-depth.",
+    "When cancelling the only active version, the hub falls back to tax-empty cleanly with no console error — matches spec (7) 'AUCUNE erreur technique'."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only scope)", "frontend": "~99% (all specified data-testids and flows work; only UX polish items remain)"},
+  "test_credentials": "persona_finance@accslegro.com / persona123 (validated with accounting.tax_profile_manage); persona_junior@accslegro.com / persona123 (validated 403 UX path)",
+  "seed_data_creation": "Appended (append-only) to Meelora CH: published 2028-01-01 (then cancelled with motif 'Erreur de saisie test'); cancelled the active 2026-01-01 (motif 'Version 2026 erronée - test'); re-created a fresh 2026-01-01 configured version afterwards so the hub is once again in the expected 'Configuré' baseline for subsequent testing.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "CH.3 FINITION acceptance is met end-to-end. State after this test iteration: Meelora has a NEW active 2026-01-01 configured version, 2027-01-01 is 'Planifiée — annulée', 2028-01-01 is 'Planifiée — annulée', plus the older 2026 version marked 'Annulée' — all append-only. Fiscal engine is INACTIVE. Only cosmetic UX items remain (junior toast wording, DialogDescription).",
+  "rca of the issue": "N/A — no functional issues found. Cosmetic items only (toast wording, missing aria-describedby, and optional hiding of destructive buttons for users without accounting.tax_profile_manage)."
+}

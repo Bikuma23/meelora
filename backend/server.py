@@ -4152,6 +4152,30 @@ async def tax_profile_activate(company_id: str, active: bool = True, user: dict 
     return await tax_profile_service.set_activation(db, ws, company_id, user, active)
 
 
+@api.delete("/companies/{company_id}/tax-profile/{pid}")
+async def tax_profile_delete_draft(company_id: str, pid: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.tax_profile_manage", workspace_id=ws)
+    r = await tax_profile_service.delete_draft(db, ws, company_id, user, pid)
+    await log_action(user, "delete", "tax_profile", pid, details="Brouillon de profil fiscal supprimé",
+                     company_id=company_id, entity_id=pid, event_type="tax_profile.draft_deleted")
+    return r
+
+
+class TaxProfileCancelIn(BaseModel):
+    reason: str
+
+
+@api.post("/companies/{company_id}/tax-profile/{pid}/cancel")
+async def tax_profile_cancel(company_id: str, pid: str, payload: TaxProfileCancelIn, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.tax_profile_manage", workspace_id=ws)
+    r = await tax_profile_service.cancel_version(db, ws, company_id, user, pid, payload.reason)
+    await log_action(user, "cancel", "tax_profile", pid, details=f"Configuration fiscale annulée : {payload.reason}",
+                     company_id=company_id, entity_id=pid, event_type="tax_profile.cancelled")
+    return r
+
+
 
 
 @api.get("/companies/{company_id}/ap/suppliers/{supplier_id}/summary")

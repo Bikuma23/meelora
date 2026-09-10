@@ -4,9 +4,11 @@ import { api } from "../lib/api";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import { Input } from "../components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
+import { Textarea } from "../components/ui/textarea";
 import {
   Loader2, ShieldCheck, HelpCircle, Check, ChevronRight, ChevronLeft, AlertCircle,
-  CircleDot, Pencil, History, Power, X, Info, ArrowRight,
+  CircleDot, Pencil, History, Power, X, Info, ArrowRight, Ban, CalendarClock,
 } from "lucide-react";
 
 // Swiss cantons (code -> name). Used to pre-fill / confirm the fiscal context.
@@ -19,6 +21,11 @@ const CANTONS = [
   ["NE", "Neuchâtel"], ["GE", "Genève"], ["JU", "Jura"],
 ];
 const cantonName = (c) => (CANTONS.find(([k]) => k === c) || [])[1] || c;
+// Friendly errors — never surface raw permission codes/slugs to the user.
+const apiError = (e, fallback) => {
+  if (e?.response?.status === 403) return "Vous n'avez pas les droits pour modifier la configuration TVA. Contactez votre administrateur.";
+  return e?.response?.data?.detail || fallback;
+};
 // Migration may pre-fill a canton NAME (e.g. "Genève") rather than a code ("GE").
 const normalizeCanton = (v) => {
   if (!v) return "";
@@ -134,7 +141,7 @@ function Wizard({ cid, prefill, mode, active, onDone, onCancel }) {
       toast.success(rectify ? "Configuration mise à jour" : "Configuration TVA enregistrée");
       onDone();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Échec de l'enregistrement");
+      toast.error(apiError(e, "Échec de l'enregistrement"));
     } finally { setBusy(false); }
   };
 
@@ -322,12 +329,13 @@ function VersionRow({ v, prev, label, idx }) {
   const changes = prev
     ? ["vat_status", "vat_method", "vat_number", "canton"].filter((f) => (v[f] || null) !== (prev[f] || null))
     : [];
+  const muted = label === "Remplacée" || v.is_cancelled;
   return (
     <li className="py-2.5 text-sm" data-testid={`tax-history-item-${idx}`}>
       <div className="flex items-center justify-between">
-        <span className="text-[#063044]">
-          Depuis le <span className="font-700">{v.effective_from}</span>
-          <span className={`ml-2 text-xs ${label === "Remplacée" ? "text-slate-400" : "text-[#15AF97]"}`} data-testid={`tax-history-label-${idx}`}>{label}</span>
+        <span className={v.is_cancelled ? "text-slate-400" : "text-[#063044]"}>
+          Depuis le <span className={`font-700 ${v.is_cancelled ? "line-through" : ""}`}>{v.effective_from}</span>
+          <span className={`ml-2 text-xs ${muted ? "text-slate-400" : "text-[#15AF97]"}`} data-testid={`tax-history-label-${idx}`}>{label}</span>
         </span>
         <div className="flex items-center gap-3">
           {prev && (
@@ -337,6 +345,9 @@ function VersionRow({ v, prev, label, idx }) {
           <span className="text-xs text-slate-400">{(v.published_at || "").slice(0, 10)}</span>
         </div>
       </div>
+      {v.is_cancelled && v.cancellation_reason && (
+        <p className="mt-1 text-xs text-slate-400" data-testid={`tax-history-cancel-reason-${idx}`}>Motif : {v.cancellation_reason}</p>
+      )}
       {open && (
         <div className="mt-2 rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600" data-testid={`tax-history-diff-${idx}`}>
           {changes.length === 0 ? "Aucun champ modifié." : changes.map((fld) => (
@@ -358,12 +369,13 @@ function HistorySection({ versions, activeId }) {
   const published = (versions || []).filter((v) => v.status === "published"); // sorted version desc
   const byId = Object.fromEntries(published.map((v) => [v._id, v]));
   if (published.length === 0) return null;
-  const labelFor = (v) => (
-    v.is_superseded ? "Remplacée"
-      : v._id === activeId ? "Configuration actuelle"
-      : v.effective_from > today ? "Planifiée"
-      : "Version précédente"
-  );
+  const labelFor = (v) => {
+    if (v.is_cancelled) return v.effective_from > today ? "Planifiée — annulée" : "Annulée";
+    if (v.is_superseded) return "Remplacée";
+    if (v._id === activeId) return "Configuration actuelle";
+    if (v.effective_from > today) return "Planifiée";
+    return "Version précédente";
+  };
   return (
     <div className="card p-5" data-testid="tax-history">
       <button type="button" onClick={() => setOpen((o) => !o)} data-testid="tax-history-toggle"
@@ -396,7 +408,7 @@ function ActivationGate({ cid, active, activation, onChange }) {
       toast.success(engineOn ? "Moteur TVA désactivé" : "Moteur TVA activé");
       onChange();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Action impossible");
+      toast.error(apiError(e, "Action impossible"));
     } finally { setBusy(false); }
   };
 
@@ -429,12 +441,84 @@ function ActivationGate({ cid, active, activation, onChange }) {
   );
 }
 
+// ---- Cancellation dialog (mandatory reason) ---------------------------------
+function CancelDialog({ open, onOpenChange, cid, version, onDone }) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const confirm = async () => {
+    if (!reason.trim()) return;
+    setBusy(true);
+    try {
+      await api.cancelTaxVersion(cid, version._id, reason.trim());
+      toast.success("Configuration annulée");
+      onOpenChange(false); setReason(""); onDone();
+    } catch (e) {
+      toast.error(apiError(e, "Annulation impossible"));
+    } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md" data-testid="tax-cancel-dialog">
+        <DialogHeader>
+          <DialogTitle className="text-[#063044]">Annuler cette configuration</DialogTitle>
+          <DialogDescription>Indiquez le motif de l'annulation. La configuration restera conservée dans l'historique.</DialogDescription>
+        </DialogHeader>
+        <p className="text-sm text-slate-500">
+          La configuration applicable à partir du <span className="font-700 text-[#063044]">{version?.effective_from}</span> sera rendue inactive.
+          Elle restera conservée dans l'historique. Indiquez le motif.
+        </p>
+        <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Motif de l'annulation…"
+          data-testid="tax-cancel-reason" className="mt-1 text-sm" rows={3} />
+        <DialogFooter>
+          <button type="button" onClick={() => onOpenChange(false)} data-testid="tax-cancel-abort"
+            className="rounded-xl px-4 py-2 text-sm font-600 text-slate-500 hover:text-[#063044]">Retour</button>
+          <button type="button" onClick={confirm} disabled={busy || !reason.trim()} data-testid="tax-cancel-confirm"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#DC2626] px-4 py-2 text-sm font-700 text-white transition-colors hover:bg-[#b91c1c] disabled:opacity-40">
+            {busy ? <Loader2 size={15} className="animate-spin" /> : <Ban size={15} />} Confirmer l'annulation
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---- Choice: rectify vs amend -----------------------------------------------
+function ChooseMode({ activeDate, onPick, onCancel }) {
+  return (
+    <div className="mx-auto max-w-xl" data-testid="tax-choose-mode">
+      <div className="card p-6">
+        <h2 className="font-display text-xl font-700 text-[#063044]">Que souhaitez-vous faire ?</h2>
+        <p className="mt-1 text-sm text-slate-500">Choisissez l'option qui décrit le mieux votre situation.</p>
+        <div className="mt-5 grid gap-3">
+          <button type="button" onClick={() => onPick("rectify")} data-testid="tax-choose-rectify"
+            className="rounded-xl border border-slate-200 p-4 text-left transition-colors hover:border-[#15AF97] hover:bg-[#15AF97]/5">
+            <div className="flex items-center gap-2 font-700 text-[#063044]"><Pencil size={15} className="text-[#15AF97]" /> Corriger la configuration actuelle</div>
+            <p className="mt-1 text-xs text-slate-500">L'information corrigée était déjà valable depuis le {activeDate}.</p>
+          </button>
+          <button type="button" onClick={() => onPick("amend")} data-testid="tax-choose-amend"
+            className="rounded-xl border border-slate-200 p-4 text-left transition-colors hover:border-[#15AF97] hover:bg-[#15AF97]/5">
+            <div className="flex items-center gap-2 font-700 text-[#063044]"><CalendarClock size={15} className="text-[#15AF97]" /> Modifier à partir d'une nouvelle date</div>
+            <p className="mt-1 text-xs text-slate-500">La situation de votre entreprise change à partir d'une nouvelle date.</p>
+          </button>
+        </div>
+        <button type="button" onClick={onCancel} data-testid="tax-choose-back"
+          className="mt-5 inline-flex items-center gap-1 text-sm font-600 text-slate-500 hover:text-[#063044]">
+          <ChevronLeft size={16} /> Retour
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 // ---- Main --------------------------------------------------------------------
 export default function SwissTaxProfile() {
   const { activeCompanyId } = useNav();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [wiz, setWiz] = useState(null); // null | {mode, prefill, active}
+  const [choose, setChoose] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState(null);
   const load = () => {
     if (!activeCompanyId) { setLoading(false); return; }
     return api.getTaxProfile(activeCompanyId).then(setData).catch(() => setData(null)).finally(() => setLoading(false));
@@ -450,11 +534,12 @@ export default function SwissTaxProfile() {
   const status = !active ? "not_configured" : (active.completeness === "complete" ? "complete" : "needs_attention");
   const today = new Date().toISOString().slice(0, 10);
   const futureVersions = (data?.versions || [])
-    .filter((v) => v.status === "published" && !v.is_superseded && v.effective_from > today)
+    .filter((v) => v.status === "published" && !v.is_superseded && !v.is_cancelled && v.effective_from > today)
     .sort((a, b) => a.effective_from.localeCompare(b.effective_from));
 
   // kind: "create" (first setup) | "rectify" (same period) | "amend" (new period)
   const startWizard = async (kind) => {
+    setChoose(false);
     if (kind === "rectify") { setWiz({ mode: "rectify", prefill: active, active }); return; }
     if (kind === "amend") { setWiz({ mode: "amend", prefill: active, active }); return; }
     let prefill = { country: "CH" };
@@ -475,6 +560,14 @@ export default function SwissTaxProfile() {
         <Wizard cid={activeCompanyId} prefill={wiz.prefill} mode={wiz.mode} active={wiz.active}
           onCancel={() => setWiz(null)}
           onDone={() => { setWiz(null); refresh(); }} />
+      </div>
+    );
+  }
+
+  if (choose) {
+    return (
+      <div data-testid="tax-hub">
+        <ChooseMode activeDate={active?.effective_from} onPick={startWizard} onCancel={() => setChoose(false)} />
       </div>
     );
   }
@@ -517,6 +610,10 @@ export default function SwissTaxProfile() {
             <span className="font-700">Une nouvelle configuration est planifiée</span>
             <span className="ml-1 text-slate-500">· Applicable à partir du {futureVersions[0].effective_from}</span>
           </div>
+          <button type="button" onClick={() => setCancelTarget(futureVersions[0])} data-testid="tax-future-cancel-btn"
+            className="ml-auto inline-flex items-center gap-1 text-xs font-600 text-slate-400 transition-colors hover:text-[#DC2626]">
+            <Ban size={13} /> Annuler
+          </button>
         </div>
       )}
 
@@ -552,17 +649,21 @@ export default function SwissTaxProfile() {
             <div className="text-xs text-slate-400">Configuration active depuis le {active.effective_from}</div>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-3">
-            <button type="button" onClick={() => startWizard("amend")} data-testid="tax-edit-btn"
+            <button type="button" onClick={() => setChoose(true)} data-testid="tax-edit-btn"
               className="inline-flex items-center gap-1.5 text-sm font-600 text-[#15AF97] transition-colors hover:text-[#128a78]">
-              <Pencil size={14} /> Modifier la configuration à partir du…
+              <Pencil size={14} /> Modifier la configuration
             </button>
-            <button type="button" onClick={() => startWizard("rectify")} data-testid="tax-rectify-btn"
-              className="inline-flex items-center gap-1.5 text-sm font-600 text-slate-500 transition-colors hover:text-[#063044]">
-              Corriger la période actuelle
+            <button type="button" onClick={() => setCancelTarget(active)} data-testid="tax-cancel-current-btn"
+              className="ml-auto inline-flex items-center gap-1.5 text-xs font-600 text-slate-400 transition-colors hover:text-[#DC2626]">
+              <Ban size={13} /> Annuler cette configuration
             </button>
           </div>
         </div>
       )}
+
+      {/* Cancellation dialog (mandatory reason) */}
+      <CancelDialog open={!!cancelTarget} onOpenChange={(o) => !o && setCancelTarget(null)}
+        cid={activeCompanyId} version={cancelTarget} onDone={() => { setCancelTarget(null); refresh(); }} />
 
       {/* Activation gate — only relevant once a profile exists */}
       {active && <ActivationGate cid={activeCompanyId} active={active} activation={data?.activation} onChange={refresh} />}

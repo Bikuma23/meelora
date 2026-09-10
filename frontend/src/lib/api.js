@@ -92,6 +92,8 @@ export const api = {
   getTaxMigrationReport: (cid) => client.get(`/companies/${cid}/tax-profile/migration-report`).then((r) => r.data),
   createTaxDraft: (cid, payload) => client.post(`/companies/${cid}/tax-profile/draft`, payload).then((r) => r.data),
   publishTaxProfile: (cid, pid) => client.post(`/companies/${cid}/tax-profile/${pid}/publish`).then((r) => r.data),
+  deleteTaxDraft: (cid, pid) => client.delete(`/companies/${cid}/tax-profile/${pid}`).then((r) => r.data),
+  cancelTaxVersion: (cid, pid, reason) => client.post(`/companies/${cid}/tax-profile/${pid}/cancel`, { reason }).then((r) => r.data),
   activateFiscalEngine: (cid, active = true) => client.post(`/companies/${cid}/tax-profile/activate`, null, { params: { active } }).then((r) => r.data),
   uploadCompanyLogo: (cid, body) => client.post(`/companies/${cid}/logo`, body).then((r) => r.data),
   deleteCompanyLogo: (cid) => client.delete(`/companies/${cid}/logo`).then((r) => r.data),

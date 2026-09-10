@@ -1805,4 +1805,12 @@ Doc : `memory/SWISS_CH3_COMPANY_PROFILE_SCOPING.md`. Cœur : `backend/core/compl
 - **Endpoints** : `GET /companies/{cid}/tax-profile`, `GET .../tax-profile/migration-report`, `POST .../tax-profile/draft`, `POST .../tax-profile/{pid}/publish`, `POST .../tax-profile/activate?active=`. `/me/company-context` enrichi du champ `country`.
 - **Tests** : backend 16/16 (`backend/tests/test_ch3_supersession.py`) + flux curl e2e ; frontend `test_reports/iteration_85.json` (~98%, tous les data-testids et flux validés). Non-régression A4/A4.6 confirmée (aucun recâblage A3/A4).
 
+#### CH.3 FINITION — Rectification / Remplacement / Suppression logique (LIVRÉ & TESTÉ — 2026-06)
+- **Écran de choix** « Que souhaitez-vous faire ? » : Corriger la configuration actuelle (rectify, même date) vs Modifier à partir d'une nouvelle date (amend). Aucun mot technique (« supersession ») exposé.
+- **Suppression de brouillon** (`DELETE .../tax-profile/{pid}`, tax_profile_manage) : physique UNIQUEMENT pour un draft jamais publié, auditée. Une version publiée ne peut JAMAIS être supprimée (409).
+- **Annulation logique** (`POST .../tax-profile/{pid}/cancel {reason}`, tax_profile_manage) : **motif obligatoire** (422 sinon), tombstone **append-only** (`entry_type:"cancellation"`, `cancels_version_id`, `cancellation_reason`, `cancelled_at/by`), l'ancienne version n'est **jamais mutée**. `is_cancelled` DÉRIVÉ. Annuler une version qui en superséda une autre **fait revivre** la version antérieure dans la résolution. Annulation d'une version **future** → bannière « planifiée » retirée de l'actif, historique « Planifiée — annulée » (+ motif). Double annulation = 409.
+- **UI** : bannière future avec « Annuler » ; carte Configuré avec « Annuler cette configuration » ; `CancelDialog` (motif obligatoire, bouton désactivé si vide, `DialogDescription` a11y) ; historique labels lisibles (Configuration actuelle / Remplacée / Planifiée / Planifiée — annulée / Annulée / Version précédente) + motif ; erreurs 403 mappées en message convivial (aucun code de permission exposé).
+- **Snapshots transactions** : inchangés (aucun recâblage A3/A4 ; les `VATPolicyDecision` déjà figées ne sont jamais recalculées par une rectification/annulation).
+- **Tests** : backend 14/14 (`backend/tests/test_ch3_cancellation.py`) + curl e2e ; frontend `test_reports/iteration_86.json` (~99%, aucun problème fonctionnel).
+
 **STOP après CH.3 — ne PAS démarrer CH.4 ni recâbler A3/A4 sans accord explicite de l'utilisateur.**
