@@ -1791,3 +1791,18 @@ Doc : `memory/SWISS_CH2_VAT_SCOPING.md`. Domaine **`vat_ch`** ajouté au Policy 
 - Routes CH.1 `POST /policy/resolve` servent `vat_ch`. Notes de crédit : héritage du snapshot fiscal d'origine (règle définie, appliquée lors du câblage A4).
 
 **STOP après CH.2 — ne pas démarrer CH.3 automatiquement.**
+
+### CH.3 — Profil fiscal Société Suisse : Backend + Frontend (LIVRÉ & TESTÉ — 2026-06)
+Doc : `memory/SWISS_CH3_COMPANY_PROFILE_SCOPING.md`. Cœur : `backend/core/compliance/company_tax_profile.py`. UI : `frontend/src/pages/SwissTaxProfile.js` (branchée sur la clé nav `acct_taxes` → hub « TVA »).
+- **Séparation identité / fiscal** : `companies` (adresse/nom) reste canonique ; `company_tax_profiles` porte le contexte fiscal VERSIONNÉ (country/canton/vat_status/vat_number/vat_method) sans duplication divergente.
+- **Assistant d'installation « Happy Path »** (5-7 questions grand public) : Pays/Canton (pré-remplis via migration-report) → Assujetti TVA ? (Oui/Non/**Je ne sais pas**) → N° TVA (validation format+checksum UID **hors-ligne**, jamais une preuve officielle) → Méthode (effective/TDFN/Je ne sais pas) → Date d'effet → Aperçu. Bulles « Pourquoi cette information ? » discrètes.
+- **`unknown` jamais auto-converti** → alimente `unresolved`. Statuts UX grand public : **Non configuré / À compléter / Configuré** (ambre, jamais rouge alarmiste). Indicateur discret ambre sur l'item de menu « TVA » quand À compléter (événement `meelora:tax-updated` + `taxBump` rafraîchissent la sidebar).
+- **Activation Gate** (par société) : bouton « Activer le moteur TVA » désactivé tant que le profil n'est pas `complete`, avec la raison affichée à proximité. A3/A4 restent sur le moteur legacy tant que `fiscal_engine_active=false` (shadow mode). `complete ≠ activation automatique`.
+- **Rectification / Supersession à même date d'effet** (option a validée par l'utilisateur) : compléter/corriger la période EN COURS crée une NOUVELLE version qui SUPERSEDE l'ancienne à MÊME `effective_from`. **Append-only strict** : l'ancienne version n'est JAMAIS mutée ; la relation `supersedes_version_id` (+ `superseded_at`/`superseded_by`) est portée par la NOUVELLE version ; le statut « Remplacée » est DÉRIVÉ (`is_superseded`). Résolution = tip de la chaîne. Overlap même date SANS relation de supersession = **409 fail-closed**. Impossible de superseder une version non-tip (pas de branches concurrentes).
+- **Changement de situation** = nouvelle date d'effet → nouvelle période (PAS de supersession). Bannière « Configuration future planifiée » pour les versions `effective_from > today` (label historique « Planifiée »).
+- **Historique** (secondaire, lecture seule) : versions publiées avec labels Configuration actuelle / Remplacée / Planifiée + « Voir les changements » (diff des champs). Aucun vocabulaire technique (policy_version/hash/ids) exposé.
+- **Permission** : `accounting.tax_profile_manage` requise pour draft/publish/activate (persona_finance l'a ; persona_junior → 403 propre surfacé par toast). Isolation société stricte.
+- **Endpoints** : `GET /companies/{cid}/tax-profile`, `GET .../tax-profile/migration-report`, `POST .../tax-profile/draft`, `POST .../tax-profile/{pid}/publish`, `POST .../tax-profile/activate?active=`. `/me/company-context` enrichi du champ `country`.
+- **Tests** : backend 16/16 (`backend/tests/test_ch3_supersession.py`) + flux curl e2e ; frontend `test_reports/iteration_85.json` (~98%, tous les data-testids et flux validés). Non-régression A4/A4.6 confirmée (aucun recâblage A3/A4).
+
+**STOP après CH.3 — ne PAS démarrer CH.4 ni recâbler A3/A4 sans accord explicite de l'utilisateur.**

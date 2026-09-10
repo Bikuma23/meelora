@@ -40,6 +40,7 @@ const importAccountingA1 = () => import("../pages/AccountingA1");
 const SalesAR = lazy(importSalesAR);
 const PurchasesAP = lazy(importPurchasesAP);
 const PurchaseOrders = lazy(() => import("../pages/PurchaseOrders"));
+const SwissTaxProfile = lazy(() => import("../pages/SwissTaxProfile"));
 const AcctDashboard = lazy(() => importComptabilite().then((m) => ({ default: m.AcctDashboard })));
 const AcctBV = lazy(() => importComptabilite().then((m) => ({ default: m.AcctBV })));
 const AcctBilan = lazy(() => importComptabilite().then((m) => ({ default: m.AcctBilan })));
@@ -110,7 +111,7 @@ const PAGES = {
   acct_tb: { title: "Balance de vérification", sub: "Comptabilité", comp: makePlaceholder("Balance de vérification") },
   acct_coa: { title: "Plan comptable", sub: "Comptabilité", comp: makePlaceholder("Plan comptable") },
   acct_analytics: { title: "Analytique & Projets", sub: "Comptabilité", comp: makePlaceholder("Analytique & Projets") },
-  acct_taxes: { title: "Taxes", sub: "Comptabilité", comp: makePlaceholder("Taxes") },
+  acct_taxes: { title: "TVA", sub: "Configuration fiscale", comp: SwissTaxProfile },
   acct_assets: { title: "Actifs & amortissements", sub: "Comptabilité", comp: makePlaceholder("Actifs & amortissements") },
   acct_close: { title: "Clôture & Réconciliation", sub: "Périodes GL", comp: AcctPeriods },
   acct_imports: { title: "Imports & Migration", sub: "Comptabilité", comp: makePlaceholder("Imports & Migration") },
@@ -486,7 +487,7 @@ const moduleBadgeCount = (counts, code) =>
 // Reusable floating module navigation (popover) — same UX principle as the avatar
 // menu. The sidebar stays compact (root modules only); sub-menus live in the flyout
 // and never grant any authorization (P1.13 remains the sole authority).
-function ModuleFlyout({ code, active, go, openModule, setOpenModule }) {
+function ModuleFlyout({ code, active, go, openModule, setOpenModule, taxHub }) {
   const { t } = useLang();
   const { counts } = useNavBadges();
   const cfg = MODULE_FLYOUT[code];
@@ -495,6 +496,7 @@ function ModuleFlyout({ code, active, go, openModule, setOpenModule }) {
   const moduleActive = (MODULE_PAGES[code] || []).includes(active);
   const open = openModule === code;
   const modCount = moduleBadgeCount(counts, code);
+  const isCH = taxHub?.isCH;
   return (
     <Popover open={open} onOpenChange={(o) => { if (o) preloadModule(code); setOpenModule(o ? code : null); }}>
       <PopoverTrigger asChild>
@@ -519,11 +521,15 @@ function ModuleFlyout({ code, active, go, openModule, setOpenModule }) {
             {g.label && <div className="px-2 pb-1 pt-2 overline" style={{ color: "#94A3B8" }}>{t(g.label)}</div>}
             {g.items.map((it) => {
               const on = active === it.key; const I = it.icon;
+              const isTax = it.key === "acct_taxes";
+              const label = isTax && isCH ? "TVA" : it.label;
+              const taxDot = isTax && taxHub?.status === "needs_attention";
               return (
                 <button key={it.key} data-testid={`nav-${it.key}`} onClick={() => { go(it.key); setOpenModule(null); }}
                   className={`group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors duration-150 ${on ? "bg-[#A7F3DD]/40 font-700 text-[#0F172A]" : "font-600 text-slate-600 hover:bg-[#F3F4F6] hover:text-[#0F172A]"}`}>
                   <I size={15} strokeWidth={2.2} className={on ? "text-[#22C55E]" : "text-slate-400 group-hover:text-[#22C55E]"} />
-                  <span className="flex-1 truncate">{t(it.label)}</span>
+                  <span className="flex-1 truncate">{t(label)}</span>
+                  {taxDot && <span data-testid="nav-tax-attention-dot" className="h-2 w-2 shrink-0 rounded-full bg-[#FBBF24]" aria-label="Configuration à compléter" />}
                   <NavCount count={counts[it.key]} testid={`nav-item-badge-${it.key}`} />
                 </button>
               );
@@ -535,7 +541,7 @@ function ModuleFlyout({ code, active, go, openModule, setOpenModule }) {
   );
 }
 
-function ModulesNav({ modules, active, go, openModule, setOpenModule }) {
+function ModulesNav({ modules, active, go, openModule, setOpenModule, taxHub }) {
   // Product composition: when ACCOUNTING is accessible, REPORTING is not a separate
   // root module (its capabilities live in Comptabilité → Rapports & Analyses).
   // This is a navigation rule only; module codes stay canonically distinct and no
@@ -544,7 +550,7 @@ function ModulesNav({ modules, active, go, openModule, setOpenModule }) {
   const hasAcct = codes.includes("ACCOUNTING");
   const visible = codes.filter((c) => MODULE_FLYOUT[c] && !(hasAcct && c === "REPORTING"));
   return visible.map((code) => (
-    <ModuleFlyout key={code} code={code} active={active} go={go} openModule={openModule} setOpenModule={setOpenModule} />
+    <ModuleFlyout key={code} code={code} active={active} go={go} openModule={openModule} setOpenModule={setOpenModule} taxHub={taxHub} />
   ));
 }
 
@@ -591,7 +597,7 @@ function MandatSwitcher({ companies, activeCompanyId, active, go, enterMandat })
   );
 }
 
-function DynamicCompanyNav({ manifest, active, go, companies, activeCompanyId, enterMandat, openModule, setOpenModule }) {
+function DynamicCompanyNav({ manifest, active, go, companies, activeCompanyId, enterMandat, openModule, setOpenModule, taxHub }) {
   const modules = manifest?.modules || [];
   const choosing = active === "mandats_list";
   return (
@@ -609,7 +615,7 @@ function DynamicCompanyNav({ manifest, active, go, companies, activeCompanyId, e
         <p className="px-3 py-4 text-xs text-slate-400" data-testid="company-nav-empty">Aucun module ne vous est attribué pour ce mandat.</p>
       )}
       {!choosing && (
-        <ModulesNav modules={modules} active={active} go={go} openModule={openModule} setOpenModule={setOpenModule} />
+        <ModulesNav modules={modules} active={active} go={go} openModule={openModule} setOpenModule={setOpenModule} taxHub={taxHub} />
       )}
     </div>
   );
@@ -693,6 +699,26 @@ function LayoutInner() {
     if (!activeCompanyId) { setNavManifest(null); return; }
     api.getCompanyNavigation(activeCompanyId).then(setNavManifest).catch(() => setNavManifest({ modules: [], admin_view: false }));
   }, [activeCompanyId]);
+  // CH Country Pack: derive the fiscal hub label ("TVA") + a discrete "à compléter"
+  // indicator for Swiss companies with ACCOUNTING access. Never blocking.
+  const [taxHub, setTaxHub] = useState({ isCH: false, status: null });
+  const [taxBump, setTaxBump] = useState(0);
+  useEffect(() => {
+    const onTaxUpdate = () => setTaxBump((n) => n + 1);
+    window.addEventListener("meelora:tax-updated", onTaxUpdate);
+    return () => window.removeEventListener("meelora:tax-updated", onTaxUpdate);
+  }, []);
+  useEffect(() => {
+    const c = (navCompanies || []).find((x) => x.id === activeCompanyId);
+    const isCH = (c?.country || "").toUpperCase() === "CH";
+    const hasAcct = (navManifest?.modules || []).some((m) => m.module_code === "ACCOUNTING");
+    if (!activeCompanyId || !isCH || !hasAcct) { setTaxHub({ isCH, status: null }); return; }
+    api.getTaxProfile(activeCompanyId).then((d) => {
+      const a = d?.active;
+      const status = !a ? "not_configured" : (a.completeness === "complete" ? "complete" : "needs_attention");
+      setTaxHub({ isCH: true, status });
+    }).catch(() => setTaxHub({ isCH: true, status: null }));
+  }, [activeCompanyId, navManifest, navCompanies, active, taxBump]);
   const switchCompany = (cid) => {
     if (cid === activeCompanyId) return;
     // Fail-closed: drop the previous mandate's manifest/menus immediately so no
@@ -826,6 +852,7 @@ function LayoutInner() {
             enterMandat={enterMandat}
             openModule={openModule}
             setOpenModule={setOpenModule}
+            taxHub={taxHub}
           />
           )}
         </nav>

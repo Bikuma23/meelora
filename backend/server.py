@@ -156,6 +156,7 @@ from core.accounting import ap_extraction as ap_ai
 from core.accounting import po as po_service
 from core.accounting import fx_revaluation as fxrev_service
 from core.compliance import policy_engine
+from core.compliance import company_tax_profile as tax_profile_service
 from core.compliance import jurisdiction as jurisdiction_service
 from core.accounting import dunning as dunning_service
 from core.financial import documents as doc_service
@@ -2874,7 +2875,7 @@ async def get_my_company_context(user: dict = Depends(get_current_user)):
                     {"workspace_id": ws, "company_id": cid, "user_id": user.get("id"),
                      "access_level": {"$ne": "none"}}))
             out.append({"id": cid, "name": c.get("name"), "legacy_prefix": c.get("legacy_prefix"),
-                        "has_modules": bool(has_modules)})
+                        "country": c.get("country"), "has_modules": bool(has_modules)})
     # Prefer companies where the user has actual module visibility (default select).
     out.sort(key=lambda x: (not x["has_modules"], (x.get("name") or "").lower()))
     return {"companies": out, "workspace_id": ws}
@@ -4095,6 +4096,60 @@ async def policy_resolve(company_id: str, payload: PolicyResolveIn, user: dict =
                                            context=payload.context, as_of=payload.as_of)
     except policy_engine.PolicyError as e:
         raise HTTPException(status_code=409, detail={"code": e.code, "message": e.message, "detail": e.detail})
+
+
+# ---- CH.3 Company tax profile + onboarding ---------------------------------
+class TaxProfileIn(BaseModel):
+    effective_from: Optional[str] = None
+    effective_to: Optional[str] = None
+    country: Optional[str] = None
+    canton: Optional[str] = None
+    vat_status: Optional[str] = None
+    vat_number: Optional[str] = None
+    vat_method: Optional[str] = None
+    vat_method_start: Optional[str] = None
+    vat_period: Optional[str] = None
+    net_tax_rates: Optional[list] = None
+    supersedes_version_id: Optional[str] = None
+    supersession_reason: Optional[str] = None
+
+
+@api.get("/companies/{company_id}/tax-profile")
+async def tax_profile_active(company_id: str, as_of: Optional[str] = None, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return {"active": await tax_profile_service.get_active_profile(db, ws, company_id, as_of),
+            "activation": await tax_profile_service.get_activation(db, ws, company_id),
+            "versions": await tax_profile_service.list_versions(db, ws, company_id)}
+
+
+@api.get("/companies/{company_id}/tax-profile/migration-report")
+async def tax_profile_migration(company_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await tax_profile_service.migration_report(db, ws, company_id)
+
+
+@api.post("/companies/{company_id}/tax-profile/draft")
+async def tax_profile_draft(company_id: str, payload: TaxProfileIn, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.tax_profile_manage", workspace_id=ws)
+    return await tax_profile_service.create_draft(db, ws, company_id, user, payload.model_dump(exclude_unset=True))
+
+
+@api.post("/companies/{company_id}/tax-profile/{pid}/publish")
+async def tax_profile_publish(company_id: str, pid: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.tax_profile_manage", workspace_id=ws)
+    r = await tax_profile_service.publish(db, ws, company_id, user, pid)
+    await log_action(user, "publish", "tax_profile", pid, details="Profil fiscal publié",
+                     company_id=company_id, entity_id=pid, event_type="tax_profile.published")
+    return r
+
+
+@api.post("/companies/{company_id}/tax-profile/activate")
+async def tax_profile_activate(company_id: str, active: bool = True, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.tax_profile_manage", workspace_id=ws)
+    return await tax_profile_service.set_activation(db, ws, company_id, user, active)
 
 
 
@@ -10725,6 +10780,7 @@ async def startup():
         await fxrev_service.ensure_indexes(db)
         await policy_engine.ensure_indexes(db)
         await policy_engine.ensure_seed(db)
+        await tax_profile_service.ensure_indexes(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     # P1.13A — seed Meelora workspace entitlements (availability only; grants no

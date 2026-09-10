@@ -86,6 +86,13 @@ export const api = {
   confirmEmailChange: (token) => client.post("/me/email-change/confirm", { token }).then((r) => r.data),
   changePassword: (current_password, new_password) => client.post("/me/password-change", { current_password, new_password }).then((r) => r.data),
   getCompanyHome: (cid) => client.get(`/companies/${cid}/home`).then((r) => r.data),
+
+  // CH.3 — Swiss company tax profile (fiscal hub)
+  getTaxProfile: (cid, asOf) => client.get(`/companies/${cid}/tax-profile`, { params: asOf ? { as_of: asOf } : {} }).then((r) => r.data),
+  getTaxMigrationReport: (cid) => client.get(`/companies/${cid}/tax-profile/migration-report`).then((r) => r.data),
+  createTaxDraft: (cid, payload) => client.post(`/companies/${cid}/tax-profile/draft`, payload).then((r) => r.data),
+  publishTaxProfile: (cid, pid) => client.post(`/companies/${cid}/tax-profile/${pid}/publish`).then((r) => r.data),
+  activateFiscalEngine: (cid, active = true) => client.post(`/companies/${cid}/tax-profile/activate`, null, { params: { active } }).then((r) => r.data),
   uploadCompanyLogo: (cid, body) => client.post(`/companies/${cid}/logo`, body).then((r) => r.data),
   deleteCompanyLogo: (cid) => client.delete(`/companies/${cid}/logo`).then((r) => r.data),
   getCompanyLogoBlob: (cid) => client.get(`/companies/${cid}/logo`, { responseType: "blob" }).then((r) => r.data),

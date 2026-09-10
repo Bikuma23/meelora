@@ -1,0 +1,51 @@
+{
+  "summary": "CH.3 Frontend (Swiss Tax Profile hub + wizard + activation gate + history) tested end-to-end with persona_finance and persona_junior. All specified data-testids are present and wired correctly. Navigation, hub badges, wizard flow (all 6 steps for taxable + skip flow for 'Je ne sais pas'), live UID validation (3 cases), Why popovers, permission enforcement (junior 403 surfaced as friendly toast), sidebar attention dot in flyout and 'TVA' label — all pass. Two UX friction issues found related to effective_from handling and completeness recomputation on edit.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/companies/{cid}/tax-profile/{pid}/publish", "issue": "Returns 409 with technical detail when the draft has the same effective_from as an already-published version. Detail string is surfaced as-is in the toast (visible French but a bit technical). Consider a friendlier message when the wizard reuses the existing active date."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "SwissTaxProfile.Wizard (edit mode)", "issue": "On edit, prefill.effective_from = active.effective_from. Submitting without changing the date always triggers a 409 on publish (append-only immutable). Users see a red toast even when they only wanted to fix a missing field on the current period. The wizard should either (a) auto-bump the effective_from to today or next available date, or (b) allow the backend to append a NEW published version with same effective_from (or treat as amendment).", "selector": "[data-testid=tax-effective-from]", "priority": "HIGH"},
+      {"component": "SwissTaxProfile hub", "issue": "When user picks a future effective_from (e.g. 2027-07-15) to avoid the 409, publish succeeds and history correctly lists the new version, BUT the hub still shows the old badge 'À compléter' because GET /tax-profile is filtered by as_of=today. There is no visual hint to the user that their new configuration is scheduled and will only become active later. Consider adding a 'Prochaine configuration à partir du …' banner when a future published version exists.", "selector": "[data-testid=tax-status-badge]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_checks": [
+    "nav-module-ACCOUNTING flyout opens and nav-acct_taxes label = 'TVA' when country=CH",
+    "nav-tax-attention-dot amber displayed only inside the flyout for needs_attention (not outside)",
+    "tax-hub renders with tax-status-badge 'À compléter', shows '1 information à confirmer' block and tax-complete-btn",
+    "tax-activation-gate present with tax-activation-toggle DISABLED and tax-activation-reason '1 information à confirmer avant l'activation'",
+    "Wizard steps ordering (taxable): company → liability → vat_number → method → date → review",
+    "Company step: country FR label 'Suisse' (locked), canton pre-filled to 'GE' (Genève), currency 'CHF · Franc suisse'",
+    "why-liability / why-method / why-date popovers open showing why-*-content as expected",
+    "Live UID validation: 'ABC' → 'Format attendu : CHE-123.456.789'; 'CHE-123.456.789' → 'La somme de contrôle ne correspond pas.'; 'CHE-116.281.710' → 'Numéro valide · CHE-116.281.710'",
+    "Review step shows tax-review-summary 'Suisse · Genève · Assujetti à la TVA · N° TVA : CHE-116.281.710 · Méthode : Méthode effective · À partir du <date>'",
+    "Happy path with unique future date → toast success 'Configuration TVA enregistrée' and version appended (history shows 'Configuration actuelle')",
+    "'Je ne sais pas' flow correctly SKIPS vat_number and method steps (goes company → liability → date → review) and shows tax-review-unresolved without inventing any value",
+    "tax-history section (secondary, read-only) toggles open and lists only PUBLISHED versions; item 0 label = 'Configuration actuelle'",
+    "Permission enforcement: persona_junior can READ hub but wizard submit yields 403 surfaced as friendly toast: 'Action sensible refusée (accounting.tax_profile_manage) : permission_not_granted' — no raw stack; user stays on the wizard step",
+    "Direct API sanity: POST draft with vat_status=taxable+vat_number+vat_method=effective → completeness='complete', unresolved=[]"
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "Handle wizard-edit collision on effective_from: auto-bump default to next valid date OR allow amendment / show clearer message on 409",
+    "Add a 'configuration future planifiée' banner on the hub when a published version with effective_from > today exists (so the user isn't confused by an unchanged 'À compléter' badge after a successful save)"
+  ],
+  "critical_code_review_comments": [
+    "Wizard prefill sets effective_from = prefill.effective_from | `${currentYear}-01-01`. Since tax profile is append-only immutable, using the existing active date guarantees a 409 on republish — either the frontend must offer a fresh date or the backend must allow the amendment/replacement semantics implicit in the UI copy 'Modifier la configuration'.",
+    "The hub only reads active-as-of-today. If publish succeeds with a future date, the UI gives no feedback that the change is scheduled — the user might think nothing happened.",
+    "Error toast on publish uses response.data.detail verbatim; consider mapping 409 to a specific human-readable message."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only scope)", "frontend": "~85% (all specified test-ids and flows work; two UX gaps around effective_from and future scheduled config)"},
+  "test_credentials": "persona_finance@accslegro.com / persona123 (works); persona_junior@accslegro.com / persona123 (works, no tax_profile_manage)",
+  "seed_data_creation": "Two additional PUBLISHED tax-profile versions were appended to Meelora CH during testing (2027-07-15 taxable+effective, plus 1 needs_attention 2026-01-01 unknown). Append-only, non-destructive as noted in the request. Fiscal engine remains INACTIVE at end of test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All data-testids from the CH.3 review request are wired and verified. The two remaining findings are product-UX decisions, not implementation defects; the main agent can decide whether to (a) auto-advance effective_from, (b) allow same-date amendment on the backend, or (c) surface a 'planifié' banner. Junior 403 handling is production-quality (friendly French toast).",
+  "rca of the issue": "409 on republish stems from the immutable append-only rule combined with the wizard prefilling effective_from from the currently active version. Reproduction: (1) login persona_finance, (2) navigate ACCOUNTING → TVA, (3) click 'Compléter' or 'Modifier', (4) go through steps without changing the date, (5) submit → 409. Mitigation options: bump default date in Wizard (line 77 SwissTaxProfile.js: `effective_from: prefill?.effective_from || \\`${currentYear}-01-01\\`` → use today or +1 day when a version already exists at that date), or introduce an 'amend current' backend endpoint that supersedes without a new period start."
+}

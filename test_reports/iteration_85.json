@@ -1,0 +1,44 @@
+{
+  "summary": "CH.3 iteration 2 — Rectification/Supersession fully verified end-to-end on the Swiss tax profile hub for Meelora. Regression fix for the sidebar amber attention dot (nav-tax-attention-dot) is confirmed via the 'meelora:tax-updated' event: dot appears before rectify and disappears after. Wizard 'rectify' mode has NO date step and shows 'Confirmer'; wizard 'amend' mode has the date step and creates a future scheduled version with tax-future-banner and no supersession. History correctly labels 'Configuration actuelle' / 'Remplacée' and the diff shows the exact expected changes. Activation toggle works both ways. UID live validation returns the three expected states. why-method popover opens. Junior persona is blocked at submit (403) with a friendly toast; user stays on the review step. One minor UX polish issue found around the history label of a FUTURE (scheduled) version.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "SwissTaxProfile HistorySection.labelFor", "issue": "After an 'amend' publishes a FUTURE version (effective_from > today), it is listed at the top of the history and labeled 'Version précédente'. It should read something like 'Planifiée' / 'À venir' / 'Applicable à partir du 2027-01-01' to match the tax-future-banner terminology; calling a future scheduled version 'précédente' is misleading.", "selector": "[data-testid=tax-history-label-0]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_checks": [
+    "Starting state: badge 'À compléter', tax-needs-attention block, tax-complete-btn present, tax-activation-gate with disabled toggle and reason '1 information à confirmer avant l'activation'",
+    "Regression fix confirmed: nav-tax-attention-dot amber dot IS displayed inside the nav-module-ACCOUNTING flyout before rectify, and DISAPPEARS after successful rectify (event meelora:tax-updated + taxBump dependency in Layout.js works)",
+    "Nav label = 'TVA' (CH company)",
+    "Wizard rectify mode: tax-effective-from ABSENT across every visible step (company→liability→vatnumber→method→review)",
+    "Review title = 'Compléter la configuration actuelle'; tax-review-rectify-note = 'Cette information sera considérée comme applicable depuis le 2026-01-01. La version précédente restera conservée dans l'historique.'",
+    "Submit button label in rectify = 'Confirmer' (vs 'Activer la configuration' in create/amend)",
+    "After rectify submit: badge → 'Configuré'; tax-complete-number = 'CHE-116.281.710'; tax-complete-method = 'Méthode effective'; body includes 'Configuration active depuis le 2026-01-01'",
+    "History (post-rectify): 2 items, label-0 = 'Configuration actuelle', label-1 = 'Remplacée'; tax-history-changes-0 opens tax-history-diff-0 showing exactly: 'Assujettissement: À confirmer → Assujetti', 'Méthode: À confirmer → Méthode effective', 'N° TVA: — → CHE-116.281.710'",
+    "Activation gate: toggle enabled after rectify; clicking flips 'Activer le moteur TVA' → 'Désactiver' and back",
+    "Amend flow: tax-edit-btn opens wizard WITH date step; submit with 2027-01-01 succeeds; hub badge stays 'Configuré' (as-of-today = 2026 version); tax-future-banner shows 'Une nouvelle configuration est planifiée · Applicable à partir du 2027-01-01'",
+    "History after amend: 3 items — future (2027) NOT labeled 'Remplacée' (correctly not a supersession); 2026 rectified = 'Configuration actuelle'; older 2026 = 'Remplacée'",
+    "tax-rectify-btn secondary button present in Configured state and opens the wizard in rectify mode (no date step)",
+    "UID live feedback: 'ABC' → 'Format attendu : CHE-123.456.789'; 'CHE-123.456.789' → 'La somme de contrôle ne correspond pas.'; 'CHE-116.281.710' → 'Numéro valide · CHE-116.281.710'",
+    "why-method popover opens and why-method-content is visible on method step",
+    "Junior persona (no accounting.tax_profile_manage): reads hub OK; wizard submit returns 403 surfaced as friendly toast 'Action sensible refusée (accounting.tax_profile_manage) : permission_not_granted'; user stays on tax-step-review (no navigation, no raw stack)"
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "(LOW) In HistorySection.labelFor, a future scheduled version (effective_from > today, not superseded, not the current activeId) should be labeled 'Planifiée' or 'À venir' instead of 'Version précédente' so the wording aligns with tax-future-banner."
+  ],
+  "critical_code_review_comments": [
+    "labelFor in HistorySection only distinguishes superseded vs activeId, but does not treat future/scheduled versions specially. Consider: if (v.effective_from > today) return 'Planifiée' — mirrors banner semantics and avoids the misleading 'Version précédente' on a version that has never been active yet.",
+    "Everything else (rectify/amend semantics, event bus refresh, badge/attention-dot recomputation, junior 403 UX) is production-quality and matches the spec exactly."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only scope)", "frontend": "~98% (all specified data-testids and flows work; one minor label wording gap on future history entry)"},
+  "test_credentials": "persona_finance@accslegro.com / persona123 (validated); persona_junior@accslegro.com / persona123 (validated 403 path)",
+  "seed_data_creation": "Appended to Meelora CH tax-profile: rectified version at 2026-01-01 (supersedes original unknown-status version) and a future version at 2027-01-01. Append-only, non-destructive as noted. Fiscal engine ended INACTIVE.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All CH.3 iteration-2 acceptance criteria are met. The 'meelora:tax-updated' event bus + Layout taxBump wiring correctly recomputes the amber dot after wizard submit. The only remaining polish is the history label of a future/scheduled version (currently 'Version précédente', should be something like 'Planifiée').",
+  "rca of the issue": "The label wording issue stems from HistorySection.labelFor considering only two axes (is_superseded, activeId). Since a future version is neither superseded nor the as-of-today active one, it falls into the default 'Version précédente' branch. Fix location: /app/frontend/src/pages/SwissTaxProfile.js around the labelFor helper — add a check for v.effective_from > todayISO before the fallback."
+}
