@@ -1819,3 +1819,16 @@ Doc : `memory/SWISS_CH3_COMPANY_PROFILE_SCOPING.md`. Cœur : `backend/core/compl
 - Sémantique préparée pour le futur recâblage A3/A4 : lorsqu'une opération métier requiert une info TVA non résolue et que l'utilisateur ne peut pas la corriger, ne pas afficher « Compléter maintenant » comme s'il pouvait agir (à exploiter en A3/A4, non construit ici).
 
 **STOP après CH.3 — ne PAS démarrer CH.4 ni recâbler A3/A4 sans accord explicite de l'utilisateur.**
+
+### CH.3B — Activation Gate (recâblage A3/A4 vers vat_ch) — CADRAGE APPROUVÉ
+Doc : `memory/SWISS_CH3B_ACTIVATION_GATE_A3A4_SCOPING.md`. Découpage validé : CH.3B.1 (state machine + endpoints) → CH.3B.2 (shadow mode) → CH.3B.3 (activation réelle A3/A4 + UX contextuelle). STOP + rapport après chaque sous-tranche.
+
+#### CH.3B.1 — Fiscal Activation state machine + endpoints (LIVRÉ & TESTÉ backend — 2026-06)
+- Nouvelle permission sensible **`accounting.fiscal_engine_activate`** (distincte de `tax_profile_manage`, aucun bypass admin/manage/platform). Ajoutée au catalogue ACCOUNTING.
+- Module `core/compliance/fiscal_activation.py` : machine à états **par société** `legacy → shadow → ready → active` (+ rollback gardé), stockée sur `company_fiscal_activation.state` (booléen `fiscal_engine_active` DÉRIVÉ = state=="active", compat CH.3). Audit des transitions dans `fiscal_activation_audit`. Migration idempotente `ensure_state_migration` au démarrage.
+- Gardes : `active` exige profil `complete` + shadow exécutée (`fiscal_shadow_observations`) + 0 différence bloquante. Rollback `active→shadow/legacy` autorisé UNIQUEMENT si aucune transaction `vat_ch` (`sales_invoices`/`ap_invoices` avec `fiscal_engine:"vat_ch"`) — sinon 409 (jamais de retour silencieux au legacy). Isolation société stricte.
+- Endpoints : `GET /companies/{cid}/tax/activation` (statut + `can_*` + reasons) ; `POST .../tax/activation/{shadow|ready|activate|rollback}` (perm `fiscal_engine_activate`). `activate` accepte `effective_at`.
+- CH.3 `get_activation`/`set_activation` délèguent désormais à la state machine (compat). ⚠️ **Note intermédiaire** : le bouton « Activer le moteur TVA » de l'ActivationGate CH.3 renvoie maintenant 409 tant que la shadow n'a pas tourné (comportement correct selon le nouveau Gate) ; l'UX d'activation propre (shadow → parité → activer) est livrée en **CH.3B.3**.
+- **Tests** : curl e2e (status legacy/complete, activate-sans-shadow 409, shadow OK, junior 403, ready, activate + effet, rollback OK sans tx, rollback 409 avec tx `vat_ch`). Aucun recâblage A3/A4 encore effectué (shadow/branchement = 3B.2/3B.3).
+
+**STOP après CH.3B.1 — attendre validation avant CH.3B.2 (shadow). CH.4 reste STOP.**

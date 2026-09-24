@@ -41,6 +41,7 @@ PERMISSIONS: dict[str, list[str]] = {
         "accounting.po_match_override",
         "accounting.fx_revaluation_post",
         "accounting.tax_profile_manage",
+        "accounting.fiscal_engine_activate",
         "accounting.entry_reverse",
         "accounting.chart_manage",
         "accounting.reconciliation_manage",

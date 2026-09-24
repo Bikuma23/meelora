@@ -157,6 +157,7 @@ from core.accounting import po as po_service
 from core.accounting import fx_revaluation as fxrev_service
 from core.compliance import policy_engine
 from core.compliance import company_tax_profile as tax_profile_service
+from core.compliance import fiscal_activation as fiscal_activation_service
 from core.compliance import jurisdiction as jurisdiction_service
 from core.accounting import dunning as dunning_service
 from core.financial import documents as doc_service
@@ -4176,6 +4177,64 @@ async def tax_profile_cancel(company_id: str, pid: str, payload: TaxProfileCance
     r = await tax_profile_service.cancel_version(db, ws, company_id, user, pid, payload.reason)
     await log_action(user, "cancel", "tax_profile", pid, details=f"Configuration fiscale annulée : {payload.reason}",
                      company_id=company_id, entity_id=pid, event_type="tax_profile.cancelled")
+    return r
+
+
+# ---- CH.3B.1 — Fiscal Activation Gate (per-company state machine) --------------
+class FiscalActivateIn(BaseModel):
+    effective_at: Optional[str] = None
+
+
+class FiscalRollbackIn(BaseModel):
+    to_state: str = "legacy"
+
+
+@api.get("/companies/{company_id}/tax/activation")
+async def fiscal_activation_status(company_id: str, user: dict = Depends(get_current_user)):
+    ws = await _ar_read_scope(company_id, user)
+    return await fiscal_activation_service.get_status(db, ws, company_id)
+
+
+@api.post("/companies/{company_id}/tax/activation/shadow")
+async def fiscal_activation_shadow(company_id: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.fiscal_engine_activate", workspace_id=ws)
+    r = await fiscal_activation_service.enter_shadow(db, ws, company_id, user)
+    await log_action(user, "shadow", "fiscal_activation", company_id, details="Passage en mode shadow",
+                     company_id=company_id, entity_id=company_id, event_type="fiscal_activation.shadow")
+    return r
+
+
+@api.post("/companies/{company_id}/tax/activation/ready")
+async def fiscal_activation_ready(company_id: str, user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.fiscal_engine_activate", workspace_id=ws)
+    r = await fiscal_activation_service.mark_ready(db, ws, company_id, user)
+    await log_action(user, "ready", "fiscal_activation", company_id, details="Marqué prêt à activer",
+                     company_id=company_id, entity_id=company_id, event_type="fiscal_activation.ready")
+    return r
+
+
+@api.post("/companies/{company_id}/tax/activation/activate")
+async def fiscal_activation_activate(company_id: str, payload: FiscalActivateIn = FiscalActivateIn(),
+                                     user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.fiscal_engine_activate", workspace_id=ws)
+    r = await fiscal_activation_service.activate(db, ws, company_id, user, payload.effective_at)
+    await log_action(user, "activate", "fiscal_activation", company_id,
+                     details=f"Moteur TVA activé (effet {r.get('activation_effective_at')})",
+                     company_id=company_id, entity_id=company_id, event_type="fiscal_activation.activated")
+    return r
+
+
+@api.post("/companies/{company_id}/tax/activation/rollback")
+async def fiscal_activation_rollback(company_id: str, payload: FiscalRollbackIn = FiscalRollbackIn(),
+                                     user: dict = Depends(get_current_user)):
+    ws = require_tenant_context(user)
+    await require_sensitive_permission(db, user, company_id, "accounting.fiscal_engine_activate", workspace_id=ws)
+    r = await fiscal_activation_service.rollback(db, ws, company_id, user, payload.to_state)
+    await log_action(user, "rollback", "fiscal_activation", company_id, details=f"Retour à l'état {payload.to_state}",
+                     company_id=company_id, entity_id=company_id, event_type="fiscal_activation.rollback")
     return r
 
 
@@ -10808,6 +10867,7 @@ async def startup():
         await policy_engine.ensure_indexes(db)
         await policy_engine.ensure_seed(db)
         await tax_profile_service.ensure_indexes(db)
+        await fiscal_activation_service.ensure_state_migration(db)
     except Exception as e:
         logger.error(f"Index financial_years échec : {e}")
     # P1.13A — seed Meelora workspace entitlements (availability only; grants no

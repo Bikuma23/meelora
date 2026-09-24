@@ -324,25 +324,22 @@ async def build_migration_draft(db, ws, co, user):
                               provenance="auto-migration depuis companies")
 
 
-# --- Activation Gate (per-company; A3/A4 stay on legacy until active) ----------
+# --- Activation Gate (per-company) — state machine owned by fiscal_activation.py -
 async def get_activation(db, ws, co):
     d = await db.company_fiscal_activation.find_one({"workspace_id": ws, "company_id": co})
-    return {"company_id": co, "fiscal_engine_active": bool(d and d.get("fiscal_engine_active")),
-            "activated_at": (d or {}).get("activated_at")}
+    state = (d or {}).get("state") or ("active" if (d and d.get("fiscal_engine_active")) else "legacy")
+    return {"company_id": co, "state": state,
+            "fiscal_engine_active": state == "active",
+            "activated_at": (d or {}).get("activated_at"),
+            "activation_effective_at": (d or {}).get("activation_effective_at")}
 
 
 async def set_activation(db, ws, co, user, active):
-    # Guard: only activate when a COMPLETE published profile exists.
+    # CH.3 compat shim → delegates to the CH.3B state machine (full gate guards).
+    from . import fiscal_activation
     if active:
-        prof = await _active_published(db, ws, co, _now()[:10])
-        if not prof or prof.get("completeness") != "complete":
-            raise HTTPException(status_code=409,
-                                detail="Profil fiscal incomplet : impossible d'activer le moteur TVA.")
-    await db.company_fiscal_activation.update_one(
-        {"workspace_id": ws, "company_id": co},
-        {"$set": {"workspace_id": ws, "company_id": co, "fiscal_engine_active": bool(active),
-                  "activated_at": _now() if active else None, "by": (user or {}).get("id")}}, upsert=True)
-    return await get_activation(db, ws, co)
+        return await fiscal_activation.activate(db, ws, co, user)
+    return await fiscal_activation.rollback(db, ws, co, user, to_state="legacy")
 
 
 async def ensure_indexes(db):
